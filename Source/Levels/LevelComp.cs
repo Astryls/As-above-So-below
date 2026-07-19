@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Verse;
 
@@ -35,12 +36,78 @@ namespace AsAboveSoBelow
             }
         }
 
+        private bool syncSubscribed;
+        private Action<IntVec3> roofChangedHandler;
+        private Action<IntVec3> terrainChangedHandler;
+        private Action<Thing> thingSpawnedHandler;
+
         public override void FinalizeInit()
         {
             base.FinalizeInit();
             if (level == 0 && groundMap == null)
             {
                 groundMap = map;
+            }
+            TrySubscribeSync();
+        }
+
+        /// <summary>Sky level comps listen to the ground map's roof changes and their
+        /// own terrain/spawn events to enforce the cross-level rules.</summary>
+        private void TrySubscribeSync()
+        {
+            if (syncSubscribed || level != 1)
+            {
+                return;
+            }
+            Map ground = lowerMap ?? groundMap;
+            if (ground == null || ground.events == null || map.events == null)
+            {
+                return;
+            }
+            Map self = map;
+            roofChangedHandler = c => LevelSync.OnGroundRoofChanged(ground, c);
+            terrainChangedHandler = c => LevelSync.OnSkyTerrainChanged(self, c);
+            thingSpawnedHandler = t => LevelSync.OnSkyThingSpawned(self, t);
+            ground.events.RoofChanged += roofChangedHandler;
+            map.events.TerrainChanged += terrainChangedHandler;
+            map.events.ThingSpawned += thingSpawnedHandler;
+            syncSubscribed = true;
+            ABLog.Dev("Sky sync subscribed for map " + map.uniqueID + ".");
+        }
+
+        private void UnsubscribeSync()
+        {
+            if (!syncSubscribed)
+            {
+                return;
+            }
+            Map ground = lowerMap ?? groundMap;
+            if (ground?.events != null && roofChangedHandler != null)
+            {
+                ground.events.RoofChanged -= roofChangedHandler;
+            }
+            if (map?.events != null)
+            {
+                if (terrainChangedHandler != null)
+                {
+                    map.events.TerrainChanged -= terrainChangedHandler;
+                }
+                if (thingSpawnedHandler != null)
+                {
+                    map.events.ThingSpawned -= thingSpawnedHandler;
+                }
+            }
+            syncSubscribed = false;
+        }
+
+        public override void MapRemoved()
+        {
+            base.MapRemoved();
+            UnsubscribeSync();
+            Map ground = groundMap;
+            if (ground != null && !ground.Disposed && ground != map)
+            {
+                ground.Levels()?.CleanupInvalidMaps();
             }
         }
 

@@ -24,33 +24,49 @@ namespace AsAboveSoBelow
                 rocks.Add(ThingDefOf.Sandstone);
             }
 
-            List<Perlin> noises = new List<Perlin>(rocks.Count);
-            for (int i = 0; i < rocks.Count; i++)
-            {
-                noises.Add(new Perlin(0.005, 2.0, 0.5, 6, Rand.Range(0, int.MaxValue), QualityMode.Medium));
-            }
+            List<Perlin> noises = ABRockGen.MakeNoises(rocks.Count);
 
             TerrainGrid terrainGrid = map.terrainGrid;
             foreach (IntVec3 c in map.AllCells)
             {
-                int best = 0;
-                double bestVal = double.MinValue;
-                for (int i = 0; i < noises.Count; i++)
-                {
-                    double v = noises[i].GetValue(c.x, 0.0, c.z);
-                    if (v > bestVal)
-                    {
-                        bestVal = v;
-                        best = i;
-                    }
-                }
-                ThingDef rock = rocks[best];
+                ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
                 TerrainDef terrain = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
                 terrainGrid.SetTerrain(c, terrain);
                 GenSpawn.Spawn(rock, c, map);
             }
 
             map.fogGrid.Refog(CellRect.WholeMap(map));
+        }
+    }
+
+    /// <summary>Shared rock-type blending used by the basement fill and the sky
+    /// level's mountain stone so both match the surface geology.</summary>
+    internal static class ABRockGen
+    {
+        internal static List<Perlin> MakeNoises(int count)
+        {
+            List<Perlin> noises = new List<Perlin>(count);
+            for (int i = 0; i < count; i++)
+            {
+                noises.Add(new Perlin(0.005, 2.0, 0.5, 6, Rand.Range(0, int.MaxValue), QualityMode.Medium));
+            }
+            return noises;
+        }
+
+        internal static int PickIndex(List<Perlin> noises, IntVec3 c)
+        {
+            int best = 0;
+            double bestVal = double.MinValue;
+            for (int i = 0; i < noises.Count; i++)
+            {
+                double v = noises[i].GetValue(c.x, 0.0, c.z);
+                if (v > bestVal)
+                {
+                    bestVal = v;
+                    best = i;
+                }
+            }
+            return best;
         }
     }
 }

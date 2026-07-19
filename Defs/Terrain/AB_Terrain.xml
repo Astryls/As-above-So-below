@@ -6,6 +6,7 @@
     <label>open air</label>
     <description>Nothing here but a long drop to the level below.</description>
     <texturePath>Terrain/AB_OpenAir</texturePath>
+    <dontRender>true</dontRender>
     <edgeType>Hard</edgeType>
     <renderPrecedence>15</renderPrecedence>
     <layerable>false</layerable>
