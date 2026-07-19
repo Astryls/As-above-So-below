@@ -17,6 +17,65 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class LevelSync
     {
+        /// <summary>One-pass air/rooftop reconciliation against the ground map's
+        /// live roof grid. Events keep the pair in sync during play; this sweep
+        /// self-heals any gap (events missed while a kill switch was tripped,
+        /// mod interference, load ordering) whenever a sky map finalizes.
+        /// Conservative by design: it only ever flips between the two terrains
+        /// this mod owns, mirroring the genstep's rule (constructed roof below
+        /// becomes rooftop, no roof below reverts rooftop to air); floors, rock,
+        /// and natural-roof cells are never touched.</summary>
+        public static void ReconcileRooftops(Map sky)
+        {
+            if (!ABGuard.On(ABGuard.RoofSync) || sky == null)
+            {
+                return;
+            }
+            try
+            {
+                Map ground = sky.LowerMap() ?? sky.GroundMap();
+                if (ground == null || ground.Disposed || ground == sky)
+                {
+                    return;
+                }
+                TerrainGrid grid = sky.terrainGrid;
+                RoofGrid roofs = ground.roofGrid;
+                TerrainDef air = ABDefOf.AB_OpenAir;
+                TerrainDef rooftop = ABDefOf.AB_RoofSurface;
+                int fixedCells = 0;
+                foreach (IntVec3 c in sky.AllCells)
+                {
+                    TerrainDef top = grid.TerrainAt(c);
+                    if (top == air)
+                    {
+                        RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
+                        if (roof != null && !roof.isNatural)
+                        {
+                            grid.SetTerrain(c, rooftop);
+                            fixedCells++;
+                        }
+                    }
+                    else if (top == rooftop)
+                    {
+                        RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
+                        if (roof == null)
+                        {
+                            grid.SetTerrain(c, air);
+                            fixedCells++;
+                        }
+                    }
+                }
+                if (fixedCells > 0)
+                {
+                    ABLog.Dev("Rooftop reconciliation fixed " + fixedCells + " cell(s) on map " + sky.uniqueID + ".");
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.RoofSync, e, "rooftop reconciliation");
+            }
+        }
+
         public static void OnGroundRoofChanged(Map ground, IntVec3 c)
         {
             if (!ABGuard.On(ABGuard.RoofSync))

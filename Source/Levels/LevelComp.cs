@@ -102,6 +102,12 @@ namespace AsAboveSoBelow
                 NoteSkyLevel(1);
             }
             TrySubscribeSync();
+            if (level == 1)
+            {
+                // Self-heal any air/rooftop drift against the live roof grid;
+                // a no-op when the event path kept everything in sync.
+                LevelSync.ReconcileRooftops(map);
+            }
         }
 
         private const int WeatherSyncInterval = 150;
