@@ -5,14 +5,28 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Per-map cache of the materials that player blueprints and frames still
-    /// need (exact remaining counts via IConstructible.ThingCountNeeded). Used to
-    /// pull materials toward construction on other levels and to stop storage
-    /// hauling from carrying materials away from a level that needs them.
+    /// Per-map cache of the materials this level still needs. Two sources:
+    /// construction (player blueprints and frames, exact remaining counts via
+    /// IConstructible.ThingCountNeeded) and production bills (T7 #1: active
+    /// bills on usable benches register the SHORTFALL of one batch of their
+    /// ingredients, required minus what the level already has). Bill demand is
+    /// shortfall-based because bills are chronic, not one-shot like frames: a
+    /// stocked kitchen registers nothing, and as the cook consumes meat the
+    /// shortfall reappears and haulers top the level back up. For ingredients
+    /// with alternatives (any raw food), availability is aggregated across the
+    /// allowed defs before the shortfall is registered on each, so a level with
+    /// enough rice does not pull meat. Used to pull materials toward other
+    /// levels and to stop storage hauling from carrying materials away from a
+    /// level that needs them. Delivery is loose at the stairs; local hauling
+    /// and the bench's ingredient radius take it from there.
     /// </summary>
     public static class CrossLevelDemand
     {
         private const int CacheTtlTicks = 600;
+
+        private const int MaxBillsPerMap = 30;
+
+        private const int MaxDefsPerBill = 40;
 
         private static readonly Dictionary<int, CacheEntry> cache = new Dictionary<int, CacheEntry>();
 
@@ -65,18 +79,129 @@ namespace AsAboveSoBelow
             entry = new CacheEntry { tick = now };
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry.need);
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry.need);
+            AddBillNeeds(map, entry);
             foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
             {
-                List<Thing> things = map.listerThings.ThingsOfDef(kvp.Key);
-                int sum = 0;
-                for (int i = 0; i < things.Count; i++)
+                if (!entry.available.ContainsKey(kvp.Key))
                 {
-                    sum += things[i].stackCount;
+                    entry.available[kvp.Key] = CountOnMap(map, kvp.Key);
                 }
-                entry.available[kvp.Key] = sum;
             }
             cache[map.uniqueID] = entry;
             return entry;
+        }
+
+        private static int CountOnMap(Map map, ThingDef def)
+        {
+            List<Thing> things = map.listerThings.ThingsOfDef(def);
+            int sum = 0;
+            for (int i = 0; i < things.Count; i++)
+            {
+                sum += things[i].stackCount;
+            }
+            return sum;
+        }
+
+        private static void AddBillNeeds(Map map, CacheEntry entry)
+        {
+            List<Building> buildings = map.listerBuildings.allBuildingsColonist;
+            int billsSeen = 0;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                if (!(buildings[i] is Building_WorkTable table) || !table.CurrentlyUsableForBills())
+                {
+                    continue;
+                }
+                BillStack stack = table.BillStack;
+                if (stack == null)
+                {
+                    continue;
+                }
+                for (int b = 0; b < stack.Count; b++)
+                {
+                    if (!(stack[b] is Bill_Production bill) || !bill.ShouldDoNow())
+                    {
+                        continue;
+                    }
+                    if (++billsSeen > MaxBillsPerMap)
+                    {
+                        return;
+                    }
+                    List<IngredientCount> ings = bill.recipe.ingredients;
+                    for (int k = 0; k < ings.Count; k++)
+                    {
+                        IngredientCount ing = ings[k];
+                        if (ing.IsFixedIngredient)
+                        {
+                            ThingDef def = ing.FixedIngredient;
+                            if (def == null)
+                            {
+                                continue;
+                            }
+                            int required = ing.CountRequiredOfFor(def, bill.recipe, bill);
+                            int shortfall = required - Available(map, entry, def);
+                            if (shortfall > 0)
+                            {
+                                entry.need.TryGetValue(def, out int cur);
+                                entry.need[def] = cur + shortfall;
+                            }
+                            continue;
+                        }
+                        // Alternatives: aggregate availability across the allowed
+                        // defs first, then register the shortfall on each so any
+                        // of them can satisfy the pull.
+                        int fan = 0;
+                        int totalAvailable = 0;
+                        int anyRequired = 0;
+                        foreach (ThingDef def in ing.filter.AllowedThingDefs)
+                        {
+                            if (!bill.ingredientFilter.Allows(def))
+                            {
+                                continue;
+                            }
+                            if (++fan > MaxDefsPerBill)
+                            {
+                                break;
+                            }
+                            totalAvailable += Available(map, entry, def);
+                            if (anyRequired == 0)
+                            {
+                                anyRequired = ing.CountRequiredOfFor(def, bill.recipe, bill);
+                            }
+                        }
+                        int aggShortfall = anyRequired - totalAvailable;
+                        if (aggShortfall <= 0)
+                        {
+                            continue;
+                        }
+                        fan = 0;
+                        foreach (ThingDef def in ing.filter.AllowedThingDefs)
+                        {
+                            if (!bill.ingredientFilter.Allows(def))
+                            {
+                                continue;
+                            }
+                            if (++fan > MaxDefsPerBill)
+                            {
+                                break;
+                            }
+                            entry.need.TryGetValue(def, out int cur);
+                            entry.need[def] = cur + aggShortfall;
+                        }
+                    }
+                }
+            }
+        }
+
+        private static int Available(Map map, CacheEntry entry, ThingDef def)
+        {
+            if (entry.available.TryGetValue(def, out int a))
+            {
+                return a;
+            }
+            a = CountOnMap(map, def);
+            entry.available[def] = a;
+            return a;
         }
 
         private static void AddFrom(List<Thing> things, Dictionary<ThingDef, int> need)
