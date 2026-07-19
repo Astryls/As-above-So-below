@@ -146,9 +146,11 @@ namespace AsAboveSoBelow
             else
             {
                 Building_ABStairs chosen = stairs;
+                Map chosenTarget = target;
                 cmd.action = delegate
                 {
                     Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, chosen);
+                    job.targetC = chosen.CounterpartTowards(chosenTarget);
                     if (pawn.Drafted)
                     {
                         pawn.jobs.TryTakeOrderedJob(job, JobTag.DraftedOrder);

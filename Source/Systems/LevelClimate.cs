@@ -31,13 +31,19 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Building_ABStairs b = a.Counterpart;
-                if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
-                {
-                    continue;
-                }
-                ExchangePair(a, b);
+                ExchangeLink(a, a.Counterpart);
+                // Elevator middle cars hold a second link (down).
+                ExchangeLink(a, a.SecondCounterpart);
             }
+        }
+
+        private static void ExchangeLink(Building_ABStairs a, Building_ABStairs b)
+        {
+            if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
+            {
+                return;
+            }
+            ExchangePair(a, b);
         }
 
         private static void ExchangePair(Building_ABStairs a, Building_ABStairs b)

@@ -45,6 +45,12 @@
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
   <AB_CaptureUpTo>Capture {0} (bed on the level above)</AB_CaptureUpTo>
   <AB_CaptureDownTo>Capture {0} (bed on the level below)</AB_CaptureDownTo>
+  <AB_ExtendUp>Extend shaft up</AB_ExtendUp>
+  <AB_ExtendUpDesc>Extend the elevator shaft to the level above, opening it if needed, and place a linked car there.</AB_ExtendUpDesc>
+  <AB_ExtendDown>Extend shaft down</AB_ExtendDown>
+  <AB_ExtendDownDesc>Extend the elevator shaft to the level below, opening it if needed, and place a linked car there.</AB_ExtendDownDesc>
+  <AB_RideToSky>Ride to the sky level</AB_RideToSky>
+  <AB_RideToBasement>Ride to the basement</AB_RideToBasement>
   <AB_PowerBridgeInspect>Power link: bridges the grid to the connected level.</AB_PowerBridgeInspect>
   <AB_CrossLevelPipes>Bridge pipe networks through stairwells</AB_CrossLevelPipes>
   <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked stairwell on both levels, their stored contents flow between the levels. Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>

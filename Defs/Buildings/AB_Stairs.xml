@@ -21,6 +21,7 @@
       <MaxHitPoints>300</MaxHitPoints>
       <WorkToBuild>3200</WorkToBuild>
       <Flammability>1.0</Flammability>
+      <Mass>35</Mass>
     </statBases>
     <!-- Normal ticker: the power bridge equalizes in CompTick. Never-tickers get no comp ticks at all. -->
     <tickerType>Normal</tickerType>
@@ -66,9 +67,12 @@
     <statBases>
       <MaxHitPoints>600</MaxHitPoints>
       <WorkToBuild>12000</WorkToBuild>
+      <Mass>160</Mass>
     </statBases>
     <comps>
-      <li Class="CompProperties_Quality" />
+      <li>
+        <compClass>CompQuality</compClass>
+      </li>
     </comps>
   </ThingDef>
 
@@ -110,13 +114,44 @@
     </modExtensions>
   </ThingDef>
 
+  <ThingDef ParentName="AB_StairsBase">
+    <defName>AB_Elevator</defName>
+    <label>elevator</label>
+    <description>An elevator car. Use its controls to extend the shaft up or down, opening that level and placing a linked car there. A car on the ground level can hold links in both directions, letting pawns ride straight between the sky level and the basement in one trip. Rides are much faster than stairs, and the shaft carries a power link.</description>
+    <thingClass>AsAboveSoBelow.Building_ABElevator</thingClass>
+    <stuffCategories Inherit="False">
+      <li>Metallic</li>
+    </stuffCategories>
+    <costStuffCount>200</costStuffCount>
+    <statBases>
+      <MaxHitPoints>450</MaxHitPoints>
+      <WorkToBuild>9000</WorkToBuild>
+      <Flammability>0.5</Flammability>
+      <Mass>70</Mass>
+    </statBases>
+    <graphicData>
+      <texPath>Things/Building/AB_Elevator</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_Elevator</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>0</deltaLevel>
+        <counterpartDef>AB_Elevator</counterpartDef>
+        <climbFactor>0.35</climbFactor>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
   <ThingDef ParentName="BuildingBase" Name="AB_LadderBase" Abstract="True">
     <thingClass>AsAboveSoBelow.Building_ABStairs</thingClass>
     <altitudeLayer>Building</altitudeLayer>
     <passability>PassThroughOnly</passability>
     <pathCost>30</pathCost>
     <fillPercent>0.20</fillPercent>
-    <rotatable>false</rotatable>
+    <!-- Rotatable: the ladder leans against the wall on its facing edge. -->
+    <rotatable>true</rotatable>
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
@@ -129,6 +164,7 @@
       <MaxHitPoints>120</MaxHitPoints>
       <WorkToBuild>800</WorkToBuild>
       <Flammability>1.0</Flammability>
+      <Mass>10</Mass>
     </statBases>
     <!-- No power bridge comp: ladders do not carry utility lines. -->
     <tickerType>Never</tickerType>
@@ -147,8 +183,12 @@
     <description>A cheap ladder leading down. Slower to climb than stairs and cannot carry a power link. Completing it opens the basement level below and creates a matching ladder there.</description>
     <graphicData>
       <texPath>Things/Building/AB_LadderDown</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
+      <drawOffsetNorth>(0,0,0.33)</drawOffsetNorth>
+      <drawOffsetEast>(0.33,0,0)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
+      <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
     </graphicData>
     <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
     <modExtensions>
@@ -166,8 +206,12 @@
     <description>A cheap ladder leading up. Slower to climb than stairs and cannot carry a power link. Completing it opens the sky level above and creates a matching ladder there.</description>
     <graphicData>
       <texPath>Things/Building/AB_LadderUp</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
+      <drawOffsetNorth>(0,0,0.33)</drawOffsetNorth>
+      <drawOffsetEast>(0.33,0,0)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
+      <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
     </graphicData>
     <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
     <modExtensions>

@@ -24,7 +24,7 @@ namespace AsAboveSoBelow
         {
             this.FailOnDestroyedOrNull(TargetIndex.A);
             this.FailOnDespawnedOrNull(TargetIndex.B);
-            this.FailOn(() => Stairs == null || Stairs.Counterpart == null);
+            this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
             this.FailOnForbidden(TargetIndex.A);
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.ClosestTouch)
                 .FailOnSomeonePhysicallyInteracting(TargetIndex.A);
@@ -36,7 +36,8 @@ namespace AsAboveSoBelow
             Toil transfer = ToilMaker.MakeToil("AB_HaulTransfer");
             transfer.initAction = delegate
             {
-                StairTransfer.Transfer(pawn, Stairs);
+                Building_ABStairs dest = job.GetTarget(TargetIndex.C).Thing as Building_ABStairs;
+                StairTransfer.Transfer(pawn, Stairs, CarriedIntent.Auto, dest);
             };
             transfer.defaultCompleteMode = ToilCompleteMode.Instant;
             yield return transfer;

@@ -36,6 +36,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
+            job.targetC = stairs.CounterpartTowards(target);
             job.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
             return job;
         }

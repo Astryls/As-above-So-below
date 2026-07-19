@@ -38,9 +38,10 @@ namespace AsAboveSoBelow
         /// rebuild every frame; rebuilds happen when the camera escapes the pad.</summary>
         private const int MaskPadCells = 8;
 
-        /// <summary>Night opacity cap. High enough to sell darkness, low enough that
-        /// the ground below stays readable, like Z-Levels beta.</summary>
-        private const float MaskMaxDarkness = 0.62f;
+        /// <summary>Night opacity cap. High enough to sell darkness, low enough
+        /// that the ground below stays readable. Lowered from 0.62 after playtest
+        /// feedback: night below-views read nearly black at the old cap.</summary>
+        private const float MaskMaxDarkness = 0.45f;
 
         /// <summary>True only while the lower map's dynamic draw runs; DrawPos
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>

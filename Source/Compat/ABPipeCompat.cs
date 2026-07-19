@@ -33,6 +33,22 @@ namespace AsAboveSoBelow
             }
         }
 
+        private static void BridgeLink(Building_ABStairs a, Building_ABStairs b)
+        {
+            if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
+            {
+                return;
+            }
+            if (DbhActive)
+            {
+                DBHWaterBridge.BridgePair(a, b);
+            }
+            if (VefActive)
+            {
+                VEFPipeBridge.BridgePair(a, b);
+            }
+        }
+
         public static void TickGroundPairs(LevelComp groundComp)
         {
             if (!DbhActive && !VefActive)
@@ -52,19 +68,9 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Building_ABStairs b = a.Counterpart;
-                if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
-                {
-                    continue;
-                }
-                if (DbhActive)
-                {
-                    DBHWaterBridge.BridgePair(a, b);
-                }
-                if (VefActive)
-                {
-                    VEFPipeBridge.BridgePair(a, b);
-                }
+                BridgeLink(a, a.Counterpart);
+                // Elevator middle cars hold a second link (down).
+                BridgeLink(a, a.SecondCounterpart);
             }
         }
     }

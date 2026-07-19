@@ -22,25 +22,26 @@ namespace AsAboveSoBelow
         /// has a valid bed for the victim, checked with both pawns virtually at
         /// the stairwell exit so bed validity and reachability evaluate on the
         /// target map.</summary>
-        internal static Building_ABStairs FindStairsTowardBed(Pawn taker, Pawn victim, GuestStatus? guest)
+        internal static Building_ABStairs FindStairsTowardBed(Pawn taker, Pawn victim, GuestStatus? guest, out Building_ABStairs exit)
         {
+            exit = null;
             LevelComp comp = taker.Map.Levels();
             if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
             {
                 return null;
             }
-            return Toward(taker, victim, comp.upperMap, guest)
-                ?? Toward(taker, victim, comp.lowerMap, guest);
+            return Toward(taker, victim, comp.upperMap, guest, ref exit)
+                ?? Toward(taker, victim, comp.lowerMap, guest, ref exit);
         }
 
-        private static Building_ABStairs Toward(Pawn taker, Pawn victim, Map target, GuestStatus? guest)
+        private static Building_ABStairs Toward(Pawn taker, Pawn victim, Map target, GuestStatus? guest, ref Building_ABStairs exitOut)
         {
             if (target == null || target.Disposed)
             {
                 return null;
             }
             Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(taker, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.Counterpart;
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
             if (exit == null)
             {
                 return null;
@@ -69,7 +70,12 @@ namespace AsAboveSoBelow
             {
                 ABVirtualPosition.Restore(taker, takerToken);
             }
-            return found ? stairs : null;
+            if (!found)
+            {
+                return null;
+            }
+            exitOut = exit;
+            return stairs;
         }
     }
 
@@ -127,7 +133,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            return TakePawnAcrossLevels.FindStairsTowardBed(pawn, victim, null) != null;
+            return TakePawnAcrossLevels.FindStairsTowardBed(pawn, victim, null, out Building_ABStairs _) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
@@ -136,12 +142,13 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(pawn, victim, null);
+            Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(pawn, victim, null, out Building_ABStairs exit);
             if (stairs == null)
             {
                 return null;
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_RescueAcrossLevels, victim, stairs);
+            job.targetC = exit;
             job.count = 1;
             return job;
         }
@@ -168,7 +175,7 @@ namespace AsAboveSoBelow
         {
             this.FailOnDestroyedOrNull(TargetIndex.A);
             this.FailOnDespawnedOrNull(TargetIndex.B);
-            this.FailOn(() => Stairs == null || Stairs.Counterpart == null);
+            this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
             this.FailOn(() => Victim == null || Victim.Dead || !Victim.Downed);
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.OnCell)
                 .FailOnSomeonePhysicallyInteracting(TargetIndex.A);
@@ -180,8 +187,10 @@ namespace AsAboveSoBelow
             Toil transfer = ToilMaker.MakeToil("AB_TakePawnTransfer");
             transfer.initAction = delegate
             {
+                Building_ABStairs dest = job.GetTarget(TargetIndex.C).Thing as Building_ABStairs;
                 StairTransfer.Transfer(pawn, Stairs,
-                    job.def == ABDefOf.AB_CaptureAcrossLevels ? CarriedIntent.Capture : CarriedIntent.Rescue);
+                    job.def == ABDefOf.AB_CaptureAcrossLevels ? CarriedIntent.Capture : CarriedIntent.Rescue,
+                    dest);
             };
             transfer.defaultCompleteMode = ToilCompleteMode.Instant;
             yield return transfer;
@@ -243,16 +252,17 @@ namespace AsAboveSoBelow
                 {
                     return null;
                 }
-                Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(taker, victim, GuestStatus.Prisoner);
-                if (stairs?.Counterpart == null)
+                Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(taker, victim, GuestStatus.Prisoner, out Building_ABStairs exit);
+                if (stairs == null || exit == null)
                 {
                     return null;
                 }
-                bool up = stairs.Counterpart.Map.Level() > map.Level();
+                bool up = exit.Map.Level() > map.Level();
                 string label = (up ? "AB_CaptureUpTo" : "AB_CaptureDownTo").Translate(victim.LabelShort);
                 FloatMenuOption option = new FloatMenuOption(label, delegate
                 {
                     Job job = JobMaker.MakeJob(ABDefOf.AB_CaptureAcrossLevels, victim, stairs);
+                    job.targetC = exit;
                     job.count = 1;
                     job.playerForced = true;
                     taker.jobs.TryTakeOrderedJob(job, JobTag.Misc);

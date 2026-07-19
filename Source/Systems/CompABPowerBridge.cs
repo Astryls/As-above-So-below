@@ -60,7 +60,17 @@ namespace AsAboveSoBelow
         private void Equalize()
         {
             Building_ABStairs stairs = parent as Building_ABStairs;
-            Building_ABStairs counterpart = stairs?.Counterpart;
+            if (stairs == null)
+            {
+                return;
+            }
+            EqualizeWith(stairs, stairs.Counterpart);
+            // Elevator middle cars hold a second link (down).
+            EqualizeWith(stairs, stairs.SecondCounterpart);
+        }
+
+        private void EqualizeWith(Building_ABStairs stairs, Building_ABStairs counterpart)
+        {
             CompABPowerBridge other = counterpart?.GetComp<CompABPowerBridge>();
             if (other == null)
             {

@@ -59,6 +59,7 @@ namespace AsAboveSoBelow
                 FloatMenuOption option = new FloatMenuOption(label, delegate
                 {
                     Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, clickedThing, stairs);
+                    job.targetC = stairs.CounterpartTowards(target);
                     job.count = Mathf.Min(clickedThing.stackCount, pawn.carryTracker.MaxStackSpaceEver(clickedThing.def));
                     job.playerForced = true;
                     pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
