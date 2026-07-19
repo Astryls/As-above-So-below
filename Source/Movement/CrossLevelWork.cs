@@ -54,6 +54,11 @@ namespace AsAboveSoBelow
             return TryTowards(giver, pawn, comp.upperMap) ?? TryTowards(giver, pawn, comp.lowerMap);
         }
 
+        /// <summary>TEMP instrumentation: the first few migration attempts per launch
+        /// log a one line summary so failed sends are diagnosable from the bridge.
+        /// Remove after the upstairs-mining report is resolved.</summary>
+        private static int diagCount;
+
         private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target)
         {
             if (target == null || target.Disposed)
@@ -62,11 +67,21 @@ namespace AsAboveSoBelow
             }
             Building_ABStairs stairs = NearestUsableStairs(pawn, target, checkReachability: true);
             Building_ABStairs exit = stairs?.Counterpart;
-            if (exit == null)
+            bool workFound = false;
+            if (exit != null)
             {
-                return null;
+                workFound = WorkExistsAt(giver, pawn, target, exit.Position);
             }
-            if (!WorkExistsAt(giver, pawn, target, exit.Position))
+            if (diagCount < 6)
+            {
+                diagCount++;
+                Log.Warning(ABLog.Tag + " [diagnostic] migrate check: pawn=" + pawn.LabelShort
+                    + " from level " + pawn.Map.Level() + " to level " + target.Level()
+                    + " stairs=" + (stairs != null ? "found" : "none")
+                    + " exit=" + (exit != null ? "found" : "none")
+                    + " work=" + (workFound ? "found" : "none"));
+            }
+            if (!workFound)
             {
                 return null;
             }
