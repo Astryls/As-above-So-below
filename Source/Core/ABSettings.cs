@@ -7,7 +7,7 @@ namespace AsAboveSoBelow
     {
         public bool verboseLogging;
         public bool showLiveBelow = true;
-        public float belowDim = 0.30f;
+        public float belowDim = 0.12f;
 
         public void DoWindowContents(Rect inRect)
         {
@@ -26,7 +26,9 @@ namespace AsAboveSoBelow
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
-            Scribe_Values.Look(ref belowDim, "belowDim", 0.30f);
+            // Key renamed so the old heavier default is not carried over from
+            // earlier test sessions; real surface lighting now does most of the work.
+            Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);
         }
     }
 }
