@@ -68,7 +68,11 @@ namespace AsAboveSoBelow
                 if (solid[idx])
                 {
                     ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
-                    grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
+                    // The whole mountain top - ledge, and the floor revealed by
+                    // mining the mass - is a flat fog-toned cap, so from above
+                    // the mountain reads exactly like the fogged mass seen from
+                    // the surface (playtest request). Floors can cover it.
+                    grid.SetTerrain(c, ABDefOf.AB_MountainTop);
                     if (wall[idx])
                     {
                         GenSpawn.Spawn(rock, c, map);
@@ -97,11 +101,9 @@ namespace AsAboveSoBelow
                 }
                 else if (roofBelow != null && roofBelow.isNatural)
                 {
-                    // Thin-roof overhang strip outside the mass: the top of the
-                    // mountain's edge, sealed with the vanilla rough stone of the
-                    // local rock so it reads native.
-                    ThingDef rimRock = rocks[ABRockGen.PickIndex(noises, c)];
-                    grid.SetTerrain(c, rimRock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
+                    // Thin-roof overhang strip outside the mass: part of the same
+                    // flat fog-toned mountain cap.
+                    grid.SetTerrain(c, ABDefOf.AB_MountainTop);
                 }
                 else
                 {

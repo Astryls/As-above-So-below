@@ -33,4 +33,22 @@
     </affordances>
   </TerrainDef>
 
+  <TerrainDef>
+    <defName>AB_MountainTop</defName>
+    <label>mountain top</label>
+    <description>The unbroken top of the mountain mass below. Bare, dark stone; nothing grows up here, but floors can be laid over it.</description>
+    <texturePath>Terrain/AB_MountainTop</texturePath>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>231</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Standable</passability>
+    <pathCost>2</pathCost>
+    <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
 </Defs>
