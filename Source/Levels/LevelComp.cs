@@ -73,34 +73,53 @@ namespace AsAboveSoBelow
 
         private const int WeatherSyncInterval = 150;
 
-        /// <summary>The sky level adopts the ground map's weather so rain, snow, and
-        /// storms stay linked between floors. Cheap: one check every 150 ticks.</summary>
+        private const int PipeBridgeInterval = 250;
+
+        /// <summary>Sky comps sync weather from the ground; the ground comp drives
+        /// pipe network bridging for every stairwell pair (each pair has one end
+        /// on the ground map under the three-level cap).</summary>
         public override void MapComponentTick()
         {
-            if (level != 1 || !ABGuard.On(ABGuard.Weather))
+            if (level == 1)
             {
-                return;
-            }
-            if ((Find.TickManager.TicksGame + (map.uniqueID % WeatherSyncInterval)) % WeatherSyncInterval != 0)
-            {
-                return;
-            }
-            try
-            {
-                Map ground = lowerMap ?? groundMap;
-                if (ground == null || ground.Disposed)
+                if (!ABGuard.On(ABGuard.Weather)
+                    || (Find.TickManager.TicksGame + (map.uniqueID % WeatherSyncInterval)) % WeatherSyncInterval != 0)
                 {
                     return;
                 }
-                WeatherDef target = ground.weatherManager.curWeather;
-                if (target != null && map.weatherManager.curWeather != target)
+                try
                 {
-                    map.weatherManager.TransitionTo(target);
+                    Map ground = lowerMap ?? groundMap;
+                    if (ground == null || ground.Disposed)
+                    {
+                        return;
+                    }
+                    WeatherDef target = ground.weatherManager.curWeather;
+                    if (target != null && map.weatherManager.curWeather != target)
+                    {
+                        map.weatherManager.TransitionTo(target);
+                    }
+                }
+                catch (Exception e)
+                {
+                    ABGuard.Disable(ABGuard.Weather, e, "weather sync");
                 }
             }
-            catch (Exception e)
+            else if (level == 0)
             {
-                ABGuard.Disable(ABGuard.Weather, e, "weather sync");
+                if (!ABGuard.On(ABGuard.Pipes) || stairsList == null || stairsList.Count == 0
+                    || (Find.TickManager.TicksGame + (map.uniqueID % PipeBridgeInterval)) % PipeBridgeInterval != 0)
+                {
+                    return;
+                }
+                try
+                {
+                    ABPipeCompat.TickGroundPairs(this);
+                }
+                catch (Exception e)
+                {
+                    ABGuard.Disable(ABGuard.Pipes, e, "pipe network bridge");
+                }
             }
         }
 
