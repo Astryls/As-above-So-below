@@ -22,7 +22,8 @@
       <WorkToBuild>3200</WorkToBuild>
       <Flammability>1.0</Flammability>
     </statBases>
-    <tickerType>Never</tickerType>
+    <!-- Normal ticker: the power bridge equalizes in CompTick. Never-tickers get no comp ticks at all. -->
+    <tickerType>Normal</tickerType>
     <placeWorkers>
       <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
     </placeWorkers>
