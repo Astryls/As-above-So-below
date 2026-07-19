@@ -20,10 +20,6 @@ namespace AsAboveSoBelow
     /// </summary>
     public class SectionLayer_ABMountainCap : SectionLayer
     {
-        /// <summary>Single tuning point for the cap tone, matched to vanilla
-        /// fog of war during playtest.</summary>
-        private static readonly Color CapColor = new Color32(30, 28, 26, byte.MaxValue);
-
         private static Material capMat;
         private static Material capMatOverWalls;
 
@@ -33,7 +29,14 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            Material solid = SolidColorMaterials.SimpleSolidColorMaterial(CapColor);
+            // The cap draws with THE VANILLA FOG MATERIAL, cloned at our queues:
+            // hand-picked colors could never exactly match the fog's rendered
+            // tone, so the feathered boundary where real fog meets the cap
+            // stayed visible (playtest round 9, answer C). Same material means
+            // pixel-identical rendering and the seam dissolves; fully-fogged
+            // vertex colors (white, alpha 255) match SectionLayer_FogOfWar's
+            // covered verts exactly.
+            Material solid = MatBases.FogOfWar;
             int terrain = 2000;
             Material soil = TerrainDefOf.Soil?.graphic?.MatSingle;
             if (soil != null)
@@ -87,56 +90,52 @@ namespace AsAboveSoBelow
                     {
                         baseSub = GetSubMesh(capMat);
                     }
-                    AddQuad(baseSub, c.x, c.z, c.x + 1, c.z + 1, y);
                     // Decal-cover pass: wall sprites drape a wavy overhang skirt
-                    // about a third of a cell into adjacent floor, drawn above
-                    // the low cap and lit by nearby glow - it reads as a warm
-                    // band breaking the flat sheet (playtest round 8). Cover the
-                    // wall-facing rim of open cap cells with strips just above
-                    // the cutout queue. Cells holding any edifice (torch,
-                    // furniture, the wall itself) are skipped so their sprites
-                    // are never clipped.
+                    // into adjacent floor cells; the wall-facing rim draws just
+                    // above the cutout queue to cover it. Tiles are emitted
+                    // OVERLAP-FREE: stacking two translucent fog quads darkens
+                    // the rim by one extra blend and reads as faint 1x1 cell
+                    // edges (playtest round 10, north-facing rows). Cells
+                    // holding any edifice (torch, furniture, the wall itself)
+                    // get a plain base quad so their sprites are never clipped.
                     if (c.GetEdifice(map) != null)
                     {
+                        AddQuad(baseSub, c.x, c.z, c.x + 1, c.z + 1, y);
                         continue;
                     }
                     bool n = RockAt(map, c + IntVec3.North);
                     bool s = RockAt(map, c + IntVec3.South);
                     bool e = RockAt(map, c + IntVec3.East);
                     bool w = RockAt(map, c + IntVec3.West);
-                    if (n)
+                    bool ne = RockAt(map, c + IntVec3.North + IntVec3.East);
+                    bool nw = RockAt(map, c + IntVec3.North + IntVec3.West);
+                    bool se = RockAt(map, c + IntVec3.South + IntVec3.East);
+                    bool sw = RockAt(map, c + IntVec3.South + IntVec3.West);
+                    if (!n && !s && !e && !w && !ne && !nw && !se && !sw)
                     {
-                        AddStrip(ref stripSub, c.x, c.z + 1f - StripWidth, c.x + 1, c.z + 1, y);
+                        AddQuad(baseSub, c.x, c.z, c.x + 1, c.z + 1, y);
+                        continue;
                     }
-                    if (s)
-                    {
-                        AddStrip(ref stripSub, c.x, c.z, c.x + 1, c.z + StripWidth, y);
-                    }
-                    if (e)
-                    {
-                        AddStrip(ref stripSub, c.x + 1f - StripWidth, c.z, c.x + 1, c.z + 1, y);
-                    }
-                    if (w)
-                    {
-                        AddStrip(ref stripSub, c.x, c.z, c.x + StripWidth, c.z + 1, y);
-                    }
-                    // Corner nubs from diagonal-only rock neighbors.
-                    if (!n && !e && RockAt(map, c + IntVec3.North + IntVec3.East))
-                    {
-                        AddStrip(ref stripSub, c.x + 1f - StripWidth, c.z + 1f - StripWidth, c.x + 1, c.z + 1, y);
-                    }
-                    if (!n && !w && RockAt(map, c + IntVec3.North + IntVec3.West))
-                    {
-                        AddStrip(ref stripSub, c.x, c.z + 1f - StripWidth, c.x + StripWidth, c.z + 1, y);
-                    }
-                    if (!s && !e && RockAt(map, c + IntVec3.South + IntVec3.East))
-                    {
-                        AddStrip(ref stripSub, c.x + 1f - StripWidth, c.z, c.x + 1, c.z + StripWidth, y);
-                    }
-                    if (!s && !w && RockAt(map, c + IntVec3.South + IntVec3.West))
-                    {
-                        AddStrip(ref stripSub, c.x, c.z, c.x + StripWidth, c.z + StripWidth, y);
-                    }
+                    // 3x3 tiling: rim tiles go high wherever any touching rock
+                    // (cardinal or diagonal) can drape a decal; every pixel of
+                    // the cell is covered by exactly one quad.
+                    float x0 = c.x;
+                    float z0 = c.z;
+                    float x1 = c.x + 1f;
+                    float z1 = c.z + 1f;
+                    float xa = x0 + StripWidth;
+                    float xb = x1 - StripWidth;
+                    float za = z0 + StripWidth;
+                    float zb = z1 - StripWidth;
+                    EmitTile(ref stripSub, baseSub, n || w || nw, x0, zb, xa, z1, y);
+                    EmitTile(ref stripSub, baseSub, n, xa, zb, xb, z1, y);
+                    EmitTile(ref stripSub, baseSub, n || e || ne, xb, zb, x1, z1, y);
+                    EmitTile(ref stripSub, baseSub, w, x0, za, xa, zb, y);
+                    AddQuad(baseSub, xa, za, xb, zb, y);
+                    EmitTile(ref stripSub, baseSub, e, xb, za, x1, zb, y);
+                    EmitTile(ref stripSub, baseSub, s || w || sw, x0, z0, xa, za, y);
+                    EmitTile(ref stripSub, baseSub, s, xa, z0, xb, za, y);
+                    EmitTile(ref stripSub, baseSub, s || e || se, xb, z0, x1, za, y);
                 }
                 if (baseSub != null || stripSub != null)
                 {
@@ -151,14 +150,24 @@ namespace AsAboveSoBelow
 
         private const float StripWidth = 0.4f;
 
-        private void AddStrip(ref LayerSubMesh sub, float x0, float z0, float x1, float z1, float y)
+        private void EmitTile(ref LayerSubMesh stripSub, LayerSubMesh baseSub, bool high,
+            float x0, float z0, float x1, float z1, float y)
         {
-            if (sub == null)
+            if (high)
             {
-                sub = GetSubMesh(capMatOverWalls);
+                if (stripSub == null)
+                {
+                    stripSub = GetSubMesh(capMatOverWalls);
+                }
+                AddQuad(stripSub, x0, z0, x1, z1, y);
             }
-            AddQuad(sub, x0, z0, x1, z1, y);
+            else
+            {
+                AddQuad(baseSub, x0, z0, x1, z1, y);
+            }
         }
+
+        private static readonly Color32 FoggedVert = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
 
         private static void AddQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1, float y)
         {
@@ -167,6 +176,10 @@ namespace AsAboveSoBelow
             sub.verts.Add(new Vector3(x0, y, z1));
             sub.verts.Add(new Vector3(x1, y, z1));
             sub.verts.Add(new Vector3(x1, y, z0));
+            sub.colors.Add(FoggedVert);
+            sub.colors.Add(FoggedVert);
+            sub.colors.Add(FoggedVert);
+            sub.colors.Add(FoggedVert);
             sub.tris.Add(vi);
             sub.tris.Add(vi + 1);
             sub.tris.Add(vi + 2);
