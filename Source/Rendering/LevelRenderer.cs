@@ -54,6 +54,44 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<MapDrawer, Section[,]> SectionsRef =
             AccessTools.FieldRefAccess<MapDrawer, Section[,]>("sections");
 
+        /// <summary>Exact layer types the below-view copies: world CONTENT only.
+        /// Everything else (fog, darkness, lighting, plans, the vanilla power grid
+        /// overlay, DBH and VEF pipe overlays, any future mod overlay) is excluded
+        /// by construction, so overlays only ever render on the level being viewed.
+        /// Exact types, not IsAssignableFrom: the power overlay subclasses the
+        /// things layer and would slip through an inheritance check.</summary>
+        private static readonly HashSet<Type> ContentLayerTypes = BuildContentLayerTypes();
+
+        private static HashSet<Type> BuildContentLayerTypes()
+        {
+            HashSet<Type> set = new HashSet<Type>
+            {
+                typeof(SectionLayer_Terrain),
+                typeof(SectionLayer_ThingsGeneral),
+                typeof(SectionLayer_BuildingsDamage),
+                typeof(SectionLayer_Snow),
+                typeof(SectionLayer_Gas),
+                typeof(SectionLayer_PollutionCloud),
+                typeof(SectionLayer_EdgeShadows)
+            };
+            AddByName(set, "Verse.SectionLayer_SunShadows");
+            // Version or DLC dependent layers, added when present.
+            AddByName(set, "Verse.SectionLayer_Sand");
+            AddByName(set, "RimWorld.SectionLayer_TerrainEdges");
+            AddByName(set, "Verse.SectionLayer_TerrainScatter");
+            AddByName(set, "RimWorld.SectionLayer_BridgeProps");
+            return set;
+        }
+
+        private static void AddByName(HashSet<Type> set, string typeName)
+        {
+            Type type = AccessTools.TypeByName(typeName);
+            if (type != null)
+            {
+                set.Add(type);
+            }
+        }
+
         private static Mesh maskMesh;
         private static Material maskMat;
         private static int maskLastFrame = -999;
@@ -118,17 +156,7 @@ namespace AsAboveSoBelow
                     for (int i = 0; i < layers.Count; i++)
                     {
                         SectionLayer layer = layers[i];
-                        // Knowledge and vision masks must never enter the below-view:
-                        // SectionLayer_Darkness paints black over the lower map's
-                        // fogged cells (the recurring phantom fog), FogOfWar and
-                        // IndoorMask encode the lower map's player knowledge, and the
-                        // lighting overlay is replaced by our air-cells mask.
-                        if (layer is SectionLayer_Darkness || layer is SectionLayer_FogOfWar
-                            || layer is SectionLayer_IndoorMask || layer is SectionLayer_LightingOverlay)
-                        {
-                            continue;
-                        }
-                        if (!layer.Visible)
+                        if (!ContentLayerTypes.Contains(layer.GetType()) || !layer.Visible)
                         {
                             continue;
                         }

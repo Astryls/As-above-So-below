@@ -26,6 +26,13 @@
     <placeWorkers>
       <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
     </placeWorkers>
+    <comps>
+      <li Class="CompProperties_Power">
+        <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
+        <transmitsPower>true</transmitsPower>
+        <basePowerConsumption>0</basePowerConsumption>
+      </li>
+    </comps>
   </ThingDef>
 
   <ThingDef ParentName="AB_StairsBase">
