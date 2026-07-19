@@ -9,15 +9,14 @@ namespace AsAboveSoBelow
     /// <summary>
     /// Lays out the sky level from a snapshot of the ground map.
     /// The mountain mass (mineable edifice or thick natural roof below) rises one
-    /// step contracted: its outer ring becomes an open walkable rock ledge, the
-    /// eroded core becomes solid mineable rock under a thick rock roof, and only
-    /// the core's interior (one more erosion in) is fogged, so the rock face ring
-    /// stays visible exactly like a vanilla mountain. Constructed roofs below
-    /// become corrugated rooftop, natural thin roofs (the mountain overhang
-    /// strip) become walkable rock roof, and only roofless cells are open air
-    /// showing the level below - so the mountain edge is sealed with no
-    /// see-through slivers under the rock edge sprites. Ore lumps scatter into
-    /// the mass so the sky mountain is worth mining.
+    /// step contracted: its outer ring stays an open walkable rock ledge, and the
+    /// eroded core is solid mineable rock under thick rock roof, FULLY fogged -
+    /// exactly a vanilla unexplored mountain (playtest spec: fog fills the whole
+    /// mass; faces reveal as pawns approach). Constructed roofs below become
+    /// corrugated rooftop; natural thin roofs (the overhang strip) become the
+    /// VANILLA rough stone terrain of the local rock so the mountain edge is
+    /// sealed and looks native; only roofless cells are open air showing the
+    /// level below. Ore lumps scatter into the mass so it is worth mining.
     /// </summary>
     public class GenStep_ABSkyTerrain : GenStep
     {
@@ -72,17 +71,12 @@ namespace AsAboveSoBelow
                     grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
                     if (wall[idx])
                     {
+                        // The whole mass: solid rock under thick roof, fogged like a
+                        // vanilla unexplored mountain. Faces unfog as pawns approach.
                         GenSpawn.Spawn(rock, c, map);
                         oreCells.Add(c);
-                        if (AllWithinRadius(map, indices, wall, c, 2))
-                        {
-                            // Deep interior only: roofed mountain, fogged like vanilla
-                            // unexplored rock.
-                            map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
-                            fogCells.Add(c);
-                        }
-                        // The two visible face rows stay unroofed AND unfogged so their
-                        // rock texture renders fully lit, matching Z-Levels beta's edge.
+                        map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
+                        fogCells.Add(c);
                     }
                     // Ledge ring: open walkable rock, no wall, no roof, never fogged.
                     continue;
@@ -100,8 +94,10 @@ namespace AsAboveSoBelow
                 else if (roofBelow.isNatural)
                 {
                     // Thin-roof overhang strip outside the mass: the top of the
-                    // mountain's edge, walkable rock roof.
-                    grid.SetTerrain(c, ABDefOf.AB_RockRoofSurface);
+                    // mountain's edge, sealed with the vanilla rough stone of the
+                    // local rock so it reads native.
+                    ThingDef rimRock = rocks[ABRockGen.PickIndex(noises, c)];
+                    grid.SetTerrain(c, rimRock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
                 }
                 else
                 {
@@ -143,22 +139,5 @@ namespace AsAboveSoBelow
             return true;
         }
 
-        /// <summary>True when every cell within the square radius is set; cells
-        /// beyond the map edge count as set.</summary>
-        private static bool AllWithinRadius(Map map, CellIndices indices, bool[] grid, IntVec3 c, int radius)
-        {
-            foreach (IntVec3 n in CellRect.CenteredOn(c, radius))
-            {
-                if (!n.InBounds(map))
-                {
-                    continue;
-                }
-                if (!grid[indices.CellToIndex(n)])
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 }

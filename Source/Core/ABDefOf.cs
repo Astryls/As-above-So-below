@@ -19,7 +19,6 @@ namespace AsAboveSoBelow
 
         public static TerrainDef AB_OpenAir;
         public static TerrainDef AB_RoofSurface;
-        public static TerrainDef AB_RockRoofSurface;
 
         static ABDefOf()
         {

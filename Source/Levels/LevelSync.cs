@@ -42,23 +42,29 @@ namespace AsAboveSoBelow
                 RoofGrid roofs = ground.roofGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainDef rooftop = ABDefOf.AB_RoofSurface;
-                TerrainDef rockTop = ABDefOf.AB_RockRoofSurface;
                 int fixedCells = 0;
                 foreach (IntVec3 c in sky.AllCells)
                 {
                     TerrainDef top = grid.TerrainAt(c);
-                    if (top != air && top != rooftop && top != rockTop)
+                    if (top != air && top != rooftop)
                     {
-                        // Floors, solid rock, and anything else are never touched.
+                        // Floors, rock, and anything else are never touched.
                         continue;
                     }
                     RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
-                    TerrainDef want = roof == null ? air : (roof.isNatural ? rockTop : rooftop);
-                    if (top != want)
+                    TerrainDef want = roof != null && !roof.isNatural ? rooftop : air;
+                    if (top == want)
                     {
-                        grid.SetTerrain(c, want);
-                        fixedCells++;
+                        continue;
                     }
+                    if (want == air && IsStairsPlatform(sky, c))
+                    {
+                        // Landing platforms are the arrival footing; they persist
+                        // while their stairs stand.
+                        continue;
+                    }
+                    grid.SetTerrain(c, want);
+                    fixedCells++;
                 }
                 if (fixedCells > 0)
                 {
@@ -89,23 +95,25 @@ namespace AsAboveSoBelow
                 TerrainDef top = grid.TerrainAt(c);
                 if (roof != null)
                 {
-                    // Support gained: air becomes the walkable top matching the
-                    // roof kind (corrugated rooftop over constructed roofs, rock
-                    // roof over natural ones). Solid rock terrain and existing
+                    // Support gained: air becomes buildable rooftop. Natural roofs
+                    // are generation-time only; solid rock terrain and existing
                     // floors are already supported, leave them alone.
-                    TerrainDef want = roof.isNatural ? ABDefOf.AB_RockRoofSurface : ABDefOf.AB_RoofSurface;
-                    if (top == ABDefOf.AB_OpenAir
-                        || (top != want && (top == ABDefOf.AB_RoofSurface || top == ABDefOf.AB_RockRoofSurface)))
+                    if (!roof.isNatural && top == ABDefOf.AB_OpenAir)
                     {
-                        grid.SetTerrain(c, want);
+                        grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
                     }
                 }
                 else
                 {
-                    // Support lost.
-                    if (top == ABDefOf.AB_RoofSurface || top == ABDefOf.AB_RockRoofSurface)
+                    // Support lost. Stairwell landing platforms persist while
+                    // their stairs stand (they are the arrival footing), and
+                    // revert through the same rule once the stairs are gone.
+                    if (top == ABDefOf.AB_RoofSurface)
                     {
-                        grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                        if (!IsStairsPlatform(sky, c))
+                        {
+                            grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                        }
                     }
                     else if (top != ABDefOf.AB_OpenAir && top.Removable)
                     {
@@ -243,6 +251,27 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.RoofSync, e, "mining fog reveal");
             }
+        }
+
+        /// <summary>True when the cell belongs to a spawned stairwell's landing
+        /// footing (footprint plus one rim cell). O(stairs on the map), called
+        /// only for cells about to be demoted to open air.</summary>
+        internal static bool IsStairsPlatform(Map sky, IntVec3 c)
+        {
+            List<Building_ABStairs> stairs = sky.Levels()?.Stairs;
+            if (stairs == null)
+            {
+                return false;
+            }
+            for (int i = 0; i < stairs.Count; i++)
+            {
+                Building_ABStairs s = stairs[i];
+                if (s != null && s.Spawned && s.OccupiedRect().ExpandedBy(1).Contains(c))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool ShouldFall(Thing t)

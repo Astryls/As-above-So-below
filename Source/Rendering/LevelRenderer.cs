@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Verse;
@@ -110,43 +111,74 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Base render queue per below layer type. Flat ground layers
-        /// stay tightly packed at the bottom; the things layer gets headroom for
-        /// per-submesh altitude stepping; weather-ish overlays draw last. All
-        /// far below any vanilla map material (2000+).</summary>
-        private static readonly Dictionary<Type, int> BelowLayerQueues = BuildBelowLayerQueues();
+        /// <summary>Queue OFFSET per below layer type, subtracted from the
+        /// runtime-derived ceiling. Flat ground layers pack at the bottom; the
+        /// things layer gets headroom for per-submesh altitude stepping;
+        /// weather-ish overlays draw last.</summary>
+        private static readonly Dictionary<Type, int> BelowLayerOffsets = BuildBelowLayerOffsets();
 
-        private const int BelowThingsBaseQueue = 1200;
+        private const int BelowThingsOffset = 200;
 
-        private const int BelowDefaultQueue = 1320;
+        private const int BelowDefaultOffset = 150;
 
-        private static Dictionary<Type, int> BuildBelowLayerQueues()
+        private static Dictionary<Type, int> BuildBelowLayerOffsets()
         {
             Dictionary<Type, int> map = new Dictionary<Type, int>
             {
-                { typeof(SectionLayer_Terrain), 1000 },
-                { typeof(SectionLayer_EdgeShadows), 1020 },
-                { typeof(SectionLayer_ThingsGeneral), BelowThingsBaseQueue },
-                { typeof(SectionLayer_BuildingsDamage), 1350 },
-                { typeof(SectionLayer_Snow), 1400 },
-                { typeof(SectionLayer_Gas), 1450 },
-                { typeof(SectionLayer_PollutionCloud), 1500 }
+                { typeof(SectionLayer_Terrain), 300 },
+                { typeof(SectionLayer_EdgeShadows), 260 },
+                { typeof(SectionLayer_ThingsGeneral), BelowThingsOffset },
+                { typeof(SectionLayer_BuildingsDamage), 95 },
+                { typeof(SectionLayer_Snow), 90 },
+                { typeof(SectionLayer_Gas), 85 },
+                { typeof(SectionLayer_PollutionCloud), 80 }
             };
-            AddQueueByName(map, "Verse.SectionLayer_Watergen", 1005);
-            AddQueueByName(map, "Verse.SectionLayer_Sand", 1008);
-            AddQueueByName(map, "RimWorld.SectionLayer_TerrainEdges", 1010);
-            AddQueueByName(map, "Verse.SectionLayer_TerrainScatter", 1015);
-            AddQueueByName(map, "Verse.SectionLayer_SunShadows", 1025);
-            AddQueueByName(map, "RimWorld.SectionLayer_BridgeProps", 1030);
+            AddOffsetByName(map, "Verse.SectionLayer_Watergen", 290);
+            AddOffsetByName(map, "Verse.SectionLayer_Sand", 285);
+            AddOffsetByName(map, "RimWorld.SectionLayer_TerrainEdges", 280);
+            AddOffsetByName(map, "Verse.SectionLayer_TerrainScatter", 275);
+            AddOffsetByName(map, "Verse.SectionLayer_SunShadows", 255);
+            AddOffsetByName(map, "RimWorld.SectionLayer_BridgeProps", 250);
             return map;
         }
 
-        private static void AddQueueByName(Dictionary<Type, int> map, string typeName, int queue)
+        private static void AddOffsetByName(Dictionary<Type, int> map, string typeName, int offset)
         {
             Type type = AccessTools.TypeByName(typeName);
             if (type != null)
             {
-                map[type] = queue;
+                map[type] = offset;
+            }
+        }
+
+        private static int belowQueueCeiling = -1;
+
+        /// <summary>The render queue vanilla terrain ACTUALLY uses, read from a
+        /// real terrain material once at runtime. Guessing this constant caused
+        /// two broken rounds: the sky map's own terrain must render after every
+        /// below-view queue, so the whole below band hangs strictly under the
+        /// measured value rather than an assumed one.</summary>
+        private static int BelowQueueCeiling
+        {
+            get
+            {
+                if (belowQueueCeiling < 0)
+                {
+                    int q = 0;
+                    Material m = TerrainDefOf.Soil?.graphic?.MatSingle;
+                    if (m != null)
+                    {
+                        q = m.renderQueue;
+                        if (q <= 0 && m.shader != null)
+                        {
+                            q = m.shader.renderQueue;
+                        }
+                    }
+                    // Sanity floor: with anything implausible, fall back to the
+                    // Unity geometry default so the band still sits under it.
+                    belowQueueCeiling = q >= 500 ? q : 2000;
+                }
+                return belowQueueCeiling;
             }
         }
 
@@ -245,11 +277,12 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        if (!BelowLayerQueues.TryGetValue(layerType, out int baseQueue))
+                        if (!BelowLayerOffsets.TryGetValue(layerType, out int offset))
                         {
-                            baseQueue = BelowDefaultQueue;
+                            offset = BelowDefaultOffset;
                         }
-                        bool stepByAltitude = baseQueue == BelowThingsBaseQueue;
+                        int baseQueue = Mathf.Max(BelowQueueCeiling - offset, 1);
+                        bool stepByAltitude = offset == BelowThingsOffset;
                         List<LayerSubMesh> subs = layer.subMeshes;
                         for (int j = 0; j < subs.Count; j++)
                         {
@@ -437,7 +470,12 @@ namespace AsAboveSoBelow
             try
             {
                 OffsetActive = true;
-                lower.dynamicDrawManager.DrawDynamicThings();
+                if (!TryDrawFilteredDynamic(map, lower))
+                {
+                    // Reflection fallback: the unfiltered vanilla pass (pre-spec
+                    // behavior) rather than no live view at all.
+                    lower.dynamicDrawManager.DrawDynamicThings();
+                }
             }
             catch (Exception e)
             {
@@ -447,6 +485,87 @@ namespace AsAboveSoBelow
             {
                 OffsetActive = false;
             }
+        }
+
+        private static AccessTools.FieldRef<DynamicDrawManager, List<Thing>> drawThingsRef;
+        private static bool drawThingsRefFailed;
+
+        /// <summary>The one-way mirror rule (playtest spec): a below thing is
+        /// visible from above ONLY when its cell is unroofed (any roof kind),
+        /// unfogged, in view, and under open air on this level. Pawns walking
+        /// under roofs, rooftops, landings, or the mountain simply do not draw.
+        /// Single-threaded per-thing Draw mirrors vanilla's own
+        /// singleThreadedDrawing fallback path, so no parallel pre-draw is
+        /// needed.</summary>
+        private static bool TryDrawFilteredDynamic(Map sky, Map lower)
+        {
+            if (drawThingsRefFailed)
+            {
+                return false;
+            }
+            if (drawThingsRef == null)
+            {
+                try
+                {
+                    drawThingsRef = AccessTools.FieldRefAccess<DynamicDrawManager, List<Thing>>("drawThings");
+                }
+                catch (Exception)
+                {
+                    drawThingsRef = null;
+                }
+                if (drawThingsRef == null)
+                {
+                    drawThingsRefFailed = true;
+                    Log.Warning(ABLog.Tag + " DynamicDrawManager.drawThings not found; the below view falls back to unfiltered dynamic drawing.");
+                    return false;
+                }
+            }
+            List<Thing> things = drawThingsRef(lower.dynamicDrawManager);
+            if (things == null)
+            {
+                drawThingsRefFailed = true;
+                return false;
+            }
+            CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
+            RoofGrid roofs = lower.roofGrid;
+            FogGrid fog = lower.fogGrid;
+            TerrainGrid skyTerrain = sky.terrainGrid;
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            for (int i = 0; i < things.Count; i++)
+            {
+                Thing t = things[i];
+                if (t == null || !t.Spawned)
+                {
+                    continue;
+                }
+                IntVec3 pos = t.Position;
+                if (!pos.InBounds(lower) || roofs.Roofed(pos))
+                {
+                    continue;
+                }
+                if (!pos.InBounds(sky) || skyTerrain.TerrainAt(pos) != air)
+                {
+                    continue;
+                }
+                if (fog.IsFogged(pos))
+                {
+                    continue;
+                }
+                if (!view.Contains(pos) && !t.def.drawOffscreen)
+                {
+                    continue;
+                }
+                try
+                {
+                    t.DynamicDrawPhase(DrawPhase.Draw);
+                }
+                catch (Exception e)
+                {
+                    Log.WarningOnce(ABLog.Tag + " Below draw failed for " + t.LabelCap + ": " + e.Message,
+                        t.thingIDNumber ^ 762195846);
+                }
+            }
+            return true;
         }
     }
 }
