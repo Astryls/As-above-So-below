@@ -75,6 +75,12 @@ namespace AsAboveSoBelow
                 typeof(SectionLayer_EdgeShadows)
             };
             AddByName(set, "Verse.SectionLayer_SunShadows");
+            // Water depth shading. Vanilla routes this through the WaterDepth
+            // subcamera; the below-view redraws its submeshes flat at the below
+            // offset instead, so deep water reads as depth-shaded rather than a flat
+            // slab. Exact type: it subclasses SectionLayer_Terrain and would be
+            // missed by an inheritance check.
+            AddByName(set, "Verse.SectionLayer_Watergen");
             // Version or DLC dependent layers, added when present.
             AddByName(set, "Verse.SectionLayer_Sand");
             AddByName(set, "RimWorld.SectionLayer_TerrainEdges");
@@ -179,7 +185,15 @@ namespace AsAboveSoBelow
         /// NOT inherited: looking down from the sky level reveals sealed areas the
         /// same way Z-Levels beta did; surface pawns' own knowledge is unaffected.
         /// Sky light comes from the CURRENT map's sky manager because inactive maps
-        /// do not update theirs.</summary>
+        /// do not update theirs.
+        /// Known accepted limitation (T6 #6, decided): the mask material draws on
+        /// top of the transparent pass so it can dim below content that renders
+        /// AFTER it (the offset dynamic pass). Sky level projectiles crossing open
+        /// air occupy those same cells for a few frames and pick up the same dim.
+        /// Below and sky content share render queues and overlapping altitudes, so
+        /// no draw-order or depth trick separates them; a clean fix needs a
+        /// subcamera composite of the entire below view, out of scope for polish.
+        /// Cosmetic, most visible at night, accepted and documented.</summary>
         private static void DrawBelowMask(Map sky, Map lower, CellRect view)
         {
             if (maskMat == null)

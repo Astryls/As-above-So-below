@@ -28,6 +28,22 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
+    /// Below-view pawn silhouettes (the far-zoom highlight outlines) are drawn at
+    /// AltitudeLayer.Silhouettes, a fixed altitude that ignores our DrawPos offset,
+    /// so a lower-map pawn's silhouette would float over the sky terrain. Skip the
+    /// whole silhouette pass while the lower map's dynamic draw runs; the sky map's
+    /// own silhouettes (OffsetActive false) are untouched.
+    /// </summary>
+    [HarmonyPatch(typeof(DynamicDrawManager), "DrawSilhouettes")]
+    internal static class Patch_DynamicDrawManager_DrawSilhouettes
+    {
+        private static bool Prefix()
+        {
+            return !LevelRenderer.OffsetActive;
+        }
+    }
+
+    /// <summary>
     /// Patches every declared DrawPos getter (vanilla and modded Thing subclasses)
     /// with a postfix that shifts the result down while the lower map's dynamic
     /// draw pass runs. Inactive cost is a single static bool read.

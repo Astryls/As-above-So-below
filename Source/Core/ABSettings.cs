@@ -7,6 +7,7 @@ namespace AsAboveSoBelow
     {
         public bool verboseLogging;
         public bool showLiveBelow = true;
+        public bool showCeilingHint = true;
         public float belowDim = 0.12f;
         public bool crossLevelWork = true;
         public bool idleReturnHome = true;
@@ -26,6 +27,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_CrossLevelPipes".Translate(), ref crossLevelPipes, "AB_CrossLevelPipesTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelTemperature".Translate(), ref crossLevelTemperature, "AB_CrossLevelTemperatureTip".Translate());
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
+            listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
             listing.GapLine();
@@ -38,6 +40,7 @@ namespace AsAboveSoBelow
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
+            Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
             // Key renamed so the old heavier default is not carried over from
             // earlier test sessions; real surface lighting now does most of the work.
             Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);

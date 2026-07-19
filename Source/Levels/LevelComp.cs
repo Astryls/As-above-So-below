@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RimWorld;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -165,6 +166,20 @@ namespace AsAboveSoBelow
             map.events.ThingDespawned += thingDespawnedHandler;
             syncSubscribed = true;
             ABLog.Dev("Level sync subscribed for map " + map.uniqueID + " (level " + level + ").");
+            // Surface ceiling hints regenerate from the Roofs flag; after a load the
+            // surface sections can build before this sky map's links restore, so
+            // nudge a one-time whole-map regen. Cosmetic: failure is swallowed.
+            if (level == 1)
+            {
+                try
+                {
+                    (lowerMap ?? groundMap)?.mapDrawer?.WholeMapChanged(MapMeshFlagDefOf.Roofs);
+                }
+                catch (Exception e)
+                {
+                    ABLog.Dev("Ceiling hint load nudge skipped: " + e.Message);
+                }
+            }
         }
 
         private void UnsubscribeSync()

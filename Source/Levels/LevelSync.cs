@@ -59,7 +59,14 @@ namespace AsAboveSoBelow
                             grid.SetTerrain(c, ABDefOf.AB_OpenAir);
                         }
                     }
-                    // Natural rock surfaces above mountains are left alone for now.
+                    // Natural rock surfaces above mountains are left alone. Known
+                    // limitation (T6 #3, deferred by decision): if the natural roof
+                    // supporting a sky-mountain rim or ledge cell below is mined out,
+                    // that cell keeps its rock terrain and "floats" rather than
+                    // collapsing to air and dropping. It is a rare edge case (natural
+                    // roof removal under the ledge ring), so we accept and document
+                    // it in the field manual rather than force a collapse cascade
+                    // that could destabilize the mountain shell.
                 }
             }
             catch (Exception e)
@@ -77,6 +84,15 @@ namespace AsAboveSoBelow
             try
             {
                 TerrainDef top = sky.terrainGrid.TerrainAt(c);
+                Map ground = sky.LowerMap();
+                bool groundOk = ground != null && !ground.Disposed && c.InBounds(ground);
+                // The surface ceiling hint layer keys on the Roofs mesh flag. A sky
+                // floor change over an EXISTING rooftop writes no roof below, so
+                // nudge the surface section explicitly (event-driven, one section).
+                if (groundOk)
+                {
+                    ground.mapDrawer.MapMeshDirty(c, MapMeshFlagDefOf.Roofs);
+                }
                 if (top == ABDefOf.AB_OpenAir)
                 {
                     DropCellContents(sky, c);
@@ -84,8 +100,7 @@ namespace AsAboveSoBelow
                 }
                 if (top.Removable)
                 {
-                    Map ground = sky.LowerMap();
-                    if (ground != null && !ground.Disposed && c.InBounds(ground) && ground.roofGrid.RoofAt(c) == null)
+                    if (groundOk && ground.roofGrid.RoofAt(c) == null)
                     {
                         ground.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
                     }
