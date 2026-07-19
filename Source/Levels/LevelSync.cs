@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -45,13 +46,6 @@ namespace AsAboveSoBelow
                 foreach (IntVec3 c in sky.AllCells)
                 {
                     TerrainDef top = grid.TerrainAt(c);
-                    if (IsMiningLeaveTerrain(top))
-                    {
-                        // Missed-event backstop for the mined-cap restoration.
-                        grid.SetTerrain(c, ABDefOf.AB_MountainTop);
-                        fixedCells++;
-                        continue;
-                    }
                     if (top != air && top != rooftop)
                     {
                         // Floors, rock, and anything else are never touched.
@@ -123,15 +117,6 @@ namespace AsAboveSoBelow
             try
             {
                 TerrainDef top = sky.terrainGrid.TerrainAt(c);
-                if (IsMiningLeaveTerrain(top))
-                {
-                    // Vanilla mining writes the rock's leaveTerrain (rough-hewn
-                    // stone) over whatever lay beneath, stomping the mountain
-                    // cap the moment a wall is mined. Restore the cap; the
-                    // re-fired event takes the normal path.
-                    sky.terrainGrid.SetTerrain(c, ABDefOf.AB_MountainTop);
-                    return;
-                }
                 Map ground = sky.LowerMap();
                 bool groundOk = ground != null && !ground.Disposed && c.InBounds(ground);
                 // The surface ceiling hint layer keys on the Roofs mesh flag. A sky
@@ -311,33 +296,43 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        private static HashSet<TerrainDef> miningLeaveTerrains;
+        private static Dictionary<TerrainDef, Color> minedRockColors;
 
-        /// <summary>Terrains vanilla mining leaves under removed rock (every
-        /// mineable's building.leaveTerrain, e.g. rough-hewn stone). On the sky
-        /// level these overwrite the mountain cap when a wall is mined; the
-        /// restoration converts them straight back. Built once on first use.</summary>
-        internal static bool IsMiningLeaveTerrain(TerrainDef def)
+        /// <summary>Maps every mining leave-terrain (rough-hewn stone etc.) to
+        /// the tint of the rock whose mining produces it - its wall and edge
+        /// strip color. Mined floors keep vanilla's leave-terrain as their
+        /// marker and the cap overlay fills them flat in this color, so tunnels
+        /// read in the nearest edge color against the fog mass (playtest
+        /// round 10). Miss means the terrain is not a mined floor. Modded rocks
+        /// participate automatically via their def tint.</summary>
+        internal static bool TryGetMinedRockColor(TerrainDef leaveTerrain, out Color color)
         {
-            if (def == null)
+            color = default(Color);
+            if (leaveTerrain == null)
             {
                 return false;
             }
-            if (miningLeaveTerrains == null)
+            if (minedRockColors == null)
             {
-                miningLeaveTerrains = new HashSet<TerrainDef>();
+                minedRockColors = new Dictionary<TerrainDef, Color>();
                 List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
                 for (int i = 0; i < defs.Count; i++)
                 {
                     ThingDef d = defs[i];
                     TerrainDef leave = d.building?.leaveTerrain;
-                    if (leave != null && d.mineable)
+                    if (leave == null || !d.mineable || minedRockColors.ContainsKey(leave))
                     {
-                        miningLeaveTerrains.Add(leave);
+                        continue;
                     }
+                    Color c = d.graphicData != null ? d.graphicData.color : Color.white;
+                    if (c == Color.white && d.stuffProps != null)
+                    {
+                        c = d.stuffProps.color;
+                    }
+                    minedRockColors[leave] = c;
                 }
             }
-            return miningLeaveTerrains.Contains(def);
+            return minedRockColors.TryGetValue(leaveTerrain, out color);
         }
 
         /// <summary>True when the cell belongs to a spawned stairwell's landing

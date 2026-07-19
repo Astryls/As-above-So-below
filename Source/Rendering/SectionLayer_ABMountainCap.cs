@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -46,13 +47,37 @@ namespace AsAboveSoBelow
             }
             int shadow = MatBases.EdgeShadow != null ? MatBases.EdgeShadow.renderQueue : terrain;
             int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : terrain + 450;
-            int low = Mathf.Clamp(Mathf.Max(terrain, shadow) + 1, terrain + 1, cutout - 1);
-            // The pooled solid-color material is shared; clone before touching
-            // queues. The over-walls variant sits just above the cutout family
+            lowQueue = Mathf.Clamp(Mathf.Max(terrain, shadow) + 1, terrain + 1, cutout - 1);
+            highQueue = cutout + 1;
+            // Clones: the over-walls variant sits just above the cutout family
             // (walls, their overhang decals) but below items, filth, and pawns
             // (transparent queues).
-            capMat = new Material(solid) { renderQueue = low };
-            capMatOverWalls = new Material(solid) { renderQueue = cutout + 1 };
+            capMat = new Material(solid) { renderQueue = lowQueue };
+            capMatOverWalls = new Material(solid) { renderQueue = highQueue };
+        }
+
+        private static int lowQueue;
+        private static int highQueue;
+
+        private static readonly Dictionary<TerrainDef, Material[]> minedMats =
+            new Dictionary<TerrainDef, Material[]>();
+
+        /// <summary>Low and high queue materials for a mined floor: a flat fill
+        /// in the source rock's own wall-and-edge color.</summary>
+        private static Material[] MinedMatsFor(TerrainDef leaveTerrain, Color rockColor)
+        {
+            if (minedMats.TryGetValue(leaveTerrain, out Material[] pair))
+            {
+                return pair;
+            }
+            Material solid = SolidColorMaterials.SimpleSolidColorMaterial(rockColor);
+            pair = new[]
+            {
+                new Material(solid) { renderQueue = lowQueue },
+                new Material(solid) { renderQueue = highQueue }
+            };
+            minedMats[leaveTerrain] = pair;
+            return pair;
         }
 
         public SectionLayer_ABMountainCap(Section section) : base(section)
@@ -78,18 +103,33 @@ namespace AsAboveSoBelow
                 TerrainGrid grid = map.terrainGrid;
                 TerrainDef cap = ABDefOf.AB_MountainTop;
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
-                LayerSubMesh baseSub = null;
-                LayerSubMesh stripSub = null;
+                bool emitted = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
-                    if (grid.TerrainAt(c) != cap)
+                    TerrainDef t = grid.TerrainAt(c);
+                    Material lowMat;
+                    Material highMat;
+                    if (t == cap)
+                    {
+                        // Unmined mountain top: the vanilla fog fill.
+                        lowMat = capMat;
+                        highMat = capMatOverWalls;
+                    }
+                    else if (LevelSync.TryGetMinedRockColor(t, out Color rockColor))
+                    {
+                        // Mined-out floor (vanilla leave-terrain kept as the
+                        // marker): flat fill in the local rock's edge color, so
+                        // tunnels read against the fog mass (playtest round 10).
+                        Material[] pair = MinedMatsFor(t, rockColor);
+                        lowMat = pair[0];
+                        highMat = pair[1];
+                    }
+                    else
                     {
                         continue;
                     }
-                    if (baseSub == null)
-                    {
-                        baseSub = GetSubMesh(capMat);
-                    }
+                    emitted = true;
+                    LayerSubMesh baseSub = GetSubMesh(lowMat);
                     // Decal-cover pass: wall sprites drape a wavy overhang skirt
                     // into adjacent floor cells; the wall-facing rim draws just
                     // above the cutout queue to cover it. Tiles are emitted
@@ -127,17 +167,17 @@ namespace AsAboveSoBelow
                     float xb = x1 - StripWidth;
                     float za = z0 + StripWidth;
                     float zb = z1 - StripWidth;
-                    EmitTile(ref stripSub, baseSub, n || w || nw, x0, zb, xa, z1, y);
-                    EmitTile(ref stripSub, baseSub, n, xa, zb, xb, z1, y);
-                    EmitTile(ref stripSub, baseSub, n || e || ne, xb, zb, x1, z1, y);
-                    EmitTile(ref stripSub, baseSub, w, x0, za, xa, zb, y);
+                    EmitTile(highMat, baseSub, n || w || nw, x0, zb, xa, z1, y);
+                    EmitTile(highMat, baseSub, n, xa, zb, xb, z1, y);
+                    EmitTile(highMat, baseSub, n || e || ne, xb, zb, x1, z1, y);
+                    EmitTile(highMat, baseSub, w, x0, za, xa, zb, y);
                     AddQuad(baseSub, xa, za, xb, zb, y);
-                    EmitTile(ref stripSub, baseSub, e, xb, za, x1, zb, y);
-                    EmitTile(ref stripSub, baseSub, s || w || sw, x0, z0, xa, za, y);
-                    EmitTile(ref stripSub, baseSub, s, xa, z0, xb, za, y);
-                    EmitTile(ref stripSub, baseSub, s || e || se, xb, z0, x1, za, y);
+                    EmitTile(highMat, baseSub, e, xb, za, x1, zb, y);
+                    EmitTile(highMat, baseSub, s || w || sw, x0, z0, xa, za, y);
+                    EmitTile(highMat, baseSub, s, xa, z0, xb, za, y);
+                    EmitTile(highMat, baseSub, s || e || se, xb, z0, x1, za, y);
                 }
-                if (baseSub != null || stripSub != null)
+                if (emitted)
                 {
                     FinalizeMesh(MeshParts.All);
                 }
@@ -150,21 +190,10 @@ namespace AsAboveSoBelow
 
         private const float StripWidth = 0.4f;
 
-        private void EmitTile(ref LayerSubMesh stripSub, LayerSubMesh baseSub, bool high,
+        private void EmitTile(Material highMat, LayerSubMesh baseSub, bool high,
             float x0, float z0, float x1, float z1, float y)
         {
-            if (high)
-            {
-                if (stripSub == null)
-                {
-                    stripSub = GetSubMesh(capMatOverWalls);
-                }
-                AddQuad(stripSub, x0, z0, x1, z1, y);
-            }
-            else
-            {
-                AddQuad(baseSub, x0, z0, x1, z1, y);
-            }
+            AddQuad(high ? GetSubMesh(highMat) : baseSub, x0, z0, x1, z1, y);
         }
 
         private static readonly Color32 FoggedVert = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
