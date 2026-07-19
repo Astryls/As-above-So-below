@@ -138,6 +138,40 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Guaranteed fog reveal when a mineable is removed on a level map
+        /// (mined, collapsed, or destroyed). Vanilla's own fog-blocker path is gated
+        /// on adjacency conditions; this makes the reveal unconditional and is
+        /// idempotent when both run. Covers the sky level and the basement.</summary>
+        public static void OnLevelMineableDespawned(Map levelMap, Thing thing)
+        {
+            if (!ABGuard.On(ABGuard.RoofSync))
+            {
+                return;
+            }
+            try
+            {
+                if (!(thing is Mineable))
+                {
+                    return;
+                }
+                IntVec3 c = thing.Position;
+                if (!c.InBounds(levelMap))
+                {
+                    return;
+                }
+                FogGrid fog = levelMap.fogGrid;
+                if (fog.IsFogged(c))
+                {
+                    fog.Unfog(c);
+                }
+                fog.FloodUnfogAdjacent(c, sendLetters: false);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.RoofSync, e, "mining fog reveal");
+            }
+        }
+
         private static bool ShouldFall(Thing t)
         {
             if (t is Mineable || t is Blueprint || t is Frame || t is Explosion || t is Building_ABStairs)

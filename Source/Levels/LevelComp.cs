@@ -40,6 +40,7 @@ namespace AsAboveSoBelow
         private Action<IntVec3> roofChangedHandler;
         private Action<IntVec3> terrainChangedHandler;
         private Action<Thing> thingSpawnedHandler;
+        private Action<Thing> thingDespawnedHandler;
 
         public override void FinalizeInit()
         {
@@ -52,27 +53,33 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Sky level comps listen to the ground map's roof changes and their
-        /// own terrain/spawn events to enforce the cross-level rules.</summary>
+        /// own terrain/spawn events; both sky and basement comps listen for mineable
+        /// removal to guarantee the fog reveal.</summary>
         private void TrySubscribeSync()
         {
-            if (syncSubscribed || level != 1)
-            {
-                return;
-            }
-            Map ground = lowerMap ?? groundMap;
-            if (ground == null || ground.events == null || map.events == null)
+            if (syncSubscribed || level == 0 || map.events == null)
             {
                 return;
             }
             Map self = map;
-            roofChangedHandler = c => LevelSync.OnGroundRoofChanged(ground, c);
-            terrainChangedHandler = c => LevelSync.OnSkyTerrainChanged(self, c);
-            thingSpawnedHandler = t => LevelSync.OnSkyThingSpawned(self, t);
-            ground.events.RoofChanged += roofChangedHandler;
-            map.events.TerrainChanged += terrainChangedHandler;
-            map.events.ThingSpawned += thingSpawnedHandler;
+            if (level == 1)
+            {
+                Map ground = lowerMap ?? groundMap;
+                if (ground == null || ground.events == null)
+                {
+                    return;
+                }
+                roofChangedHandler = c => LevelSync.OnGroundRoofChanged(ground, c);
+                terrainChangedHandler = c => LevelSync.OnSkyTerrainChanged(self, c);
+                thingSpawnedHandler = t => LevelSync.OnSkyThingSpawned(self, t);
+                ground.events.RoofChanged += roofChangedHandler;
+                map.events.TerrainChanged += terrainChangedHandler;
+                map.events.ThingSpawned += thingSpawnedHandler;
+            }
+            thingDespawnedHandler = t => LevelSync.OnLevelMineableDespawned(self, t);
+            map.events.ThingDespawned += thingDespawnedHandler;
             syncSubscribed = true;
-            ABLog.Dev("Sky sync subscribed for map " + map.uniqueID + ".");
+            ABLog.Dev("Level sync subscribed for map " + map.uniqueID + " (level " + level + ").");
         }
 
         private void UnsubscribeSync()
@@ -95,6 +102,10 @@ namespace AsAboveSoBelow
                 if (thingSpawnedHandler != null)
                 {
                     map.events.ThingSpawned -= thingSpawnedHandler;
+                }
+                if (thingDespawnedHandler != null)
+                {
+                    map.events.ThingDespawned -= thingDespawnedHandler;
                 }
             }
             syncSubscribed = false;
