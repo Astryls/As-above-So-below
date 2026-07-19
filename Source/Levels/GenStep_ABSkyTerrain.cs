@@ -69,7 +69,9 @@ namespace AsAboveSoBelow
                     {
                         GenSpawn.Spawn(rock, c, map);
                         map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
-                        if (AllNeighbors(map, indices, wall, c))
+                        // Fog only cells two rows deep into the wall mass so two full
+                        // rock face rows stay visible outside the fog's soft edge.
+                        if (AllWithinRadius(map, indices, wall, c, 2))
                         {
                             fogCells.Add(c);
                         }
@@ -111,6 +113,24 @@ namespace AsAboveSoBelow
             for (int i = 0; i < adjacent.Length; i++)
             {
                 IntVec3 n = c + adjacent[i];
+                if (!n.InBounds(map))
+                {
+                    continue;
+                }
+                if (!grid[indices.CellToIndex(n)])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>True when every cell within the square radius is set; cells
+        /// beyond the map edge count as set.</summary>
+        private static bool AllWithinRadius(Map map, CellIndices indices, bool[] grid, IntVec3 c, int radius)
+        {
+            foreach (IntVec3 n in CellRect.CenteredOn(c, radius))
+            {
                 if (!n.InBounds(map))
                 {
                     continue;
