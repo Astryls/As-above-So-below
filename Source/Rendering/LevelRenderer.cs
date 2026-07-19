@@ -18,6 +18,17 @@ namespace AsAboveSoBelow
     /// only over air cells it can never cover the sky level's own rock, floors, or
     /// buildings, regardless of shader depth behavior. Vanilla overlay meshes are
     /// deliberately NOT drawn into the below-view for exactly that reason.
+    ///
+    /// Render ordering: RimWorld's map shaders do not depth-write, so within one
+    /// render queue the GPU paints by camera distance and the below copies (same
+    /// materials, same queue as the sky map's own layers) used to OVERPAINT the
+    /// sky's terrain - rooftop and rock terrain existed in the mesh but were
+    /// invisible (Z-Levels beta solved the same problem with dedicated lower
+    /// section layers). The below pass therefore draws through cloned materials
+    /// forced into explicit low render queues (1000-1500, stepped to preserve
+    /// the painter order between layers and by submesh altitude within the
+    /// things layer), guaranteeing every sky-map material draws after - and
+    /// therefore over - the view below.
     /// Every entry point is kill-switched via ABGuard.Rendering.
     /// </summary>
     public static class LevelRenderer
@@ -99,6 +110,72 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Base render queue per below layer type. Flat ground layers
+        /// stay tightly packed at the bottom; the things layer gets headroom for
+        /// per-submesh altitude stepping; weather-ish overlays draw last. All
+        /// far below any vanilla map material (2000+).</summary>
+        private static readonly Dictionary<Type, int> BelowLayerQueues = BuildBelowLayerQueues();
+
+        private const int BelowThingsBaseQueue = 1200;
+
+        private const int BelowDefaultQueue = 1320;
+
+        private static Dictionary<Type, int> BuildBelowLayerQueues()
+        {
+            Dictionary<Type, int> map = new Dictionary<Type, int>
+            {
+                { typeof(SectionLayer_Terrain), 1000 },
+                { typeof(SectionLayer_EdgeShadows), 1020 },
+                { typeof(SectionLayer_ThingsGeneral), BelowThingsBaseQueue },
+                { typeof(SectionLayer_BuildingsDamage), 1350 },
+                { typeof(SectionLayer_Snow), 1400 },
+                { typeof(SectionLayer_Gas), 1450 },
+                { typeof(SectionLayer_PollutionCloud), 1500 }
+            };
+            AddQueueByName(map, "Verse.SectionLayer_Watergen", 1005);
+            AddQueueByName(map, "Verse.SectionLayer_Sand", 1008);
+            AddQueueByName(map, "RimWorld.SectionLayer_TerrainEdges", 1010);
+            AddQueueByName(map, "Verse.SectionLayer_TerrainScatter", 1015);
+            AddQueueByName(map, "Verse.SectionLayer_SunShadows", 1025);
+            AddQueueByName(map, "RimWorld.SectionLayer_BridgeProps", 1030);
+            return map;
+        }
+
+        private static void AddQueueByName(Dictionary<Type, int> map, string typeName, int queue)
+        {
+            Type type = AccessTools.TypeByName(typeName);
+            if (type != null)
+            {
+                map[type] = queue;
+            }
+        }
+
+        private static readonly Dictionary<(Material, int), Material> belowMats =
+            new Dictionary<(Material, int), Material>();
+
+        /// <summary>Cached clone of a section material at a forced render queue.
+        /// Source materials are pooled and stable, so the cache stays small; the
+        /// cap is a defensive bound only.</summary>
+        private static Material BelowMaterialFor(Material source, int queue)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+            (Material, int) key = (source, queue);
+            if (belowMats.TryGetValue(key, out Material clone))
+            {
+                return clone;
+            }
+            if (belowMats.Count > 1024)
+            {
+                belowMats.Clear();
+            }
+            clone = new Material(source) { renderQueue = queue };
+            belowMats[key] = clone;
+            return clone;
+        }
+
         private static Mesh maskMesh;
         private static Material maskMat;
         private static int maskLastFrame = -999;
@@ -163,17 +240,37 @@ namespace AsAboveSoBelow
                     for (int i = 0; i < layers.Count; i++)
                     {
                         SectionLayer layer = layers[i];
-                        if (!ContentLayerTypes.Contains(layer.GetType()) || !layer.Visible)
+                        Type layerType = layer.GetType();
+                        if (!ContentLayerTypes.Contains(layerType) || !layer.Visible)
                         {
                             continue;
                         }
+                        if (!BelowLayerQueues.TryGetValue(layerType, out int baseQueue))
+                        {
+                            baseQueue = BelowDefaultQueue;
+                        }
+                        bool stepByAltitude = baseQueue == BelowThingsBaseQueue;
                         List<LayerSubMesh> subs = layer.subMeshes;
                         for (int j = 0; j < subs.Count; j++)
                         {
                             LayerSubMesh sub = subs[j];
-                            if (sub.finalized && !sub.disabled && sub.mesh.bounds.center.y <= MaxSubMeshAltitude)
+                            float subY = sub.mesh.bounds.center.y;
+                            if (!sub.finalized || sub.disabled || subY > MaxSubMeshAltitude)
                             {
-                                Graphics.DrawMesh(sub.mesh, OffsetMatrix, sub.material, 0);
+                                continue;
+                            }
+                            // Things submeshes bake at their AltitudeLayer heights
+                            // and vanilla layers them by distance sorting, which the
+                            // forced low queues bypass; step the queue by altitude
+                            // so plants, items, and buildings keep their painter
+                            // order inside the below view.
+                            int queue = stepByAltitude
+                                ? baseQueue + Mathf.Clamp((int)(subY * 40f), 0, 99)
+                                : baseQueue;
+                            Material mat = BelowMaterialFor(sub.material, queue);
+                            if (mat != null)
+                            {
+                                Graphics.DrawMesh(sub.mesh, OffsetMatrix, mat, 0);
                             }
                         }
                     }
