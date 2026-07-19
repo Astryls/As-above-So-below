@@ -128,8 +128,10 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Air-cells-only mask: opaque over unexplored surface, otherwise
-        /// darkness from the surface's per-cell light plus the user's base dim.
+        /// <summary>Air-cells-only mask carrying darkness from the surface's per-cell
+        /// light plus the user's base dim. The surface's fog of war is deliberately
+        /// NOT inherited: looking down from the sky level reveals sealed areas the
+        /// same way Z-Levels beta did; surface pawns' own knowledge is unaffected.
         /// Sky light comes from the CURRENT map's sky manager because inactive maps
         /// do not update theirs.</summary>
         private static void DrawBelowMask(Map sky, Map lower, CellRect view)
@@ -174,7 +176,6 @@ namespace AsAboveSoBelow
             float skyGlowNow = sky.skyManager.CurSkyGlow;
             TerrainGrid skyTerrain = sky.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
-            FogGrid lowerFog = lower.fogGrid;
             GlowGrid lowerGlow = lower.glowGrid;
             RoofGrid lowerRoofs = lower.roofGrid;
             int step = view.Width > 130 ? 2 : 1;
@@ -187,19 +188,11 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    byte a;
-                    if (lowerFog.IsFogged(c))
-                    {
-                        a = 255;
-                    }
-                    else
-                    {
-                        // Artificial glow from the lower map, sky light from the
-                        // current map (identical tile, updated every frame).
-                        float artificial = lowerGlow.GroundGlowAt(c, ignoreCavePlants: false, ignoreSky: true);
-                        float light = lowerRoofs.Roofed(c) ? artificial : Mathf.Max(skyGlowNow, artificial);
-                        a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (0.82f - baseDim)));
-                    }
+                    // Artificial glow from the lower map, sky light from the
+                    // current map (identical tile, updated every frame).
+                    float artificial = lowerGlow.GroundGlowAt(c, ignoreCavePlants: false, ignoreSky: true);
+                    float light = lowerRoofs.Roofed(c) ? artificial : Mathf.Max(skyGlowNow, artificial);
+                    byte a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (0.82f - baseDim)));
                     int vi = maskVerts.Count;
                     float x1 = Mathf.Min(x + step, view.maxX + 1);
                     float z1 = Mathf.Min(z + step, view.maxZ + 1);
