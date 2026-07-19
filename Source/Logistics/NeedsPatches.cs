@@ -8,9 +8,11 @@ using Verse.AI.Group;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// A tired colonist whose owned bed sits on a directly linked level takes the
-    /// stairs toward it instead of sleeping on the ground. On arrival the vanilla
-    /// rest job finds the bed normally. Hunger and recreation resolve through the
+    /// A tired colonist whose owned bed sits anywhere in this column takes the
+    /// stairs toward it instead of sleeping on the ground. Routing is one hop at
+    /// a time: a sky pawn with a basement bed descends to the ground, where this
+    /// giver fires again for the second hop (T7 #3). On arrival the vanilla rest
+    /// job finds the bed normally. Hunger and recreation resolve through the
     /// idle-return drift; rest needs the redirect because vanilla happily sleeps
     /// on any floor.
     /// </summary>
@@ -46,11 +48,22 @@ namespace AsAboveSoBelow
                     return;
                 }
                 LevelComp comp = pawn.Map.Levels();
-                if (comp == null || (bed.Map != comp.upperMap && bed.Map != comp.lowerMap))
+                if (comp == null)
                 {
                     return;
                 }
-                Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, bed.Map, checkReachability: true);
+                // Same column only; route one hop toward the bed's level.
+                Map pawnGround = pawn.Map.GroundMap();
+                if (pawnGround == null || pawnGround != bed.Map.GroundMap())
+                {
+                    return;
+                }
+                Map nextMap = bed.Map.Level() > comp.level ? comp.upperMap : comp.lowerMap;
+                if (nextMap == null || nextMap.Disposed)
+                {
+                    return;
+                }
+                Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, nextMap, checkReachability: true);
                 if (stairs?.Counterpart == null)
                 {
                     return;

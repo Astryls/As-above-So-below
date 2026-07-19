@@ -10,7 +10,16 @@ namespace AsAboveSoBelow
     /// in the two nets' towers equalizes (damped, through DBH's own public
     /// PullWater and PushWater so all their rules apply). Sewage still needs
     /// per-level handling (a septic tank or outlet on each level).
-    /// This class is only JIT compiled when DBH is active.
+    ///
+    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException): foreign
+    /// types must never appear in ANY method signature (parameters or return
+    /// type) or class-level member here - locals inside method bodies only.
+    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects over
+    /// every method in every assembly) resolve signature types even for methods
+    /// that are never called, which hard-crashes the scan when DBH is absent.
+    /// Method BODIES are safe: they are JIT compiled only on first invocation,
+    /// and every call site is gated by ABPipeCompat's ModsConfig.IsActive check.
+    /// That is why everything below lives inside one clean-signature method.
     /// </summary>
     public static class DBHWaterBridge
     {
@@ -18,8 +27,6 @@ namespace AsAboveSoBelow
 
         private const float MinTransfer = 0.05f;
 
-        // No class-level fields may use DBH types: field type resolution can load
-        // the assembly before any runtime gate runs. Locals only.
         public static void BridgePair(Building_ABStairs a, Building_ABStairs b)
         {
             HygienePipeMapComp compA = a.Map.GetComponent<HygienePipeMapComp>();
@@ -28,86 +35,76 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            List<PlumbingNet> netsAtA = new List<PlumbingNet>();
-            CollectNetsAt(compA, a.Position, netsAtA);
-            for (int i = 0; i < netsAtA.Count; i++)
+            PlumbingNet[] netsA = compA.PipeNets;
+            PlumbingNet[] netsB = compB.PipeNets;
+            for (int i = 0; i < netsA.Length; i++)
             {
-                PlumbingNet netA = netsAtA[i];
-                PlumbingNet netB = NetAtOfType(compB, b.Position, netA.NetType);
-                if (netB != null && netB != netA)
+                PlumbingNet netA = netsA[i];
+                if (!netA.cells.Contains(a.Position))
                 {
-                    EqualizeWater(netA, netB);
+                    continue;
                 }
-            }
-        }
-
-        private static void CollectNetsAt(HygienePipeMapComp comp, IntVec3 cell, List<PlumbingNet> outNets)
-        {
-            PlumbingNet[] nets = comp.PipeNets;
-            for (int i = 0; i < nets.Length; i++)
-            {
-                if (nets[i].cells.Contains(cell))
+                // First net of the same type touching the far stairwell.
+                PlumbingNet netB = null;
+                for (int j = 0; j < netsB.Length; j++)
                 {
-                    outNets.Add(nets[i]);
+                    if (netsB[j].NetType == netA.NetType && netsB[j].cells.Contains(b.Position))
+                    {
+                        netB = netsB[j];
+                        break;
+                    }
                 }
-            }
-        }
-
-        private static PlumbingNet NetAtOfType(HygienePipeMapComp comp, IntVec3 cell, int netType)
-        {
-            PlumbingNet[] nets = comp.PipeNets;
-            for (int i = 0; i < nets.Length; i++)
-            {
-                if (nets[i].NetType == netType && nets[i].cells.Contains(cell))
+                if (netB == null || netB == netA)
                 {
-                    return nets[i];
+                    continue;
                 }
-            }
-            return null;
-        }
-
-        private static void EqualizeWater(PlumbingNet netA, PlumbingNet netB)
-        {
-            float capA = Capacity(netA);
-            float capB = Capacity(netB);
-            if (capA <= 0f || capB <= 0f)
-            {
-                return;
-            }
-            float storedA = netA.WaterStorage;
-            float storedB = netB.WaterStorage;
-            float move = (storedA * capB - storedB * capA) / (capA + capB) * Damping;
-            if (move > MinTransfer)
-            {
-                Transfer(netA, netB, move);
-            }
-            else if (move < -MinTransfer)
-            {
-                Transfer(netB, netA, -move);
-            }
-        }
-
-        private static float Capacity(PlumbingNet net)
-        {
-            float cap = 0f;
-            List<CompWaterStorage> towers = net.WaterTowers;
-            for (int i = 0; i < towers.Count; i++)
-            {
-                cap += towers[i].WaterStorage + towers[i].space;
-            }
-            return cap;
-        }
-
-        private static void Transfer(PlumbingNet from, PlumbingNet to, float amount)
-        {
-            if (!from.PullWater(amount, out ContaminationLevel _))
-            {
-                return;
-            }
-            float leftover = to.PushWater(amount);
-            if (leftover > 0f)
-            {
-                from.PushWater(leftover);
+                // Capacities from the towers (stored + free space).
+                float capA = 0f;
+                List<CompWaterStorage> towersA = netA.WaterTowers;
+                for (int t = 0; t < towersA.Count; t++)
+                {
+                    capA += towersA[t].WaterStorage + towersA[t].space;
+                }
+                float capB = 0f;
+                List<CompWaterStorage> towersB = netB.WaterTowers;
+                for (int t = 0; t < towersB.Count; t++)
+                {
+                    capB += towersB[t].WaterStorage + towersB[t].space;
+                }
+                if (capA <= 0f || capB <= 0f)
+                {
+                    continue;
+                }
+                // Damped equalization toward equal fill fractions.
+                float move = (netA.WaterStorage * capB - netB.WaterStorage * capA) / (capA + capB) * Damping;
+                PlumbingNet from;
+                PlumbingNet to;
+                float amount;
+                if (move > MinTransfer)
+                {
+                    from = netA;
+                    to = netB;
+                    amount = move;
+                }
+                else if (move < -MinTransfer)
+                {
+                    from = netB;
+                    to = netA;
+                    amount = -move;
+                }
+                else
+                {
+                    continue;
+                }
+                if (!from.PullWater(amount, out ContaminationLevel _))
+                {
+                    continue;
+                }
+                float leftover = to.PushWater(amount);
+                if (leftover > 0f)
+                {
+                    from.PushWater(leftover);
+                }
             }
         }
     }

@@ -14,4 +14,17 @@
     </requiredCapacities>
   </WorkGiverDef>
 
+  <WorkGiverDef>
+    <defName>AB_FetchFromOtherLevels</defName>
+    <label>fetch things from other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>fetch</verb>
+    <gerund>fetching from</gerund>
+    <priorityInType>8</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
 </Defs>

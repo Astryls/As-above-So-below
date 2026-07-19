@@ -10,7 +10,16 @@ namespace AsAboveSoBelow
     /// stored resource equalizes between the two nets (damped, through PipeSystem's
     /// own public draw and distribute so all their rules apply). Each side needs at
     /// least one storage for resources to flow into.
-    /// This class is only JIT compiled when VEF is active.
+    ///
+    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException): foreign
+    /// types must never appear in ANY method signature (parameters or return
+    /// type) or class-level member here - locals inside method bodies only.
+    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects over
+    /// every method in every assembly) resolve signature types even for methods
+    /// that are never called, which hard-crashes the scan when VEF is absent.
+    /// Method BODIES are safe: they are JIT compiled only on first invocation,
+    /// and every call site is gated by ABPipeCompat's detection check. That is
+    /// why everything below lives inside one clean-signature method.
     /// </summary>
     public static class VEFPipeBridge
     {
@@ -27,6 +36,7 @@ namespace AsAboveSoBelow
                 return;
             }
             List<PipeNet> netsA = managerA.pipeNets;
+            List<PipeNet> netsB = managerB.pipeNets;
             for (int i = 0; i < netsA.Count; i++)
             {
                 PipeNet netA = netsA[i];
@@ -34,61 +44,61 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                PipeNet netB = NetAtOfDef(managerB, b.Position, netA.def);
-                if (netB != null && netB != netA)
+                // First net of the same def touching the far stairwell.
+                PipeNet netB = null;
+                for (int j = 0; j < netsB.Count; j++)
                 {
-                    Equalize(netA, netB);
+                    PipeNet cand = netsB[j];
+                    if (cand?.networkGrid != null && cand.def == netA.def && cand.networkGrid[b.Position])
+                    {
+                        netB = cand;
+                        break;
+                    }
                 }
-            }
-        }
-
-        private static PipeNet NetAtOfDef(PipeNetManager manager, IntVec3 cell, PipeNetDef def)
-        {
-            List<PipeNet> nets = manager.pipeNets;
-            for (int i = 0; i < nets.Count; i++)
-            {
-                PipeNet net = nets[i];
-                if (net?.networkGrid != null && net.def == def && net.networkGrid[cell])
+                if (netB == null || netB == netA)
                 {
-                    return net;
+                    continue;
                 }
-            }
-            return null;
-        }
-
-        private static void Equalize(PipeNet netA, PipeNet netB)
-        {
-            float storedA = netA.CurrentStored();
-            float storedB = netB.CurrentStored();
-            float capA = storedA + netA.AvailableCapacity;
-            float capB = storedB + netB.AvailableCapacity;
-            if (capA <= 0f || capB <= 0f)
-            {
-                return;
-            }
-            float move = (storedA * capB - storedB * capA) / (capA + capB) * Damping;
-            if (move > MinTransfer)
-            {
-                Move(netA, netB, move);
-            }
-            else if (move < -MinTransfer)
-            {
-                Move(netB, netA, -move);
-            }
-        }
-
-        private static void Move(PipeNet from, PipeNet to, float amount)
-        {
-            from.DrawAmongStorage(amount, out float drawn, null, drawFromOverflow: false);
-            if (drawn <= 0f)
-            {
-                return;
-            }
-            to.DistributeAmongStorage(drawn, out float stored, null, allowOverflow: false);
-            float leftover = drawn - stored;
-            if (leftover > 0.001f)
-            {
-                from.DistributeAmongStorage(leftover, out float _, null, allowOverflow: false);
+                float storedA = netA.CurrentStored();
+                float storedB = netB.CurrentStored();
+                float capA = storedA + netA.AvailableCapacity;
+                float capB = storedB + netB.AvailableCapacity;
+                if (capA <= 0f || capB <= 0f)
+                {
+                    continue;
+                }
+                // Damped equalization toward equal fill fractions.
+                float move = (storedA * capB - storedB * capA) / (capA + capB) * Damping;
+                PipeNet from;
+                PipeNet to;
+                float amount;
+                if (move > MinTransfer)
+                {
+                    from = netA;
+                    to = netB;
+                    amount = move;
+                }
+                else if (move < -MinTransfer)
+                {
+                    from = netB;
+                    to = netA;
+                    amount = -move;
+                }
+                else
+                {
+                    continue;
+                }
+                from.DrawAmongStorage(amount, out float drawn, null, drawFromOverflow: false);
+                if (drawn <= 0f)
+                {
+                    continue;
+                }
+                to.DistributeAmongStorage(drawn, out float stored, null, allowOverflow: false);
+                float leftover = drawn - stored;
+                if (leftover > 0.001f)
+                {
+                    from.DistributeAmongStorage(leftover, out float _, null, allowOverflow: false);
+                }
             }
         }
     }
