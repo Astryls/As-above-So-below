@@ -20,6 +20,14 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            if (__instance.emergency)
+            {
+                // The think tree runs an emergency JobGiver_Work (firefighting class
+                // givers only) BEFORE the normal one. Migrating on it would scan an
+                // almost empty work list and burn the per-pawn cooldown every cycle,
+                // starving the real scanner. Only the normal instance migrates.
+                return;
+            }
             ABSettings settings = ABMod.Settings;
             if (settings == null || !settings.crossLevelWork)
             {
