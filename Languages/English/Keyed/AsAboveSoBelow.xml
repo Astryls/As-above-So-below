@@ -31,5 +31,7 @@
   <AB_NoSupportOnTarget>The matching spot on the other level cannot support a stairwell.</AB_NoSupportOnTarget>
   <AB_CrossLevelWork>Colonists take stairs to work on other levels</AB_CrossLevelWork>
   <AB_CrossLevelWorkTip>When a colonist finds no work on their current level, they check directly linked levels and take the stairs if there is something to do there.</AB_CrossLevelWorkTip>
+  <AB_IdleReturnHome>Idle colonists return to the surface</AB_IdleReturnHome>
+  <AB_IdleReturnHomeTip>Colonists with nothing to do on any level head back down to the surface instead of roaming the level they worked on.</AB_IdleReturnHomeTip>
 
 </LanguageData>

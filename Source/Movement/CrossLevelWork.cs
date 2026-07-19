@@ -51,13 +51,37 @@ namespace AsAboveSoBelow
             }
             nextAllowedTick[pawn.thingIDNumber] = now + MigrationCooldownTicks;
 
-            return TryTowards(giver, pawn, comp.upperMap) ?? TryTowards(giver, pawn, comp.lowerMap);
+            ThinkResult? work = TryTowards(giver, pawn, comp.upperMap) ?? TryTowards(giver, pawn, comp.lowerMap);
+            if (work.HasValue)
+            {
+                return work;
+            }
+            return TryReturnHome(giver, pawn, comp);
         }
 
-        /// <summary>TEMP instrumentation: the first few migration attempts per launch
-        /// log a one line summary so failed sends are diagnosable from the bridge.
-        /// Remove after the upstairs-mining report is resolved.</summary>
-        private static int diagCount;
+        /// <summary>Truly idle colonists drift back toward the ground level, where
+        /// food, beds, and recreation usually live, instead of roaming a work level
+        /// forever.</summary>
+        private static ThinkResult? TryReturnHome(JobGiver_Work giver, Pawn pawn, LevelComp comp)
+        {
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.idleReturnHome || comp.level == 0)
+            {
+                return null;
+            }
+            Map home = comp.level > 0 ? comp.lowerMap : comp.upperMap;
+            if (home == null || home.Disposed)
+            {
+                return null;
+            }
+            Building_ABStairs stairs = NearestUsableStairs(pawn, home, checkReachability: true);
+            if (stairs?.Counterpart == null)
+            {
+                return null;
+            }
+            Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            return new ThinkResult(job, giver, JobTag.Misc);
+        }
 
         private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target)
         {
@@ -67,21 +91,11 @@ namespace AsAboveSoBelow
             }
             Building_ABStairs stairs = NearestUsableStairs(pawn, target, checkReachability: true);
             Building_ABStairs exit = stairs?.Counterpart;
-            bool workFound = false;
-            if (exit != null)
+            if (exit == null)
             {
-                workFound = WorkExistsAt(giver, pawn, target, exit.Position);
+                return null;
             }
-            if (diagCount < 6)
-            {
-                diagCount++;
-                Log.Warning(ABLog.Tag + " [diagnostic] migrate check: pawn=" + pawn.LabelShort
-                    + " from level " + pawn.Map.Level() + " to level " + target.Level()
-                    + " stairs=" + (stairs != null ? "found" : "none")
-                    + " exit=" + (exit != null ? "found" : "none")
-                    + " work=" + (workFound ? "found" : "none"));
-            }
-            if (!workFound)
+            if (!WorkExistsAt(giver, pawn, target, exit.Position))
             {
                 return null;
             }
