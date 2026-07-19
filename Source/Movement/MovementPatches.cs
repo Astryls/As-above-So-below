@@ -20,14 +20,6 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (__instance.emergency)
-            {
-                // The think tree runs an emergency JobGiver_Work (firefighting class
-                // givers only) BEFORE the normal one. Migrating on it would scan an
-                // almost empty work list and burn the per-pawn cooldown every cycle,
-                // starving the real scanner. Only the normal instance migrates.
-                return;
-            }
             ABSettings settings = ABMod.Settings;
             if (settings == null || !settings.crossLevelWork)
             {
@@ -45,7 +37,15 @@ namespace AsAboveSoBelow
             }
             try
             {
-                ThinkResult? result = CrossLevelWork.TryMigrateForWork(__instance, pawn);
+                // The think tree runs an emergency JobGiver_Work (rescue, tend,
+                // firefight - vanilla caches those givers into a list the normal
+                // pass never scans) BEFORE the normal one. The emergency instance
+                // migrates through its own pre-checked, separately-cooled path so
+                // doctors cross levels for downed pawns without empty emergency
+                // scans starving the real work scanner.
+                ThinkResult? result = __instance.emergency
+                    ? CrossLevelWork.TryMigrateForEmergencyWork(__instance, pawn)
+                    : CrossLevelWork.TryMigrateForWork(__instance, pawn);
                 if (result.HasValue)
                 {
                     __result = result.Value;

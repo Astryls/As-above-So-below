@@ -20,11 +20,19 @@ namespace AsAboveSoBelow
     {
         private const int MigrationCooldownTicks = 1200;
 
+        /// <summary>Retry cadence after an emergency virtual scan that found
+        /// nothing actionable (e.g. someone is down but no bed exists anywhere).
+        /// First response is instant: the cooldown is only charged when the
+        /// plausibility pre-check already sees an emergency.</summary>
+        private const int EmergencyMigrationCooldownTicks = 600;
+
         /// <summary>True while the virtual scan runs so the postfix that calls us
         /// does not recurse.</summary>
         internal static bool VirtualScanActive;
 
         private static readonly Dictionary<int, int> nextAllowedTick = new Dictionary<int, int>();
+
+        private static readonly Dictionary<int, int> nextAllowedEmergencyTick = new Dictionary<int, int>();
 
         public static ThinkResult? TryMigrateForWork(JobGiver_Work giver, Pawn pawn)
         {
@@ -51,6 +59,86 @@ namespace AsAboveSoBelow
                 return work;
             }
             return TryReturnHome(giver, pawn, comp);
+        }
+
+        /// <summary>Migration for the emergency work pass (rescue, tend,
+        /// firefight). Vanilla caches emergency work givers into a separate list
+        /// that the normal pass never scans, so without this a doctor idling on
+        /// another level never sees a downed pawn below or above. A cheap
+        /// plausibility pre-check runs BEFORE any cooldown is charged: response
+        /// is immediate when someone actually goes down, while calm-day empty
+        /// passes cost two short list walks and no cooldown churn. The cooldown
+        /// is separate from the normal migration cooldown so a failed emergency
+        /// scan can never starve the real work scanner.</summary>
+        public static ThinkResult? TryMigrateForEmergencyWork(JobGiver_Work giver, Pawn pawn)
+        {
+            LevelComp comp = pawn.Map.Levels();
+            if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+            {
+                return null;
+            }
+            int now = Find.TickManager.TicksGame;
+            if (nextAllowedEmergencyTick.TryGetValue(pawn.thingIDNumber, out int next) && now < next)
+            {
+                return null;
+            }
+            bool up = EmergencyWorkPlausible(pawn, comp.upperMap);
+            bool low = EmergencyWorkPlausible(pawn, comp.lowerMap);
+            if (!up && !low)
+            {
+                return null;
+            }
+            if (nextAllowedEmergencyTick.Count > 512)
+            {
+                nextAllowedEmergencyTick.Clear();
+            }
+            nextAllowedEmergencyTick[pawn.thingIDNumber] = now + EmergencyMigrationCooldownTicks;
+            ThinkResult? work = up ? TryTowards(giver, pawn, comp.upperMap) : null;
+            if (!work.HasValue && low)
+            {
+                work = TryTowards(giver, pawn, comp.lowerMap);
+            }
+            return work;
+        }
+
+        /// <summary>Cheap plausibility check for emergency work on a linked
+        /// level: any fire, or a faction pawn or colony prisoner who is downed
+        /// out of bed or has wounds a player doctor should tend. Cheapest checks
+        /// first; this runs on every empty emergency scan of every colonist, so
+        /// it must stay allocation-free. The virtual scan stays the authority on
+        /// whether the work is actually doable.</summary>
+        private static bool EmergencyWorkPlausible(Pawn pawn, Map target)
+        {
+            if (target == null || target.Disposed)
+            {
+                return false;
+            }
+            if (target.listerThings.ThingsOfDef(ThingDefOf.Fire).Count > 0)
+            {
+                return true;
+            }
+            if (AnyEmergencyPatient(target.mapPawns.SpawnedPawnsInFaction(pawn.Faction)))
+            {
+                return true;
+            }
+            return AnyEmergencyPatient(target.mapPawns.PrisonersOfColonySpawned);
+        }
+
+        private static bool AnyEmergencyPatient(List<Pawn> list)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                Pawn p = list[i];
+                if (p.Downed && !p.InBed())
+                {
+                    return true;
+                }
+                if (p.health != null && p.health.HasHediffsNeedingTendByPlayer())
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Truly idle colonists drift back toward the ground level, where
