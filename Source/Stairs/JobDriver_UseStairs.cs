@@ -55,11 +55,20 @@ namespace AsAboveSoBelow
             }
             Map sourceMap = stairs.Map;
             IntVec3 sourcePos = stairs.Position;
+            Thing carried = null;
             try
             {
                 Map targetMap = dest.Map;
                 IntVec3 landing = dest.Position;
                 bool drafted = p.Drafted;
+                // Despawning a pawn ends its job, and job cleanup DROPS the carried
+                // thing at the pawn's feet. Detach it first so nothing can drop, and
+                // hand it back after the transfer.
+                carried = p.carryTracker?.CarriedThing;
+                if (carried != null)
+                {
+                    p.carryTracker.innerContainer.Remove(carried);
+                }
                 p.DeSpawn();
                 IntVec3 cell = landing.Standable(targetMap) ? landing : CellFinder.StandableCellNear(landing, targetMap, 4f);
                 if (!cell.IsValid)
@@ -67,6 +76,14 @@ namespace AsAboveSoBelow
                     cell = landing;
                 }
                 GenSpawn.Spawn(p, cell, targetMap);
+                if (carried != null && !carried.Destroyed)
+                {
+                    if (p.carryTracker == null || !p.carryTracker.TryStartCarry(carried))
+                    {
+                        GenPlace.TryPlaceThing(carried, cell, targetMap, ThingPlaceMode.Near);
+                    }
+                    carried = null;
+                }
                 if (drafted && p.drafter != null)
                 {
                     p.drafter.Drafted = true;
@@ -78,6 +95,10 @@ namespace AsAboveSoBelow
                 if (!p.Spawned && !p.Destroyed && !p.Dead)
                 {
                     GenSpawn.Spawn(p, sourcePos, sourceMap);
+                }
+                if (carried != null && !carried.Destroyed && carried.holdingOwner == null && !carried.Spawned)
+                {
+                    GenPlace.TryPlaceThing(carried, sourcePos, sourceMap, ThingPlaceMode.Near);
                 }
             }
         }

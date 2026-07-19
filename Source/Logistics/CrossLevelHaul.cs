@@ -63,15 +63,35 @@ namespace AsAboveSoBelow
                 verdictCache.Clear();
             }
 
-            StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
             Map found = null;
-            if (Check(pawn, t, comp.upperMap, current, ref stairs))
+            // A level that still needs this material for construction keeps it:
+            // storage hauling never carries demanded materials away.
+            bool demandedHere = CrossLevelDemand.Demands(map, t.def);
+            if (!demandedHere)
             {
-                found = comp.upperMap;
-            }
-            else if (Check(pawn, t, comp.lowerMap, current, ref stairs))
-            {
-                found = comp.lowerMap;
+                StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
+                if (Check(pawn, t, comp.upperMap, current, ref stairs))
+                {
+                    found = comp.upperMap;
+                }
+                else if (Check(pawn, t, comp.lowerMap, current, ref stairs))
+                {
+                    found = comp.lowerMap;
+                }
+                if (found == null)
+                {
+                    // No better storage anywhere: pull materials toward levels whose
+                    // blueprints and frames still need them. Loose delivery at the
+                    // stairs is fine, construct-deliver uses unstored resources.
+                    if (DemandCheck(pawn, t, comp.upperMap, ref stairs))
+                    {
+                        found = comp.upperMap;
+                    }
+                    else if (DemandCheck(pawn, t, comp.lowerMap, ref stairs))
+                    {
+                        found = comp.lowerMap;
+                    }
+                }
             }
             verdictCache[t.thingIDNumber] = new VerdictEntry
             {
@@ -79,6 +99,21 @@ namespace AsAboveSoBelow
                 mapId = found?.uniqueID ?? -1
             };
             return found;
+        }
+
+        private static bool DemandCheck(Pawn pawn, Thing t, Map target, ref Building_ABStairs stairs)
+        {
+            if (target == null || target.Disposed || !CrossLevelDemand.Demands(target, t.def))
+            {
+                return false;
+            }
+            Building_ABStairs s = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
+            if (s?.Counterpart == null)
+            {
+                return false;
+            }
+            stairs = s;
+            return true;
         }
 
         private static Map FindLinked(LevelComp comp, int id)
