@@ -64,10 +64,10 @@ namespace AsAboveSoBelow
             }
 
             Map found = null;
-            // A level that still needs this material for construction keeps it:
-            // storage hauling never carries demanded materials away.
-            bool demandedHere = CrossLevelDemand.Demands(map, t.def);
-            if (!demandedHere)
+            // Quantity-aware pin: a level keeps only as much of a material as its
+            // blueprints still need; surplus stacks export normally.
+            bool exportBlocked = !CrossLevelDemand.ExportAllowed(map, t);
+            if (!exportBlocked)
             {
                 StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
                 if (Check(pawn, t, comp.upperMap, current, ref stairs))

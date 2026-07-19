@@ -37,5 +37,7 @@
   <AB_CrossLevelHaulingTip>When an item's best storage is on another level, haulers carry it through the stairs. Runs after normal hauling on the same level.</AB_CrossLevelHaulingTip>
   <AB_CrossLevelNeeds>Colonists cross levels to sleep in their beds</AB_CrossLevelNeeds>
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
+  <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
+  <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
 
 </LanguageData>

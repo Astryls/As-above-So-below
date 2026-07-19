@@ -20,6 +20,7 @@ namespace AsAboveSoBelow
         {
             public int tick;
             public readonly Dictionary<ThingDef, int> need = new Dictionary<ThingDef, int>();
+            public readonly Dictionary<ThingDef, int> available = new Dictionary<ThingDef, int>();
         }
 
         public static bool Demands(Map map, ThingDef def)
@@ -30,6 +31,24 @@ namespace AsAboveSoBelow
             }
             CacheEntry entry = GetEntry(map);
             return entry.need.TryGetValue(def, out int n) && n > 0;
+        }
+
+        /// <summary>Quantity-aware pin: exporting this stack is fine as long as the
+        /// level keeps enough of the material to cover its remaining construction
+        /// need. A level needing 20 steel out of 500 exports freely.</summary>
+        public static bool ExportAllowed(Map map, Thing t)
+        {
+            if (map == null || map.Disposed || t?.def == null)
+            {
+                return true;
+            }
+            CacheEntry entry = GetEntry(map);
+            if (!entry.need.TryGetValue(t.def, out int need) || need <= 0)
+            {
+                return true;
+            }
+            entry.available.TryGetValue(t.def, out int available);
+            return available - t.stackCount >= need;
         }
 
         private static CacheEntry GetEntry(Map map)
@@ -46,6 +65,16 @@ namespace AsAboveSoBelow
             entry = new CacheEntry { tick = now };
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry.need);
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry.need);
+            foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
+            {
+                List<Thing> things = map.listerThings.ThingsOfDef(kvp.Key);
+                int sum = 0;
+                for (int i = 0; i < things.Count; i++)
+                {
+                    sum += things[i].stackCount;
+                }
+                entry.available[kvp.Key] = sum;
+            }
             cache[map.uniqueID] = entry;
             return entry;
         }
