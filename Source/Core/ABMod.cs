@@ -1,0 +1,35 @@
+using UnityEngine;
+using Verse;
+
+namespace AsAboveSoBelow
+{
+    public class ABMod : Mod
+    {
+        public static ABSettings Settings { get; private set; }
+
+        public ABMod(ModContentPack content) : base(content)
+        {
+            Settings = GetSettings<ABSettings>();
+        }
+
+        public override string SettingsCategory() => "As above, So below";
+
+        public override void DoSettingsWindowContents(Rect inRect)
+        {
+            Settings.DoWindowContents(inRect);
+        }
+    }
+
+    public static class ABLog
+    {
+        public const string Tag = "[As above, So below]";
+
+        public static void Dev(string msg)
+        {
+            if (ABMod.Settings != null && ABMod.Settings.verboseLogging)
+            {
+                Log.Message(Tag + " " + msg);
+            }
+        }
+    }
+}
