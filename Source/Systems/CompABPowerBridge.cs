@@ -18,7 +18,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public class CompABPowerBridge : CompPowerBattery
     {
-        private const int UpdateInterval = 30;
+        private const int UpdateInterval = 10;
 
         /// <summary>True on the side that received energy in the last equalization.
         /// Only the receiving side forwards charge into its local battery bank;
@@ -72,6 +72,8 @@ namespace AsAboveSoBelow
                     AddEnergy(amount);
                     lastFlowIn = true;
                     other.lastFlowIn = false;
+                    // Deliver in the same cycle instead of waiting for our next tick.
+                    ForwardToLocalBank();
                 }
             }
             else if (delta < -0.5f)
@@ -83,6 +85,7 @@ namespace AsAboveSoBelow
                     other.AddEnergy(amount);
                     lastFlowIn = false;
                     other.lastFlowIn = true;
+                    other.ForwardToLocalBank();
                 }
             }
         }
