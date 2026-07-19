@@ -7,14 +7,14 @@ using Verse.Noise;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Lays out the sky level from a snapshot of the ground map:
-    /// - mineable edifice OR thick natural roof below: the mountain continues
-    ///   upward as solid mineable rock (aligned exactly with the rock face below),
-    ///   under its own thick rock roof, fogged like unexplored mountain
-    /// - otherwise thin natural roof below: bare walkable rock rim (the overhang)
-    /// - otherwise constructed roof below: walkable, buildable rooftop
-    /// - no roof below: open air (impassable, invisible, shows the level below)
-    /// After generation, LevelSync keeps rooftops in step with live roof changes.
+    /// Lays out the sky level from a snapshot of the ground map.
+    /// The mountain mass (mineable edifice or thick natural roof below) rises one
+    /// step contracted: its outer ring becomes an open walkable rock ledge, the
+    /// eroded core becomes solid mineable rock under a thick rock roof, and only
+    /// the core's interior (one more erosion in) is fogged, so the rock face ring
+    /// stays visible exactly like a vanilla mountain. Constructed roofs below
+    /// become buildable rooftop; everything else, including the thin-roof overhang
+    /// strip, is open air showing the level below.
     /// </summary>
     public class GenStep_ABSkyTerrain : GenStep
     {
@@ -30,8 +30,11 @@ namespace AsAboveSoBelow
             }
             List<Perlin> noises = ABRockGen.MakeNoises(rocks.Count);
             TerrainGrid grid = map.terrainGrid;
-            List<IntVec3> fogCells = new List<IntVec3>();
+            CellIndices indices = map.cellIndices;
+            int cellCount = indices.NumGridCells;
 
+            // Pass 1: the solid mountain mass, projected from below.
+            bool[] solid = new bool[cellCount];
             foreach (IntVec3 c in map.AllCells)
             {
                 RoofDef roof = null;
@@ -41,39 +44,83 @@ namespace AsAboveSoBelow
                     roof = ground.roofGrid.RoofAt(c);
                     edifice = ground.edificeGrid[c];
                 }
-                bool rockHere = (edifice != null && edifice.def.mineable)
+                solid[indices.CellToIndex(c)] = (edifice != null && edifice.def.mineable)
                     || (roof != null && roof.isNatural && roof.isThickRoof);
-                if (rockHere)
+            }
+
+            // Pass 2: erode by one. The ring becomes ledge, the core becomes walls.
+            bool[] wall = new bool[cellCount];
+            foreach (IntVec3 c in map.AllCells)
+            {
+                int idx = indices.CellToIndex(c);
+                wall[idx] = solid[idx] && AllNeighbors(map, indices, solid, c);
+            }
+
+            // Pass 3: terrain, walls, roofs; collect the fog core (walls eroded again).
+            List<IntVec3> fogCells = new List<IntVec3>();
+            foreach (IntVec3 c in map.AllCells)
+            {
+                int idx = indices.CellToIndex(c);
+                if (solid[idx])
                 {
                     ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
                     grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
-                    GenSpawn.Spawn(rock, c, map);
-                    map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
-                    fogCells.Add(c);
+                    if (wall[idx])
+                    {
+                        GenSpawn.Spawn(rock, c, map);
+                        map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
+                        if (AllNeighbors(map, indices, wall, c))
+                        {
+                            fogCells.Add(c);
+                        }
+                    }
+                    // Ledge ring: open walkable rock, no wall, no roof, never fogged.
+                    continue;
                 }
-                else if (roof == null)
+                RoofDef roofBelow = null;
+                if (ground != null && c.InBounds(ground))
                 {
-                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                    roofBelow = ground.roofGrid.RoofAt(c);
                 }
-                else if (roof.isNatural)
-                {
-                    ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
-                    grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
-                }
-                else
+                if (roofBelow != null && !roofBelow.isNatural)
                 {
                     grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
                 }
+                else
+                {
+                    // No roof, or the thin-roof overhang strip outside the mass:
+                    // open air, the ground below stays visible.
+                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                }
             }
 
-            // Fog exactly the rock interior so it reads as unexplored mountain and
-            // defogs naturally as it gets mined or seen.
+            // Pass 4: fog only the deep interior; the outer wall row stays visible.
             FogGrid fog = map.fogGrid;
             for (int i = 0; i < fogCells.Count; i++)
             {
                 IntVec3 c = fogCells[i];
                 fog.Refog(new CellRect(c.x, c.z, 1, 1));
             }
+        }
+
+        /// <summary>True when all 8 neighbors are set; cells beyond the map edge
+        /// count as set so masses touching the border stay solid there.</summary>
+        private static bool AllNeighbors(Map map, CellIndices indices, bool[] grid, IntVec3 c)
+        {
+            IntVec3[] adjacent = GenAdj.AdjacentCells;
+            for (int i = 0; i < adjacent.Length; i++)
+            {
+                IntVec3 n = c + adjacent[i];
+                if (!n.InBounds(map))
+                {
+                    continue;
+                }
+                if (!grid[indices.CellToIndex(n)])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
