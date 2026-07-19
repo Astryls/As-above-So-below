@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>As above, So below - asset importer</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1f232b; --panel2: #262b35; --line: #363d4a;
+    --text: #d6dae2; --dim: #8b93a2; --accent: #d7a94f; --ok: #7fbf6a; --bad: #d96b5a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .4px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 12.5px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 60px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  section h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); }
+  label { color: var(--dim); font-size: 12.5px; }
+  select, input[type=text], input[type=number] {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit;
+  }
+  input[type=range] { vertical-align: middle; width: 140px; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #1c1608; font-weight: 600; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  #drop {
+    border: 2px dashed var(--line); border-radius: 8px; padding: 26px; text-align: center; color: var(--dim);
+    transition: border-color .15s, background .15s;
+  }
+  #drop.armed { border-color: var(--accent); background: #24211a; color: var(--text); }
+  #srcWrap { margin-top: 12px; display: none; }
+  #srcView { background: #000; border: 1px solid var(--line); border-radius: 6px; display: block; max-width: 100%; cursor: grab; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  table.map { border-collapse: collapse; }
+  table.map td, table.map th { padding: 4px 10px 4px 0; text-align: left; font-size: 13px; }
+  table.map th { color: var(--dim); font-weight: 500; }
+  #cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; text-align: center; }
+  .card h3 { margin: 0 0 8px; font-size: 12.5px; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .card canvas { width: 176px; height: 176px; image-rendering: auto; border-radius: 4px; }
+  .card .fname { font-size: 11.5px; color: var(--dim); margin-top: 6px; word-break: break-all; }
+  .checker { background: repeating-conic-gradient(#2c313b 0 25%, #232730 0 50%) 0 0 / 22px 22px; }
+  .dark { background: #101216; }
+  .dirt { background: #6b5942; }
+  #status { margin-top: 10px; font-size: 13px; min-height: 18px; }
+  #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
+  .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); vertical-align: middle; }
+  kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>As above, So below <span>&mdash; asset importer</span></h1>
+  <p>Slice Nano Banana 2x2 grids into game-ready rotation textures: auto-detect cells, key out the green, preview stuff tints, export named PNGs for Textures/Things/Building/.</p>
+</header>
+<main>
+
+<section>
+  <h2>1 &middot; What is this grid?</h2>
+  <div class="row">
+    <label>Preset
+      <select id="preset"></select>
+    </label>
+    <label>Base name <input type="text" id="baseName" size="20"></label>
+    <label>Export size <input type="number" id="outSize" min="32" max="1024" step="32" style="width:70px"> px</label>
+    <label><input type="checkbox" id="alsoBase" checked> also export unsuffixed base file from</label>
+    <select id="baseFrom">
+      <option value="0">north</option><option value="1">east</option>
+      <option value="2">south</option><option value="3">west</option>
+    </select>
+  </div>
+</section>
+
+<section>
+  <h2>2 &middot; Load the generated grid</h2>
+  <div id="drop">Drop the grid image here, paste it (<kbd>Ctrl</kbd>+<kbd>V</kbd>), or <button id="browseBtn" style="padding:3px 10px">browse</button>
+    <input type="file" id="file" accept="image/*" style="display:none">
+  </div>
+  <div id="srcWrap">
+    <canvas id="srcView"></canvas>
+    <div class="hint">Colored squares are the four source cells. Drag a square to move it, scroll over it to resize. <button id="redetect" style="padding:3px 10px">Re-detect cells</button></div>
+  </div>
+</section>
+
+<section>
+  <h2>3 &middot; Keying and mapping</h2>
+  <div class="row">
+    <label>Key color <span class="swatch" id="keySwatch"></span></label>
+    <label>Threshold <input type="range" id="thresh" min="0.05" max="0.6" step="0.01" value="0.25"> <span id="threshV">0.25</span></label>
+    <label>Feather <input type="range" id="feather" min="0" max="0.25" step="0.01" value="0.08"> <span id="featherV">0.08</span></label>
+    <label><input type="checkbox" id="despill" checked> remove green fringe</label>
+    <label>Padding <input type="range" id="pad" min="0" max="0.2" step="0.01" value="0.05"> <span id="padV">0.05</span></label>
+  </div>
+  <div class="row">
+    <table class="map">
+      <tr><th>Output</th><th>Source cell</th><th>Extra rotation</th><th>Mirror</th></tr>
+      <tbody id="mapRows"></tbody>
+    </table>
+    <div>
+      <button id="deriveBtn" title="Use the top-left cell for all four outputs, rotating it 90 degrees per direction">Derive all from NORTH cell</button>
+      <div class="hint">Use this when only one cell came out clean:<br>pure 90-degree rotations are lossless.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>4 &middot; Preview</h2>
+  <div class="row">
+    <label>Behind sprite
+      <select id="previewBg">
+        <option value="checker">transparency checker</option>
+        <option value="dirt">soil brown</option>
+        <option value="dark">dark</option>
+      </select>
+    </label>
+    <label>Stuff tint
+      <select id="tint">
+        <option value="">none (raw grays)</option>
+        <option value="#a5794a">wood</option>
+        <option value="#b8bcc0">steel</option>
+        <option value="#8d8d85">granite</option>
+        <option value="#9fc0c5">plasteel</option>
+        <option value="#d9c27e">gold</option>
+      </select>
+    </label>
+  </div>
+  <div id="cards" style="margin-top:12px"></div>
+</section>
+
+<section>
+  <h2>5 &middot; Export</h2>
+  <div class="row">
+    <button class="primary" id="zipBtn" disabled>Download ZIP</button>
+    <button id="dlBtn" disabled>Download individual PNGs</button>
+    <button id="dirBtn" disabled title="Chrome/Edge only: write straight into the mod's texture folder">Save directly to folder&hellip;</button>
+  </div>
+  <div id="status"></div>
+  <div class="hint">Target folder: <b>Textures\Things\Building\</b> inside the mod. When the files are in, tell the assistant to flip the stairs to rotatable.</div>
+</section>
+
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const DIRS = ["north", "east", "south", "west"];
+const DIR_COLORS = ["#5aa2d9", "#7fbf6a", "#d7a94f", "#d96b5a"];
+const CELL_NAMES = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+const PRESETS = [
+  { label: "Stairs up (1x1)",            base: "AB_StairsUp",      size: 128 },
+  { label: "Stairs down (1x1)",          base: "AB_StairsDown",    size: 128 },
+  { label: "Ladder up (1x1)",            base: "AB_LadderUp",      size: 128 },
+  { label: "Ladder down (1x1)",          base: "AB_LadderDown",    size: 128 },
+  { label: "Grand staircase up (2x2)",   base: "AB_GrandStairsUp", size: 256 },
+  { label: "Grand staircase down (2x2)", base: "AB_GrandStairsDown", size: 256 },
+  { label: "Custom", base: "MyBuilding", size: 128 }
+];
+
+const state = {
+  img: null,            // HTMLImageElement
+  key: [0, 255, 0],     // detected key color
+  cells: null,          // [{cx,cy,s}] x4 in image coords
+  mapping: DIRS.map((d, i) => ({ cell: i, rot: 0, mirror: false })),
+  outputs: [null, null, null, null]  // canvases at export size
+};
+
+/* ---------- setup UI ---------- */
+PRESETS.forEach((p, i) => {
+  const o = document.createElement("option");
+  o.value = i; o.textContent = p.label;
+  $("preset").appendChild(o);
+});
+function applyPreset() {
+  const p = PRESETS[+$("preset").value];
+  $("baseName").value = p.base;
+  $("outSize").value = p.size;
+  schedule();
+}
+$("preset").onchange = applyPreset;
+applyPreset();
+
+const mapRows = $("mapRows");
+DIRS.forEach((d, i) => {
+  const tr = document.createElement("tr");
+  const cellSel = CELL_NAMES.map((n, ci) =>
+    `<option value="${ci}" ${ci === i ? "selected" : ""}>${n}</option>`).join("");
+  tr.innerHTML =
+    `<td style="color:${DIR_COLORS[i]};font-weight:600">${d}</td>` +
+    `<td><select data-map="cell" data-dir="${i}">${cellSel}</select></td>` +
+    `<td><select data-map="rot" data-dir="${i}">
+       <option value="0">none</option><option value="1">90 cw</option>
+       <option value="2">180</option><option value="3">270 cw</option></select></td>` +
+    `<td><input type="checkbox" data-map="mirror" data-dir="${i}"></td>`;
+  mapRows.appendChild(tr);
+});
+mapRows.addEventListener("change", e => {
+  const t = e.target, i = +t.dataset.dir, m = state.mapping[i];
+  if (t.dataset.map === "cell") m.cell = +t.value;
+  if (t.dataset.map === "rot") m.rot = +t.value;
+  if (t.dataset.map === "mirror") m.mirror = t.checked;
+  schedule();
+});
+$("deriveBtn").onclick = () => {
+  state.mapping = DIRS.map((d, i) => ({ cell: 0, rot: i, mirror: false }));
+  [...mapRows.querySelectorAll("select[data-map=cell]")].forEach(s => s.value = 0);
+  [...mapRows.querySelectorAll("select[data-map=rot]")].forEach((s, i) => s.value = i);
+  [...mapRows.querySelectorAll("input[data-map=mirror]")].forEach(c => c.checked = false);
+  schedule();
+};
+
+["thresh", "feather", "pad"].forEach(id => {
+  $(id).oninput = () => { $(id + "V").textContent = (+$(id).value).toFixed(2); schedule(); };
+});
+["despill", "alsoBase", "baseFrom", "baseName", "outSize"].forEach(id => $(id).onchange = schedule);
+$("previewBg").onchange = () => renderCards(false);
+$("tint").onchange = () => renderCards(false);
+$("redetect").onclick = () => { if (state.img) { detectAll(); schedule(); } };
+
+/* ---------- image intake ---------- */
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("armed"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("armed"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+$("browseBtn").onclick = () => $("file").click();
+$("file").onchange = () => { if ($("file").files[0]) loadFile($("file").files[0]); };
+window.addEventListener("paste", e => {
+  for (const item of e.clipboardData.items)
+    if (item.type.startsWith("image/")) { loadFile(item.getAsFile()); break; }
+});
+function loadFile(f) {
+  const img = new Image();
+  img.onload = () => {
+    state.img = img;
+    $("srcWrap").style.display = "block";
+    detectAll();
+    schedule();
+  };
+  img.onerror = () => setStatus("Could not read that file as an image.", false);
+  img.src = URL.createObjectURL(f);
+}
+
+/* ---------- analysis ---------- */
+let srcData = null; // full-res ImageData
+function grabPixels() {
+  const c = document.createElement("canvas");
+  c.width = state.img.naturalWidth; c.height = state.img.naturalHeight;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.drawImage(state.img, 0, 0);
+  srcData = x.getImageData(0, 0, c.width, c.height);
+}
+function detectKeyColor() {
+  // median of a sparse ring just inside the border
+  const { width: w, height: h, data: d } = srcData;
+  const rs = [], gs = [], bs = [];
+  const step = Math.max(1, Math.floor(w / 220));
+  const inset = Math.max(2, Math.floor(Math.min(w, h) * 0.004));
+  const push = (x, y) => { const i = (y * w + x) * 4; rs.push(d[i]); gs.push(d[i+1]); bs.push(d[i+2]); };
+  for (let x = 0; x < w; x += step) { push(x, inset); push(x, h - 1 - inset); }
+  for (let y = 0; y < h; y += step) { push(inset, y); push(w - 1 - inset, y); }
+  const med = a => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+  state.key = [med(rs), med(gs), med(bs)];
+  $("keySwatch").style.background = `rgb(${state.key.join(",")})`;
+}
+function keyDist(r, g, b) {
+  const [kr, kg, kb] = state.key;
+  return Math.sqrt((r - kr) ** 2 + (g - kg) ** 2 + (b - kb) ** 2) / 441.673;
+}
+function detectAll() {
+  grabPixels();
+  detectKeyColor();
+  const { width: w, height: h } = srcData;
+  const quads = [
+    [0, 0, w >> 1, h >> 1], [w >> 1, 0, w - (w >> 1), h >> 1],
+    [0, h >> 1, w >> 1, h - (h >> 1)], [w >> 1, h >> 1, w - (w >> 1), h - (h >> 1)]
+  ];
+  const t = +$("thresh").value + +$("feather").value;
+  state.cells = quads.map(q => autoBox(q, t));
+}
+function autoBox([qx, qy, qw, qh], t) {
+  const { width: w, data: d } = srcData;
+  let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1;
+  const step = Math.max(1, Math.floor(qw / 480));
+  for (let y = qy; y < qy + qh; y += step) {
+    for (let x = qx; x < qx + qw; x += step) {
+      const i = (y * w + x) * 4;
+      const r = d[i], g = d[i+1], b = d[i+2];
+      if (d[i+3] < 40) continue;                     // already transparent
+      if (r > 230 && g > 230 && b > 230) continue;   // grid lines / labels
+      if (keyDist(r, g, b) <= t) continue;           // background
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const inset = Math.min(qw, qh) * 0.02;
+  if (maxX < 0) return { cx: qx + qw / 2, cy: qy + qh / 2, s: Math.min(qw, qh) * 0.7 };
+  const bw = maxX - minX, bh = maxY - minY;
+  let s = Math.max(bw, bh) * (1 + (+$("pad").value) * 2);
+  s = Math.min(s, qw - inset * 2, qh - inset * 2);
+  let cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  cx = Math.min(Math.max(cx, qx + inset + s / 2), qx + qw - inset - s / 2);
+  cy = Math.min(Math.max(cy, qy + inset + s / 2), qy + qh - inset - s / 2);
+  return { cx, cy, s };
+}
+
+/* ---------- source overlay + interaction ---------- */
+const srcView = $("srcView");
+let viewScale = 1;
+function drawOverlay() {
+  if (!state.img) return;
+  const w = state.img.naturalWidth, h = state.img.naturalHeight;
+  const dispW = Math.min(920, w);
+  viewScale = dispW / w;
+  srcView.width = dispW; srcView.height = Math.round(h * viewScale);
+  const x = srcView.getContext("2d");
+  x.drawImage(state.img, 0, 0, srcView.width, srcView.height);
+  x.strokeStyle = "rgba(255,255,255,.25)"; x.lineWidth = 1;
+  x.beginPath();
+  x.moveTo(srcView.width / 2, 0); x.lineTo(srcView.width / 2, srcView.height);
+  x.moveTo(0, srcView.height / 2); x.lineTo(srcView.width, srcView.height / 2);
+  x.stroke();
+  state.cells.forEach((c, i) => {
+    x.strokeStyle = DIR_COLORS[i]; x.lineWidth = 2;
+    x.strokeRect((c.cx - c.s / 2) * viewScale, (c.cy - c.s / 2) * viewScale, c.s * viewScale, c.s * viewScale);
+    x.fillStyle = DIR_COLORS[i]; x.font = "600 12px sans-serif";
+    x.fillText(CELL_NAMES[i], (c.cx - c.s / 2) * viewScale + 4, (c.cy - c.s / 2) * viewScale + 14);
+  });
+}
+let dragging = -1, dragOff = [0, 0];
+function cellAt(e) {
+  const r = srcView.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (srcView.width / r.width) / viewScale;
+  const py = (e.clientY - r.top) * (srcView.height / r.height) / viewScale;
+  for (let i = 0; i < 4; i++) {
+    const c = state.cells[i];
+    if (Math.abs(px - c.cx) <= c.s / 2 && Math.abs(py - c.cy) <= c.s / 2) return [i, px, py];
+  }
+  return [-1, px, py];
+}
+srcView.addEventListener("mousedown", e => {
+  const [i, px, py] = cellAt(e);
+  if (i >= 0) { dragging = i; dragOff = [px - state.cells[i].cx, py - state.cells[i].cy]; }
+});
+window.addEventListener("mousemove", e => {
+  if (dragging < 0) return;
+  const [, px, py] = cellAt(e);
+  state.cells[dragging].cx = px - dragOff[0];
+  state.cells[dragging].cy = py - dragOff[1];
+  drawOverlay(); schedule();
+});
+window.addEventListener("mouseup", () => dragging = -1);
+srcView.addEventListener("wheel", e => {
+  const [i] = cellAt(e);
+  if (i < 0) return;
+  e.preventDefault();
+  const c = state.cells[i];
+  c.s = Math.max(16, c.s * (e.deltaY < 0 ? 1.04 : 0.96));
+  drawOverlay(); schedule();
+}, { passive: false });
+
+/* ---------- processing ---------- */
+function processCell(cell) {
+  // crop square at full res
+  const s = Math.round(cell.s);
+  const c = document.createElement("canvas");
+  c.width = s; c.height = s;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.drawImage(state.img, Math.round(cell.cx - s / 2), Math.round(cell.cy - s / 2), s, s, 0, 0, s, s);
+  // chroma key at full res
+  const t = +$("thresh").value, f = Math.max(0.001, +$("feather").value);
+  const despill = $("despill").checked;
+  const id = x.getImageData(0, 0, s, s), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const dist = keyDist(d[i], d[i+1], d[i+2]);
+    let a = (dist - t) / f;
+    a = a < 0 ? 0 : a > 1 ? 1 : a;
+    a = a * a * (3 - 2 * a); // smoothstep
+    d[i+3] = Math.min(d[i+3], Math.round(a * 255));
+    if (despill && d[i+3] > 0) {
+      const cap = Math.max(d[i], d[i+2]) + 8;
+      if (d[i+1] > cap) d[i+1] = cap;
+    }
+  }
+  x.putImageData(id, 0, 0);
+  return c;
+}
+function orient(canvas, rot, mirror) {
+  if (!rot && !mirror) return canvas;
+  const s = canvas.width;
+  const c = document.createElement("canvas");
+  c.width = s; c.height = s;
+  const x = c.getContext("2d");
+  x.translate(s / 2, s / 2);
+  x.rotate(rot * Math.PI / 2);
+  if (mirror) x.scale(-1, 1);
+  x.drawImage(canvas, -s / 2, -s / 2);
+  return c;
+}
+function downscale(canvas, target) {
+  let cur = canvas;
+  while (cur.width > target * 2) {
+    const c = document.createElement("canvas");
+    c.width = cur.width >> 1; c.height = cur.height >> 1;
+    const x = c.getContext("2d");
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+    x.drawImage(cur, 0, 0, c.width, c.height);
+    cur = c;
+  }
+  const out = document.createElement("canvas");
+  out.width = target; out.height = target;
+  const x = out.getContext("2d");
+  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+  x.drawImage(cur, 0, 0, target, target);
+  return out;
+}
+function rebuildOutputs() {
+  if (!state.img || !state.cells) return;
+  const target = Math.max(32, +$("outSize").value || 128);
+  const processed = {};
+  state.outputs = state.mapping.map(m => {
+    if (!(m.cell in processed)) processed[m.cell] = processCell(state.cells[m.cell]);
+    return downscale(orient(processed[m.cell], m.rot, m.mirror), target);
+  });
+  $("zipBtn").disabled = $("dlBtn").disabled = false;
+  $("dirBtn").disabled = !window.showDirectoryPicker;
+}
+
+/* ---------- previews ---------- */
+function tintCanvas(src, hex) {
+  if (!hex) return src;
+  const c = document.createElement("canvas");
+  c.width = src.width; c.height = src.height;
+  const x = c.getContext("2d");
+  x.drawImage(src, 0, 0);
+  x.globalCompositeOperation = "multiply";
+  x.fillStyle = hex; x.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = "destination-in";
+  x.drawImage(src, 0, 0);
+  return c;
+}
+function renderCards(rebuild) {
+  if (rebuild !== false) rebuildOutputs();
+  const cards = $("cards");
+  cards.innerHTML = "";
+  const bg = $("previewBg").value, tint = $("tint").value;
+  const base = $("baseName").value.trim() || "MyBuilding";
+  state.outputs.forEach((out, i) => {
+    if (!out) return;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h3 style="color:${DIR_COLORS[i]}">${DIRS[i]}</h3>`;
+    const view = document.createElement("canvas");
+    view.width = out.width; view.height = out.height;
+    view.className = bg;
+    view.getContext("2d").drawImage(tintCanvas(out, tint), 0, 0);
+    card.appendChild(view);
+    const fn = document.createElement("div");
+    fn.className = "fname";
+    fn.textContent = `${base}_${DIRS[i]}.png (${out.width}px)`;
+    card.appendChild(fn);
+    cards.appendChild(card);
+  });
+}
+
+/* ---------- schedule ---------- */
+let timer = 0;
+function schedule() {
+  clearTimeout(timer);
+  timer = setTimeout(() => { if (state.img) { drawOverlay(); renderCards(); } }, 120);
+}
+
+/* ---------- export ---------- */
+function fileList() {
+  const base = $("baseName").value.trim() || "MyBuilding";
+  const files = state.outputs.map((c, i) => ({ name: `${base}_${DIRS[i]}.png`, canvas: c }));
+  if ($("alsoBase").checked) files.push({ name: `${base}.png`, canvas: state.outputs[+$("baseFrom").value] });
+  return files.filter(f => f.canvas);
+}
+function toBlob(canvas) { return new Promise(res => canvas.toBlob(res, "image/png")); }
+function setStatus(msg, ok) {
+  const s = $("status");
+  s.textContent = msg; s.className = ok === false ? "bad" : ok ? "ok" : "";
+}
+$("dlBtn").onclick = async () => {
+  for (const f of fileList()) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await toBlob(f.canvas));
+    a.download = f.name;
+    a.click();
+    await new Promise(r => setTimeout(r, 220));
+  }
+  setStatus("Downloaded " + fileList().length + " files to your Downloads folder.", true);
+};
+
+/* minimal store-only ZIP */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function buildZip(entries) { // entries: {name, u8}
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const u16 = v => new Uint8Array([v & 255, (v >> 8) & 255]);
+  const u32 = v => new Uint8Array([v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255]);
+  for (const e of entries) {
+    const name = enc.encode(e.name), crc = crc32(e.u8);
+    const head = [new Uint8Array([80,75,3,4]), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(e.u8.length), u32(e.u8.length), u16(name.length), u16(0), name];
+    central.push({ name, crc, size: e.u8.length, offset });
+    for (const p of head) { parts.push(p); offset += p.length; }
+    parts.push(e.u8); offset += e.u8.length;
+  }
+  const cdStart = offset;
+  for (const c of central) {
+    const rec = [new Uint8Array([80,75,1,2]), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(c.crc), u32(c.size), u32(c.size), u16(c.name.length), u16(0), u16(0), u16(0), u16(0),
+      u32(0), u32(c.offset), c.name];
+    for (const p of rec) { parts.push(p); offset += p.length; }
+  }
+  const cdSize = offset - cdStart;
+  parts.push(new Uint8Array([80,75,5,6]), u16(0), u16(0), u16(central.length), u16(central.length), u32(cdSize), u32(cdStart), u16(0));
+  return new Blob(parts, { type: "application/zip" });
+}
+$("zipBtn").onclick = async () => {
+  const entries = [];
+  for (const f of fileList())
+    entries.push({ name: f.name, u8: new Uint8Array(await (await toBlob(f.canvas)).arrayBuffer()) });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(buildZip(entries));
+  a.download = ($("baseName").value.trim() || "textures") + ".zip";
+  a.click();
+  setStatus("ZIP with " + entries.length + " files downloaded.", true);
+};
+
+let dirHandle = null;
+$("dirBtn").onclick = async () => {
+  try {
+    if (!dirHandle) dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    let n = 0;
+    for (const f of fileList()) {
+      const fh = await dirHandle.getFileHandle(f.name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(await toBlob(f.canvas));
+      await w.close();
+      n++;
+    }
+    setStatus("Wrote " + n + " files into \"" + dirHandle.name + "\". Same folder is reused next time.", true);
+  } catch (err) {
+    if (err.name !== "AbortError") setStatus("Folder save failed: " + err.message, false);
+  }
+};
+</script>
+</body>
+</html>
