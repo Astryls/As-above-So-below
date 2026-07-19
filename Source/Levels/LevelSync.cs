@@ -42,27 +42,22 @@ namespace AsAboveSoBelow
                 RoofGrid roofs = ground.roofGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainDef rooftop = ABDefOf.AB_RoofSurface;
+                TerrainDef rockTop = ABDefOf.AB_RockRoofSurface;
                 int fixedCells = 0;
                 foreach (IntVec3 c in sky.AllCells)
                 {
                     TerrainDef top = grid.TerrainAt(c);
-                    if (top == air)
+                    if (top != air && top != rooftop && top != rockTop)
                     {
-                        RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
-                        if (roof != null && !roof.isNatural)
-                        {
-                            grid.SetTerrain(c, rooftop);
-                            fixedCells++;
-                        }
+                        // Floors, solid rock, and anything else are never touched.
+                        continue;
                     }
-                    else if (top == rooftop)
+                    RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
+                    TerrainDef want = roof == null ? air : (roof.isNatural ? rockTop : rooftop);
+                    if (top != want)
                     {
-                        RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
-                        if (roof == null)
-                        {
-                            grid.SetTerrain(c, air);
-                            fixedCells++;
-                        }
+                        grid.SetTerrain(c, want);
+                        fixedCells++;
                     }
                 }
                 if (fixedCells > 0)
@@ -94,17 +89,21 @@ namespace AsAboveSoBelow
                 TerrainDef top = grid.TerrainAt(c);
                 if (roof != null)
                 {
-                    // Support gained: air becomes buildable rooftop. Rock surfaces and
-                    // existing floors are already supported, leave them alone.
-                    if (top == ABDefOf.AB_OpenAir)
+                    // Support gained: air becomes the walkable top matching the
+                    // roof kind (corrugated rooftop over constructed roofs, rock
+                    // roof over natural ones). Solid rock terrain and existing
+                    // floors are already supported, leave them alone.
+                    TerrainDef want = roof.isNatural ? ABDefOf.AB_RockRoofSurface : ABDefOf.AB_RoofSurface;
+                    if (top == ABDefOf.AB_OpenAir
+                        || (top != want && (top == ABDefOf.AB_RoofSurface || top == ABDefOf.AB_RockRoofSurface)))
                     {
-                        grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                        grid.SetTerrain(c, want);
                     }
                 }
                 else
                 {
                     // Support lost.
-                    if (top == ABDefOf.AB_RoofSurface)
+                    if (top == ABDefOf.AB_RoofSurface || top == ABDefOf.AB_RockRoofSurface)
                     {
                         grid.SetTerrain(c, ABDefOf.AB_OpenAir);
                     }

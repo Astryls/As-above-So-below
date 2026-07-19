@@ -18,13 +18,31 @@
   <TerrainDef>
     <defName>AB_RoofSurface</defName>
     <label>rooftop</label>
-    <description>The top side of a roof on the level below. Sturdy enough to walk on and build on.</description>
+    <description>The corrugated steel top side of a roof on the level below. Sturdy enough to walk on and build on.</description>
     <texturePath>Terrain/AB_RoofSurface</texturePath>
     <edgeType>Hard</edgeType>
     <renderPrecedence>230</renderPrecedence>
     <layerable>false</layerable>
     <passability>Standable</passability>
     <pathCost>1</pathCost>
+    <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
+  <TerrainDef>
+    <defName>AB_RockRoofSurface</defName>
+    <label>rock roof</label>
+    <description>The top of a natural rock roof on the level below. Solid stone, safe to walk and build on.</description>
+    <texturePath>Terrain/AB_RockRoofSurface</texturePath>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>231</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Standable</passability>
+    <pathCost>2</pathCost>
     <fertility>0</fertility>
     <affordances>
       <li>Light</li>

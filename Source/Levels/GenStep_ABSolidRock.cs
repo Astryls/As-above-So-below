@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.Noise;
 
@@ -36,6 +38,69 @@ namespace AsAboveSoBelow
             }
 
             map.fogGrid.Refog(CellRect.WholeMap(map));
+
+            // Ore veins throughout the fill so the basement is worth mining.
+            ABOreGen.ScatterOres(map, null, OreLumpsPer10kCells);
+        }
+
+        private const float OreLumpsPer10kCells = 6f;
+    }
+
+    /// <summary>Scatters mineable ore lumps into natural rock, weighted by each
+    /// ore's vanilla scatter commonality so modded ores participate
+    /// automatically. Only ever replaces natural rock edifices: stairs,
+    /// landings, and already-placed lumps are untouched. Null candidates means
+    /// the whole map (the basement fill); the sky pass hands in its mountain
+    /// wall cells.</summary>
+    internal static class ABOreGen
+    {
+        internal static void ScatterOres(Map map, List<IntVec3> candidates, float lumpsPer10kCells)
+        {
+            try
+            {
+                if (candidates != null && candidates.Count == 0)
+                {
+                    return;
+                }
+                List<ThingDef> ores = new List<ThingDef>();
+                List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
+                for (int i = 0; i < defs.Count; i++)
+                {
+                    ThingDef d = defs[i];
+                    if (d.building != null && d.building.isResourceRock
+                        && d.building.mineableScatterCommonality > 0f)
+                    {
+                        ores.Add(d);
+                    }
+                }
+                if (ores.Count == 0)
+                {
+                    return;
+                }
+                int cellBase = candidates?.Count ?? map.Area;
+                int lumps = Mathf.Max(1, Mathf.RoundToInt(cellBase / 10000f * lumpsPer10kCells));
+                for (int i = 0; i < lumps; i++)
+                {
+                    ThingDef ore = ores.RandomElementByWeight(d => d.building.mineableScatterCommonality);
+                    IntVec3 center = candidates != null ? candidates.RandomElement() : CellFinder.RandomCell(map);
+                    int size = ore.building.mineableScatterLumpSizeRange.RandomInRange;
+                    List<IntVec3> lump = GridShapeMaker.IrregularLump(center, map, size);
+                    for (int j = 0; j < lump.Count; j++)
+                    {
+                        IntVec3 c = lump[j];
+                        Building edifice = c.GetEdifice(map);
+                        if (edifice != null && edifice.def.building != null
+                            && edifice.def.building.isNaturalRock && !edifice.def.building.isResourceRock)
+                        {
+                            GenSpawn.Spawn(ore, c, map, WipeMode.Vanish);
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.LevelGen, e, "ore scatter");
+            }
         }
     }
 

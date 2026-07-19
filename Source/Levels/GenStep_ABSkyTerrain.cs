@@ -13,8 +13,11 @@ namespace AsAboveSoBelow
     /// eroded core becomes solid mineable rock under a thick rock roof, and only
     /// the core's interior (one more erosion in) is fogged, so the rock face ring
     /// stays visible exactly like a vanilla mountain. Constructed roofs below
-    /// become buildable rooftop; everything else, including the thin-roof overhang
-    /// strip, is open air showing the level below.
+    /// become corrugated rooftop, natural thin roofs (the mountain overhang
+    /// strip) become walkable rock roof, and only roofless cells are open air
+    /// showing the level below - so the mountain edge is sealed with no
+    /// see-through slivers under the rock edge sprites. Ore lumps scatter into
+    /// the mass so the sky mountain is worth mining.
     /// </summary>
     public class GenStep_ABSkyTerrain : GenStep
     {
@@ -56,8 +59,10 @@ namespace AsAboveSoBelow
                 wall[idx] = solid[idx] && AllNeighbors(map, indices, solid, c);
             }
 
-            // Pass 3: terrain, walls, roofs; collect the fog core (walls eroded again).
+            // Pass 3: terrain, walls, roofs; collect the fog core (walls eroded again)
+            // and the wall cells that can host ore lumps.
             List<IntVec3> fogCells = new List<IntVec3>();
+            List<IntVec3> oreCells = new List<IntVec3>();
             foreach (IntVec3 c in map.AllCells)
             {
                 int idx = indices.CellToIndex(c);
@@ -68,6 +73,7 @@ namespace AsAboveSoBelow
                     if (wall[idx])
                     {
                         GenSpawn.Spawn(rock, c, map);
+                        oreCells.Add(c);
                         if (AllWithinRadius(map, indices, wall, c, 2))
                         {
                             // Deep interior only: roofed mountain, fogged like vanilla
@@ -86,15 +92,20 @@ namespace AsAboveSoBelow
                 {
                     roofBelow = ground.roofGrid.RoofAt(c);
                 }
-                if (roofBelow != null && !roofBelow.isNatural)
+                if (roofBelow == null)
                 {
-                    grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                    // No roof below: open air, the ground stays visible.
+                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                }
+                else if (roofBelow.isNatural)
+                {
+                    // Thin-roof overhang strip outside the mass: the top of the
+                    // mountain's edge, walkable rock roof.
+                    grid.SetTerrain(c, ABDefOf.AB_RockRoofSurface);
                 }
                 else
                 {
-                    // No roof, or the thin-roof overhang strip outside the mass:
-                    // open air, the ground below stays visible.
-                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                    grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
                 }
             }
 
@@ -105,7 +116,12 @@ namespace AsAboveSoBelow
                 IntVec3 c = fogCells[i];
                 fog.Refog(new CellRect(c.x, c.z, 1, 1));
             }
+
+            // Pass 5: ore lumps inside the mass walls.
+            ABOreGen.ScatterOres(map, oreCells, OreLumpsPer10kCells);
         }
+
+        private const float OreLumpsPer10kCells = 6f;
 
         /// <summary>True when all 8 neighbors are set; cells beyond the map edge
         /// count as set so masses touching the border stay solid there.</summary>

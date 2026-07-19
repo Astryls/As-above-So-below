@@ -114,34 +114,53 @@ namespace AsAboveSoBelow
 
         private const int PipeBridgeInterval = 250;
 
+        private const int SubscribeRetryInterval = 250;
+
+        /// <summary>Low-frequency safety net over the event-driven rooftop sync:
+        /// a bounded whole-map sweep (~sub-millisecond) that converges the
+        /// air/rooftop state even if roof events misfire for any reason.</summary>
+        private const int RooftopSweepInterval = 2000;
+
         /// <summary>Sky comps sync weather from the ground; the ground comp drives
         /// pipe network bridging for every stairwell pair (each pair has one end
         /// on the ground map under the three-level cap).</summary>
         public override void MapComponentTick()
         {
+            if (level != 0 && !syncSubscribed
+                && Find.TickManager.TicksGame % SubscribeRetryInterval == 0)
+            {
+                // FinalizeInit's subscription can bail silently when a link or
+                // the events object is not ready yet; retry until it lands so
+                // the roof and terrain cascades can never stay dead for a whole
+                // session. One bool read per tick once subscribed.
+                TrySubscribeSync();
+            }
             if (level == 1)
             {
-                if (!ABGuard.On(ABGuard.Weather)
-                    || (Find.TickManager.TicksGame + (map.uniqueID % WeatherSyncInterval)) % WeatherSyncInterval != 0)
+                int now = Find.TickManager.TicksGame;
+                if (ABGuard.On(ABGuard.Weather)
+                    && (now + (map.uniqueID % WeatherSyncInterval)) % WeatherSyncInterval == 0)
                 {
-                    return;
-                }
-                try
-                {
-                    Map ground = lowerMap ?? groundMap;
-                    if (ground == null || ground.Disposed)
+                    try
                     {
-                        return;
+                        Map ground = lowerMap ?? groundMap;
+                        if (ground != null && !ground.Disposed)
+                        {
+                            WeatherDef target = ground.weatherManager.curWeather;
+                            if (target != null && map.weatherManager.curWeather != target)
+                            {
+                                map.weatherManager.TransitionTo(target);
+                            }
+                        }
                     }
-                    WeatherDef target = ground.weatherManager.curWeather;
-                    if (target != null && map.weatherManager.curWeather != target)
+                    catch (Exception e)
                     {
-                        map.weatherManager.TransitionTo(target);
+                        ABGuard.Disable(ABGuard.Weather, e, "weather sync");
                     }
                 }
-                catch (Exception e)
+                if ((now + (map.uniqueID % RooftopSweepInterval)) % RooftopSweepInterval == 0)
                 {
-                    ABGuard.Disable(ABGuard.Weather, e, "weather sync");
+                    LevelSync.ReconcileRooftops(map);
                 }
             }
             else if (level == 0)
