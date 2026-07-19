@@ -34,6 +34,14 @@ namespace AsAboveSoBelow
 
         private const int MaskRebuildIntervalFrames = 15;
 
+        /// <summary>Cells of padding around the view so panning does not force a
+        /// rebuild every frame; rebuilds happen when the camera escapes the pad.</summary>
+        private const int MaskPadCells = 8;
+
+        /// <summary>Night opacity cap. High enough to sell darkness, low enough that
+        /// the ground below stays readable, like Z-Levels beta.</summary>
+        private const float MaskMaxDarkness = 0.62f;
+
         /// <summary>True only while the lower map's dynamic draw runs; DrawPos
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>
         public static volatile bool OffsetActive;
@@ -155,12 +163,16 @@ namespace AsAboveSoBelow
                 };
             }
             int frame = Time.frameCount;
-            if (maskMesh == null || frame - maskLastFrame >= MaskRebuildIntervalFrames
-                || view != maskLastRect || lower.uniqueID != maskLastLowerId)
+            bool viewContained = maskMesh != null
+                && maskLastRect.Contains(new IntVec3(view.minX, 0, view.minZ))
+                && maskLastRect.Contains(new IntVec3(view.maxX, 0, view.maxZ));
+            if (!viewContained || frame - maskLastFrame >= MaskRebuildIntervalFrames
+                || lower.uniqueID != maskLastLowerId)
             {
-                RebuildMask(sky, lower, view);
+                CellRect buildRect = view.ExpandedBy(MaskPadCells).ClipInsideMap(sky);
+                RebuildMask(sky, lower, buildRect);
                 maskLastFrame = frame;
-                maskLastRect = view;
+                maskLastRect = buildRect;
                 maskLastLowerId = lower.uniqueID;
             }
             if (maskMesh != null && maskMesh.vertexCount > 0)
@@ -169,7 +181,9 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void RebuildMask(Map sky, Map lower, CellRect view)
+        private static int maskLastStep = 1;
+
+        private static void RebuildMask(Map sky, Map lower, CellRect rect)
         {
             if (maskMesh == null)
             {
@@ -188,13 +202,33 @@ namespace AsAboveSoBelow
             TerrainDef air = ABDefOf.AB_OpenAir;
             GlowGrid lowerGlow = lower.glowGrid;
             RoofGrid lowerRoofs = lower.roofGrid;
-            int step = view.Width > 130 ? 2 : 1;
-            for (int x = view.minX; x <= view.maxX; x += step)
+            // Resolution switches use hysteresis so zooming near the threshold does
+            // not pop between block sizes.
+            int step = maskLastStep;
+            if (step == 1 && rect.Width > 150)
             {
-                for (int z = view.minZ; z <= view.maxZ; z += step)
+                step = 2;
+            }
+            else if (step == 2 && rect.Width < 125)
+            {
+                step = 1;
+            }
+            maskLastStep = step;
+            // Anchor the sampling grid to world coordinates so blocks stay put
+            // while the camera pans; a view-anchored grid shifts a cell whenever
+            // the view edge parity flips, which reads as jitter.
+            int startX = rect.minX - (((rect.minX % step) + step) % step);
+            int startZ = rect.minZ - (((rect.minZ % step) + step) % step);
+            int sizeX = sky.Size.x;
+            int sizeZ = sky.Size.z;
+            for (int x = startX; x <= rect.maxX; x += step)
+            {
+                for (int z = startZ; z <= rect.maxZ; z += step)
                 {
-                    IntVec3 c = new IntVec3(x, 0, z);
-                    if (!c.InBounds(sky) || skyTerrain.TerrainAt(c) != air)
+                    int cx = Mathf.Clamp(x, 0, sizeX - 1);
+                    int cz = Mathf.Clamp(z, 0, sizeZ - 1);
+                    IntVec3 c = new IntVec3(cx, 0, cz);
+                    if (skyTerrain.TerrainAt(c) != air)
                     {
                         continue;
                     }
@@ -202,14 +236,20 @@ namespace AsAboveSoBelow
                     // current map (identical tile, updated every frame).
                     float artificial = lowerGlow.GroundGlowAt(c, ignoreCavePlants: false, ignoreSky: true);
                     float light = lowerRoofs.Roofed(c) ? artificial : Mathf.Max(skyGlowNow, artificial);
-                    byte a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (0.82f - baseDim)));
+                    byte a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (MaskMaxDarkness - baseDim)));
                     int vi = maskVerts.Count;
-                    float x1 = Mathf.Min(x + step, view.maxX + 1);
-                    float z1 = Mathf.Min(z + step, view.maxZ + 1);
-                    maskVerts.Add(new Vector3(x, MaskAltitude, z));
-                    maskVerts.Add(new Vector3(x, MaskAltitude, z1));
+                    float x0 = Mathf.Max(x, 0);
+                    float z0 = Mathf.Max(z, 0);
+                    float x1 = Mathf.Min(x + step, sizeX);
+                    float z1 = Mathf.Min(z + step, sizeZ);
+                    if (x1 <= x0 || z1 <= z0)
+                    {
+                        continue;
+                    }
+                    maskVerts.Add(new Vector3(x0, MaskAltitude, z0));
+                    maskVerts.Add(new Vector3(x0, MaskAltitude, z1));
                     maskVerts.Add(new Vector3(x1, MaskAltitude, z1));
-                    maskVerts.Add(new Vector3(x1, MaskAltitude, z));
+                    maskVerts.Add(new Vector3(x1, MaskAltitude, z0));
                     Color32 col = new Color32(0, 0, 0, a);
                     maskColors.Add(col);
                     maskColors.Add(col);
