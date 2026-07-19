@@ -68,13 +68,15 @@ namespace AsAboveSoBelow
                     if (wall[idx])
                     {
                         GenSpawn.Spawn(rock, c, map);
-                        map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
-                        // Fog only cells two rows deep into the wall mass so two full
-                        // rock face rows stay visible outside the fog's soft edge.
                         if (AllWithinRadius(map, indices, wall, c, 2))
                         {
+                            // Deep interior only: roofed mountain, fogged like vanilla
+                            // unexplored rock.
+                            map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
                             fogCells.Add(c);
                         }
+                        // The two visible face rows stay unroofed AND unfogged so their
+                        // rock texture renders fully lit, matching Z-Levels beta's edge.
                     }
                     // Ledge ring: open walkable rock, no wall, no roof, never fogged.
                     continue;
