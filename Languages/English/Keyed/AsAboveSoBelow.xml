@@ -44,6 +44,12 @@
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
   <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
+  <AB_ThreatBasementInfest>Infestations can target the basement</AB_ThreatBasementInfest>
+  <AB_ThreatBasementInfestTip>When an infestation fires at your colony, it has a chance to burrow up into the basement level instead of the surface. Threat size and storyteller pacing are unchanged; only the battlefield moves. Off by default.</AB_ThreatBasementInfestTip>
+  <AB_ThreatSkyDrops>Drop-pod raids can target the sky level</AB_ThreatSkyDrops>
+  <AB_ThreatSkyDropsTip>When a hostile drop-pod raid fires at your colony, it has a chance to land on your rooftops instead of the surface. Raiders who find nothing to fight up there will take your stairs down. Threat size and storyteller pacing are unchanged. Off by default.</AB_ThreatSkyDropsTip>
+  <AB_ThreatDivertChance>Diversion chance</AB_ThreatDivertChance>
+  <AB_ThreatDivertChanceTip>The chance that an eligible incident is diverted to another level instead of hitting the surface.</AB_ThreatDivertChanceTip>
   <AB_RescueUpTo>Rescue {0} (bed on the level above)</AB_RescueUpTo>
   <AB_RescueDownTo>Rescue {0} (bed on the level below)</AB_RescueDownTo>
   <AB_CaptureUpTo>Capture {0} (bed on the level above)</AB_CaptureUpTo>

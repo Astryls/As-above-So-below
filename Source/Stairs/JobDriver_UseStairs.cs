@@ -183,6 +183,8 @@ namespace AsAboveSoBelow
                 {
                     p.carryTracker.innerContainer.Remove(carried);
                 }
+                // Hostiles must leave their map-scoped lord before despawning.
+                HostileDescend.NoteLeaving(p);
                 p.DeSpawn();
                 IntVec3 cell = landing.Standable(targetMap) ? landing : CellFinder.StandableCellNear(landing, targetMap, 4f);
                 if (!cell.IsValid)
@@ -202,6 +204,8 @@ namespace AsAboveSoBelow
                 {
                     p.drafter.Drafted = true;
                 }
+                // Arrived hostiles join (or start) the assault on this map.
+                HostileDescend.NoteArrived(p, targetMap);
                 FinishCarriedDelivery(p, intent);
                 PullFollowers(p, stairs, sourceMap, dest);
                 ContinueRide(p, dest, rideFinal, targetMap);

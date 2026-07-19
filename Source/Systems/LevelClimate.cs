@@ -31,6 +31,11 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                if (a.Ext != null && a.Ext.utilityOnly)
+                {
+                    // Sealed utility shafts do not leak temperature.
+                    continue;
+                }
                 ExchangeLink(a, a.Counterpart);
                 // Elevator middle cars hold a second link (down).
                 ExchangeLink(a, a.SecondCounterpart);

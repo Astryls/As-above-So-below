@@ -116,6 +116,10 @@ namespace AsAboveSoBelow
 
         private const int SubscribeRetryInterval = 250;
 
+        /// <summary>Cadence of the stuck-hostile scan on pocket levels. Gated
+        /// behind a cheap any-hostiles check, so calm maps pay one lookup.</summary>
+        private const int HostileScanInterval = 250;
+
         /// <summary>Low-frequency safety net over the event-driven rooftop sync:
         /// a bounded whole-map sweep (~sub-millisecond) that converges the
         /// air/rooftop state even if roof events misfire for any reason.</summary>
@@ -134,6 +138,18 @@ namespace AsAboveSoBelow
                 // the roof and terrain cascades can never stay dead for a whole
                 // session. One bool read per tick once subscribed.
                 TrySubscribeSync();
+            }
+            if (level != 0 && ABGuard.On(ABGuard.HostileMove)
+                && (Find.TickManager.TicksGame + (map.uniqueID % HostileScanInterval)) % HostileScanInterval == 0)
+            {
+                try
+                {
+                    HostileDescend.ScanPocketMap(this);
+                }
+                catch (Exception e)
+                {
+                    ABGuard.Disable(ABGuard.HostileMove, e, "hostile descend scan");
+                }
             }
             if (level == 1)
             {

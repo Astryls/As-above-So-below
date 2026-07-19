@@ -275,6 +275,11 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                if (s.Ext != null && s.Ext.utilityOnly)
+                {
+                    // Vertical conduits and pipes carry networks, never pawns.
+                    continue;
+                }
                 Building_ABStairs cp = s.CounterpartTowards(target);
                 if (cp == null)
                 {

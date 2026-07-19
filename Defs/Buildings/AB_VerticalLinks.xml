@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <ThingDef ParentName="BuildingBase" Name="AB_VerticalLinkBase" Abstract="True">
+    <thingClass>AsAboveSoBelow.Building_ABUtilityLink</thingClass>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <pathCost>10</pathCost>
+    <fillPercent>0.15</fillPercent>
+    <rotatable>false</rotatable>
+    <size>(1,1)</size>
+    <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <statBases>
+      <MaxHitPoints>80</MaxHitPoints>
+      <Flammability>0.5</Flammability>
+      <Mass>8</Mass>
+    </statBases>
+    <minifiedDef>MinifiedThing</minifiedDef>
+    <thingCategories>
+      <li>BuildingsMisc</li>
+    </thingCategories>
+    <placeWorkers>
+      <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_VerticalLinkBase" Name="AB_VerticalConduitBase" Abstract="True">
+    <designationCategory>Power</designationCategory>
+    <costList>
+      <Steel>20</Steel>
+    </costList>
+    <statBases>
+      <WorkToBuild>1000</WorkToBuild>
+    </statBases>
+    <!-- Normal ticker: the power bridge equalizes in CompTick. -->
+    <tickerType>Normal</tickerType>
+    <researchPrerequisites>
+      <li>Electricity</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="CompProperties_Battery">
+        <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
+        <storedEnergyMax>1000</storedEnergyMax>
+        <efficiency>1.0</efficiency>
+        <transmitsPower>true</transmitsPower>
+      </li>
+    </comps>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_VerticalConduitBase">
+    <defName>AB_VerticalConduitDown</defName>
+    <label>vertical conduit (down)</label>
+    <description>A sealed cable shaft carrying power to the level below. Connects the power networks touching it on both levels; nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_VerticalConduitDown</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_VerticalConduitDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>-1</deltaLevel>
+        <counterpartDef>AB_VerticalConduitUp</counterpartDef>
+        <utilityOnly>true</utilityOnly>
+        <bridgeWater>false</bridgeWater>
+        <bridgeVef>false</bridgeVef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_VerticalConduitBase">
+    <defName>AB_VerticalConduitUp</defName>
+    <label>vertical conduit (up)</label>
+    <description>A sealed cable shaft carrying power to the level above. Connects the power networks touching it on both levels; nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_VerticalConduitUp</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_VerticalConduitUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>1</deltaLevel>
+        <counterpartDef>AB_VerticalConduitDown</counterpartDef>
+        <utilityOnly>true</utilityOnly>
+        <bridgeWater>false</bridgeWater>
+        <bridgeVef>false</bridgeVef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

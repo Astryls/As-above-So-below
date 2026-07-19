@@ -17,6 +17,9 @@ namespace AsAboveSoBelow
         public bool crossLevelNeeds = true;
         public bool crossLevelPipes = true;
         public bool crossLevelTemperature = true;
+        public bool threatBasementInfest;
+        public bool threatSkyDrops;
+        public float threatDivertChance = 0.25f;
 
         public void DoWindowContents(Rect inRect)
         {
@@ -31,6 +34,15 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
             listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
             listing.CheckboxLabeled("AB_ShowLevelWidget".Translate(), ref showLevelWidget, "AB_ShowLevelWidgetTip".Translate());
+            listing.GapLine();
+            listing.CheckboxLabeled("AB_ThreatBasementInfest".Translate(), ref threatBasementInfest, "AB_ThreatBasementInfestTip".Translate());
+            listing.CheckboxLabeled("AB_ThreatSkyDrops".Translate(), ref threatSkyDrops, "AB_ThreatSkyDropsTip".Translate());
+            if (threatBasementInfest || threatSkyDrops)
+            {
+                listing.Label("AB_ThreatDivertChance".Translate() + ": " + threatDivertChance.ToStringPercent(), tooltip: "AB_ThreatDivertChanceTip".Translate());
+                threatDivertChance = listing.Slider(threatDivertChance, 0.05f, 1f);
+            }
+            listing.GapLine();
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
             listing.Label("AB_ClimbTime".Translate() + ": " + climbTimeMultiplier.ToStringPercent(), tooltip: "AB_ClimbTimeTip".Translate());
@@ -57,6 +69,9 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref crossLevelNeeds, "crossLevelNeeds", true);
             Scribe_Values.Look(ref crossLevelPipes, "crossLevelPipes", true);
             Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
+            Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);
+            Scribe_Values.Look(ref threatSkyDrops, "threatSkyDrops", false);
+            Scribe_Values.Look(ref threatDivertChance, "threatDivertChance", 0.25f);
         }
     }
 }

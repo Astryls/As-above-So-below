@@ -39,11 +39,15 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (DbhActive)
+            // Per-def capability routing: stairs bridge everything, the vertical
+            // water pipe bridges DBH water only, the vertical conduit nothing
+            // here (its power link is comp-driven).
+            ABStairsExtension ext = a.Ext;
+            if (DbhActive && (ext == null || ext.bridgeWater))
             {
                 DBHWaterBridge.BridgePair(a, b);
             }
-            if (VefActive)
+            if (VefActive && (ext == null || ext.bridgeVef))
             {
                 VEFPipeBridge.BridgePair(a, b);
             }
