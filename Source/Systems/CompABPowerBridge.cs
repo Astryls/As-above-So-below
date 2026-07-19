@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -19,6 +20,11 @@ namespace AsAboveSoBelow
     {
         private const int UpdateInterval = 30;
 
+        /// <summary>True on the side that received energy in the last equalization.
+        /// Only the receiving side forwards charge into its local battery bank;
+        /// the producing side must never churn energy in circles.</summary>
+        private bool lastFlowIn;
+
         public override void CompTick()
         {
             base.CompTick();
@@ -29,6 +35,10 @@ namespace AsAboveSoBelow
             try
             {
                 Equalize();
+                if (lastFlowIn)
+                {
+                    ForwardToLocalBank();
+                }
             }
             catch (Exception e)
             {
@@ -60,6 +70,8 @@ namespace AsAboveSoBelow
                 {
                     other.DrawPower(amount);
                     AddEnergy(amount);
+                    lastFlowIn = true;
+                    other.lastFlowIn = false;
                 }
             }
             else if (delta < -0.5f)
@@ -69,6 +81,53 @@ namespace AsAboveSoBelow
                 {
                     DrawPower(amount);
                     other.AddEnergy(amount);
+                    lastFlowIn = false;
+                    other.lastFlowIn = true;
+                }
+            }
+        }
+
+        /// <summary>Vanilla nets never move charge battery to battery, so a bank on
+        /// the receiving level would stay empty forever. The receiving bridge side
+        /// pushes its charge into the local net's ordinary batteries at their own
+        /// charge efficiency (bridge batteries excluded).</summary>
+        private void ForwardToLocalBank()
+        {
+            PowerNet net = PowerNet;
+            if (net == null)
+            {
+                return;
+            }
+            float available = StoredEnergy;
+            if (available <= 0.5f)
+            {
+                return;
+            }
+            List<CompPowerBattery> batteries = net.batteryComps;
+            for (int i = 0; i < batteries.Count; i++)
+            {
+                CompPowerBattery battery = batteries[i];
+                if (battery == this || battery is CompABPowerBridge)
+                {
+                    continue;
+                }
+                float space = battery.Props.storedEnergyMax - battery.StoredEnergy;
+                if (space <= 0f)
+                {
+                    continue;
+                }
+                float efficiency = Mathf.Max(battery.Props.efficiency, 0.01f);
+                float draw = Mathf.Min(available, space / efficiency);
+                if (draw <= 0f)
+                {
+                    continue;
+                }
+                DrawPower(draw);
+                battery.AddEnergy(draw * efficiency);
+                available -= draw;
+                if (available <= 0.5f)
+                {
+                    break;
                 }
             }
         }
