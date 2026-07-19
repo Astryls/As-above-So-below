@@ -20,6 +20,7 @@ namespace AsAboveSoBelow
         public const string Weather = "weather";
         public const string Power = "power";
         public const string Pipes = "pipes";
+        public const string Climate = "climate";
 
         private static readonly HashSet<string> disabled = new HashSet<string>();
 

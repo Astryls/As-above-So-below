@@ -156,6 +156,18 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Breaks the pair link from this side without destroying anything.
+        /// Used when a level map is removed so surviving counterparts read unlinked.</summary>
+        internal void SeverLink()
+        {
+            Building_ABStairs cp = counterpart;
+            counterpart = null;
+            if (cp != null && !cp.Destroyed)
+            {
+                cp.counterpart = null;
+            }
+        }
+
         public override void Destroy(DestroyMode mode = DestroyMode.Vanish)
         {
             Building_ABStairs cp = counterpart;

@@ -107,18 +107,32 @@ namespace AsAboveSoBelow
             }
             else if (level == 0)
             {
-                if (!ABGuard.On(ABGuard.Pipes) || stairsList == null || stairsList.Count == 0
+                if (stairsList == null || stairsList.Count == 0
                     || (Find.TickManager.TicksGame + (map.uniqueID % PipeBridgeInterval)) % PipeBridgeInterval != 0)
                 {
                     return;
                 }
-                try
+                if (ABGuard.On(ABGuard.Climate))
                 {
-                    ABPipeCompat.TickGroundPairs(this);
+                    try
+                    {
+                        LevelClimate.TickGroundPairs(this);
+                    }
+                    catch (Exception e)
+                    {
+                        ABGuard.Disable(ABGuard.Climate, e, "stairwell heat exchange");
+                    }
                 }
-                catch (Exception e)
+                if (ABGuard.On(ABGuard.Pipes))
                 {
-                    ABGuard.Disable(ABGuard.Pipes, e, "pipe network bridge");
+                    try
+                    {
+                        ABPipeCompat.TickGroundPairs(this);
+                    }
+                    catch (Exception e)
+                    {
+                        ABGuard.Disable(ABGuard.Pipes, e, "pipe network bridge");
+                    }
                 }
             }
         }
@@ -186,6 +200,16 @@ namespace AsAboveSoBelow
         {
             base.MapRemoved();
             UnsubscribeSync();
+            // Sever stair links cleanly so counterparts on surviving maps read as
+            // not connected instead of holding references into a disposed map.
+            if (stairsList != null)
+            {
+                for (int i = 0; i < stairsList.Count; i++)
+                {
+                    stairsList[i]?.SeverLink();
+                }
+                stairsList.Clear();
+            }
             Map ground = groundMap;
             if (ground != null && !ground.Disposed && ground != map)
             {

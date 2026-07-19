@@ -13,6 +13,7 @@ namespace AsAboveSoBelow
         public bool crossLevelHauling = true;
         public bool crossLevelNeeds = true;
         public bool crossLevelPipes = true;
+        public bool crossLevelTemperature = true;
 
         public void DoWindowContents(Rect inRect)
         {
@@ -23,6 +24,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelNeeds".Translate(), ref crossLevelNeeds, "AB_CrossLevelNeedsTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelPipes".Translate(), ref crossLevelPipes, "AB_CrossLevelPipesTip".Translate());
+            listing.CheckboxLabeled("AB_CrossLevelTemperature".Translate(), ref crossLevelTemperature, "AB_CrossLevelTemperatureTip".Translate());
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
@@ -44,6 +46,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref crossLevelHauling, "crossLevelHauling", true);
             Scribe_Values.Look(ref crossLevelNeeds, "crossLevelNeeds", true);
             Scribe_Values.Look(ref crossLevelPipes, "crossLevelPipes", true);
+            Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
         }
     }
 }
