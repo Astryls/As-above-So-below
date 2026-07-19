@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <ThingDef ParentName="BuildingBase" Name="AB_StairsBase" Abstract="True">
+    <thingClass>AsAboveSoBelow.Building_ABStairs</thingClass>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <pathCost>42</pathCost>
+    <fillPercent>0.40</fillPercent>
+    <rotatable>false</rotatable>
+    <size>(1,1)</size>
+    <designationCategory>Structure</designationCategory>
+    <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <stuffCategories>
+      <li>Metallic</li>
+      <li>Woody</li>
+      <li>Stony</li>
+    </stuffCategories>
+    <costStuffCount>75</costStuffCount>
+    <statBases>
+      <MaxHitPoints>300</MaxHitPoints>
+      <WorkToBuild>3200</WorkToBuild>
+      <Flammability>1.0</Flammability>
+    </statBases>
+    <tickerType>Never</tickerType>
+    <placeWorkers>
+      <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_StairsBase">
+    <defName>AB_StairsDown</defName>
+    <label>stairs down</label>
+    <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. The basement starts as solid rock, so bring miners.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_StairsDown</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>-1</deltaLevel>
+        <counterpartDef>AB_StairsUp</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_StairsBase">
+    <defName>AB_StairsUp</defName>
+    <label>stairs up</label>
+    <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Up there you can only walk and build above roofed parts of your base.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_StairsUp</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>1</deltaLevel>
+        <counterpartDef>AB_StairsDown</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

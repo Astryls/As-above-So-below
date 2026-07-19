@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <JobDef>
+    <defName>AB_UseStairs</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_UseStairs</driverClass>
+    <reportString>using stairs.</reportString>
+    <playerInterruptible>true</playerInterruptible>
+  </JobDef>
+
+</Defs>

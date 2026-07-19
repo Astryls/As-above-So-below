@@ -4,4 +4,19 @@
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
 
+  <AB_GoUp>Go up the stairs</AB_GoUp>
+  <AB_GoDown>Go down the stairs</AB_GoDown>
+  <AB_NoPath>no path</AB_NoPath>
+  <AB_NotLinkedShort>not linked</AB_NotLinkedShort>
+  <AB_NotLinkedLine>Not connected to another level yet.</AB_NotLinkedLine>
+  <AB_LinkedAbove>Connected to the level above.</AB_LinkedAbove>
+  <AB_LinkedBelow>Connected to the level below.</AB_LinkedBelow>
+  <AB_ViewAbove>View level above</AB_ViewAbove>
+  <AB_ViewBelow>View level below</AB_ViewBelow>
+  <AB_ViewOtherLevelDesc>Jump the camera to the connected stairwell on the other level. You can also press Page Up and Page Down to switch levels.</AB_ViewOtherLevelDesc>
+  <AB_BasementCreated>The basement level has been opened. It is solid rock, mine it out to expand.</AB_BasementCreated>
+  <AB_SkyCreated>The sky level has been opened. Build floors above roofed rooms to expand upward.</AB_SkyCreated>
+  <AB_OnlySurfaceForNow>Must be placed on the surface level.</AB_OnlySurfaceForNow>
+  <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
+
 </LanguageData>

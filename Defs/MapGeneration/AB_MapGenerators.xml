@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <MapGeneratorDef>
+    <defName>AB_Basement</defName>
+    <label>basement level</label>
+    <isUnderground>true</isUnderground>
+    <ignoreAreaRevealedLetter>true</ignoreAreaRevealedLetter>
+    <disableCallAid>true</disableCallAid>
+    <pocketMapProperties>
+      <biome>AB_Underground</biome>
+      <temperature>12</temperature>
+    </pocketMapProperties>
+    <genSteps>
+      <li>AB_SolidRock</li>
+    </genSteps>
+  </MapGeneratorDef>
+
+  <MapGeneratorDef>
+    <defName>AB_Sky</defName>
+    <label>sky level</label>
+    <ignoreAreaRevealedLetter>true</ignoreAreaRevealedLetter>
+    <disableCallAid>true</disableCallAid>
+    <pocketMapProperties>
+      <biome>AB_OpenSky</biome>
+      <temperature>10</temperature>
+    </pocketMapProperties>
+    <genSteps>
+      <li>AB_SkyTerrain</li>
+    </genSteps>
+  </MapGeneratorDef>
+
+  <GenStepDef>
+    <defName>AB_SolidRock</defName>
+    <order>200</order>
+    <genStep Class="AsAboveSoBelow.GenStep_ABSolidRock" />
+  </GenStepDef>
+
+  <GenStepDef>
+    <defName>AB_SkyTerrain</defName>
+    <order>200</order>
+    <genStep Class="AsAboveSoBelow.GenStep_ABSkyTerrain" />
+  </GenStepDef>
+
+</Defs>

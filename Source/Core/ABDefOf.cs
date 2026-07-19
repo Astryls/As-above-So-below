@@ -9,6 +9,14 @@ namespace AsAboveSoBelow
         public static KeyBindingDef AB_ViewLevelUp;
         public static KeyBindingDef AB_ViewLevelDown;
 
+        public static JobDef AB_UseStairs;
+
+        public static MapGeneratorDef AB_Basement;
+        public static MapGeneratorDef AB_Sky;
+
+        public static TerrainDef AB_OpenAir;
+        public static TerrainDef AB_RoofSurface;
+
         static ABDefOf()
         {
             DefOfHelper.EnsureInitializedInCtor(typeof(ABDefOf));
