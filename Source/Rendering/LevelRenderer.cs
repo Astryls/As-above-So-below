@@ -110,6 +110,16 @@ namespace AsAboveSoBelow
                     for (int i = 0; i < layers.Count; i++)
                     {
                         SectionLayer layer = layers[i];
+                        // Knowledge and vision masks must never enter the below-view:
+                        // SectionLayer_Darkness paints black over the lower map's
+                        // fogged cells (the recurring phantom fog), FogOfWar and
+                        // IndoorMask encode the lower map's player knowledge, and the
+                        // lighting overlay is replaced by our air-cells mask.
+                        if (layer is SectionLayer_Darkness || layer is SectionLayer_FogOfWar
+                            || layer is SectionLayer_IndoorMask || layer is SectionLayer_LightingOverlay)
+                        {
+                            continue;
+                        }
                         if (!layer.Visible)
                         {
                             continue;

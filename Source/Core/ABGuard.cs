@@ -17,6 +17,7 @@ namespace AsAboveSoBelow
         public const string Movement = "movement";
         public const string Logistics = "logistics";
         public const string RoofSync = "roofSync";
+        public const string Weather = "weather";
 
         private static readonly HashSet<string> disabled = new HashSet<string>();
 
