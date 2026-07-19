@@ -33,5 +33,9 @@
   <AB_CrossLevelWorkTip>When a colonist finds no work on their current level, they check directly linked levels and take the stairs if there is something to do there.</AB_CrossLevelWorkTip>
   <AB_IdleReturnHome>Idle colonists return to the surface</AB_IdleReturnHome>
   <AB_IdleReturnHomeTip>Colonists with nothing to do on any level head back down to the surface instead of roaming the level they worked on.</AB_IdleReturnHomeTip>
+  <AB_CrossLevelHauling>Haul items between levels</AB_CrossLevelHauling>
+  <AB_CrossLevelHaulingTip>When an item's best storage is on another level, haulers carry it through the stairs. Runs after normal hauling on the same level.</AB_CrossLevelHaulingTip>
+  <AB_CrossLevelNeeds>Colonists cross levels to sleep in their beds</AB_CrossLevelNeeds>
+  <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
 
 </LanguageData>

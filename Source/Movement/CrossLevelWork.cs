@@ -26,12 +26,6 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<int, int> nextAllowedTick = new Dictionary<int, int>();
 
-        private static readonly AccessTools.FieldRef<Thing, sbyte> MapIndexRef =
-            AccessTools.FieldRefAccess<Thing, sbyte>("mapIndexOrState");
-
-        private static readonly AccessTools.FieldRef<Thing, IntVec3> PositionRef =
-            AccessTools.FieldRefAccess<Thing, IntVec3>("positionInt");
-
         public static ThinkResult? TryMigrateForWork(JobGiver_Work giver, Pawn pawn)
         {
             Map map = pawn.Map;
@@ -149,29 +143,65 @@ namespace AsAboveSoBelow
         /// discarded; the real job gets picked normally after the transfer.</summary>
         private static bool WorkExistsAt(JobGiver_Work giver, Pawn pawn, Map target, IntVec3 entryCell)
         {
-            sbyte targetIndex = (sbyte)Find.Maps.IndexOf(target);
-            if (targetIndex < 0)
+            if (!ABVirtualPosition.TrySwap(pawn, target, entryCell, out ABVirtualPosition.Token token))
             {
                 return false;
             }
-            sbyte oldMapIndex = MapIndexRef(pawn);
-            IntVec3 oldPos = PositionRef(pawn);
             bool found = false;
             VirtualScanActive = true;
             try
             {
-                MapIndexRef(pawn) = targetIndex;
-                PositionRef(pawn) = entryCell;
                 ThinkResult result = giver.TryIssueJobPackage(pawn, default(JobIssueParams));
                 found = result.Job != null;
             }
             finally
             {
-                MapIndexRef(pawn) = oldMapIndex;
-                PositionRef(pawn) = oldPos;
+                ABVirtualPosition.Restore(pawn, token);
                 VirtualScanActive = false;
             }
             return found;
+        }
+    }
+
+    /// <summary>
+    /// Temporarily relocates a pawn (private position and map index fields) so
+    /// vanilla map-scoped queries run as if the pawn stood on another level.
+    /// Callers must Restore in a finally block. Shared by cross-level work and
+    /// hauling; the MultiFloors-proven technique.
+    /// </summary>
+    internal static class ABVirtualPosition
+    {
+        private static readonly AccessTools.FieldRef<Thing, sbyte> MapIndexRef =
+            AccessTools.FieldRefAccess<Thing, sbyte>("mapIndexOrState");
+
+        private static readonly AccessTools.FieldRef<Thing, IntVec3> PositionRef =
+            AccessTools.FieldRefAccess<Thing, IntVec3>("positionInt");
+
+        public struct Token
+        {
+            internal sbyte mapIndex;
+            internal IntVec3 pos;
+        }
+
+        public static bool TrySwap(Pawn pawn, Map target, IntVec3 cell, out Token token)
+        {
+            token = default(Token);
+            sbyte idx = (sbyte)Find.Maps.IndexOf(target);
+            if (idx < 0)
+            {
+                return false;
+            }
+            token.mapIndex = MapIndexRef(pawn);
+            token.pos = PositionRef(pawn);
+            MapIndexRef(pawn) = idx;
+            PositionRef(pawn) = cell;
+            return true;
+        }
+
+        public static void Restore(Pawn pawn, Token token)
+        {
+            MapIndexRef(pawn) = token.mapIndex;
+            PositionRef(pawn) = token.pos;
         }
     }
 }

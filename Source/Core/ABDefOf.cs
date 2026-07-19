@@ -10,6 +10,7 @@ namespace AsAboveSoBelow
         public static KeyBindingDef AB_ViewLevelDown;
 
         public static JobDef AB_UseStairs;
+        public static JobDef AB_HaulAcrossLevels;
 
         public static MapGeneratorDef AB_Basement;
         public static MapGeneratorDef AB_Sky;

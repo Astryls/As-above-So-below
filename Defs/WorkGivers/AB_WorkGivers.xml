@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <WorkGiverDef>
+    <defName>AB_HaulAcrossLevels</defName>
+    <label>haul things to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABHaulAcrossLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>haul</verb>
+    <gerund>hauling</gerund>
+    <priorityInType>10</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+</Defs>

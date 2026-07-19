@@ -37,10 +37,19 @@ namespace AsAboveSoBelow
 
         private void DoTransfer()
         {
-            Pawn p = pawn;
-            Building_ABStairs stairs = Stairs;
+            StairTransfer.Transfer(pawn, Stairs);
+        }
+    }
+
+    /// <summary>Shared pawn transfer through a linked stairwell, with carried
+    /// things riding along and a guarded recovery respawn on failure. Used by the
+    /// use-stairs job and the cross-level hauling job.</summary>
+    internal static class StairTransfer
+    {
+        public static void Transfer(Pawn p, Building_ABStairs stairs)
+        {
             Building_ABStairs dest = stairs?.Counterpart;
-            if (dest == null || !dest.Spawned)
+            if (p == null || dest == null || !dest.Spawned)
             {
                 return;
             }

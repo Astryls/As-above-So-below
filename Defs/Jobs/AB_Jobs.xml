@@ -8,4 +8,11 @@
     <playerInterruptible>true</playerInterruptible>
   </JobDef>
 
+  <JobDef>
+    <defName>AB_HaulAcrossLevels</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_HaulAcrossLevels</driverClass>
+    <reportString>hauling TargetA to another level.</reportString>
+    <playerInterruptible>true</playerInterruptible>
+  </JobDef>
+
 </Defs>
