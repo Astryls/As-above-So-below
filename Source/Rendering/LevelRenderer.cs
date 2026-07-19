@@ -2,17 +2,22 @@ using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Verse;
 
 namespace AsAboveSoBelow
 {
     /// <summary>
     /// See-below rendering for the sky level. Draws the lower map's own cached
-    /// section meshes (terrain, buildings, items, snow) shifted down in altitude
-    /// so they sort under everything on the sky map, adds a translucent dim quad,
-    /// and re-runs the lower map's dynamic drawing (pawns, projectiles) with a
-    /// global draw offset so life below stays live. Open air cells on the sky
-    /// map use dontRender terrain, so the world below shows through the holes.
+    /// section meshes (terrain, buildings, items, snow) shifted down in altitude so
+    /// they sort under everything on the sky map, re-runs the lower map's dynamic
+    /// drawing with a global draw offset for live pawns and projectiles, and covers
+    /// ONLY the open-air cells with a custom mask mesh that encodes, per cell, the
+    /// surface's fog of war (opaque: unexplored stays hidden) and real per-cell
+    /// light (dark at night, lamp glow visible). Because the mask geometry exists
+    /// only over air cells it can never cover the sky level's own rock, floors, or
+    /// buildings, regardless of shader depth behavior. Vanilla overlay meshes are
+    /// deliberately NOT drawn into the below-view for exactly that reason.
     /// Every entry point is kill-switched via ABGuard.Rendering.
     /// </summary>
     public static class LevelRenderer
@@ -21,20 +26,13 @@ namespace AsAboveSoBelow
         /// terrain (y=0) but above the camera far plane at any zoom.</summary>
         public const float BelowOffset = -2.5f;
 
-        /// <summary>Submeshes whose bounds sit above this are skipped (silhouettes,
-        /// misc overlays), except lighting and fog which are relocated below.</summary>
+        /// <summary>Submeshes whose bounds sit above this are skipped (fog of war,
+        /// lighting, silhouettes, overlays); the mask mesh replaces them.</summary>
         private const float MaxSubMeshAltitude = 2f;
 
-        /// <summary>The lower map's lighting overlay is re-seated just under the sky
-        /// map's plane so the view below shows real time-of-day light; its shared
-        /// material color is updated per frame by the current map's SkyManager, so
-        /// day/night stays in sync for free. Fog of war sits just above it so
-        /// unexplored surface stays hidden from above.</summary>
-        private const float LightingRelocateY = -0.15f;
+        private const float MaskAltitude = -0.10f;
 
-        private const float FogRelocateY = -0.10f;
-
-        private const float DimQuadAltitude = -0.05f;
+        private const int MaskRebuildIntervalFrames = 15;
 
         /// <summary>True only while the lower map's dynamic draw runs; DrawPos
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>
@@ -48,8 +46,14 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<MapDrawer, Section[,]> SectionsRef =
             AccessTools.FieldRefAccess<MapDrawer, Section[,]>("sections");
 
-        private static Material dimMat;
-        private static float dimMatAlpha = -1f;
+        private static Mesh maskMesh;
+        private static Material maskMat;
+        private static int maskLastFrame = -999;
+        private static CellRect maskLastRect;
+        private static int maskLastLowerId = -1;
+        private static readonly List<Vector3> maskVerts = new List<Vector3>();
+        private static readonly List<int> maskTris = new List<int>();
+        private static readonly List<Color32> maskColors = new List<Color32>();
 
         public static void DrawBelowStatic(Map map)
         {
@@ -69,7 +73,6 @@ namespace AsAboveSoBelow
             }
             try
             {
-                SendDiagnosticOnce(map, lower);
                 // Vanilla's far clip plane is 65.5 while the camera rises to y=65 at
                 // full zoom out, which would clip our below content at y=-2.5. Keep
                 // enough depth budget; idempotent in case something resets it.
@@ -82,7 +85,7 @@ namespace AsAboveSoBelow
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
                 DrawSections(lower, view);
-                DrawDimQuad(view);
+                DrawBelowMask(map, lower, view);
             }
             catch (Exception e)
             {
@@ -111,29 +114,11 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        float relocateY = float.NaN;
-                        if (layer is SectionLayer_LightingOverlay)
-                        {
-                            relocateY = LightingRelocateY;
-                        }
-                        else if (layer is SectionLayer_FogOfWar)
-                        {
-                            relocateY = FogRelocateY;
-                        }
                         List<LayerSubMesh> subs = layer.subMeshes;
                         for (int j = 0; j < subs.Count; j++)
                         {
                             LayerSubMesh sub = subs[j];
-                            if (!sub.finalized || sub.disabled)
-                            {
-                                continue;
-                            }
-                            if (!float.IsNaN(relocateY))
-                            {
-                                float y = relocateY - sub.mesh.bounds.center.y;
-                                Graphics.DrawMesh(sub.mesh, Matrix4x4.Translate(new Vector3(0f, y, 0f)), sub.material, 0);
-                            }
-                            else if (sub.mesh.bounds.center.y <= MaxSubMeshAltitude)
+                            if (sub.finalized && !sub.disabled && sub.mesh.bounds.center.y <= MaxSubMeshAltitude)
                             {
                                 Graphics.DrawMesh(sub.mesh, OffsetMatrix, sub.material, 0);
                             }
@@ -143,49 +128,105 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void DrawDimQuad(CellRect view)
+        /// <summary>Air-cells-only mask: opaque over unexplored surface, otherwise
+        /// darkness from the surface's per-cell light plus the user's base dim.
+        /// Sky light comes from the CURRENT map's sky manager because inactive maps
+        /// do not update theirs.</summary>
+        private static void DrawBelowMask(Map sky, Map lower, CellRect view)
         {
-            float alpha = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.85f);
-            if (alpha < 0.01f)
+            if (maskMat == null)
             {
-                return;
+                maskMat = new Material(MatBases.FogOfWar)
+                {
+                    mainTexture = BaseContent.WhiteTex,
+                    color = Color.white
+                };
             }
-            if (dimMat == null || Mathf.Abs(alpha - dimMatAlpha) > 0.001f)
+            int frame = Time.frameCount;
+            if (maskMesh == null || frame - maskLastFrame >= MaskRebuildIntervalFrames
+                || view != maskLastRect || lower.uniqueID != maskLastLowerId)
             {
-                dimMat = SolidColorMaterials.SimpleSolidColorMaterial(new Color(0f, 0f, 0f, alpha));
-                dimMatAlpha = alpha;
+                RebuildMask(sky, lower, view);
+                maskLastFrame = frame;
+                maskLastRect = view;
+                maskLastLowerId = lower.uniqueID;
             }
-            Vector3 center = view.CenterVector3;
-            center.y = DimQuadAltitude;
-            Matrix4x4 m = Matrix4x4.TRS(center, Quaternion.identity, new Vector3(view.Width + 2f, 1f, view.Height + 2f));
-            Graphics.DrawMesh(MeshPool.plane10, m, dimMat, 0);
+            if (maskMesh != null && maskMesh.vertexCount > 0)
+            {
+                Graphics.DrawMesh(maskMesh, Matrix4x4.identity, maskMat, 0);
+            }
         }
 
-        private static bool diagnosticSent;
-
-        /// <summary>Temporary instrumentation: one warning per launch with the sky
-        /// map's lighting numbers, delivered through the log so a bad value is
-        /// visible without guesswork. Remove after the lighting fix is verified.</summary>
-        private static void SendDiagnosticOnce(Map sky, Map lower)
+        private static void RebuildMask(Map sky, Map lower, CellRect view)
         {
-            if (diagnosticSent)
+            if (maskMesh == null)
             {
-                return;
+                maskMesh = new Mesh
+                {
+                    name = "AB_BelowMask",
+                    indexFormat = IndexFormat.UInt32
+                };
             }
-            diagnosticSent = true;
-            try
+            maskVerts.Clear();
+            maskTris.Clear();
+            maskColors.Clear();
+            float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
+            float skyGlowNow = sky.skyManager.CurSkyGlow;
+            TerrainGrid skyTerrain = sky.terrainGrid;
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            FogGrid lowerFog = lower.fogGrid;
+            GlowGrid lowerGlow = lower.glowGrid;
+            RoofGrid lowerRoofs = lower.roofGrid;
+            int step = view.Width > 130 ? 2 : 1;
+            for (int x = view.minX; x <= view.maxX; x += step)
             {
-                Log.Warning(ABLog.Tag + " [diagnostic] sky map " + sky.uniqueID
-                    + " skyGlow=" + sky.skyManager.CurSkyGlow.ToString("F2")
-                    + " celestial=" + RimWorld.GenCelestial.CurCelestialSunGlow(sky).ToString("F2")
-                    + " weather=" + (sky.weatherManager.curWeather != null ? sky.weatherManager.curWeather.defName : "null")
-                    + " lowerSkyGlow=" + lower.skyManager.CurSkyGlow.ToString("F2")
-                    + " biome=" + (sky.Biome != null ? sky.Biome.defName : "null")
-                    + " tileValid=" + sky.Tile.Valid);
+                for (int z = view.minZ; z <= view.maxZ; z += step)
+                {
+                    IntVec3 c = new IntVec3(x, 0, z);
+                    if (!c.InBounds(sky) || skyTerrain.TerrainAt(c) != air)
+                    {
+                        continue;
+                    }
+                    byte a;
+                    if (lowerFog.IsFogged(c))
+                    {
+                        a = 255;
+                    }
+                    else
+                    {
+                        // Artificial glow from the lower map, sky light from the
+                        // current map (identical tile, updated every frame).
+                        float artificial = lowerGlow.GroundGlowAt(c, ignoreCavePlants: false, ignoreSky: true);
+                        float light = lowerRoofs.Roofed(c) ? artificial : Mathf.Max(skyGlowNow, artificial);
+                        a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (0.82f - baseDim)));
+                    }
+                    int vi = maskVerts.Count;
+                    float x1 = Mathf.Min(x + step, view.maxX + 1);
+                    float z1 = Mathf.Min(z + step, view.maxZ + 1);
+                    maskVerts.Add(new Vector3(x, MaskAltitude, z));
+                    maskVerts.Add(new Vector3(x, MaskAltitude, z1));
+                    maskVerts.Add(new Vector3(x1, MaskAltitude, z1));
+                    maskVerts.Add(new Vector3(x1, MaskAltitude, z));
+                    Color32 col = new Color32(0, 0, 0, a);
+                    maskColors.Add(col);
+                    maskColors.Add(col);
+                    maskColors.Add(col);
+                    maskColors.Add(col);
+                    maskTris.Add(vi);
+                    maskTris.Add(vi + 1);
+                    maskTris.Add(vi + 2);
+                    maskTris.Add(vi);
+                    maskTris.Add(vi + 2);
+                    maskTris.Add(vi + 3);
+                }
             }
-            catch (Exception e)
+            maskMesh.Clear();
+            if (maskVerts.Count > 0)
             {
-                ABLog.Dev("Diagnostic failed: " + e.Message);
+                maskMesh.SetVertices(maskVerts);
+                maskMesh.SetColors(maskColors);
+                maskMesh.SetTriangles(maskTris, 0);
+                maskMesh.RecalculateBounds();
             }
         }
 
