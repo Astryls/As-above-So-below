@@ -41,6 +41,8 @@
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
   <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
+  <AB_CaptureUpTo>Capture {0} (bed on the level above)</AB_CaptureUpTo>
+  <AB_CaptureDownTo>Capture {0} (bed on the level below)</AB_CaptureDownTo>
   <AB_PowerBridgeInspect>Power link: bridges the grid to the connected level.</AB_PowerBridgeInspect>
   <AB_CrossLevelPipes>Bridge pipe networks through stairwells</AB_CrossLevelPipes>
   <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked stairwell on both levels, their stored contents flow between the levels. Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>

@@ -15,4 +15,18 @@
     <playerInterruptible>true</playerInterruptible>
   </JobDef>
 
+  <JobDef>
+    <defName>AB_RescueAcrossLevels</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_ABTakePawnAcrossLevels</driverClass>
+    <reportString>rescuing TargetA to another level.</reportString>
+    <playerInterruptible>true</playerInterruptible>
+  </JobDef>
+
+  <JobDef>
+    <defName>AB_CaptureAcrossLevels</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_ABTakePawnAcrossLevels</driverClass>
+    <reportString>capturing TargetA to another level.</reportString>
+    <playerInterruptible>true</playerInterruptible>
+  </JobDef>
+
 </Defs>

@@ -80,6 +80,7 @@ namespace AsAboveSoBelow
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry.need);
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry.need);
             AddBillNeeds(map, entry);
+            AddMealNeeds(map, entry);
             foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
             {
                 if (!entry.available.ContainsKey(kvp.Key))
@@ -189,6 +190,59 @@ namespace AsAboveSoBelow
                             entry.need[def] = cur + aggShortfall;
                         }
                     }
+                }
+            }
+        }
+
+        private const int MealsPerMouth = 2;
+
+        /// <summary>Patient and prisoner feeding (T7 #2/#7): levels with bedridden
+        /// patients or prisoners register shortfall demand for a small buffer of
+        /// meals, so food flows to them and doctors and wardens feed locally.
+        /// Aggregated across meal types like bill alternatives: any meal type on
+        /// hand counts.</summary>
+        private static void AddMealNeeds(Map map, CacheEntry entry)
+        {
+            int mouths = 0;
+            IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                Pawn p = pawns[i];
+                if (p.IsPrisonerOfColony
+                    || (p.Faction == Faction.OfPlayer && p.InBed() && HealthAIUtility.ShouldSeekMedicalRest(p)))
+                {
+                    mouths++;
+                }
+            }
+            if (mouths == 0)
+            {
+                return;
+            }
+            int required = mouths * MealsPerMouth;
+            ThingDef[] meals =
+            {
+                ThingDefOf.MealSimple, ThingDefOf.MealFine, ThingDefOf.MealNutrientPaste,
+                ThingDefOf.MealSurvivalPack, ThingDefOf.Pemmican
+            };
+            int totalAvailable = 0;
+            for (int i = 0; i < meals.Length; i++)
+            {
+                if (meals[i] != null)
+                {
+                    totalAvailable += Available(map, entry, meals[i]);
+                }
+            }
+            int shortfall = required - totalAvailable;
+            if (shortfall <= 0)
+            {
+                return;
+            }
+            for (int i = 0; i < meals.Length; i++)
+            {
+                if (meals[i] != null)
+                {
+                    entry.need.TryGetValue(meals[i], out int cur);
+                    entry.need[meals[i]] = cur + shortfall;
                 }
             }
         }

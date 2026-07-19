@@ -15,6 +15,20 @@
   </WorkGiverDef>
 
   <WorkGiverDef>
+    <defName>AB_RescueAcrossLevels</defName>
+    <label>rescue to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABRescueAcrossLevels</giverClass>
+    <workType>Doctor</workType>
+    <verb>rescue</verb>
+    <gerund>rescuing</gerund>
+    <priorityInType>70</priorityInType>
+    <emergency>true</emergency>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
     <defName>AB_FetchFromOtherLevels</defName>
     <label>fetch things from other levels</label>
     <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>
