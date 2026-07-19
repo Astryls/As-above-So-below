@@ -28,6 +28,14 @@
       <HintPath>C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- Soft compat references: compile-time only, never shipped, runtime gated on ModsConfig.IsActive. -->
     <Reference Include="BadHygiene">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\836308268\1.6\Assemblies\BadHygiene.dll</HintPath>

@@ -51,6 +51,12 @@
   <AB_ExtendDownDesc>Extend the elevator shaft to the level below, opening it if needed, and place a linked car there.</AB_ExtendDownDesc>
   <AB_RideToSky>Ride to the sky level</AB_RideToSky>
   <AB_RideToBasement>Ride to the basement</AB_RideToBasement>
+  <AB_LevelSky>Sky level</AB_LevelSky>
+  <AB_LevelSurface>Surface</AB_LevelSurface>
+  <AB_LevelBasement>Basement</AB_LevelBasement>
+  <AB_LevelWidgetTip>You can also press Page Up and Page Down.</AB_LevelWidgetTip>
+  <AB_ShowLevelWidget>Show level view buttons</AB_ShowLevelWidget>
+  <AB_ShowLevelWidgetTip>Adds view level above and view level below buttons next to the other view toggles in the bottom right.</AB_ShowLevelWidgetTip>
   <AB_PowerBridgeInspect>Power link: bridges the grid to the connected level.</AB_PowerBridgeInspect>
   <AB_CrossLevelPipes>Bridge pipe networks through stairwells</AB_CrossLevelPipes>
   <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked stairwell on both levels, their stored contents flow between the levels. Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>

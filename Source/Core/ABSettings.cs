@@ -8,6 +8,7 @@ namespace AsAboveSoBelow
         public bool verboseLogging;
         public bool showLiveBelow = true;
         public bool showCeilingHint = true;
+        public bool showLevelWidget = true;
         public float belowDim = 0.12f;
         public float climbTimeMultiplier = 1f;
         public bool crossLevelWork = true;
@@ -29,6 +30,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_CrossLevelTemperature".Translate(), ref crossLevelTemperature, "AB_CrossLevelTemperatureTip".Translate());
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
             listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
+            listing.CheckboxLabeled("AB_ShowLevelWidget".Translate(), ref showLevelWidget, "AB_ShowLevelWidgetTip".Translate());
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
             listing.Label("AB_ClimbTime".Translate() + ": " + climbTimeMultiplier.ToStringPercent(), tooltip: "AB_ClimbTimeTip".Translate());
@@ -44,6 +46,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
             Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
+            Scribe_Values.Look(ref showLevelWidget, "showLevelWidget", true);
             Scribe_Values.Look(ref climbTimeMultiplier, "climbTimeMultiplier", 1f);
             // Key renamed so the old heavier default is not carried over from
             // earlier test sessions; real surface lighting now does most of the work.

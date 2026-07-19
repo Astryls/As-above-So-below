@@ -44,7 +44,6 @@ namespace AsAboveSoBelow
                         LevelCamera.JumpPreservingView(down);
                     }
                 }
-                LevelWidget.Draw();
             }
             catch (Exception e)
             {

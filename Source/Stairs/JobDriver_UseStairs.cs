@@ -50,6 +50,71 @@ namespace AsAboveSoBelow
         }
     }
 
+    /// <summary>Orders that must replay after a stair transfer: job queues do
+    /// not survive the despawn, so cross-level ordered actions (for example a
+    /// Reverse Commands order for a pawn on another level) stash their real
+    /// action here and the transfer runs it on arrival at the right map.
+    /// Entries expire and are overwritten by newer orders; everything fails
+    /// open.</summary>
+    internal static class ABPendingOrders
+    {
+        private const int ExpiryTicks = 5000;
+
+        private struct Entry
+        {
+            public int tick;
+            public Map map;
+            public Action action;
+        }
+
+        private static readonly Dictionary<int, Entry> pending = new Dictionary<int, Entry>();
+
+        public static void Set(Pawn pawn, Map targetMap, Action action)
+        {
+            if (pawn == null || targetMap == null || action == null)
+            {
+                return;
+            }
+            if (pending.Count > 64)
+            {
+                pending.Clear();
+            }
+            pending[pawn.thingIDNumber] = new Entry
+            {
+                tick = Find.TickManager.TicksGame,
+                map = targetMap,
+                action = action
+            };
+        }
+
+        public static void TryRun(Pawn pawn, Map arrivedOn)
+        {
+            if (pawn == null || !pending.TryGetValue(pawn.thingIDNumber, out Entry entry))
+            {
+                return;
+            }
+            if (Find.TickManager.TicksGame - entry.tick > ExpiryTicks)
+            {
+                pending.Remove(pawn.thingIDNumber);
+                return;
+            }
+            if (entry.map != arrivedOn)
+            {
+                // Not there yet (multi-hop rides consume it later).
+                return;
+            }
+            pending.Remove(pawn.thingIDNumber);
+            try
+            {
+                entry.action();
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "pending order replay");
+            }
+        }
+    }
+
     /// <summary>What should happen to carried pawn cargo after a transfer:
     /// continue as a rescue, as a capture, or infer from context.</summary>
     public enum CarriedIntent
@@ -130,6 +195,7 @@ namespace AsAboveSoBelow
                 FinishCarriedDelivery(p, intent);
                 PullFollowers(p, stairs, sourceMap, dest);
                 ContinueRide(p, dest, rideFinal, targetMap);
+                ABPendingOrders.TryRun(p, targetMap);
             }
             catch (Exception e)
             {
