@@ -73,14 +73,24 @@ namespace AsAboveSoBelow
 
         private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target)
         {
+            if (target == null || target.Disposed)
+            {
+                return null;
+            }
             if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
             {
+                ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level()
+                    + ": no reachable linked stairs on this level.");
                 return null;
             }
             if (!WorkExistsAt(giver, pawn, target, exit.Position))
             {
+                ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level()
+                    + ": no work reachable from the stairwell exit at " + exit.Position
+                    + " (is the work area connected to that exit?).");
                 return null;
             }
+            ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level() + ": work found, taking stairs.");
             return new ThinkResult(MakeStairsJob(stairs, exit), giver, JobTag.Misc);
         }
 

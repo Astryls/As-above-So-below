@@ -39,7 +39,6 @@ namespace AsAboveSoBelow
                     return;
                 }
                 TerrainGrid grid = sky.terrainGrid;
-                RoofGrid roofs = ground.roofGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainDef rooftop = ABDefOf.AB_RoofSurface;
                 int fixedCells = 0;
@@ -51,8 +50,7 @@ namespace AsAboveSoBelow
                         // Floors, rock, and anything else are never touched.
                         continue;
                     }
-                    RoofDef roof = c.InBounds(ground) ? roofs.RoofAt(c) : null;
-                    TerrainDef want = roof != null && !roof.isNatural ? rooftop : air;
+                    TerrainDef want = c.InBounds(ground) && CoveredBelow(ground, c) ? rooftop : air;
                     if (top == want)
                     {
                         continue;
@@ -90,49 +88,17 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                RoofDef roof = ground.roofGrid.RoofAt(c);
-                TerrainGrid grid = sky.terrainGrid;
-                TerrainDef top = grid.TerrainAt(c);
-                if (roof != null)
+                SyncCellFromBelow(sky, ground, c, allowFloorCollapse: true);
+                // The wall-edge rule makes neighbor verdicts depend on this roof
+                // cell: promote or demote the adjacent wall tops in the same event.
+                IntVec3[] adj = GenAdj.AdjacentCells;
+                for (int i = 0; i < adj.Length; i++)
                 {
-                    // Support gained: air becomes buildable rooftop. Natural roofs
-                    // are generation-time only; solid rock terrain and existing
-                    // floors are already supported, leave them alone.
-                    if (!roof.isNatural && top == ABDefOf.AB_OpenAir)
+                    IntVec3 n = c + adj[i];
+                    if (n.InBounds(sky) && n.InBounds(ground))
                     {
-                        grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                        SyncCellFromBelow(sky, ground, n, allowFloorCollapse: false);
                     }
-                }
-                else
-                {
-                    // Support lost. Stairwell landing platforms persist while
-                    // their stairs stand (they are the arrival footing), and
-                    // revert through the same rule once the stairs are gone.
-                    if (top == ABDefOf.AB_RoofSurface)
-                    {
-                        if (!IsStairsPlatform(sky, c))
-                        {
-                            grid.SetTerrain(c, ABDefOf.AB_OpenAir);
-                        }
-                    }
-                    else if (top != ABDefOf.AB_OpenAir && top.Removable)
-                    {
-                        // A built floor was riding on that roof: it collapses first,
-                        // then the exposed rooftop reverts to air.
-                        grid.RemoveTopLayer(c);
-                        if (grid.TerrainAt(c) == ABDefOf.AB_RoofSurface)
-                        {
-                            grid.SetTerrain(c, ABDefOf.AB_OpenAir);
-                        }
-                    }
-                    // Natural rock surfaces above mountains are left alone. Known
-                    // limitation (T6 #3, deferred by decision): if the natural roof
-                    // supporting a sky-mountain rim or ledge cell below is mined out,
-                    // that cell keeps its rock terrain and "floats" rather than
-                    // collapsing to air and dropping. It is a rare edge case (natural
-                    // roof removal under the ledge ring), so we accept and document
-                    // it in the field manual rather than force a collapse cascade
-                    // that could destabilize the mountain shell.
                 }
             }
             catch (Exception e)
@@ -251,6 +217,82 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.RoofSync, e, "mining fog reveal");
             }
+        }
+
+        /// <summary>Applies the covered-below verdict to one sky cell: covered
+        /// cells gain rooftop over air; uncovered cells lose unsupported rooftop
+        /// (landing platforms exempt while their stairs stand) and, on the
+        /// directly changed cell only, collapse floors whose roof is gone.
+        /// Natural rock surfaces above mountains are never touched; floating rim
+        /// rock on natural roof loss stays a documented rare limitation.</summary>
+        private static void SyncCellFromBelow(Map sky, Map ground, IntVec3 c, bool allowFloorCollapse)
+        {
+            TerrainGrid grid = sky.terrainGrid;
+            TerrainDef top = grid.TerrainAt(c);
+            if (CoveredBelow(ground, c))
+            {
+                if (top == ABDefOf.AB_OpenAir)
+                {
+                    grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                }
+                return;
+            }
+            if (top == ABDefOf.AB_RoofSurface)
+            {
+                if (!IsStairsPlatform(sky, c))
+                {
+                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                }
+                return;
+            }
+            if (allowFloorCollapse && top != ABDefOf.AB_OpenAir && top.Removable
+                && ground.roofGrid.RoofAt(c) == null)
+            {
+                // A built floor was riding on that roof: it collapses first,
+                // then the exposed rooftop reverts to air.
+                grid.RemoveTopLayer(c);
+                if (grid.TerrainAt(c) == ABDefOf.AB_RoofSurface)
+                {
+                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                }
+            }
+        }
+
+        /// <summary>True when a sky cell should read as rooftop: a constructed
+        /// roof below, OR an artificial impassable edifice (wall, door) below
+        /// supporting an adjacent constructed roof - so the steel runs to the
+        /// outer edge of the wall blocks instead of stopping at the interior
+        /// (playtest spec). Wall changes that fire no roof event converge via
+        /// the periodic sweep.</summary>
+        internal static bool CoveredBelow(Map ground, IntVec3 c)
+        {
+            RoofDef roof = ground.roofGrid.RoofAt(c);
+            if (roof != null)
+            {
+                return !roof.isNatural;
+            }
+            Building ed = ground.edificeGrid[c];
+            if (ed == null || ed.def.passability != Traversability.Impassable
+                || ed.def.mineable || ed is Building_ABStairs
+                || (ed.def.building != null && ed.def.building.isNaturalRock))
+            {
+                return false;
+            }
+            IntVec3[] adj = GenAdj.AdjacentCells;
+            for (int i = 0; i < adj.Length; i++)
+            {
+                IntVec3 n = c + adj[i];
+                if (!n.InBounds(ground))
+                {
+                    continue;
+                }
+                RoofDef r = ground.roofGrid.RoofAt(n);
+                if (r != null && !r.isNatural)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>True when the cell belongs to a spawned stairwell's landing

@@ -71,27 +71,31 @@ namespace AsAboveSoBelow
                     grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
                     if (wall[idx])
                     {
-                        // The whole mass: solid rock under thick roof, fogged like a
-                        // vanilla unexplored mountain. Faces unfog as pawns approach.
                         GenSpawn.Spawn(rock, c, map);
                         oreCells.Add(c);
                         map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
-                        fogCells.Add(c);
+                        if (AllWithinRadius(map, indices, wall, c, 2))
+                        {
+                            // Deep interior only: fogged like vanilla unexplored
+                            // rock. The two outer face rows and the ledge stay
+                            // visible so the mountain reads as a mountain -
+                            // fogging the faces let the fog's soft edge swallow
+                            // the narrow ledge entirely (playtest regression).
+                            fogCells.Add(c);
+                        }
                     }
-                    // Ledge ring: open walkable rock, no wall, no roof, never fogged.
+                    // Ledge ring: open walkable rock, no wall, never fogged.
                     continue;
                 }
-                RoofDef roofBelow = null;
-                if (ground != null && c.InBounds(ground))
+                bool inGround = ground != null && c.InBounds(ground);
+                RoofDef roofBelow = inGround ? ground.roofGrid.RoofAt(c) : null;
+                if (inGround && LevelSync.CoveredBelow(ground, c))
                 {
-                    roofBelow = ground.roofGrid.RoofAt(c);
+                    // Constructed roof below, or a wall supporting one: the
+                    // rooftop runs to the outer edge of the wall blocks.
+                    grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
                 }
-                if (roofBelow == null)
-                {
-                    // No roof below: open air, the ground stays visible.
-                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
-                }
-                else if (roofBelow.isNatural)
+                else if (roofBelow != null && roofBelow.isNatural)
                 {
                     // Thin-roof overhang strip outside the mass: the top of the
                     // mountain's edge, sealed with the vanilla rough stone of the
@@ -101,7 +105,8 @@ namespace AsAboveSoBelow
                 }
                 else
                 {
-                    grid.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                    // No support below: open air, the ground stays visible.
+                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
                 }
             }
 
@@ -118,6 +123,24 @@ namespace AsAboveSoBelow
         }
 
         private const float OreLumpsPer10kCells = 6f;
+
+        /// <summary>True when every cell within the square radius is set; cells
+        /// beyond the map edge count as set.</summary>
+        private static bool AllWithinRadius(Map map, CellIndices indices, bool[] grid, IntVec3 c, int radius)
+        {
+            foreach (IntVec3 n in CellRect.CenteredOn(c, radius))
+            {
+                if (!n.InBounds(map))
+                {
+                    continue;
+                }
+                if (!grid[indices.CellToIndex(n)])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         /// <summary>True when all 8 neighbors are set; cells beyond the map edge
         /// count as set so masses touching the border stay solid there.</summary>
