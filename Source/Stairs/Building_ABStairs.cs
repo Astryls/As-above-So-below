@@ -110,25 +110,27 @@ namespace AsAboveSoBelow
             ABLog.Dev("Linked stairs " + ThingID + " (level " + Map.Level() + ") with " + cp.ThingID + " (level " + targetMap.Level() + ").");
         }
 
-        /// <summary>Clears a 3x3 landing: rocks mined out in the basement, air becomes rooftop on the sky level, fog lifted.</summary>
+        /// <summary>Clears a 3x3 landing on the destination level: mineable rock is
+        /// mined out (basement fill or sky mountains alike), open air becomes rooftop
+        /// on the sky level, fog lifted.</summary>
         private static void PrepareLanding(Map targetMap, IntVec3 center)
         {
             int lvl = targetMap.Level();
             foreach (IntVec3 c in CellRect.CenteredOn(center, 1).ClipInsideMap(targetMap))
             {
-                if (lvl < 0)
+                if (lvl != 0)
                 {
                     List<Thing> things = c.GetThingList(targetMap).ToList();
                     for (int i = 0; i < things.Count; i++)
                     {
                         Thing t = things[i];
-                        if (t.def.building != null && t.def.building.isNaturalRock && t.def.destroyable)
+                        if (t.def.mineable && t.def.destroyable)
                         {
                             t.Destroy(DestroyMode.Vanish);
                         }
                     }
                 }
-                else if (lvl > 0 && targetMap.terrainGrid.TerrainAt(c) == ABDefOf.AB_OpenAir)
+                if (lvl > 0 && targetMap.terrainGrid.TerrainAt(c) == ABDefOf.AB_OpenAir)
                 {
                     targetMap.terrainGrid.SetTerrain(c, ABDefOf.AB_RoofSurface);
                 }

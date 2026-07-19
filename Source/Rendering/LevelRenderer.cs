@@ -60,6 +60,14 @@ namespace AsAboveSoBelow
             }
             try
             {
+                // Vanilla's far clip plane is 65.5 while the camera rises to y=65 at
+                // full zoom out, which would clip our below content at y=-2.5. Keep
+                // enough depth budget; idempotent in case something resets it.
+                Camera cam = Find.Camera;
+                if (cam != null && cam.farClipPlane < 70f)
+                {
+                    cam.farClipPlane = 70f;
+                }
                 // Process the lower map's dirty sections so the view below stays live.
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
