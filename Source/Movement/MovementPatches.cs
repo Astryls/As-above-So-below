@@ -99,8 +99,17 @@ namespace AsAboveSoBelow
 
         private static List<Gizmo> Build(Pawn pawn)
         {
-            if (!ABGuard.On(ABGuard.Movement) || !pawn.Spawned || !pawn.Drafted
-                || !pawn.IsColonistPlayerControlled)
+            if (!ABGuard.On(ABGuard.Movement) || !pawn.Spawned)
+            {
+                return null;
+            }
+            bool draftedColonist = pawn.Drafted && pawn.IsColonistPlayerControlled;
+            // Obedient pets get the same send up / send down orders (T7 #6).
+            bool obedientPet = !draftedColonist
+                && pawn.RaceProps.Animal && pawn.Faction == Faction.OfPlayer && !pawn.Downed
+                && pawn.training != null && pawn.training.HasLearned(TrainableDefOf.Obedience)
+                && !AnimalPenUtility.NeedsToBeManagedByRope(pawn);
+            if (!draftedColonist && !obedientPet)
             {
                 return null;
             }
@@ -140,7 +149,15 @@ namespace AsAboveSoBelow
                 cmd.action = delegate
                 {
                     Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, chosen);
-                    pawn.jobs.TryTakeOrderedJob(job, JobTag.DraftedOrder);
+                    if (pawn.Drafted)
+                    {
+                        pawn.jobs.TryTakeOrderedJob(job, JobTag.DraftedOrder);
+                    }
+                    else
+                    {
+                        // Animals have no ordered-job UI semantics; force it.
+                        pawn.jobs.StartJob(job, JobCondition.InterruptForced);
+                    }
                 };
             }
             list.Add(cmd);

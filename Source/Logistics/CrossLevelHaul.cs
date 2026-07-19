@@ -54,7 +54,7 @@ namespace AsAboveSoBelow
                 if (cached != null)
                 {
                     stairs = CrossLevelWork.NearestUsableStairs(pawn, cached, checkReachability: true);
-                    return stairs?.Counterpart != null ? cached : null;
+                    return stairs?.CounterpartTowards(cached) != null ? cached : null;
                 }
                 return null;
             }
@@ -108,7 +108,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             Building_ABStairs s = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            if (s?.Counterpart == null)
+            if (s?.CounterpartTowards(target) == null)
             {
                 return false;
             }
@@ -136,7 +136,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             Building_ABStairs s = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = s?.Counterpart;
+            Building_ABStairs exit = s?.CounterpartTowards(target);
             if (exit == null)
             {
                 return false;

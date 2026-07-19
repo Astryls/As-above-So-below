@@ -30,7 +30,7 @@ namespace AsAboveSoBelow
                 .FailOnSomeonePhysicallyInteracting(TargetIndex.A);
             yield return Toils_Haul.StartCarryThing(TargetIndex.A);
             yield return Toils_Goto.GotoThing(TargetIndex.B, PathEndMode.Touch);
-            Toil climb = Toils_General.Wait(ClimbTicks, TargetIndex.B);
+            Toil climb = Toils_General.Wait(Stairs?.ClimbTicksFor(pawn) ?? ClimbTicks, TargetIndex.B);
             climb.WithProgressBarToilDelay(TargetIndex.B);
             yield return climb;
             Toil transfer = ToilMaker.MakeToil("AB_HaulTransfer");

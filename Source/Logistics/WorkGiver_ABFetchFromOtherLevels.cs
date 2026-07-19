@@ -88,7 +88,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.Counterpart;
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
             if (exit == null)
             {
                 return null;
@@ -139,7 +139,9 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            return JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
+            return job;
         }
     }
 }

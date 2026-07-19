@@ -35,6 +35,18 @@ namespace AsAboveSoBelow
                 && !pawn.Drafted && !pawn.Downed && pawn.GetLord() == null;
         }
 
+        /// <summary>Conservative animal policy (T7 #6): only player pets that are
+        /// not pen animals, are not area-restricted to their current map, and are
+        /// not busy with a lord may cross levels for food. Pen animals never.</summary>
+        internal static bool EligiblePetForFood(Pawn pawn)
+        {
+            return pawn != null && pawn.Spawned && pawn.RaceProps != null
+                && pawn.RaceProps.Animal && pawn.Faction == Faction.OfPlayer
+                && !pawn.Downed && pawn.GetLord() == null
+                && !AnimalPenUtility.NeedsToBeManagedByRope(pawn)
+                && pawn.playerSettings?.AreaRestrictionInPawnCurrentMap == null;
+        }
+
         internal static bool OnCooldown(Dictionary<int, int> table, Pawn pawn)
         {
             return table.TryGetValue(pawn.thingIDNumber, out int next)
@@ -58,11 +70,13 @@ namespace AsAboveSoBelow
                 return false;
             }
             Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            if (stairs?.Counterpart == null)
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
+            if (exit == null)
             {
                 return false;
             }
             job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
             return true;
         }
     }
@@ -148,7 +162,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.Counterpart;
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
             if (exit == null)
             {
                 return false;
@@ -171,6 +185,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
             return true;
         }
     }
@@ -196,7 +211,8 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (!NeedsCross.EligibleColonist(pawn) || pawn.needs?.food == null)
+                if ((!NeedsCross.EligibleColonist(pawn) && !NeedsCross.EligiblePetForFood(pawn))
+                    || pawn.needs?.food == null)
                 {
                     return;
                 }
@@ -231,7 +247,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.Counterpart;
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
             if (exit == null)
             {
                 return false;
@@ -255,6 +271,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
             return true;
         }
     }

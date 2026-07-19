@@ -24,6 +24,10 @@
     </statBases>
     <!-- Normal ticker: the power bridge equalizes in CompTick. Never-tickers get no comp ticks at all. -->
     <tickerType>Normal</tickerType>
+    <minifiedDef>MinifiedThing</minifiedDef>
+    <thingCategories>
+      <li>BuildingsMisc</li>
+    </thingCategories>
     <placeWorkers>
       <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
     </placeWorkers>
@@ -51,6 +55,126 @@
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
         <counterpartDef>AB_StairsUp</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_StairsBase" Name="AB_GrandStairsBase" Abstract="True">
+    <size>(2,2)</size>
+    <fillPercent>0.50</fillPercent>
+    <costStuffCount>300</costStuffCount>
+    <statBases>
+      <MaxHitPoints>600</MaxHitPoints>
+      <WorkToBuild>12000</WorkToBuild>
+    </statBases>
+    <comps>
+      <li Class="CompProperties_Quality" />
+    </comps>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_GrandStairsBase">
+    <defName>AB_GrandStairsDown</defName>
+    <label>grand staircase down</label>
+    <description>A wide, stately staircase leading down. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the basement level below and creates a matching staircase there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_GrandStairsDown</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(2,2)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>-1</deltaLevel>
+        <counterpartDef>AB_GrandStairsUp</counterpartDef>
+        <climbFactor>0.6</climbFactor>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_GrandStairsBase">
+    <defName>AB_GrandStairsUp</defName>
+    <label>grand staircase up</label>
+    <description>A wide, stately staircase leading up. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the sky level above and creates a matching staircase there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_GrandStairsUp</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(2,2)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>1</deltaLevel>
+        <counterpartDef>AB_GrandStairsDown</counterpartDef>
+        <climbFactor>0.6</climbFactor>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="BuildingBase" Name="AB_LadderBase" Abstract="True">
+    <thingClass>AsAboveSoBelow.Building_ABStairs</thingClass>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <pathCost>30</pathCost>
+    <fillPercent>0.20</fillPercent>
+    <rotatable>false</rotatable>
+    <size>(1,1)</size>
+    <designationCategory>Structure</designationCategory>
+    <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <stuffCategories>
+      <li>Metallic</li>
+      <li>Woody</li>
+    </stuffCategories>
+    <costStuffCount>25</costStuffCount>
+    <statBases>
+      <MaxHitPoints>120</MaxHitPoints>
+      <WorkToBuild>800</WorkToBuild>
+      <Flammability>1.0</Flammability>
+    </statBases>
+    <!-- No power bridge comp: ladders do not carry utility lines. -->
+    <tickerType>Never</tickerType>
+    <minifiedDef>MinifiedThing</minifiedDef>
+    <thingCategories>
+      <li>BuildingsMisc</li>
+    </thingCategories>
+    <placeWorkers>
+      <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_LadderBase">
+    <defName>AB_LadderDown</defName>
+    <label>ladder down</label>
+    <description>A cheap ladder leading down. Slower to climb than stairs and cannot carry a power link. Completing it opens the basement level below and creates a matching ladder there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_LadderDown</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>-1</deltaLevel>
+        <counterpartDef>AB_LadderUp</counterpartDef>
+        <climbFactor>1.6</climbFactor>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_LadderBase">
+    <defName>AB_LadderUp</defName>
+    <label>ladder up</label>
+    <description>A cheap ladder leading up. Slower to climb than stairs and cannot carry a power link. Completing it opens the sky level above and creates a matching ladder there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_LadderUp</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>1</deltaLevel>
+        <counterpartDef>AB_LadderDown</counterpartDef>
+        <climbFactor>1.6</climbFactor>
       </li>
     </modExtensions>
   </ThingDef>

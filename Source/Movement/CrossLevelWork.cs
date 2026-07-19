@@ -69,11 +69,13 @@ namespace AsAboveSoBelow
                 return null;
             }
             Building_ABStairs stairs = NearestUsableStairs(pawn, home, checkReachability: true);
-            if (stairs?.Counterpart == null)
+            Building_ABStairs exit = stairs?.CounterpartTowards(home);
+            if (exit == null)
             {
                 return null;
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
             return new ThinkResult(job, giver, JobTag.Misc);
         }
 
@@ -84,7 +86,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             Building_ABStairs stairs = NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.Counterpart;
+            Building_ABStairs exit = stairs?.CounterpartTowards(target);
             if (exit == null)
             {
                 return null;
@@ -94,6 +96,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
+            job.targetC = exit;
             return new ThinkResult(job, giver, JobTag.Misc);
         }
 
@@ -116,8 +119,8 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Building_ABStairs cp = s.Counterpart;
-                if (cp == null || cp.Map != target)
+                Building_ABStairs cp = s.CounterpartTowards(target);
+                if (cp == null)
                 {
                     continue;
                 }

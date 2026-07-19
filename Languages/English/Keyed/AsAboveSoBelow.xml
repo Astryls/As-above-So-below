@@ -22,6 +22,8 @@
   <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
   <AB_BelowDim>Darken the level below</AB_BelowDim>
   <AB_BelowDimTip>How much the view of the level below is darkened when seen from above.</AB_BelowDimTip>
+  <AB_ClimbTime>Stair climb time</AB_ClimbTime>
+  <AB_ClimbTimeTip>Multiplies how long every stairs type takes to climb. Ladders are slower and grand staircases faster than normal stairs regardless.</AB_ClimbTimeTip>
   <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
   <AB_ShowCeilingHintTip>Cells under a built sky level floor draw a faint ceiling texture, so you can tell there is a structure overhead while looking at the surface.</AB_ShowCeilingHintTip>
   <AB_StairsCollapsed>A stairwell lost its support and collapsed.</AB_StairsCollapsed>

@@ -30,19 +30,23 @@ namespace AsAboveSoBelow
                 {
                     return new AcceptanceReport("AB_LevelCap".Translate());
                 }
-                if (!loc.InBounds(ground))
+                // Whole footprint: the grand staircase is 2x2.
+                foreach (IntVec3 c in GenAdj.OccupiedRect(loc, rot, ((ThingDef)checkingDef).Size))
                 {
-                    return new AcceptanceReport("AB_BlockedOnTarget".Translate());
-                }
-                Building edifice = loc.GetEdifice(ground);
-                if (edifice != null && edifice.def.passability == Traversability.Impassable)
-                {
-                    return new AcceptanceReport("AB_BlockedOnTarget".Translate());
-                }
-                TerrainDef terrain = ground.terrainGrid.TerrainAt(loc);
-                if (terrain?.affordances == null || !terrain.affordances.Contains(TerrainAffordanceDefOf.Medium))
-                {
-                    return new AcceptanceReport("AB_NoSupportOnTarget".Translate());
+                    if (!c.InBounds(ground))
+                    {
+                        return new AcceptanceReport("AB_BlockedOnTarget".Translate());
+                    }
+                    Building edifice = c.GetEdifice(ground);
+                    if (edifice != null && edifice.def.passability == Traversability.Impassable)
+                    {
+                        return new AcceptanceReport("AB_BlockedOnTarget".Translate());
+                    }
+                    TerrainDef terrain = ground.terrainGrid.TerrainAt(c);
+                    if (terrain?.affordances == null || !terrain.affordances.Contains(TerrainAffordanceDefOf.Medium))
+                    {
+                        return new AcceptanceReport("AB_NoSupportOnTarget".Translate());
+                    }
                 }
             }
             return true;

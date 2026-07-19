@@ -26,9 +26,9 @@ namespace AsAboveSoBelow
         protected override IEnumerable<Toil> MakeNewToils()
         {
             this.FailOnDespawnedOrNull(TargetIndex.A);
-            this.FailOn(() => Stairs == null || Stairs.Counterpart == null);
+            this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.Touch);
-            Toil climb = Toils_General.Wait(ClimbTicks, TargetIndex.A);
+            Toil climb = Toils_General.Wait(Stairs?.ClimbTicksFor(pawn) ?? ClimbTicks, TargetIndex.A);
             climb.WithProgressBarToilDelay(TargetIndex.A);
             yield return climb;
             Toil transfer = ToilMaker.MakeToil("AB_Transfer");
@@ -39,7 +39,14 @@ namespace AsAboveSoBelow
 
         private void DoTransfer()
         {
-            StairTransfer.Transfer(pawn, Stairs);
+            Building_ABStairs entry = Stairs;
+            Building_ABStairs final = job.targetC.Thing as Building_ABStairs;
+            Building_ABStairs dest = StairTransfer.ResolveNextDest(entry, final);
+            if (dest == null)
+            {
+                return;
+            }
+            StairTransfer.Transfer(pawn, entry, CarriedIntent.Auto, dest, final);
         }
     }
 
@@ -57,9 +64,30 @@ namespace AsAboveSoBelow
     /// use-stairs job and the cross-level hauling, rescue, and capture jobs.</summary>
     internal static class StairTransfer
     {
-        public static void Transfer(Pawn p, Building_ABStairs stairs, CarriedIntent intent = CarriedIntent.Auto)
+        /// <summary>The next hop's exit for a ride: toward the final destination
+        /// when one is set (elevator chains), otherwise whichever single link the
+        /// entry has. Null when no hop is possible.</summary>
+        public static Building_ABStairs ResolveNextDest(Building_ABStairs entry, Building_ABStairs final)
         {
-            Building_ABStairs dest = stairs?.Counterpart;
+            if (entry == null)
+            {
+                return null;
+            }
+            if (final != null && !final.Destroyed && final.Spawned && final.Map != entry.Map)
+            {
+                Map cur = entry.Map;
+                LevelComp comp = cur.Levels();
+                int step = Math.Sign(final.Map.Level() - cur.Level());
+                Map nextMap = step > 0 ? comp?.upperMap : comp?.lowerMap;
+                return nextMap != null ? entry.CounterpartTowards(nextMap) : null;
+            }
+            return entry.Counterpart ?? entry.SecondCounterpart;
+        }
+
+        public static void Transfer(Pawn p, Building_ABStairs stairs, CarriedIntent intent = CarriedIntent.Auto,
+            Building_ABStairs explicitDest = null, Building_ABStairs rideFinal = null)
+        {
+            Building_ABStairs dest = explicitDest ?? stairs?.Counterpart ?? stairs?.SecondCounterpart;
             if (p == null || dest == null || !dest.Spawned)
             {
                 return;
@@ -100,6 +128,8 @@ namespace AsAboveSoBelow
                     p.drafter.Drafted = true;
                 }
                 FinishCarriedDelivery(p, intent);
+                PullFollowers(p, stairs, sourceMap, dest);
+                ContinueRide(p, dest, rideFinal, targetMap);
             }
             catch (Exception e)
             {
@@ -113,6 +143,89 @@ namespace AsAboveSoBelow
                 {
                     GenPlace.TryPlaceThing(carried, sourcePos, sourceMap, ThingPlaceMode.Near);
                 }
+            }
+        }
+
+        /// <summary>Elevator chain continuation: when the ride's final destination
+        /// lies beyond the map just arrived on, immediately board the arrival car
+        /// toward it. The onward job re-runs the short climb and transfers again.</summary>
+        private static void ContinueRide(Pawn p, Building_ABStairs arrivalCar, Building_ABStairs rideFinal, Map arrivedOn)
+        {
+            try
+            {
+                if (rideFinal == null || rideFinal.Destroyed || !rideFinal.Spawned
+                    || rideFinal.Map == arrivedOn || p == null || !p.Spawned || p.Dead)
+                {
+                    return;
+                }
+                Building_ABStairs next = ResolveNextDest(arrivalCar, rideFinal);
+                if (next == null)
+                {
+                    return;
+                }
+                Job onward = JobMaker.MakeJob(ABDefOf.AB_UseStairs, arrivalCar);
+                onward.targetC = rideFinal;
+                p.jobs?.StartJob(onward, JobCondition.InterruptForced);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "elevator ride continuation");
+            }
+        }
+
+        private const float FollowPullRadius = 12f;
+
+        /// <summary>Conservative pet follow (T7 #6): when a colonist transfers,
+        /// their nearby obedient followers (master set, follow enabled, not a pen
+        /// animal) take the same stairs after them. Pets never cross on their own
+        /// initiative beyond this and the hungry-food redirect.</summary>
+        private static void PullFollowers(Pawn master, Building_ABStairs entry, Map sourceMap, Building_ABStairs dest)
+        {
+            try
+            {
+                if (master == null || !master.IsColonistPlayerControlled
+                    || sourceMap == null || sourceMap.Disposed
+                    || entry == null || !entry.Spawned)
+                {
+                    return;
+                }
+                List<Pawn> pawns = sourceMap.mapPawns.SpawnedPawnsInFaction(Faction.OfPlayer);
+                for (int i = 0; i < pawns.Count; i++)
+                {
+                    Pawn a = pawns[i];
+                    if (!a.RaceProps.Animal || a.Downed || a.Dead)
+                    {
+                        continue;
+                    }
+                    Pawn_PlayerSettings ps = a.playerSettings;
+                    if (ps == null || ps.Master != master
+                        || (!ps.followDrafted && !ps.followFieldwork))
+                    {
+                        continue;
+                    }
+                    if (AnimalPenUtility.NeedsToBeManagedByRope(a))
+                    {
+                        continue;
+                    }
+                    if ((a.Position - entry.Position).LengthHorizontalSquared
+                        > FollowPullRadius * FollowPullRadius)
+                    {
+                        continue;
+                    }
+                    if (a.CurJobDef == ABDefOf.AB_UseStairs
+                        || !a.CanReach(entry, PathEndMode.Touch, Danger.Deadly))
+                    {
+                        continue;
+                    }
+                    Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, entry);
+                    // Mirror the master's hop so a two-link elevator car is not ambiguous.
+                    job.targetC = dest;
+                    a.jobs?.StartJob(job, JobCondition.InterruptForced);
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "pet follow through stairs");
             }
         }
 
