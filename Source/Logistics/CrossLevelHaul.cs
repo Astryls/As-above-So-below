@@ -145,6 +145,10 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // The item's position must ride along: IsGoodStoreCell starts its
+            // reachability test from the item, and the item's home coordinates
+            // usually mirror into region-less open air on the other level.
+            IntVec3 oldItemPos = ABVirtualPosition.SwapPositionOnly(t, exit.Position);
             bool better;
             try
             {
@@ -153,6 +157,7 @@ namespace AsAboveSoBelow
             }
             finally
             {
+                ABVirtualPosition.RestorePositionOnly(t, oldItemPos);
                 ABVirtualPosition.Restore(pawn, token);
             }
             if (better)

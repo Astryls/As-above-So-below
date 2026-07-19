@@ -203,5 +203,21 @@ namespace AsAboveSoBelow
             MapIndexRef(pawn) = token.mapIndex;
             PositionRef(pawn) = token.pos;
         }
+
+        /// <summary>Position-only swap for non-pawn things. Vanilla storage queries
+        /// measure reachability and distance from the ITEM's position, which lives
+        /// on the source map; re-seating it at the stairwell exit for the duration
+        /// of the query makes both meaningful on the destination map.</summary>
+        public static IntVec3 SwapPositionOnly(Thing thing, IntVec3 cell)
+        {
+            IntVec3 old = PositionRef(thing);
+            PositionRef(thing) = cell;
+            return old;
+        }
+
+        public static void RestorePositionOnly(Thing thing, IntVec3 oldPos)
+        {
+            PositionRef(thing) = oldPos;
+        }
     }
 }
