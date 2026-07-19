@@ -25,6 +25,17 @@ namespace AsAboveSoBelow
         /// the producing side must never churn energy in circles.</summary>
         private bool lastFlowIn;
 
+        /// <summary>The stairs read as a conduit, not storage: no charge bar.</summary>
+        public override void PostDraw()
+        {
+        }
+
+        /// <summary>Replace the battery's stored-energy line with a conduit-style one.</summary>
+        public override string CompInspectStringExtra()
+        {
+            return "AB_PowerBridgeInspect".Translate();
+        }
+
         public override void CompTick()
         {
             base.CompTick();

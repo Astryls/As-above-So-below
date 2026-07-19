@@ -30,7 +30,7 @@
     <comps>
       <li Class="CompProperties_Battery">
         <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
-        <storedEnergyMax>600</storedEnergyMax>
+        <storedEnergyMax>1000</storedEnergyMax>
         <efficiency>1.0</efficiency>
         <transmitsPower>true</transmitsPower>
       </li>
