@@ -47,11 +47,19 @@ namespace AsAboveSoBelow
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
             base.SpawnSetup(map, respawningAfterLoad);
+            map.Levels()?.RegisterStairs(this);
             if (!respawningAfterLoad && counterpart == null)
             {
                 // Defer to end of frame: map generation must not run inside a spawn call.
                 LongEventHandler.ExecuteWhenFinished(TryEstablishLink);
             }
+        }
+
+        public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
+        {
+            Map m = Map;
+            base.DeSpawn(mode);
+            m?.Levels()?.DeregisterStairs(this);
         }
 
         private void TryEstablishLink()
@@ -102,6 +110,16 @@ namespace AsAboveSoBelow
             }
             IntVec3 pos = Position;
             PrepareLanding(targetMap, pos);
+            Building blocker = pos.GetEdifice(targetMap);
+            if (blocker != null && blocker.def.passability == Traversability.Impassable
+                && !(blocker is Building_ABStairs))
+            {
+                // Placement-time validation normally prevents this; something was
+                // built on the matching spot in the meantime. Stay unlinked instead
+                // of deleting the player's building.
+                Messages.Message("AB_LinkBlocked".Translate(), new TargetInfo(Position, Map), MessageTypeDefOf.RejectInput);
+                return;
+            }
             Building_ABStairs cp = (Building_ABStairs)ThingMaker.MakeThing(cpDef, Stuff);
             cp.SetFaction(Faction.OfPlayer);
             cp.counterpart = this;

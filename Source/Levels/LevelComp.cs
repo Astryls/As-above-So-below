@@ -22,6 +22,25 @@ namespace AsAboveSoBelow
 
         public Dictionary<int, Map> MapByLevel => mapByLevel ?? (mapByLevel = new Dictionary<int, Map>());
 
+        /// <summary>Spawned stairwells on this map. Runtime only, maintained by
+        /// Building_ABStairs spawn and despawn.</summary>
+        private List<Building_ABStairs> stairsList;
+
+        public List<Building_ABStairs> Stairs => stairsList ?? (stairsList = new List<Building_ABStairs>());
+
+        public void RegisterStairs(Building_ABStairs stairs)
+        {
+            if (stairs != null && !Stairs.Contains(stairs))
+            {
+                Stairs.Add(stairs);
+            }
+        }
+
+        public void DeregisterStairs(Building_ABStairs stairs)
+        {
+            stairsList?.Remove(stairs);
+        }
+
         public bool HasMultiLevels => mapByLevel != null && mapByLevel.Count > 1;
 
         public LevelComp(Map map) : base(map)

@@ -1,10 +1,13 @@
+using RimWorld;
 using Verse;
 
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Enforces the level cap and, for now, restricts stair placement to the
-    /// surface level. Placement from sky or basement levels arrives with T2.
+    /// Enforces the level cap and validates that stairwells linking back to an
+    /// existing level will find a clear, supportive spot at the matching
+    /// coordinates there. Newly generated levels (basement, sky) clear their own
+    /// landing, so only links to existing maps need the check.
     /// </summary>
     public class PlaceWorker_ABStairs : PlaceWorker
     {
@@ -15,14 +18,32 @@ namespace AsAboveSoBelow
             {
                 return true;
             }
-            if (map.Level() != 0)
-            {
-                return new AcceptanceReport("AB_OnlySurfaceForNow".Translate());
-            }
             int target = map.Level() + ext.deltaLevel;
             if (target < -1 || target > 1)
             {
                 return new AcceptanceReport("AB_LevelCap".Translate());
+            }
+            if (target == 0 && map.Level() != 0)
+            {
+                Map ground = map.GroundMap();
+                if (ground == null || ground.Disposed)
+                {
+                    return new AcceptanceReport("AB_LevelCap".Translate());
+                }
+                if (!loc.InBounds(ground))
+                {
+                    return new AcceptanceReport("AB_BlockedOnTarget".Translate());
+                }
+                Building edifice = loc.GetEdifice(ground);
+                if (edifice != null && edifice.def.passability == Traversability.Impassable)
+                {
+                    return new AcceptanceReport("AB_BlockedOnTarget".Translate());
+                }
+                TerrainDef terrain = ground.terrainGrid.TerrainAt(loc);
+                if (terrain?.affordances == null || !terrain.affordances.Contains(TerrainAffordanceDefOf.Medium))
+                {
+                    return new AcceptanceReport("AB_NoSupportOnTarget".Translate());
+                }
             }
             return true;
         }

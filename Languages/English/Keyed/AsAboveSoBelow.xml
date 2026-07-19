@@ -23,5 +23,13 @@
   <AB_BelowDim>Darken the level below</AB_BelowDim>
   <AB_BelowDimTip>How much the view of the level below is darkened when seen from above.</AB_BelowDimTip>
   <AB_StairsCollapsed>A stairwell lost its support and collapsed.</AB_StairsCollapsed>
+  <AB_GoUpDesc>Take the nearest stairs to the level above.</AB_GoUpDesc>
+  <AB_GoDownDesc>Take the nearest stairs to the level below.</AB_GoDownDesc>
+  <AB_NoStairs>no linked stairs on this level</AB_NoStairs>
+  <AB_LinkBlocked>The stairwell could not connect. The matching spot on the other level is blocked.</AB_LinkBlocked>
+  <AB_BlockedOnTarget>The matching spot on the other level is blocked.</AB_BlockedOnTarget>
+  <AB_NoSupportOnTarget>The matching spot on the other level cannot support a stairwell.</AB_NoSupportOnTarget>
+  <AB_CrossLevelWork>Colonists take stairs to work on other levels</AB_CrossLevelWork>
+  <AB_CrossLevelWorkTip>When a colonist finds no work on their current level, they check directly linked levels and take the stairs if there is something to do there.</AB_CrossLevelWorkTip>
 
 </LanguageData>
