@@ -63,15 +63,6 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(Pawn), nameof(Pawn.GetGizmos))]
     internal static class Patch_Pawn_LevelGizmos
     {
-        private static Texture2D upIcon;
-        private static Texture2D downIcon;
-
-        private static Texture2D UpIcon =>
-            upIcon ?? (upIcon = DefDatabase<ThingDef>.GetNamedSilentFail("AB_StairsUp")?.uiIcon);
-
-        private static Texture2D DownIcon =>
-            downIcon ?? (downIcon = DefDatabase<ThingDef>.GetNamedSilentFail("AB_StairsDown")?.uiIcon);
-
         private static IEnumerable<Gizmo> Postfix(IEnumerable<Gizmo> __result, Pawn __instance)
         {
             foreach (Gizmo g in __result)
@@ -137,7 +128,7 @@ namespace AsAboveSoBelow
             {
                 defaultLabel = (up ? "AB_GoUp" : "AB_GoDown").Translate(),
                 defaultDesc = (up ? "AB_GoUpDesc" : "AB_GoDownDesc").Translate(),
-                icon = up ? UpIcon : DownIcon
+                icon = up ? ABIcons.UpStairs : ABIcons.DownStairs
             };
             if (stairs == null)
             {

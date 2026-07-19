@@ -18,4 +18,8 @@
   <loadAfter>
     <li>brrainz.harmony</li>
   </loadAfter>
+  <incompatibleWith>
+    <li>telardo.MultiFloors</li>
+    <li>ZLevels1.1</li>
+  </incompatibleWith>
 </ModMetaData>

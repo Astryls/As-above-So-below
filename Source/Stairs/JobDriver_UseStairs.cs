@@ -19,6 +19,10 @@ namespace AsAboveSoBelow
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
+            if (ABGiddyUpCompat.BlockForMount(pawn))
+            {
+                return false;
+            }
             // Stairs are shared infrastructure; any number of pawns may use them.
             return true;
         }
@@ -157,6 +161,12 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // Backstop for jobs started before mounting: never despawn a mounted
+            // rider, it would strand the mount with a live linkage.
+            if (ABGiddyUpCompat.BlockForMount(p))
+            {
+                return;
+            }
             Map sourceMap = stairs.Map;
             IntVec3 sourcePos = stairs.Position;
             Thing carried = null;
@@ -279,6 +289,7 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     if (a.CurJobDef == ABDefOf.AB_UseStairs
+                        || ABGiddyUpCompat.IsCarryingRider(a)
                         || !a.CanReach(entry, PathEndMode.Touch, Danger.Deadly))
                     {
                         continue;

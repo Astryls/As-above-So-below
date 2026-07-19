@@ -17,14 +17,17 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(PlaySettings), nameof(PlaySettings.DoPlaySettingsGlobalControls))]
     internal static class Patch_PlaySettings_LevelButtons
     {
-        private static Texture2D upIcon;
-        private static Texture2D downIcon;
+        // Tooltips cached: Translate plus concat allocated two strings per
+        // button per frame. Stale only across a mid-session language change,
+        // which is accepted.
+        private static string upTip;
+        private static string downTip;
 
-        private static Texture2D UpIcon =>
-            upIcon ?? (upIcon = DefDatabase<ThingDef>.GetNamedSilentFail("AB_StairsUp")?.uiIcon);
+        private static string UpTip =>
+            upTip ?? (upTip = "AB_ViewAbove".Translate() + "\n" + "AB_LevelWidgetTip".Translate());
 
-        private static Texture2D DownIcon =>
-            downIcon ?? (downIcon = DefDatabase<ThingDef>.GetNamedSilentFail("AB_StairsDown")?.uiIcon);
+        private static string DownTip =>
+            downTip ?? (downTip = "AB_ViewBelow".Translate() + "\n" + "AB_LevelWidgetTip".Translate());
 
         private static void Postfix(WidgetRow row, bool worldView)
         {
@@ -50,15 +53,25 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (up != null && !up.Disposed && UpIcon != null
-                    && row.ButtonIcon(UpIcon, "AB_ViewAbove".Translate() + "\n" + "AB_LevelWidgetTip".Translate()))
+                // Declutter UI suppresses foreign ButtonIcon draws under some of
+                // its options; lift the flag only while our two buttons draw.
+                bool lifted = ABDeclutterCompat.PushUnsuppressed();
+                try
                 {
-                    LevelCamera.JumpPreservingView(up);
+                    if (up != null && !up.Disposed && ABIcons.UpStairs != null
+                        && row.ButtonIcon(ABIcons.UpStairs, UpTip))
+                    {
+                        LevelCamera.JumpPreservingView(up);
+                    }
+                    if (down != null && !down.Disposed && ABIcons.DownStairs != null
+                        && row.ButtonIcon(ABIcons.DownStairs, DownTip))
+                    {
+                        LevelCamera.JumpPreservingView(down);
+                    }
                 }
-                if (down != null && !down.Disposed && DownIcon != null
-                    && row.ButtonIcon(DownIcon, "AB_ViewBelow".Translate() + "\n" + "AB_LevelWidgetTip".Translate()))
+                finally
                 {
-                    LevelCamera.JumpPreservingView(down);
+                    ABDeclutterCompat.Pop(lifted);
                 }
             }
             catch (Exception e)

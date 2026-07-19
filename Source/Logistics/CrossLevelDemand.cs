@@ -196,6 +196,8 @@ namespace AsAboveSoBelow
 
         private const int MealsPerMouth = 2;
 
+        private static ThingDef[] mealDefs;
+
         /// <summary>Patient and prisoner feeding (T7 #2/#7): levels with bedridden
         /// patients or prisoners register shortfall demand for a small buffer of
         /// meals, so food flows to them and doctors and wardens feed locally.
@@ -219,11 +221,11 @@ namespace AsAboveSoBelow
                 return;
             }
             int required = mouths * MealsPerMouth;
-            ThingDef[] meals =
+            ThingDef[] meals = mealDefs ?? (mealDefs = new[]
             {
                 ThingDefOf.MealSimple, ThingDefOf.MealFine, ThingDefOf.MealNutrientPaste,
                 ThingDefOf.MealSurvivalPack, ThingDefOf.Pemmican
-            };
+            });
             int totalAvailable = 0;
             for (int i = 0; i < meals.Length; i++)
             {

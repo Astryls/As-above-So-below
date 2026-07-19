@@ -12,6 +12,34 @@ namespace AsAboveSoBelow
     /// </summary>
     public class LevelComp : MapComponent
     {
+        // Cheap global gate for hot Harmony postfixes (the outdoor temperature
+        // getters fire on every temperature read game wide): when no sky level
+        // exists in the current game they early out on static reads alone. The
+        // count is keyed to the Game via a weak reference because MapRemoved
+        // never fires on game unload; a stale count from an abandoned game only
+        // ever degrades the optimization, never correctness. Checked count-first
+        // so the common no-sky case never touches the weak reference.
+        private static WeakReference skyGame;
+        private static int skyCount;
+
+        public static bool AnySkyLevels =>
+            skyCount > 0 && skyGame != null && skyGame.Target == (object)Current.Game;
+
+        private static void NoteSkyLevel(int delta)
+        {
+            Game cur = Current.Game;
+            if (cur == null)
+            {
+                return;
+            }
+            if (skyGame == null || skyGame.Target != (object)cur)
+            {
+                skyGame = new WeakReference(cur);
+                skyCount = 0;
+            }
+            skyCount = Math.Max(0, skyCount + delta);
+        }
+
         public int level;
         public Map upperMap;
         public Map lowerMap;
@@ -68,6 +96,10 @@ namespace AsAboveSoBelow
             if (level == 0 && groundMap == null)
             {
                 groundMap = map;
+            }
+            if (level == 1)
+            {
+                NoteSkyLevel(1);
             }
             TrySubscribeSync();
         }
@@ -215,6 +247,10 @@ namespace AsAboveSoBelow
         {
             base.MapRemoved();
             UnsubscribeSync();
+            if (level == 1)
+            {
+                NoteSkyLevel(-1);
+            }
             // Sever stair links cleanly so counterparts on surviving maps read as
             // not connected instead of holding references into a disposed map.
             if (stairsList != null)

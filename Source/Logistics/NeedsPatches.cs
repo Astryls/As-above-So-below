@@ -62,23 +62,6 @@ namespace AsAboveSoBelow
             table[pawn.thingIDNumber] = Find.TickManager.TicksGame + FailCooldownTicks;
         }
 
-        internal static bool TryStairsJob(Pawn pawn, Map target, out Job job)
-        {
-            job = null;
-            if (target == null || target.Disposed)
-            {
-                return false;
-            }
-            Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.CounterpartTowards(target);
-            if (exit == null)
-            {
-                return false;
-            }
-            job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
-            job.targetC = exit;
-            return true;
-        }
     }
 
     [HarmonyPatch(typeof(JobGiver_GetRest), "TryGiveJob")]
@@ -121,8 +104,7 @@ namespace AsAboveSoBelow
                         return;
                     }
                     Map nextMap = bed.Map.Level() > comp.level ? comp.upperMap : comp.lowerMap;
-                    if (nextMap != null && !nextMap.Disposed
-                        && NeedsCross.TryStairsJob(pawn, nextMap, out Job job))
+                    if (CrossLevelWork.TryStairsJobToward(pawn, nextMap, out Job job))
                     {
                         __result = job;
                     }
@@ -157,35 +139,16 @@ namespace AsAboveSoBelow
         private static bool TryFreeBedTowards(Pawn pawn, Map target, out Job job)
         {
             job = null;
-            if (target == null || target.Disposed)
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
             {
                 return false;
             }
-            Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.CounterpartTowards(target);
-            if (exit == null)
+            if (!ABVirtualPosition.WithPawnAt(pawn, target, exit.Position,
+                () => RestUtility.FindBedFor(pawn) != null))
             {
                 return false;
             }
-            if (!ABVirtualPosition.TrySwap(pawn, target, exit.Position, out ABVirtualPosition.Token token))
-            {
-                return false;
-            }
-            bool found;
-            try
-            {
-                found = RestUtility.FindBedFor(pawn) != null;
-            }
-            finally
-            {
-                ABVirtualPosition.Restore(pawn, token);
-            }
-            if (!found)
-            {
-                return false;
-            }
-            job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
-            job.targetC = exit;
+            job = CrossLevelWork.MakeStairsJob(stairs, exit);
             return true;
         }
     }
@@ -242,36 +205,17 @@ namespace AsAboveSoBelow
         private static bool TryFoodTowards(Pawn pawn, Map target, out Job job)
         {
             job = null;
-            if (target == null || target.Disposed)
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
             {
                 return false;
             }
-            Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.CounterpartTowards(target);
-            if (exit == null)
+            if (!ABVirtualPosition.WithPawnAt(pawn, target, exit.Position,
+                () => FoodUtility.TryFindBestFoodSourceFor(pawn, pawn, desperate: false,
+                    out Thing _, out ThingDef _, canRefillDispenser: true, canUseInventory: false)))
             {
                 return false;
             }
-            if (!ABVirtualPosition.TrySwap(pawn, target, exit.Position, out ABVirtualPosition.Token token))
-            {
-                return false;
-            }
-            bool found;
-            try
-            {
-                found = FoodUtility.TryFindBestFoodSourceFor(pawn, pawn, desperate: false,
-                    out Thing _, out ThingDef _, canRefillDispenser: true, canUseInventory: false);
-            }
-            finally
-            {
-                ABVirtualPosition.Restore(pawn, token);
-            }
-            if (!found)
-            {
-                return false;
-            }
-            job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
-            job.targetC = exit;
+            job = CrossLevelWork.MakeStairsJob(stairs, exit);
             return true;
         }
     }

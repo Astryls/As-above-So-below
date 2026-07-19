@@ -53,7 +53,7 @@ namespace AsAboveSoBelow
                 Map cached = FindLinked(comp, entry.mapId);
                 if (cached != null)
                 {
-                    stairs = CrossLevelWork.NearestUsableStairs(pawn, cached, checkReachability: true);
+                    stairs = CrossLevelWork.NearestUsableStairsCached(pawn, cached);
                     return stairs?.CounterpartTowards(cached) != null ? cached : null;
                 }
                 return null;
@@ -107,7 +107,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            Building_ABStairs s = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
+            Building_ABStairs s = CrossLevelWork.NearestUsableStairsCached(pawn, target);
             if (s?.CounterpartTowards(target) == null)
             {
                 return false;
@@ -135,7 +135,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            Building_ABStairs s = CrossLevelWork.NearestUsableStairs(pawn, target, checkReachability: true);
+            Building_ABStairs s = CrossLevelWork.NearestUsableStairsCached(pawn, target);
             Building_ABStairs exit = s?.CounterpartTowards(target);
             if (exit == null)
             {

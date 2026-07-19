@@ -27,6 +27,7 @@
   <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
   <AB_ShowCeilingHintTip>Cells under a built sky level floor draw a faint ceiling texture, so you can tell there is a structure overhead while looking at the surface.</AB_ShowCeilingHintTip>
   <AB_StairsCollapsed>A stairwell lost its support and collapsed.</AB_StairsCollapsed>
+  <AB_DismountFirst>Dismount before using stairs or elevators.</AB_DismountFirst>
   <AB_GoUpDesc>Take the nearest stairs to the level above.</AB_GoUpDesc>
   <AB_GoDownDesc>Take the nearest stairs to the level below.</AB_GoDownDesc>
   <AB_NoStairs>no linked stairs on this level</AB_NoStairs>

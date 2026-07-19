@@ -4,33 +4,53 @@ using Verse;
 
 namespace AsAboveSoBelow
 {
+    /// <summary>A single kill switch. A plain object with a bool so the hot-path
+    /// gate is one field read; the old string constants hashed into a HashSet on
+    /// every ABGuard.On call, which added a string-hash probe to every patched
+    /// vanilla getter.</summary>
+    public sealed class ABGuardSwitch
+    {
+        internal readonly string name;
+        internal bool on = true;
+
+        internal ABGuardSwitch(string name)
+        {
+            this.name = name;
+        }
+    }
+
     /// <summary>
     /// Per-subsystem kill switches. When a subsystem throws, we log ONCE with context,
     /// then shut that subsystem down so it cannot error-spam or break vanilla.
     /// Harmony prefixes gated on these must fail open (return true, vanilla runs).
+    /// Call sites are unchanged from the string era: ABGuard.On(ABGuard.Ui) etc.
     /// </summary>
     public static class ABGuard
     {
-        public const string Ui = "ui";
-        public const string LevelGen = "levelGen";
-        public const string Rendering = "rendering";
-        public const string Movement = "movement";
-        public const string Logistics = "logistics";
-        public const string RoofSync = "roofSync";
-        public const string Weather = "weather";
-        public const string Power = "power";
-        public const string Pipes = "pipes";
-        public const string Climate = "climate";
+        public static readonly ABGuardSwitch Ui = new ABGuardSwitch("ui");
+        public static readonly ABGuardSwitch LevelGen = new ABGuardSwitch("levelGen");
+        public static readonly ABGuardSwitch Rendering = new ABGuardSwitch("rendering");
+        public static readonly ABGuardSwitch Movement = new ABGuardSwitch("movement");
+        public static readonly ABGuardSwitch Logistics = new ABGuardSwitch("logistics");
+        public static readonly ABGuardSwitch RoofSync = new ABGuardSwitch("roofSync");
+        public static readonly ABGuardSwitch Weather = new ABGuardSwitch("weather");
+        public static readonly ABGuardSwitch Power = new ABGuardSwitch("power");
+        public static readonly ABGuardSwitch Pipes = new ABGuardSwitch("pipes");
+        public static readonly ABGuardSwitch Climate = new ABGuardSwitch("climate");
 
-        private static readonly HashSet<string> disabled = new HashSet<string>();
-
-        public static bool On(string subsystem) => !disabled.Contains(subsystem);
-
-        public static void Disable(string subsystem, Exception e, string context)
+        private static readonly ABGuardSwitch[] All =
         {
-            if (disabled.Add(subsystem))
+            Ui, LevelGen, Rendering, Movement, Logistics, RoofSync, Weather, Power, Pipes, Climate
+        };
+
+        public static bool On(ABGuardSwitch subsystem) => subsystem.on;
+
+        public static void Disable(ABGuardSwitch subsystem, Exception e, string context)
+        {
+            if (subsystem.on)
             {
-                Log.Error(ABLog.Tag + " Subsystem '" + subsystem + "' hit an error in " + context
+                subsystem.on = false;
+                Log.Error(ABLog.Tag + " Subsystem '" + subsystem.name + "' hit an error in " + context
                     + " and shut itself down to protect your game. Other features keep running. Details: " + e);
             }
         }
@@ -38,27 +58,18 @@ namespace AsAboveSoBelow
         /// <summary>Reset all kill switches. Called when a game is loaded or started.</summary>
         public static void Reset()
         {
-            if (disabled.Count > 0)
+            int cleared = 0;
+            for (int i = 0; i < All.Length; i++)
             {
-                ABLog.Dev("Cleared " + disabled.Count + " tripped kill switch(es).");
-                disabled.Clear();
+                if (!All[i].on)
+                {
+                    All[i].on = true;
+                    cleared++;
+                }
             }
-        }
-
-        /// <summary>Cold-path helper. Hot paths should hand-write try/catch to avoid closures.</summary>
-        public static void Run(string subsystem, string context, Action action)
-        {
-            if (!On(subsystem))
+            if (cleared > 0)
             {
-                return;
-            }
-            try
-            {
-                action();
-            }
-            catch (Exception e)
-            {
-                Disable(subsystem, e, context);
+                ABLog.Dev("Cleared " + cleared + " tripped kill switch(es).");
             }
         }
     }

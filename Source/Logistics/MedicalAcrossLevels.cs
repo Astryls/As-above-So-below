@@ -168,6 +168,10 @@ namespace AsAboveSoBelow
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
+            if (ABGiddyUpCompat.BlockForMount(pawn))
+            {
+                return false;
+            }
             return pawn.Reserve(job.GetTarget(TargetIndex.A), job, 1, -1, null, errorOnFailed);
         }
 

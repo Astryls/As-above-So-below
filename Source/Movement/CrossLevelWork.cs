@@ -64,30 +64,16 @@ namespace AsAboveSoBelow
                 return null;
             }
             Map home = comp.level > 0 ? comp.lowerMap : comp.upperMap;
-            if (home == null || home.Disposed)
+            if (!TryStairsJobToward(pawn, home, out Job job))
             {
                 return null;
             }
-            Building_ABStairs stairs = NearestUsableStairs(pawn, home, checkReachability: true);
-            Building_ABStairs exit = stairs?.CounterpartTowards(home);
-            if (exit == null)
-            {
-                return null;
-            }
-            Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
-            job.targetC = exit;
             return new ThinkResult(job, giver, JobTag.Misc);
         }
 
         private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target)
         {
-            if (target == null || target.Disposed)
-            {
-                return null;
-            }
-            Building_ABStairs stairs = NearestUsableStairs(pawn, target, checkReachability: true);
-            Building_ABStairs exit = stairs?.CounterpartTowards(target);
-            if (exit == null)
+            if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
             {
                 return null;
             }
@@ -95,9 +81,81 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            return new ThinkResult(MakeStairsJob(stairs, exit), giver, JobTag.Misc);
+        }
+
+        /// <summary>Reachable stairs plus their far-side exit toward a target
+        /// level. The shared shape behind every "send this pawn through the
+        /// stairs" consumer; previously duplicated six times.</summary>
+        public static bool TryResolveStairs(Pawn pawn, Map target, out Building_ABStairs stairs, out Building_ABStairs exit)
+        {
+            stairs = null;
+            exit = null;
+            if (target == null || target.Disposed)
+            {
+                return false;
+            }
+            stairs = NearestUsableStairs(pawn, target, checkReachability: true);
+            exit = stairs?.CounterpartTowards(target);
+            return exit != null;
+        }
+
+        public static Job MakeStairsJob(Building_ABStairs stairs, Building_ABStairs exit)
+        {
             Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, stairs);
             job.targetC = exit;
-            return new ThinkResult(job, giver, JobTag.Misc);
+            return job;
+        }
+
+        public static bool TryStairsJobToward(Pawn pawn, Map target, out Job job)
+        {
+            job = null;
+            if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            {
+                return false;
+            }
+            job = MakeStairsJob(stairs, exit);
+            return true;
+        }
+
+        private struct StairsMemoEntry
+        {
+            public int tick;
+            public Building_ABStairs stairs;
+        }
+
+        private static readonly Dictionary<long, StairsMemoEntry> stairsMemo = new Dictionary<long, StairsMemoEntry>();
+
+        /// <summary>Per-tick memo over NearestUsableStairs with reachability. The
+        /// haul scanner calls the reachability variant once per candidate ITEM,
+        /// but the verdict only depends on (pawn, target map): within one tick a
+        /// full-map scan pays the region search twice instead of N times.
+        /// Negative results are memoized too (the expensive case is usually "no
+        /// reachable stairs", recomputed per item). One-tick staleness on
+        /// mid-tick construction or destruction is accepted; the returned stairs
+        /// are re-validated cheaply on every hit.</summary>
+        public static Building_ABStairs NearestUsableStairsCached(Pawn pawn, Map target)
+        {
+            if (pawn == null || target == null)
+            {
+                return null;
+            }
+            long key = ((long)pawn.thingIDNumber << 32) | (uint)target.uniqueID;
+            int now = Find.TickManager.TicksGame;
+            if (stairsMemo.TryGetValue(key, out StairsMemoEntry entry) && entry.tick == now)
+            {
+                Building_ABStairs cached = entry.stairs;
+                return cached != null && cached.Spawned && cached.CounterpartTowards(target) != null
+                    ? cached
+                    : null;
+            }
+            if (stairsMemo.Count > 1024)
+            {
+                stairsMemo.Clear();
+            }
+            Building_ABStairs found = NearestUsableStairs(pawn, target, checkReachability: true);
+            stairsMemo[key] = new StairsMemoEntry { tick = now, stairs = found };
+            return found;
         }
 
         /// <summary>Nearest stairwell on the pawn's map whose counterpart sits on the
@@ -205,6 +263,26 @@ namespace AsAboveSoBelow
         {
             MapIndexRef(pawn) = token.mapIndex;
             PositionRef(pawn) = token.pos;
+        }
+
+        /// <summary>Runs a scan with the pawn virtually placed at a cell on the
+        /// target map, restoring no matter what the scan does. Cold paths only:
+        /// the lambda closure allocates, so the hottest storage scan
+        /// (CrossLevelHaul.Check) keeps its hand-written swap.</summary>
+        public static bool WithPawnAt(Pawn pawn, Map target, IntVec3 cell, Func<bool> scan)
+        {
+            if (!TrySwap(pawn, target, cell, out Token token))
+            {
+                return false;
+            }
+            try
+            {
+                return scan();
+            }
+            finally
+            {
+                Restore(pawn, token);
+            }
         }
 
         /// <summary>Position-only swap for non-pawn things. Vanilla storage queries

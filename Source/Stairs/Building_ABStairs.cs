@@ -81,7 +81,24 @@ namespace AsAboveSoBelow
         /// link. Elevators extend their shaft through gizmos instead.</summary>
         public virtual bool AutoLinkOnSpawn => true;
 
-        public ABStairsExtension Ext => def.GetModExtension<ABStairsExtension>();
+        private ABStairsExtension extCached;
+        private bool extResolved;
+
+        /// <summary>Def extension, resolved once. Sentinel flag rather than a
+        /// null check: the extension can legitimately be absent, and
+        /// GetModExtension walks the extension list on every call.</summary>
+        public ABStairsExtension Ext
+        {
+            get
+            {
+                if (!extResolved)
+                {
+                    extResolved = true;
+                    extCached = def.GetModExtension<ABStairsExtension>();
+                }
+                return extCached;
+            }
+        }
 
         public int DeltaLevel => Ext?.deltaLevel ?? 0;
 
