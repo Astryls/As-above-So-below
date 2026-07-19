@@ -27,10 +27,11 @@
       <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
     </placeWorkers>
     <comps>
-      <li Class="CompProperties_Power">
+      <li Class="CompProperties_Battery">
         <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
+        <storedEnergyMax>200</storedEnergyMax>
+        <efficiency>1.0</efficiency>
         <transmitsPower>true</transmitsPower>
-        <basePowerConsumption>0</basePowerConsumption>
       </li>
     </comps>
   </ThingDef>

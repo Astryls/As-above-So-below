@@ -1,50 +1,48 @@
 using System;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Stairwells transmit power and bridge the two levels' power nets. Every 30
-    /// ticks the pair's master side (lower map id) balances the nets: the deficit
-    /// side outputs up to 90% of the other side's surplus, mirrored as a draw on
-    /// the surplus side. Damped to avoid flicker; both outputs decay to zero when
-    /// unlinked or balanced. Kill switch: power.
+    /// Stairwells bridge power between levels using the shared-tank model: each
+    /// side is a small lossless battery, vanilla nets charge it with surplus and
+    /// feed consumers from it (including switching them back on), and this comp
+    /// equalizes the pair's stored energy every 30 ticks, master side only.
+    /// A fake power plant does not work here: UpdateDesiredPowerOutput zeroes
+    /// output while PowerOn is false, and a starving net hides its deficit by
+    /// switching consumers off. Batteries dodge both mechanisms entirely.
+    /// Kill switch: power.
     /// </summary>
-    public class CompABPowerBridge : CompPowerPlant
+    public class CompABPowerBridge : CompPowerBattery
     {
         private const int UpdateInterval = 30;
-
-        private const float TransferDamping = 0.9f;
-
-        protected override float DesiredPowerOutput => PowerOutput;
 
         public override void CompTick()
         {
             base.CompTick();
-            if (!ABGuard.On(ABGuard.Power) || parent.IsHashIntervalTick(UpdateInterval) == false)
+            if (!ABGuard.On(ABGuard.Power) || !parent.IsHashIntervalTick(UpdateInterval))
             {
                 return;
             }
             try
             {
-                BalancePair();
+                Equalize();
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Power, e, "power bridge");
-                PowerOutput = 0f;
             }
         }
 
-        private void BalancePair()
+        private void Equalize()
         {
             Building_ABStairs stairs = parent as Building_ABStairs;
             Building_ABStairs counterpart = stairs?.Counterpart;
             CompABPowerBridge other = counterpart?.GetComp<CompABPowerBridge>();
             if (other == null)
             {
-                PowerOutput = 0f;
                 return;
             }
             // One side runs the math for the pair.
@@ -52,37 +50,26 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            PowerNet mine = PowerNet;
-            PowerNet theirs = other.PowerNet;
-            if (mine == null || theirs == null || mine == theirs)
+            float total = StoredEnergy + other.StoredEnergy;
+            float target = total * 0.5f;
+            float delta = target - StoredEnergy;
+            if (delta > 0.5f)
             {
-                PowerOutput = 0f;
-                other.PowerOutput = 0f;
-                return;
+                float amount = Mathf.Min(delta, other.StoredEnergy, Props.storedEnergyMax - StoredEnergy);
+                if (amount > 0f)
+                {
+                    other.DrawPower(amount);
+                    AddEnergy(amount);
+                }
             }
-            float myGain = mine.CurrentEnergyGainRate() / CompPower.WattsToWattDaysPerTick;
-            float theirGain = theirs.CurrentEnergyGainRate() / CompPower.WattsToWattDaysPerTick;
-            // Exclude our own current contribution so the calculation converges
-            // instead of feeding back.
-            myGain -= PowerOutput;
-            theirGain -= other.PowerOutput;
-            float transfer = 0f;
-            if (myGain < 0f && theirGain > 0f)
+            else if (delta < -0.5f)
             {
-                transfer = Math.Min(-myGain, theirGain) * TransferDamping;
-                PowerOutput = transfer;
-                other.PowerOutput = -transfer;
-            }
-            else if (theirGain < 0f && myGain > 0f)
-            {
-                transfer = Math.Min(-theirGain, myGain) * TransferDamping;
-                PowerOutput = -transfer;
-                other.PowerOutput = transfer;
-            }
-            else
-            {
-                PowerOutput = 0f;
-                other.PowerOutput = 0f;
+                float amount = Mathf.Min(-delta, StoredEnergy, other.Props.storedEnergyMax - other.StoredEnergy);
+                if (amount > 0f)
+                {
+                    DrawPower(amount);
+                    other.AddEnergy(amount);
+                }
             }
         }
     }
