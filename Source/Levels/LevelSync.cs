@@ -45,6 +45,13 @@ namespace AsAboveSoBelow
                 foreach (IntVec3 c in sky.AllCells)
                 {
                     TerrainDef top = grid.TerrainAt(c);
+                    if (IsMiningLeaveTerrain(top))
+                    {
+                        // Missed-event backstop for the mined-cap restoration.
+                        grid.SetTerrain(c, ABDefOf.AB_MountainTop);
+                        fixedCells++;
+                        continue;
+                    }
                     if (top != air && top != rooftop)
                     {
                         // Floors, rock, and anything else are never touched.
@@ -116,6 +123,15 @@ namespace AsAboveSoBelow
             try
             {
                 TerrainDef top = sky.terrainGrid.TerrainAt(c);
+                if (IsMiningLeaveTerrain(top))
+                {
+                    // Vanilla mining writes the rock's leaveTerrain (rough-hewn
+                    // stone) over whatever lay beneath, stomping the mountain
+                    // cap the moment a wall is mined. Restore the cap; the
+                    // re-fired event takes the normal path.
+                    sky.terrainGrid.SetTerrain(c, ABDefOf.AB_MountainTop);
+                    return;
+                }
                 Map ground = sky.LowerMap();
                 bool groundOk = ground != null && !ground.Disposed && c.InBounds(ground);
                 // The surface ceiling hint layer keys on the Roofs mesh flag. A sky
@@ -293,6 +309,35 @@ namespace AsAboveSoBelow
                 }
             }
             return false;
+        }
+
+        private static HashSet<TerrainDef> miningLeaveTerrains;
+
+        /// <summary>Terrains vanilla mining leaves under removed rock (every
+        /// mineable's building.leaveTerrain, e.g. rough-hewn stone). On the sky
+        /// level these overwrite the mountain cap when a wall is mined; the
+        /// restoration converts them straight back. Built once on first use.</summary>
+        internal static bool IsMiningLeaveTerrain(TerrainDef def)
+        {
+            if (def == null)
+            {
+                return false;
+            }
+            if (miningLeaveTerrains == null)
+            {
+                miningLeaveTerrains = new HashSet<TerrainDef>();
+                List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
+                for (int i = 0; i < defs.Count; i++)
+                {
+                    ThingDef d = defs[i];
+                    TerrainDef leave = d.building?.leaveTerrain;
+                    if (leave != null && d.mineable)
+                    {
+                        miningLeaveTerrains.Add(leave);
+                    }
+                }
+            }
+            return miningLeaveTerrains.Contains(def);
         }
 
         /// <summary>True when the cell belongs to a spawned stairwell's landing
