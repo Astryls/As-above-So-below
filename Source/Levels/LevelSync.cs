@@ -98,6 +98,43 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Mirrors lower-map mesh dirtiness to the sky map's dedicated
+        /// below-things flag (SectionLayer_ABBelowThings). Things and Buildings
+        /// flags only; every other flag is either covered by the cloned layers
+        /// (terrain, snow, gas) or irrelevant to the view below. The mirrored
+        /// call cannot recurse: a sky map has no upper map, and the surface
+        /// above a basement fails the level check.</summary>
+        public static void OnLowerMeshDirty(Map map, IntVec3 c, ulong flags)
+        {
+            if (!LevelComp.AnySkyLevels || !ABGuard.On(ABGuard.Rendering))
+            {
+                return;
+            }
+            if ((flags & ((ulong)MapMeshFlagDefOf.Things | (ulong)MapMeshFlagDefOf.Buildings)) == 0)
+            {
+                return;
+            }
+            try
+            {
+                Map sky = map.UpperMap();
+                if (sky == null || sky.Disposed || !c.InBounds(sky))
+                {
+                    return;
+                }
+                LevelComp skyComp = sky.Levels();
+                if (skyComp == null || skyComp.level <= 0)
+                {
+                    return;
+                }
+                sky.mapDrawer.MapMeshDirty(c, (ulong)ABDefOf.AB_BelowThings,
+                    regenAdjacentCells: true, regenAdjacentSections: false);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Rendering, e, "below mesh mirror");
+            }
+        }
+
         public static void OnGroundRoofChanged(Map ground, IntVec3 c)
         {
             if (!ABGuard.On(ABGuard.RoofSync))

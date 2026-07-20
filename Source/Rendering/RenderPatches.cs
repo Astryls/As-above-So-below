@@ -16,6 +16,24 @@ namespace AsAboveSoBelow
         }
     }
 
+    /// <summary>
+    /// Mirrors lower-map mesh dirtiness upward so the sky map's below-things
+    /// layer reprints exactly the cells that changed (thing spawned or
+    /// despawned, building built or destroyed, plant growth reprint). Vanilla
+    /// marks adjacent-section flags internally without recursing, so the
+    /// mirror passes regenAdjacentCells for linked-graphic edges. Costs one
+    /// static bool and a flag mask when no sky level exists.
+    /// </summary>
+    [HarmonyPatch(typeof(MapDrawer), nameof(MapDrawer.MapMeshDirty),
+        new Type[] { typeof(IntVec3), typeof(ulong), typeof(bool), typeof(bool) })]
+    internal static class Patch_MapDrawer_MapMeshDirty
+    {
+        private static void Postfix(Map ___map, IntVec3 loc, ulong dirtyFlags)
+        {
+            LevelSync.OnLowerMeshDirty(___map, loc, dirtyFlags);
+        }
+    }
+
     [HarmonyPatch(typeof(DynamicDrawManager), nameof(DynamicDrawManager.DrawDynamicThings))]
     internal static class Patch_DynamicDrawManager_DrawDynamicThings
     {

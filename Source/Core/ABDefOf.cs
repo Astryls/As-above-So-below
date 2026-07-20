@@ -21,6 +21,8 @@ namespace AsAboveSoBelow
         public static TerrainDef AB_RoofSurface;
         public static TerrainDef AB_MountainTop;
 
+        public static MapMeshFlagDef AB_BelowThings;
+
         static ABDefOf()
         {
             DefOfHelper.EnsureInitializedInCtor(typeof(ABDefOf));

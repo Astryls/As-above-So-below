@@ -84,11 +84,15 @@ namespace AsAboveSoBelow
 
         private static HashSet<Type> BuildContentLayerTypes()
         {
+            // SectionLayer_ThingsGeneral and SectionLayer_BuildingsDamage are
+            // deliberately ABSENT since the per-cell printed layer
+            // (SectionLayer_ABBelowThings) took over things content: baked
+            // section meshes cover every cell and cannot skip covered ones, so
+            // drawing them under the sky map made rooftop opacity a render
+            // -queue contest (and lost it on 1.6's atlas pipeline).
             HashSet<Type> set = new HashSet<Type>
             {
                 typeof(SectionLayer_Terrain),
-                typeof(SectionLayer_ThingsGeneral),
-                typeof(SectionLayer_BuildingsDamage),
                 typeof(SectionLayer_Snow),
                 typeof(SectionLayer_Gas),
                 typeof(SectionLayer_PollutionCloud),
@@ -137,8 +141,6 @@ namespace AsAboveSoBelow
             {
                 { typeof(SectionLayer_Terrain), 300 },
                 { typeof(SectionLayer_EdgeShadows), 260 },
-                { typeof(SectionLayer_ThingsGeneral), BelowThingsOffset },
-                { typeof(SectionLayer_BuildingsDamage), 95 },
                 { typeof(SectionLayer_Snow), 90 },
                 { typeof(SectionLayer_Gas), 85 },
                 { typeof(SectionLayer_PollutionCloud), 80 }
@@ -268,40 +270,20 @@ namespace AsAboveSoBelow
         private static readonly List<int> jobTris = new List<int>();
         private static readonly List<Color32> jobColors = new List<Color32>();
 
-        // ---- One-run diagnostic (2026-07-20 bleed-through verification) ----
-        // Dumps the live queue layout once so the queue-family theory is proven
-        // by measured numbers, not inference. Remove after the verification run.
-        private static bool diagDumped;
-        private static int diagSamples;
-        private static readonly System.Text.StringBuilder diagSb = new System.Text.StringBuilder();
-
-        private static void DiagnosticSample(Type layerType, LayerSubMesh sub, int queue)
+        /// <summary>Forced-queue draw for one printed below-view submesh
+        /// (SectionLayer_ABBelowThings): same band as the cloned layers,
+        /// stepped by the submesh's real print altitude so plants, walls, and
+        /// items keep their painter order inside the view below.</summary>
+        internal static void DrawBelowSubMesh(LayerSubMesh sub)
         {
-            if (diagDumped || diagSamples >= 6 || layerType != typeof(SectionLayer_ThingsGeneral))
+            int baseQueue = Mathf.Max(BelowQueueCeiling - BelowThingsOffset, 1);
+            float subY = sub.mesh.bounds.center.y;
+            int queue = baseQueue + Mathf.Clamp((int)(subY * 14f), 0, 99);
+            Material mat = BelowMaterialFor(sub.material, queue);
+            if (mat != null)
             {
-                return;
+                Graphics.DrawMesh(sub.mesh, OffsetMatrix, mat, 0);
             }
-            diagSamples++;
-            diagSb.Append(" | things sub ").Append(sub.material != null ? sub.material.name : "null")
-                .Append(" y=").Append(sub.mesh.bounds.center.y.ToString("F2"))
-                .Append(" q=").Append(queue);
-        }
-
-        private static void DiagnosticDump(Map lower)
-        {
-            if (diagDumped)
-            {
-                return;
-            }
-            diagDumped = true;
-            Material soil = TerrainDefOf.Soil?.graphic?.MatSingle;
-            Material roof = ABDefOf.AB_RoofSurface?.graphic?.MatSingle;
-            Log.Warning(ABLog.Tag + " [diag] queue layout: soil="
-                + (soil != null ? soil.renderQueue : -1)
-                + " roofSurface=" + (roof != null ? roof.renderQueue : -1)
-                + " terrainHardShader=" + (ShaderDatabase.TerrainHard != null ? ShaderDatabase.TerrainHard.renderQueue : -1)
-                + " ceiling=" + BelowQueueCeiling
-                + diagSb);
         }
 
         public static void DrawBelowStatic(Map map)
@@ -341,7 +323,6 @@ namespace AsAboveSoBelow
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
                 DrawSections(lower, view);
-                DiagnosticDump(lower);
                 DrawBelowMask(map, lower, view);
             }
             catch (Exception e)
@@ -377,7 +358,6 @@ namespace AsAboveSoBelow
                             offset = BelowDefaultOffset;
                         }
                         int baseQueue = Mathf.Max(BelowQueueCeiling - offset, 1);
-                        bool stepByAltitude = offset == BelowThingsOffset;
                         List<LayerSubMesh> subs = layer.subMeshes;
                         for (int j = 0; j < subs.Count; j++)
                         {
@@ -387,18 +367,7 @@ namespace AsAboveSoBelow
                             {
                                 continue;
                             }
-                            // Things submeshes bake at their AltitudeLayer heights
-                            // and vanilla layers them by distance sorting, which the
-                            // forced low queues bypass; step the queue by altitude
-                            // so plants, items, and buildings keep their painter
-                            // order inside the below view. Scale 14 spreads the real
-                            // 0..7 print range across the 0..99 headroom (the old 40
-                            // saturated everything at 99 and lost the order).
-                            int queue = stepByAltitude
-                                ? baseQueue + Mathf.Clamp((int)(subY * 14f), 0, 99)
-                                : baseQueue;
-                            DiagnosticSample(layerType, sub, queue);
-                            Material mat = BelowMaterialFor(sub.material, queue);
+                            Material mat = BelowMaterialFor(sub.material, queue: baseQueue);
                             if (mat != null)
                             {
                                 Graphics.DrawMesh(sub.mesh, OffsetMatrix, mat, 0);
