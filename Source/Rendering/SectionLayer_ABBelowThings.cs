@@ -62,6 +62,8 @@ namespace AsAboveSoBelow
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainDef cap = ABDefOf.AB_MountainTop;
                 FogGrid lowerFog = lower.fogGrid;
+                float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
+                bool doScale = scale < 0.999f;
                 bool printed = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
@@ -106,7 +108,16 @@ namespace AsAboveSoBelow
                         }
                         try
                         {
-                            t.Print(this);
+                            if (doScale && CanScale(t))
+                            {
+                                SnapshotVertCounts();
+                                t.Print(this);
+                                ScaleNewVerts(t.TrueCenter(), scale);
+                            }
+                            else
+                            {
+                                t.Print(this);
+                            }
                             printed = true;
                         }
                         catch (Exception e)
@@ -124,6 +135,52 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Rendering, e, "below things layer");
+            }
+        }
+
+        /// <summary>Per-submesh vertex counts captured just before one thing
+        /// prints; anything appended past these marks belongs to that thing.</summary>
+        private readonly List<int> vertCountsBefore = new List<int>();
+
+        /// <summary>The "fake zoom out" filter: linked graphics (walls, fences,
+        /// conduits, natural rock) are excluded - each cell prints its own
+        /// quad, so per-cell shrink would open a gap at every cell boundary,
+        /// and the mountain-edge rock faces must stay flush with the cap
+        /// layer's fill. Everything else shrinks in place about its center.</summary>
+        private static bool CanScale(Thing t)
+        {
+            GraphicData g = t.def.graphicData;
+            return g == null || g.linkType == LinkDrawerType.None;
+        }
+
+        private void SnapshotVertCounts()
+        {
+            vertCountsBefore.Clear();
+            List<LayerSubMesh> subs = subMeshes;
+            for (int i = 0; i < subs.Count; i++)
+            {
+                vertCountsBefore.Add(subs[i].verts.Count);
+            }
+        }
+
+        /// <summary>Shrinks the vertices this thing just printed about its own
+        /// center (x/z only; altitude untouched). Submeshes created during the
+        /// print start scaling from index 0.</summary>
+        private void ScaleNewVerts(Vector3 center, float scale)
+        {
+            List<LayerSubMesh> subs = subMeshes;
+            for (int i = 0; i < subs.Count; i++)
+            {
+                List<Vector3> verts = subs[i].verts;
+                int from = i < vertCountsBefore.Count ? vertCountsBefore[i] : 0;
+                for (int j = from; j < verts.Count; j++)
+                {
+                    Vector3 v = verts[j];
+                    verts[j] = new Vector3(
+                        center.x + (v.x - center.x) * scale,
+                        v.y,
+                        center.z + (v.z - center.z) * scale);
+                }
             }
         }
 

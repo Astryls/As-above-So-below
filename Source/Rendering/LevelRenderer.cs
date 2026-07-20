@@ -95,6 +95,14 @@ namespace AsAboveSoBelow
         private static float shiftAddX;
         private static float shiftAddZ;
 
+        /// <summary>Uniform per-object shrink for below-level content (the
+        /// "fake zoom out"): printed things scale at print time in
+        /// SectionLayer_ABBelowThings, live pawns via the PawnDrawParms matrix
+        /// patch. Each object shrinks about its OWN position, so unlike the
+        /// parallax scale nothing slides off its cell. Refreshed with the
+        /// transform each frame.</summary>
+        internal static float BelowThingScale = 0.85f;
+
         /// <summary>Per-frame below-band transform; refreshes lazily on first
         /// use each frame (a single int compare afterward).</summary>
         internal static Matrix4x4 BelowMatrix
@@ -126,6 +134,7 @@ namespace AsAboveSoBelow
             }
             transformFrame = frame;
             ABSettings settings = ABMod.Settings;
+            BelowThingScale = Mathf.Clamp(settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
             float south = Mathf.Clamp(settings?.belowDepthShift ?? 0.25f, 0f, 1f);
             float k = 1f;
             float addX = 0f;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Verse;
 
@@ -12,6 +13,7 @@ namespace AsAboveSoBelow
         public float belowDim = 0.12f;
         public float belowDepthShift = 0.25f;
         public bool drawSlabEdge = true;
+        public float belowThingScale = 0.85f;
         public bool belowParallax;
         public float belowParallaxStrength = 0.35f;
         public float climbTimeMultiplier = 1f;
@@ -57,6 +59,16 @@ namespace AsAboveSoBelow
             listing.Label("AB_BelowDepthShift".Translate() + ": " + belowDepthShift.ToString("0.00"), tooltip: "AB_BelowDepthShiftTip".Translate());
             belowDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
             listing.CheckboxLabeled("AB_SlabEdge".Translate(), ref drawSlabEdge, "AB_SlabEdgeTip".Translate());
+            listing.Label("AB_BelowScale".Translate() + ": " + belowThingScale.ToStringPercent(), tooltip: "AB_BelowScaleTip".Translate());
+            float newBelowScale = listing.Slider(belowThingScale, 0.7f, 1f);
+            if (Mathf.Abs(newBelowScale - belowThingScale) > 0.0005f)
+            {
+                // Printed below-things bake the scale into their vertices;
+                // reprint the layers so the slider applies live. MapDrawer
+                // amortizes actual regeneration, so drag spam is self-limiting.
+                DirtyBelowThingsLayers();
+            }
+            belowThingScale = newBelowScale;
             listing.CheckboxLabeled("AB_BelowParallax".Translate(), ref belowParallax, "AB_BelowParallaxTip".Translate());
             if (belowParallax)
             {
@@ -68,6 +80,23 @@ namespace AsAboveSoBelow
             listing.GapLine();
             listing.CheckboxLabeled("AB_VerboseLogging".Translate(), ref verboseLogging, "AB_VerboseLoggingTip".Translate());
             listing.End();
+        }
+
+        private static void DirtyBelowThingsLayers()
+        {
+            if (Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
+            List<Map> maps = Find.Maps;
+            for (int i = 0; i < maps.Count; i++)
+            {
+                LevelComp comp = maps[i].Levels();
+                if (comp != null && comp.level > 0)
+                {
+                    maps[i].mapDrawer.WholeMapChanged((ulong)ABDefOf.AB_BelowThings);
+                }
+            }
         }
 
         public override void ExposeData()
@@ -83,6 +112,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);
             Scribe_Values.Look(ref belowDepthShift, "belowDepthShift", 0.25f);
             Scribe_Values.Look(ref drawSlabEdge, "drawSlabEdge", true);
+            Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
             Scribe_Values.Look(ref belowParallax, "belowParallax", false);
             Scribe_Values.Look(ref belowParallaxStrength, "belowParallaxStrength", 0.35f);
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);

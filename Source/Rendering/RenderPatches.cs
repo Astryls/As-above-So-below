@@ -117,4 +117,48 @@ namespace AsAboveSoBelow
             }
         }
     }
+
+    /// <summary>
+    /// Below-view "fake zoom out": pawns on the lower map draw shrunk about
+    /// their own root position, so they read as one story further from the
+    /// camera while staying glued to their cells. PawnDrawParms.matrix is the
+    /// root every render tree node composes off (body, head, apparel, carried
+    /// thing), so one right-multiplied scale shrinks the whole pawn in place.
+    /// Gated on OffsetActive: portraits, statues, and same-level pawns are
+    /// untouched.
+    /// </summary>
+    [HarmonyPatch(typeof(PawnRenderer), "GetDrawParms")]
+    internal static class Patch_PawnRenderer_GetDrawParms
+    {
+        private static void Postfix(ref PawnDrawParms __result)
+        {
+            if (LevelRenderer.OffsetActive)
+            {
+                float s = LevelRenderer.BelowThingScale;
+                if (s < 0.999f)
+                {
+                    __result.matrix *= Matrix4x4.Scale(new Vector3(s, 1f, s));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Humanlike pawns beyond ZoomRootSize 18 draw via the cached atlas blit,
+    /// which positions a premade mesh directly at bodyPos and never reads
+    /// PawnDrawParms.matrix - the scale above would silently drop out at far
+    /// zoom. Disable the cache for below-view pawns only; the handful visible
+    /// through open air render through the full tree instead.
+    /// </summary>
+    [HarmonyPatch(typeof(PawnRenderer), "ParallelGetPreRenderResults")]
+    internal static class Patch_PawnRenderer_ParallelGetPreRenderResults
+    {
+        private static void Prefix(ref bool disableCache)
+        {
+            if (LevelRenderer.OffsetActive && LevelRenderer.BelowThingScale < 0.999f)
+            {
+                disableCache = true;
+            }
+        }
+    }
 }
