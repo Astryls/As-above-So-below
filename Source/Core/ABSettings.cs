@@ -60,7 +60,15 @@ namespace AsAboveSoBelow
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
             listing.Label("AB_BelowDepthShift".Translate() + ": " + belowDepthShift.ToString("0.00"), tooltip: "AB_BelowDepthShiftTip".Translate());
-            belowDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
+            float newDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
+            if (Mathf.Abs(newDepthShift - belowDepthShift) > 0.0005f)
+            {
+                // The wall facade bakes the south shift into its clipped
+                // verts; reprint so the slider applies live (amortized by
+                // MapDrawer like the other reprint sliders).
+                DirtyBelowThingsLayers();
+            }
+            belowDepthShift = newDepthShift;
             listing.CheckboxLabeled("AB_SlabEdge".Translate(), ref drawSlabEdge, "AB_SlabEdgeTip".Translate());
             listing.CheckboxLabeled("AB_WallReveal".Translate(), ref drawWallReveal, "AB_WallRevealTip".Translate());
             if (drawWallReveal)

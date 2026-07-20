@@ -56,8 +56,10 @@ namespace AsAboveSoBelow
         private const float SkirtAltitude = -0.05f;
 
         /// <summary>Width of the thin ledge outline on east/west slab edges and
-        /// the minimum south face height when the depth shift slider sits at 0.</summary>
-        private const float SkirtLedgeWidth = 0.08f;
+        /// the minimum south face height when the depth shift slider sits at 0.
+        /// Internal: the wall facade floors its baked south shift at the same
+        /// value so facade sliver and skirt face always share one height.</summary>
+        internal const float SkirtLedgeWidth = 0.08f;
 
         private const int MaskRebuildIntervalFrames = 15;
 
@@ -406,22 +408,19 @@ namespace AsAboveSoBelow
         /// flat dark face, still under every sky-side material.</summary>
         private const int FacadeQueueOffset = 55;
 
-        /// <summary>Identity-anchored draw for one wall-facade submesh, shifted
-        /// south by the same depth offset the skirt's south face uses (floored
-        /// at the ledge width), so shift, skirt, and facade stay one coherent
-        /// 2.5D extrusion. Applied at draw time: the slider needs no reprint.</summary>
+        /// <summary>Identity draw for one wall-facade submesh through its
+        /// queue clone. The south shift is BAKED into the verts at print time
+        /// (#133 redesign: the mesh is pre-clipped to the sliver and can never
+        /// overlap a rim cell, so no draw-time matrix and no ordering fight
+        /// with sky content; the depth slider triggers a reprint instead).</summary>
         internal static void DrawWallFacadeSubMesh(LayerSubMesh sub)
         {
             Material mat = BelowMaterialFor(sub.material,
                 Mathf.Max(BelowQueueCeiling - FacadeQueueOffset, 1));
-            if (mat == null)
+            if (mat != null)
             {
-                return;
+                Graphics.DrawMesh(sub.mesh, Matrix4x4.identity, mat, 0);
             }
-            float south = Mathf.Max(
-                Mathf.Clamp(ABMod.Settings?.belowDepthShift ?? 0.25f, 0f, 1f),
-                SkirtLedgeWidth);
-            Graphics.DrawMesh(sub.mesh, Matrix4x4.Translate(new Vector3(0f, 0f, -south)), mat, 0);
         }
 
         private static int wallRevealQueue = -1;
