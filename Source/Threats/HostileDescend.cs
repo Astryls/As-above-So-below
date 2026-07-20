@@ -8,12 +8,21 @@ using Verse.AI.Group;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Hostiles on pocket levels do not idle forever when nothing up (or down)
-    /// there is left to fight: a low-frequency scan sends stuck raiders through
-    /// the stairs toward the ground level, and the stair transfer moves them
-    /// between per-map assault lords (vanilla lords cannot span maps). Insects
-    /// are exempt - a diverted infestation is a self-contained basement fight
-    /// by design. Kill switch: hostileMove.
+    /// Non-player pawns on pocket levels never get stranded. Pocket maps have
+    /// no usable edges, so vanilla "leave the map" AI walks forever; and lords
+    /// are map-scoped, so nothing vanilla ever routes an NPC through stairs.
+    /// A low-frequency scan handles both sides:
+    ///  - HOSTILES (raiders, mechs, and their war or pack ANIMALS) with no
+    ///    reachable target take the stairs toward the ground and join or start
+    ///    an assault lord there. Bashing an immortal link building counts as
+    ///    idle. Insects are exempt: a diverted infestation is a self-contained
+    ///    basement fight by design.
+    ///  - FRIENDLY OR NEUTRAL NPCs (allies, visitors, traders and their
+    ///    animals) whose duty says they are trying to leave - or who idle
+    ///    around lordless - descend the same way and get an exit-map lord on
+    ///    arrival so they walk off the surface like anyone else.
+    /// StairTransfer releases every non-player pawn from its map-scoped lord
+    /// before the despawn. Kill switch: hostileMove.
     /// </summary>
     internal static class HostileDescend
     {
@@ -22,15 +31,12 @@ namespace AsAboveSoBelow
         /// the cap only bounds the pathological all-unreachable case.</summary>
         private const int MaxReachChecksPerPawn = 8;
 
-        /// <summary>Scan one pocket level for stuck hostiles. Called from
-        /// LevelComp on a slow cadence, only after a cheap any-hostiles gate.</summary>
+        /// <summary>Scan one pocket level for stuck non-player pawns. Called
+        /// from LevelComp on a slow cadence; the loop itself is the gate (one
+        /// faction compare per colonist on calm maps).</summary>
         public static void ScanPocketMap(LevelComp comp)
         {
             Map map = comp.map;
-            if (!GenHostility.AnyHostileActiveThreatTo(map, Faction.OfPlayer))
-            {
-                return;
-            }
             Map home = comp.level > 0 ? comp.lowerMap : comp.upperMap;
             if (home == null || home.Disposed)
             {
@@ -44,7 +50,12 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 Pawn p = pawns[i];
-                if (!IsMovableHostile(p) || !IsIdle(p) || HasReachableTarget(p))
+                if (p == null || p.Faction == Faction.OfPlayer || p.Dead || p.Downed || !p.Spawned)
+                {
+                    continue;
+                }
+                bool hostile = p.HostileTo(Faction.OfPlayer);
+                if (hostile ? !ShouldDescendHostile(p) : !ShouldDescendFriendly(p))
                 {
                     continue;
                 }
@@ -56,41 +67,65 @@ namespace AsAboveSoBelow
                 }
                 Job job = CrossLevelWork.MakeStairsJob(stairs, exit);
                 p.jobs?.StartJob(job, JobCondition.InterruptForced);
-                ABLog.Dev("Hostile " + p.LabelShort + " descending from level " + comp.level + " via " + stairs.ThingID + ".");
+                ABLog.Dev((hostile ? "Hostile " : "NPC ") + p.LabelShort + " descending from level "
+                    + comp.level + " via " + stairs.ThingID + ".");
             }
         }
 
-        private static bool IsMovableHostile(Pawn p)
+        private static bool ShouldDescendHostile(Pawn p)
         {
-            if (p == null || p.Dead || p.Downed || !p.Spawned)
+            // Humanlike raiders, mechs, and faction animals (war beasts, pack
+            // animals) cross levels; insects, manhunters (no faction) and
+            // entities stay where they spawned.
+            bool movableKind = p.RaceProps.Humanlike || p.RaceProps.IsMechanoid
+                || (p.RaceProps.Animal && p.Faction != null);
+            if (!movableKind || p.RaceProps.Insect || p.Faction == Faction.OfInsects)
             {
                 return false;
             }
-            if (!p.HostileTo(Faction.OfPlayer))
+            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
             {
                 return false;
             }
-            // Humanlike raiders and mechs cross levels; insects, manhunting
-            // animals and entities stay where they spawned.
-            if (!p.RaceProps.Humanlike && !p.RaceProps.IsMechanoid)
+            return IsIdle(p) && !HasReachableTarget(p);
+        }
+
+        /// <summary>Duties that mean "this pawn is trying to get off the map".
+        /// Matched by def so visitor groups mid-visit (Idle, WanderClose) are
+        /// never yanked away.</summary>
+        private static bool WantsToLeave(Pawn p)
+        {
+            Lord lord = p.GetLord();
+            if (lord == null)
+            {
+                // Lordless NPC drifting on a pocket level has nothing to do up
+                // there; idle means stuck.
+                return IsIdle(p);
+            }
+            DutyDef duty = p.mindState?.duty?.def;
+            if (duty == null)
             {
                 return false;
             }
-            if (p.InMentalState)
+            return duty == DutyDefOf.TravelOrLeave
+                || duty == DutyDefOf.TravelOrWait
+                || duty == DutyDefOf.Kidnap
+                || duty == DutyDefOf.Steal
+                || duty == DutyDefOf.TakeWoundedGuest
+                || duty == DutyDefOf.PrisonerEscape;
+        }
+
+        private static bool ShouldDescendFriendly(Pawn p)
+        {
+            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
             {
-                // Mental-state think trees override forced jobs; the pawn is
-                // caught by a later scan once the state ends.
                 return false;
             }
-            if (p.CurJobDef == ABDefOf.AB_UseStairs)
+            if (!p.RaceProps.Humanlike && !p.RaceProps.Animal)
             {
                 return false;
             }
-            if (ABGiddyUpCompat.BlockForMount(p))
-            {
-                return false;
-            }
-            return true;
+            return WantsToLeave(p);
         }
 
         private static bool IsIdle(Pawn p)
@@ -138,14 +173,15 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        /// <summary>Pull a hostile out of its map-scoped lord before the stair
-        /// transfer despawns it; a lord holding a pawn on another map corrupts
-        /// its toil state. No-op for anyone else.</summary>
+        /// <summary>Pull any non-player pawn out of its map-scoped lord before
+        /// the stair transfer despawns it; a lord holding a pawn on another map
+        /// corrupts its toil state. Colonists (caravan gathering and the like)
+        /// are handled by their own systems and never touched here.</summary>
         public static void NoteLeaving(Pawn p)
         {
             try
             {
-                if (p == null || p.Faction == null || !p.HostileTo(Faction.OfPlayer))
+                if (p == null || p.Faction == null || p.Faction == Faction.OfPlayer)
                 {
                     return;
                 }
@@ -153,23 +189,19 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                ABGuard.Disable(ABGuard.HostileMove, e, "hostile lord release");
+                ABGuard.Disable(ABGuard.HostileMove, e, "npc lord release");
             }
         }
 
-        /// <summary>Attach an arrived hostile to an assault lord on the new map:
-        /// join the faction's existing assault if one is running, otherwise
-        /// start one. Keeps diverted raiders coherent as they trickle down the
-        /// stairs instead of drifting lordless.</summary>
+        /// <summary>Attach an arrived non-player pawn to a sensible lord on the
+        /// new map: hostiles join (or start) the faction's assault; friendlies
+        /// and neutrals get an exit-map lord on the ground level so they leave
+        /// the colony like any departing guest.</summary>
         public static void NoteArrived(Pawn p, Map map)
         {
             try
             {
-                if (p == null || map == null || p.Faction == null || !p.HostileTo(Faction.OfPlayer))
-                {
-                    return;
-                }
-                if (!p.RaceProps.Humanlike && !p.RaceProps.IsMechanoid)
+                if (p == null || map == null || p.Faction == null || p.Faction == Faction.OfPlayer)
                 {
                     return;
                 }
@@ -177,21 +209,38 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                List<Lord> lords = map.lordManager.lords;
-                for (int i = 0; i < lords.Count; i++)
+                if (p.HostileTo(Faction.OfPlayer))
                 {
-                    Lord lord = lords[i];
-                    if (lord.faction == p.Faction && lord.LordJob is LordJob_AssaultColony)
+                    if (!p.RaceProps.Humanlike && !p.RaceProps.IsMechanoid && !p.RaceProps.Animal)
                     {
-                        lord.AddPawn(p);
                         return;
                     }
+                    List<Lord> lords = map.lordManager.lords;
+                    for (int i = 0; i < lords.Count; i++)
+                    {
+                        Lord lord = lords[i];
+                        if (lord.faction == p.Faction && lord.LordJob is LordJob_AssaultColony)
+                        {
+                            lord.AddPawn(p);
+                            return;
+                        }
+                    }
+                    LordMaker.MakeNewLord(p.Faction, new LordJob_AssaultColony(p.Faction), map, Gen.YieldSingle(p));
+                    return;
                 }
-                LordMaker.MakeNewLord(p.Faction, new LordJob_AssaultColony(p.Faction), map, Gen.YieldSingle(p));
+                // Friendly or neutral: only hand out exit lords on the ground
+                // level (a pocket arrival gets re-sent by the next scan).
+                if (map.Levels()?.level != 0)
+                {
+                    return;
+                }
+                LordMaker.MakeNewLord(p.Faction,
+                    new LordJob_ExitMapBest(LocomotionUrgency.Jog, canDig: false, canDefendSelf: true),
+                    map, Gen.YieldSingle(p));
             }
             catch (Exception e)
             {
-                ABGuard.Disable(ABGuard.HostileMove, e, "hostile lord join");
+                ABGuard.Disable(ABGuard.HostileMove, e, "npc lord join");
             }
         }
     }

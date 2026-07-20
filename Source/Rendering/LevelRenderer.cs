@@ -95,8 +95,11 @@ namespace AsAboveSoBelow
             // depth-shading layer and only renders correctly through vanilla's
             // WaterDepth subcamera. Drawn flat in the below pass it painted an
             // opaque black slab over every river and lake (playtest round 12).
-            // Plain water comes from the terrain layer with a shader swap in
-            // BelowMaterialFor.
+            // The terrain layer's own water submeshes render with the REAL
+            // vanilla water shader instead: DrawBelowStatic pushes the lower
+            // map's water shader globals (flow texture, map size) every frame,
+            // which is safe because the sky map has no water of its own
+            // (playtest round 13, the Z-Levels approach).
             // Version or DLC dependent layers, added when present.
             AddByName(set, "Verse.SectionLayer_Sand");
             AddByName(set, "RimWorld.SectionLayer_TerrainEdges");
@@ -206,22 +209,10 @@ namespace AsAboveSoBelow
             {
                 belowMats.Clear();
             }
+            // Pure clone at a forced queue - water materials included: their
+            // shader reads per-map globals that DrawBelowStatic re-points at
+            // the lower map each frame, so vanilla water just works from above.
             clone = new Material(source) { renderQueue = queue };
-            // Water shaders sample per-map globals (flow and depth buffers) that
-            // belong to the CURRENT map - viewed from the sky level those
-            // globals are the sky map's empty buffers and the water renders
-            // black. Swap to a plain terrain draw of the same base texture:
-            // still, readable water instead of an animated void.
-            Shader shader = clone.shader;
-            if (shader != null && shader.name != null && shader.name.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                clone.shader = ShaderDatabase.TerrainHard;
-                if (clone.mainTexture == null)
-                {
-                    clone.shader = ShaderDatabase.SolidColor;
-                    clone.color = new Color(0.25f, 0.36f, 0.47f);
-                }
-            }
             belowMats[key] = clone;
             return clone;
         }
@@ -261,6 +252,13 @@ namespace AsAboveSoBelow
                 {
                     cam.farClipPlane = 70f;
                 }
+                // The water shader samples per-map globals (river flow texture,
+                // map size). The current (sky) map set its own empty values
+                // during MapUpdate; override with the lower map's so its rivers
+                // and lakes render exactly like vanilla. Harmless for the sky
+                // map: it has no water shader in view of its own. Globals are
+                // read at render time, so the last setter this frame wins.
+                lower.waterInfo?.SetTextures();
                 // Process the lower map's dirty sections so the view below stays live.
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);

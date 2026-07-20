@@ -53,13 +53,64 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (!InfestationCellFinder.TryFindCell(out IntVec3 _, lower))
+            // Vanilla's cell finder scores against colony-distance curves tuned
+            // for big mountain bases and rejects modest mined-out basements
+            // wholesale (playtest round 13: the event never fired). Accept the
+            // basement when EITHER finder is satisfied; execution prefers the
+            // vanilla pick and falls back to ours via infestationLocOverride.
+            if (!InfestationCellFinder.TryFindCell(out IntVec3 _, lower)
+                && !TryFindBasementInfestationCell(lower, out IntVec3 _))
             {
                 return false;
             }
             surface = map;
             basement = lower;
             return true;
+        }
+
+        /// <summary>Relaxed basement spawn cell: standable, unfogged, thick
+        /// roofed, at least 6 cells from any colonist building, preferring the
+        /// farthest sampled cell so hives rise deep in the tunnels. Sampled,
+        /// not exhaustive: 220 tries bound the cost on huge maps.</summary>
+        public static bool TryFindBasementInfestationCell(Map basement, out IntVec3 best)
+        {
+            best = IntVec3.Invalid;
+            List<Building> colony = basement.listerBuildings.allBuildingsColonist;
+            float bestScore = -1f;
+            for (int i = 0; i < 220; i++)
+            {
+                IntVec3 c = CellFinder.RandomCell(basement);
+                if (!c.Standable(basement) || c.Fogged(basement))
+                {
+                    continue;
+                }
+                RoofDef roof = basement.roofGrid.RoofAt(c);
+                if (roof == null || !roof.isThickRoof)
+                {
+                    continue;
+                }
+                float minDist = float.MaxValue;
+                for (int j = 0; j < colony.Count; j++)
+                {
+                    float d = (colony[j].Position - c).LengthHorizontalSquared;
+                    if (d < minDist)
+                    {
+                        minDist = d;
+                    }
+                }
+                if (colony.Count > 0 && minDist < 36f)
+                {
+                    // Not right on the stairwell or inside built-up rooms.
+                    continue;
+                }
+                float score = colony.Count == 0 ? 1f : (minDist < 2500f ? minDist : 2500f);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = c;
+                }
+            }
+            return best.IsValid;
         }
 
         /// <summary>The sky level to divert a hostile drop-pod raid onto, or
@@ -121,6 +172,54 @@ namespace AsAboveSoBelow
         }
     }
 
+    /// <summary>No storyteller event belongs on a pocket level directly: no
+    /// trader ships passing over the basement, no cargo pods bursting on open
+    /// air. Any incident that arrives targeting one of our levels (dev palette
+    /// on the current map is the classic vector) is redirected to the column's
+    /// surface at the single TryExecute chokepoint. Our own diverts retarget
+    /// AFTER this point (inside the workers), so opt-in basement infestations
+    /// and sky drops still land where they should. Deep drill infestations are
+    /// exempt - they are local to the drill's map by nature.</summary>
+    [HarmonyPatch(typeof(IncidentWorker), nameof(IncidentWorker.TryExecute))]
+    internal static class Patch_Incident_PocketRedirect
+    {
+        private static void Prefix(IncidentWorker __instance, IncidentParms parms)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Threats))
+                {
+                    return;
+                }
+                if (__instance is IncidentWorker_DeepDrillInfestation)
+                {
+                    return;
+                }
+                if (parms == null || !(parms.target is Map map) || map.Disposed)
+                {
+                    return;
+                }
+                LevelComp comp = map.Levels();
+                if (comp == null || comp.level == 0)
+                {
+                    return;
+                }
+                Map ground = comp.groundMap;
+                if (ground == null || ground.Disposed || ground == map)
+                {
+                    return;
+                }
+                parms.target = ground;
+                ABLog.Dev("Redirected incident " + (__instance.def?.defName ?? "unknown")
+                    + " from pocket level " + comp.level + " to the column surface.");
+            }
+            catch (System.Exception e)
+            {
+                ABGuard.Disable(ABGuard.Threats, e, "pocket incident redirect");
+            }
+        }
+    }
+
     /// <summary>Let infestations FIRE when only the basement qualifies. On a
     /// surface without overhead mountain (most colonies), vanilla CanFireNow
     /// rejects the incident outright and the basement opt-in would never see
@@ -165,8 +264,18 @@ namespace AsAboveSoBelow
                 if (!surfaceValid || Rand.Chance(ABMod.Settings.threatDivertChance))
                 {
                     parms.target = basement;
+                    // Prefer vanilla's own pick when it accepts the basement;
+                    // otherwise seed the spawn from the relaxed finder. The
+                    // override also flips SpawnTunnels into its lenient
+                    // spawn-anywhere-near mode, so the spawn cannot fizzle.
+                    if (!InfestationCellFinder.TryFindCell(out IntVec3 _, basement)
+                        && ThreatDivert.TryFindBasementInfestationCell(basement, out IntVec3 seed))
+                    {
+                        parms.infestationLocOverride = seed;
+                    }
                     ABLog.Dev("Diverted infestation to basement map " + basement.uniqueID
-                        + (surfaceValid ? " (roll)." : " (surface has no valid cell)."));
+                        + (surfaceValid ? " (roll)" : " (surface has no valid cell)")
+                        + (parms.infestationLocOverride.HasValue ? " with relaxed seed cell." : "."));
                 }
             }
             catch (System.Exception e)
