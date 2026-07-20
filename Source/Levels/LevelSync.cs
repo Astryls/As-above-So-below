@@ -99,18 +99,22 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Mirrors lower-map mesh dirtiness to the sky map's dedicated
-        /// below-things flag (SectionLayer_ABBelowThings). Things and Buildings
-        /// flags only; every other flag is either covered by the cloned layers
-        /// (terrain, snow, gas) or irrelevant to the view below. The mirrored
-        /// call cannot recurse: a sky map has no upper map, and the surface
-        /// above a basement fails the level check.</summary>
+        /// below-things flag (SectionLayer_ABBelowThings + the mountain cap's
+        /// explored-face skip). Things, Buildings, and FogOfWar flags; every
+        /// other flag is either covered by the cloned layers (terrain, snow,
+        /// gas) or irrelevant to the view below. FogOfWar matters because
+        /// prints mirror the lower map's explored state: fog lifting below
+        /// must reprint the revealed cells. The mirrored call cannot recurse:
+        /// a sky map has no upper map, and the surface above a basement fails
+        /// the level check.</summary>
         public static void OnLowerMeshDirty(Map map, IntVec3 c, ulong flags)
         {
             if (!LevelComp.AnySkyLevels || !ABGuard.On(ABGuard.Rendering))
             {
                 return;
             }
-            if ((flags & ((ulong)MapMeshFlagDefOf.Things | (ulong)MapMeshFlagDefOf.Buildings)) == 0)
+            if ((flags & ((ulong)MapMeshFlagDefOf.Things | (ulong)MapMeshFlagDefOf.Buildings
+                | (ulong)MapMeshFlagDefOf.FogOfWar)) == 0)
             {
                 return;
             }

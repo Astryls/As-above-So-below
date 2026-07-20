@@ -83,8 +83,28 @@ namespace AsAboveSoBelow
         public SectionLayer_ABMountainCap(Section section) : base(section)
         {
             // Buildings flag included: mining a wall or placing a torch changes
-            // which decal-cover strips this section needs.
-            relevantChangeTypes = MapMeshFlagDefOf.Terrain | MapMeshFlagDefOf.Buildings;
+            // which decal-cover strips this section needs. AB_BelowThings
+            // included: the fill skip below depends on the LOWER map's fog and
+            // rock state, which LevelSync mirrors to that flag.
+            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain | (ulong)MapMeshFlagDefOf.Buildings
+                | (ulong)ABDefOf.AB_BelowThings;
+        }
+
+        /// <summary>True when the below cell holds an EXPLORED natural rock
+        /// face: the cap leaves such cells unfilled so the printed below-things
+        /// layer shows the actual rock texture there (the layered mountain-edge
+        /// look), while fogged rock stays behind the flat fog fill exactly like
+        /// vanilla unexplored mountain.</summary>
+        private static bool BelowFaceVisible(Map lower, IntVec3 c)
+        {
+            if (lower == null || lower.Disposed || !c.InBounds(lower)
+                || lower.fogGrid.IsFogged(c))
+            {
+                return false;
+            }
+            Building ed = lower.edificeGrid[c];
+            return ed != null
+                && (ed.def.mineable || (ed.def.building != null && ed.def.building.isNaturalRock));
         }
 
         public override bool Visible => ABGuard.On(ABGuard.Rendering);
@@ -102,6 +122,7 @@ namespace AsAboveSoBelow
                 EnsureMats();
                 TerrainGrid grid = map.terrainGrid;
                 TerrainDef cap = ABDefOf.AB_MountainTop;
+                Map lower = map.LowerMap();
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
                 bool emitted = false;
                 foreach (IntVec3 c in section.CellRect)
@@ -111,6 +132,13 @@ namespace AsAboveSoBelow
                     Material highMat;
                     if (t == cap)
                     {
+                        // Explored below rock face and no sky edifice over it:
+                        // leave the cell unfilled so the printed below rock
+                        // texture reads through (layered mountain edge).
+                        if (c.GetEdifice(map) == null && BelowFaceVisible(lower, c))
+                        {
+                            continue;
+                        }
                         // Unmined mountain top: the vanilla fog fill.
                         lowMat = capMat;
                         highMat = capMatOverWalls;

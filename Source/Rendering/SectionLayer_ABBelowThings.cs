@@ -60,10 +60,24 @@ namespace AsAboveSoBelow
                 }
                 TerrainGrid skyTerrain = map.terrainGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
+                TerrainDef cap = ABDefOf.AB_MountainTop;
+                FogGrid lowerFog = lower.fogGrid;
                 bool printed = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
-                    if (skyTerrain.TerrainAt(c) != air || !c.InBounds(lower))
+                    if (!c.InBounds(lower))
+                    {
+                        continue;
+                    }
+                    // Print under open air AND under the mountain cap: every
+                    // below rock sits under a natural roof, which the genstep
+                    // maps to AB_MountainTop, never air (measured: 16995 vs 0).
+                    // The cap layer skips its flat fill exactly where the below
+                    // face is explored, so these prints show as the visible
+                    // mountain faces; fogged content stays behind the fog fill
+                    // (cap cells) or the opaque mask (air cells).
+                    TerrainDef top = skyTerrain.TerrainAt(c);
+                    if (top != air && top != cap)
                     {
                         continue;
                     }
@@ -80,6 +94,13 @@ namespace AsAboveSoBelow
                         // Multi-cell things print once, from their root cell.
                         IntVec3 pos = t.Position;
                         if (pos.x != c.x || pos.z != c.z)
+                        {
+                            continue;
+                        }
+                        // Vanilla bakes only unfogged things; mirror that so the
+                        // below view never reveals what surface pawns have not
+                        // explored (fog lifting below reprints via the mirror).
+                        if (!t.def.seeThroughFog && lowerFog.IsFogged(pos))
                         {
                             continue;
                         }
