@@ -41,7 +41,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                Active = ModsConfig.IsActive("brrainz.reversecommands");
+                Active = ABDetect.Active("brrainz.reversecommands");
                 if (!Active)
                 {
                     return;

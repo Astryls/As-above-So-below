@@ -25,7 +25,7 @@ namespace AsAboveSoBelow
             resolved = true;
             try
             {
-                if (!ModsConfig.IsActive("sk.dmbb"))
+                if (!ABDetect.Active("sk.dmbb"))
                 {
                     return;
                 }

@@ -40,7 +40,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ModsConfig.IsActive("JPT.OpenTheWindows"))
+                if (!ABDetect.Active("JPT.OpenTheWindows"))
                 {
                     return;
                 }

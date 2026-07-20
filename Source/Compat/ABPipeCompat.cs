@@ -31,9 +31,11 @@ namespace AsAboveSoBelow
 
         static ABPipeCompat()
         {
-            DbhActive = ModsConfig.IsActive("Dubwise.DubsBadHygiene");
-            VefActive = ModsConfig.IsActive("OskarPotocki.VanillaFactionsExpanded.Core");
-            RimefellerActive = ModsConfig.IsActive("Dubwise.Rimefeller");
+            // ABDetect: postfix-insensitive so local copies of these mods
+            // (effective id "..._steam" splits) still enable the bridges.
+            DbhActive = ABDetect.Active("Dubwise.DubsBadHygiene");
+            VefActive = ABDetect.Active("OskarPotocki.VanillaFactionsExpanded.Core");
+            RimefellerActive = ABDetect.Active("Dubwise.Rimefeller");
             if (DbhActive)
             {
                 ABLog.Dev("Dubs Bad Hygiene detected, direct water bridging enabled.");

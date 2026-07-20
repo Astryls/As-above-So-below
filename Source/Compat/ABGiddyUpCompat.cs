@@ -26,9 +26,9 @@ namespace AsAboveSoBelow
                     // Sentinel flag, not a null check: the def is legitimately
                     // absent without Giddy-Up and must not be re-looked-up per call.
                     resolved = true;
-                    if (ModsConfig.IsActive("MemeGoddess.GiddyUp")
-                        || ModsConfig.IsActive("Owlchemist.GiddyUp")
-                        || ModsConfig.IsActive("Roolo.GiddyUpCore"))
+                    if (ABDetect.Active("MemeGoddess.GiddyUp")
+                        || ABDetect.Active("Owlchemist.GiddyUp")
+                        || ABDetect.Active("Roolo.GiddyUpCore"))
                     {
                         mountedDef = DefDatabase<JobDef>.GetNamedSilentFail("Mounted");
                     }

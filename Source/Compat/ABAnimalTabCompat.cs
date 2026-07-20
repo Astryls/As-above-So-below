@@ -33,7 +33,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ModsConfig.IsActive("Fluffy.AnimalTab"))
+                if (!ABDetect.Active("Fluffy.AnimalTab"))
                 {
                     return;
                 }

@@ -83,7 +83,7 @@ namespace AsAboveSoBelow
             ABApi.RegisterNeedJobGiver("RimWorld.JobGiver_BingeFood", allowInMentalState: true);
             ABApi.RegisterNeedJobGiver("RimWorld.JobGiver_Berserk", allowInMentalState: true);
             ABApi.RegisterNeedJobGiver("RimWorld.JobGiver_MurderousRage", allowInMentalState: true);
-            if (ModsConfig.IsActive("rim.job.world"))
+            if (ABDetect.Active("rim.job.world"))
             {
                 ABApi.RegisterNeedJobGiver("rjw.JobGiver_JoinInBed");
                 ABApi.RegisterNeedJobGiver("rjw.JobGiver_DoQuickie");
@@ -97,7 +97,7 @@ namespace AsAboveSoBelow
                 ABApi.RegisterNeedJobGiver("rjw.JobGiver_RapeEnemy");
                 ABLog.Dev("RJW detected: sex, breeding and rape givers registered for cross-level migration.");
             }
-            if (ModsConfig.IsActive("LovelyDovey.Sex.WithEuterpe"))
+            if (ABDetect.Active("LovelyDovey.Sex.WithEuterpe"))
             {
                 ABApi.RegisterNeedJobGiver("LoveyDoveySexWithEuterpe.JobGiver_GetIntimacy");
                 ABLog.Dev("Intimacy detected: intimacy giver registered for cross-level migration.");
