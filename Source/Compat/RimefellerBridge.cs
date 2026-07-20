@@ -15,15 +15,18 @@ namespace AsAboveSoBelow
     /// player-built tank run straight off the shaft. Nets are resolved through
     /// the link's own tank comps, so no cell scanning is needed.
     ///
-    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException): foreign
-    /// types must never appear in ANY method signature (parameters or return
-    /// type) or class-level member here - locals inside method bodies only.
-    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects over
-    /// every method in every assembly) resolve signature types even for methods
-    /// that are never called, which hard-crashes the scan when Rimefeller is
-    /// absent. Method BODIES are safe: they are JIT compiled only on first
-    /// invocation, and every call site is gated by ABPipeCompat's detection
-    /// check. That is why everything below lives inside clean-signature methods.
+    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException, then
+    /// relearned when this file broke it): foreign types must never appear in
+    /// ANY method signature (parameters or return type), field, local function
+    /// or lambda capture here - locals inside plain method bodies only.
+    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects
+    /// over every method in every assembly) resolve signature types even for
+    /// methods that are never called, which hard-crashes the scan when
+    /// Rimefeller is absent ("Could not resolve type with token ... expected
+    /// class 'Rimefeller.PipelineNet'"). Method BODIES are safe: they are JIT
+    /// compiled only on first invocation, and every call site is gated by
+    /// ABPipeCompat's detection check. Hence the object-typed private
+    /// signatures below with casts on entry.
     /// </summary>
     public static class RimefellerBridge
     {
@@ -33,8 +36,8 @@ namespace AsAboveSoBelow
 
         public static void BridgePair(Building_ABStairs a, Building_ABStairs b)
         {
-            PipelineNet netA = NetOf(a);
-            PipelineNet netB = NetOf(b);
+            PipelineNet netA = (PipelineNet)NetOf(a);
+            PipelineNet netB = (PipelineNet)NetOf(b);
             if (netA == null || netB == null || netA == netB)
             {
                 return;
@@ -43,7 +46,7 @@ namespace AsAboveSoBelow
             EqualizeFuel(netA, netB);
         }
 
-        private static PipelineNet NetOf(Building_ABStairs link)
+        private static object NetOf(Building_ABStairs link)
         {
             foreach (CompStorageTank tank in link.GetComps<CompStorageTank>())
             {
@@ -56,8 +59,10 @@ namespace AsAboveSoBelow
             return null;
         }
 
-        private static void EqualizeOil(PipelineNet netA, PipelineNet netB)
+        private static void EqualizeOil(object netAObj, object netBObj)
         {
+            PipelineNet netA = (PipelineNet)netAObj;
+            PipelineNet netB = (PipelineNet)netBObj;
             SumTanks(netA.OilStorage, out float storedA, out float capA);
             SumTanks(netB.OilStorage, out float storedB, out float capB);
             if (capA <= 0f || capB <= 0f)
@@ -75,8 +80,10 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void MoveOil(PipelineNet from, PipelineNet to, float amount)
+        private static void MoveOil(object fromObj, object toObj, float amount)
         {
+            PipelineNet from = (PipelineNet)fromObj;
+            PipelineNet to = (PipelineNet)toObj;
             if (!from.PullOil(amount))
             {
                 return;
@@ -88,8 +95,10 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void EqualizeFuel(PipelineNet netA, PipelineNet netB)
+        private static void EqualizeFuel(object netAObj, object netBObj)
         {
+            PipelineNet netA = (PipelineNet)netAObj;
+            PipelineNet netB = (PipelineNet)netBObj;
             SumTanks(netA.FuelStorage, out float storedA, out float capA);
             SumTanks(netB.FuelStorage, out float storedB, out float capB);
             if (capA <= 0f || capB <= 0f)
@@ -107,8 +116,10 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void MoveFuel(PipelineNet from, PipelineNet to, float amount)
+        private static void MoveFuel(object fromObj, object toObj, float amount)
         {
+            PipelineNet from = (PipelineNet)fromObj;
+            PipelineNet to = (PipelineNet)toObj;
             if (!from.PullFuel(amount))
             {
                 return;
@@ -120,10 +131,11 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void SumTanks(List<CompStorageTank> tanks, out float stored, out float cap)
+        private static void SumTanks(object tanksObj, out float stored, out float cap)
         {
             stored = 0f;
             cap = 0f;
+            List<CompStorageTank> tanks = (List<CompStorageTank>)tanksObj;
             if (tanks == null)
             {
                 return;
