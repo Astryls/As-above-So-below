@@ -90,6 +90,14 @@ ABApi.RegisterExitDuty("MyGuestLeaveDuty");
 // NPCs on pocket levels holding this duty are routed to the surface and
 // given an exit-map lord, instead of pacing forever at the map edge that
 // pocket maps do not have.
+
+ABApi.RegisterNeedJobGiver("MyMod.JobGiver_GetMyNeed");
+// Cross-level satisfaction for modded needs: when your giver finds nothing
+// on the pawn's map, it re-runs virtually at each linked stairwell exit and
+// the pawn commutes on a hit. Your own think-tree gating (need thresholds,
+// chance nodes) is inherited - the hook only fires when your giver ran.
+// Register partner/facility-seeking givers, NOT solo fallbacks. Built in:
+// RJW (JoinInBed, DoQuickie) and Intimacy (GetIntimacy) when active.
 ```
 
 Soft-reference pattern (no hard dependency): resolve `AsAboveSoBelow.ABApi`

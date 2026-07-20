@@ -19,7 +19,8 @@ WATCH = plausible interaction, verify during play - INCOMPAT = declared incompat
 | Reverse Commands | EXPLICIT | Cross-level orders replay via ABPendingOrders (direct links only) |
 | Fluffy Animal Tab | EXPLICIT | Column pawns appended via RecachePawns |
 | Declutter UI | EXPLICIT | Level buttons bypass its global-controls rehost |
-| RimJobWorld (+ ~40 addons incl. animations, Sexperience, Menstruation) | OK | All interactions are same-map pawn jobs/hediffs; pocket levels are real maps with full mapPawns/lister support. No cross-map assumptions found. Verify: events addon incidents fire on surface (pocket redirect handles) |
+| RimJobWorld (+ ~40 addons incl. animations, Sexperience, Menstruation) | EXPLICIT | Sex need satisfies cross-level: JoinInBed + DoQuickie registered in the need-migration engine (assembly-verified type names); partners/beds on other levels are found via virtual scan and the pawn commutes. Solo (Masturbate) and hostile-context givers deliberately excluded. Everything else is same-map pawn state |
+| Intimacy - Friends n' Lovers (+ Gender Works) | EXPLICIT | Intimacy need satisfies cross-level: JobGiver_GetIntimacy registered (their giver system mirrors vanilla joy). Inactive in current list; registration activates with the mod |
 | Common Sense | EXPLICIT | Decompiled patch surface audited: no JobGiver_Work patch (migration safe); patches JobGiver_GetJoy.TryGiveJob - our cross-level recreation postfix runs at LOW Harmony priority so CS's joy tweaks get first refusal. Opportunistic tasks hook JobTracker (orthogonal). Bill/ingredient patches run consistently under virtual position swaps |
 | Hauler's Dream | OK | Carry capacity / move speed stat patches + own jobs; orthogonal to our separate cross-level haul work givers |
 | Smarter Construction | OK | Patches construction work giver ordering; under our virtual work scan its checks evaluate against the target map consistently (position swap is coherent). No map-keyed caches found |
@@ -65,6 +66,14 @@ Everything else in the library falls into classes with no interaction surface:
 Joy now migrates like food and rest: when the joy scan ends null on a level, the same giver re-runs
 virtually at each linked stairwell exit; if the other level offers ANY joy source, the pawn takes the
 stairs and re-rolls on arrival. 600t per-pawn retry cooldown; colonists only; lords/drafted excluded.
+
+## Modded needs engine (feature, this pass)
+
+Generalization of the joy mechanism for ANY mod-added need: registered ThinkNode_JobGiver types get
+the virtual re-scan + stairs commute when they return null. One low-priority postfix on the base
+TryIssueJobPackage (JobGiver_Work overrides it - untouched); cost with nothing registered is one
+static bool per giver evaluation. Built-in registrations: RJW, Intimacy. Public:
+ABApi.RegisterNeedJobGiver.
 
 ## Known incompatibility surface to re-check each RimWorld update
 

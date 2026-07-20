@@ -171,6 +171,22 @@ namespace AsAboveSoBelow
             return duty != null && extraExitDuties.Count > 0 && extraExitDuties.Contains(duty.defName);
         }
 
+        /// <summary>Register a ThinkNode_JobGiver type (full type name) whose
+        /// need-satisfying scan should extend across levels. When the giver
+        /// returns no job on the pawn's map, it re-runs virtually at each
+        /// linked stairwell exit; on a hit the pawn takes the stairs and the
+        /// giver re-rolls on arrival. Your think tree gating (need thresholds)
+        /// is inherited: the hook only fires when your giver was invoked.
+        /// Register partner/facility-seeking givers only - solo fallbacks
+        /// (masturbate-style) satisfy locally and would mask migration.
+        /// Built in: RJW JoinInBed/DoQuickie, Intimacy GetIntimacy.
+        /// Note: givers that override TryIssueJobPackage itself (rare) are not
+        /// covered; the hook lives on the base implementation.</summary>
+        public static void RegisterNeedJobGiver(string jobGiverFullTypeName)
+        {
+            NeedMigration.Register(jobGiverFullTypeName);
+        }
+
         // ---------- Internal raisers (fail-open: a broken subscriber can
         // never take our systems down) ----------
 
