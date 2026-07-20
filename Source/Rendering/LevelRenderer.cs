@@ -42,8 +42,12 @@ namespace AsAboveSoBelow
         public const float BelowOffset = -2.5f;
 
         /// <summary>Submeshes whose bounds sit above this are skipped (fog of war,
-        /// lighting, silhouettes, overlays); the mask mesh replaces them.</summary>
-        private const float MaxSubMeshAltitude = 2f;
+        /// lighting, silhouettes, overlays); the mask mesh replaces them. 1.6 real
+        /// altitudes: content prints span 0..7 (LowPlant 4.02, Building 5.49, Item
+        /// 6.59) and overlays start at 12+ (FogOfWar 12.07, Silhouettes 13.54), so
+        /// the boundary sits at 10. The old value 2 assumed the AltInc scale and
+        /// silently skipped every wall, plant, and item submesh.</summary>
+        private const float MaxSubMeshAltitude = 10f;
 
         private const float MaskAltitude = -0.10f;
 
@@ -159,33 +163,56 @@ namespace AsAboveSoBelow
 
         private static int belowQueueCeiling = -1;
 
-        /// <summary>The render queue vanilla terrain ACTUALLY uses, read from a
-        /// real terrain material once at runtime. Guessing this constant caused
-        /// two broken rounds: the sky map's own terrain must render after every
-        /// below-view queue, so the whole below band hangs strictly under the
-        /// measured value rather than an assumed one.</summary>
+        /// <summary>The LOWEST render queue any sky-map terrain material uses,
+        /// read from real materials once at runtime. Sampling only Soil was the
+        /// steel-tile bleed-through bug: vanilla terrain shader FAMILIES (Hard
+        /// vs FadeRough vs the floor variants) do not share one queue, and our
+        /// rooftop/mountain-top draw with the Hard family. If that family sits
+        /// below Soil's, a ceiling measured from Soil alone parks part of the
+        /// below band ABOVE the rooftop tiles, and lower-map grass, walls, and
+        /// items paint over the roof (playtest 2026-07-20). The band must hang
+        /// strictly under EVERY sky terrain material, so take the minimum over
+        /// the families we actually stand on.</summary>
         private static int BelowQueueCeiling
         {
             get
             {
                 if (belowQueueCeiling < 0)
                 {
-                    int q = 0;
-                    Material m = TerrainDefOf.Soil?.graphic?.MatSingle;
-                    if (m != null)
+                    int min = int.MaxValue;
+                    min = MinQueue(min, TerrainDefOf.Soil?.graphic?.MatSingle);
+                    min = MinQueue(min, ABDefOf.AB_RoofSurface?.graphic?.MatSingle);
+                    min = MinQueue(min, ABDefOf.AB_MountainTop?.graphic?.MatSingle);
+                    min = MinQueue(min, TerrainDefOf.MetalTile?.graphic?.MatSingle);
+                    min = MinQueue(min, TerrainDefOf.WoodPlankFloor?.graphic?.MatSingle);
+                    if (ShaderDatabase.TerrainHard != null)
                     {
-                        q = m.renderQueue;
-                        if (q <= 0 && m.shader != null)
+                        int q = ShaderDatabase.TerrainHard.renderQueue;
+                        if (q >= 500)
                         {
-                            q = m.shader.renderQueue;
+                            min = Mathf.Min(min, q);
                         }
                     }
                     // Sanity floor: with anything implausible, fall back to the
                     // Unity geometry default so the band still sits under it.
-                    belowQueueCeiling = q >= 500 ? q : 2000;
+                    belowQueueCeiling = min >= 500 && min != int.MaxValue ? min : 2000;
                 }
                 return belowQueueCeiling;
             }
+        }
+
+        private static int MinQueue(int current, Material m)
+        {
+            if (m == null)
+            {
+                return current;
+            }
+            int q = m.renderQueue;
+            if (q <= 0 && m.shader != null)
+            {
+                q = m.shader.renderQueue;
+            }
+            return q >= 500 ? Mathf.Min(current, q) : current;
         }
 
         private static readonly Dictionary<(Material, int), Material> belowMats =
@@ -241,6 +268,42 @@ namespace AsAboveSoBelow
         private static readonly List<int> jobTris = new List<int>();
         private static readonly List<Color32> jobColors = new List<Color32>();
 
+        // ---- One-run diagnostic (2026-07-20 bleed-through verification) ----
+        // Dumps the live queue layout once so the queue-family theory is proven
+        // by measured numbers, not inference. Remove after the verification run.
+        private static bool diagDumped;
+        private static int diagSamples;
+        private static readonly System.Text.StringBuilder diagSb = new System.Text.StringBuilder();
+
+        private static void DiagnosticSample(Type layerType, LayerSubMesh sub, int queue)
+        {
+            if (diagDumped || diagSamples >= 6 || layerType != typeof(SectionLayer_ThingsGeneral))
+            {
+                return;
+            }
+            diagSamples++;
+            diagSb.Append(" | things sub ").Append(sub.material != null ? sub.material.name : "null")
+                .Append(" y=").Append(sub.mesh.bounds.center.y.ToString("F2"))
+                .Append(" q=").Append(queue);
+        }
+
+        private static void DiagnosticDump(Map lower)
+        {
+            if (diagDumped)
+            {
+                return;
+            }
+            diagDumped = true;
+            Material soil = TerrainDefOf.Soil?.graphic?.MatSingle;
+            Material roof = ABDefOf.AB_RoofSurface?.graphic?.MatSingle;
+            Log.Warning(ABLog.Tag + " [diag] queue layout: soil="
+                + (soil != null ? soil.renderQueue : -1)
+                + " roofSurface=" + (roof != null ? roof.renderQueue : -1)
+                + " terrainHardShader=" + (ShaderDatabase.TerrainHard != null ? ShaderDatabase.TerrainHard.renderQueue : -1)
+                + " ceiling=" + BelowQueueCeiling
+                + diagSb);
+        }
+
         public static void DrawBelowStatic(Map map)
         {
             if (!ABGuard.On(ABGuard.Rendering) || map == null || map != Find.CurrentMap)
@@ -278,6 +341,7 @@ namespace AsAboveSoBelow
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
                 DrawSections(lower, view);
+                DiagnosticDump(lower);
                 DrawBelowMask(map, lower, view);
             }
             catch (Exception e)
@@ -327,10 +391,13 @@ namespace AsAboveSoBelow
                             // and vanilla layers them by distance sorting, which the
                             // forced low queues bypass; step the queue by altitude
                             // so plants, items, and buildings keep their painter
-                            // order inside the below view.
+                            // order inside the below view. Scale 14 spreads the real
+                            // 0..7 print range across the 0..99 headroom (the old 40
+                            // saturated everything at 99 and lost the order).
                             int queue = stepByAltitude
-                                ? baseQueue + Mathf.Clamp((int)(subY * 40f), 0, 99)
+                                ? baseQueue + Mathf.Clamp((int)(subY * 14f), 0, 99)
                                 : baseQueue;
+                            DiagnosticSample(layerType, sub, queue);
                             Material mat = BelowMaterialFor(sub.material, queue);
                             if (mat != null)
                             {
