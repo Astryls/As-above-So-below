@@ -14,20 +14,19 @@ namespace AsAboveSoBelow
     /// through the outer tile ring and the slab reads as resting on the wall
     /// line below instead of floating.
     ///
-    /// Draw order does the covering, not geometry - and it is ALTITUDE, not
-    /// a forced queue, that places the strips (round-17 regression fix): the
-    /// strips draw through their NATIVE materials via the base DrawLayer,
-    /// sharing the render queue of every other printed thing, with every
-    /// vertex flattened to the floor-emplacement altitude. RimWorld's map
-    /// shaders do not depth-write, so within one queue the GPU paints by
-    /// camera distance: the strips land above the rooftop terrain but under
-    /// every real sky-side print. The first build instead cloned materials
-    /// at measured-max-terrain-queue+1, which sorted the strips OVER a sky
-    /// wall standing on the rim - the below wall's bricks painted out the
-    /// sky wall's south face (playtest #131). Laying a sky floor replaces
-    /// the rooftop terrain and disqualifies the cell outright. The below
-    /// -things band is untouched: rooftop opacity-by-construction still
-    /// holds - this layer only ever paints ON TOP of the roof.
+    /// Draw order does the covering, not geometry: the strips draw through
+    /// clones forced into the mountain cap's proven queue window - strictly
+    /// above every terrain family, HARD-CLAMPED below the cutout family
+    /// (LevelRenderer.WallRevealQueue) - so the steel tile underdraws them
+    /// and sky walls, doors, and furniture always draw over them. Within-
+    /// queue tricks DO NOT work and were tried twice (#131 EdgeShadow
+    /// -poisoned measurement without the clamp; #132 native materials +
+    /// flattened altitude - map shaders do not depth-write, so same-queue
+    /// order is effective submission order and this layer draws after the
+    /// things layer). Laying a sky floor replaces the rooftop terrain and
+    /// disqualifies the cell outright. The below-things band is untouched:
+    /// rooftop opacity-by-construction still holds - this layer only ever
+    /// paints ON TOP of the roof.
     ///
     /// Clipping happens at print time on the freshly appended quads
     /// (PrintPlane structure: 4 verts / 4 Vector3 uvs / 4 colors / 6 tris
@@ -63,9 +62,10 @@ namespace AsAboveSoBelow
         private readonly List<Vector3> qUvs = new List<Vector3>();
         private readonly List<Color32> qCols = new List<Color32>();
 
-        /// <summary>Flattened altitude for every strip vertex: above terrain
-        /// (y=0), below every real print altitude (plants 4+, buildings 5.5),
-        /// so camera-distance sorting inside the shared queue does the rest.</summary>
+        /// <summary>Flattened altitude for every strip vertex (the floor
+        /// -emplacement plane, same as the mountain cap's quads). Ordering
+        /// comes from the forced queue, never from altitude; the flatten just
+        /// keeps the strip mesh out of dynamic-content altitude ranges.</summary>
         private float stripAltitude;
 
         public override void Regenerate()
@@ -415,7 +415,27 @@ namespace AsAboveSoBelow
                 Color32.Lerp(qCols[i00], qCols[i10], s),
                 Color32.Lerp(qCols[i01], qCols[i11], s), t));
         }
+
+        /// <summary>Draws through clones forced into the measured over
+        /// -terrain queue window. Never native materials: within one queue,
+        /// non-depth-writing map shaders paint in effective submission order,
+        /// and this layer draws after the section's things layer - native
+        /// strips overpainted the sky rim wall's face (#132).</summary>
+        public override void DrawLayer()
+        {
+            if (!Visible)
+            {
+                return;
+            }
+            List<LayerSubMesh> subs = subMeshes;
+            for (int i = 0; i < subs.Count; i++)
+            {
+                LayerSubMesh sub = subs[i];
+                if (sub.finalized && !sub.disabled)
+                {
+                    LevelRenderer.DrawWallRevealSubMesh(sub);
+                }
+            }
+        }
     }
 }
-// The base DrawLayer draws the strips natively at identity - no override
-// needed: the altitude flatten above is the entire ordering mechanism.
