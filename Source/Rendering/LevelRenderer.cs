@@ -480,6 +480,11 @@ namespace AsAboveSoBelow
             return q >= 500 ? Mathf.Max(current, q) : current;
         }
 
+        /// <summary>One-shot diagnostic accessors (run #133 investigation).</summary>
+        internal static int DiagWallRevealQueue => WallRevealQueue;
+
+        internal static int DiagBelowQueueCeiling => BelowQueueCeiling;
+
         /// <summary>Identity draw for one rim-reveal submesh through its clone
         /// in the measured over-terrain window.</summary>
         internal static void DrawWallRevealSubMesh(LayerSubMesh sub)
