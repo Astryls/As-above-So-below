@@ -23,7 +23,9 @@ namespace AsAboveSoBelow
         public bool crossLevelWork = true;
         public bool idleReturnHome = true;
         public bool crossLevelHauling = true;
+        public bool crossLevelSupply = true;
         public bool crossLevelNeeds = true;
+        public bool crossLevelPrisoners = true;
         public bool crossLevelPipes = true;
         public bool crossLevelTemperature = true;
         public bool threatBasementInfest;
@@ -39,7 +41,9 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_CrossLevelWork".Translate(), ref crossLevelWork, "AB_CrossLevelWorkTip".Translate());
             listing.CheckboxLabeled("AB_IdleReturnHome".Translate(), ref idleReturnHome, "AB_IdleReturnHomeTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
+            listing.CheckboxLabeled("AB_CrossLevelSupply".Translate(), ref crossLevelSupply, "AB_CrossLevelSupplyTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelNeeds".Translate(), ref crossLevelNeeds, "AB_CrossLevelNeedsTip".Translate());
+            listing.CheckboxLabeled("AB_CrossLevelPrisoners".Translate(), ref crossLevelPrisoners, "AB_CrossLevelPrisonersTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelPipes".Translate(), ref crossLevelPipes, "AB_CrossLevelPipesTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelTemperature".Translate(), ref crossLevelTemperature, "AB_CrossLevelTemperatureTip".Translate());
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
@@ -147,7 +151,9 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
             Scribe_Values.Look(ref idleReturnHome, "idleReturnHome", true);
             Scribe_Values.Look(ref crossLevelHauling, "crossLevelHauling", true);
+            Scribe_Values.Look(ref crossLevelSupply, "crossLevelSupply", true);
             Scribe_Values.Look(ref crossLevelNeeds, "crossLevelNeeds", true);
+            Scribe_Values.Look(ref crossLevelPrisoners, "crossLevelPrisoners", true);
             Scribe_Values.Look(ref crossLevelPipes, "crossLevelPipes", true);
             Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
             Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);

@@ -13,6 +13,7 @@ namespace AsAboveSoBelow
         public static JobDef AB_HaulAcrossLevels;
         public static JobDef AB_RescueAcrossLevels;
         public static JobDef AB_CaptureAcrossLevels;
+        public static JobDef AB_TakePrisonerAcrossLevels;
 
         public static MapGeneratorDef AB_Basement;
         public static MapGeneratorDef AB_Sky;

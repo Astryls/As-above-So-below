@@ -29,6 +29,19 @@
   </WorkGiverDef>
 
   <WorkGiverDef>
+    <defName>AB_WardenTakeToBedAcrossLevels</defName>
+    <label>take prisoners to cells on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABWardenTakeToBedAcrossLevels</giverClass>
+    <workType>Warden</workType>
+    <verb>take</verb>
+    <gerund>taking to a cell</gerund>
+    <priorityInType>85</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
     <defName>AB_FetchFromOtherLevels</defName>
     <label>fetch things from other levels</label>
     <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>

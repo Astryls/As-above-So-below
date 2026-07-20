@@ -125,7 +125,8 @@ namespace AsAboveSoBelow
     {
         Auto,
         Rescue,
-        Capture
+        Capture,
+        Imprison
     }
 
     /// <summary>Shared pawn transfer through a linked stairwell, with carried
@@ -346,6 +347,16 @@ namespace AsAboveSoBelow
                         bed = RestUtility.FindBedFor(victim, p, checkSocialProperness: false,
                             ignoreOtherReservations: false, GuestStatus.Prisoner);
                         continuation = JobDefOf.Capture;
+                    }
+                    else if (intent == CarriedIntent.Imprison)
+                    {
+                        // Already a prisoner: tuck them into the linked-level cell
+                        // with the vanilla warden jobs (escort awake, carry wounded).
+                        bed = RestUtility.FindBedFor(victim, p, checkSocialProperness: false,
+                            ignoreOtherReservations: false, GuestStatus.Prisoner);
+                        continuation = victim.Downed
+                            ? JobDefOf.TakeWoundedPrisonerToBed
+                            : JobDefOf.EscortPrisonerToBed;
                     }
                     else if (intent == CarriedIntent.Rescue
                         || (victim.Downed && victim.Faction == p.Faction))
