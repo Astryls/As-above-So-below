@@ -17,44 +17,49 @@ namespace AsAboveSoBelow
     /// </summary>
     internal static class ThreatDivert
     {
-        /// <summary>The basement to divert a surface infestation into, or null
-        /// when the roll, the settings, or the map disqualify it.</summary>
-        public static Map InfestationTarget(IncidentParms parms)
+        /// <summary>Whether the column's basement can host an infestation for
+        /// this surface target: settings on, basement alive, insects exist,
+        /// hive cap not reached, and a valid infestation cell down there (the
+        /// worker spawns with spawnAnywhereIfNoGoodCell false). No chance roll
+        /// here - CanFireNow must be deterministic.</summary>
+        public static bool BasementInfestationEligible(IncidentParms parms, out Map basement, out Map surface)
         {
+            basement = null;
+            surface = null;
             if (!ABGuard.On(ABGuard.Threats))
             {
-                return null;
+                return false;
             }
             ABSettings settings = ABMod.Settings;
             if (settings == null || !settings.threatBasementInfest)
             {
-                return null;
+                return false;
             }
             if (!(parms.target is Map map) || map.Disposed || !map.IsPlayerHome)
             {
-                return null;
+                return false;
             }
             LevelComp comp = map.Levels();
             if (comp == null || comp.level != 0)
             {
-                return null;
+                return false;
             }
-            Map basement = comp.lowerMap;
-            if (basement == null || basement.Disposed)
+            Map lower = comp.lowerMap;
+            if (lower == null || lower.Disposed)
             {
-                return null;
+                return false;
             }
-            if (!Rand.Chance(settings.threatDivertChance))
+            if (Faction.OfInsects == null || HiveUtility.TotalSpawnedHivesCount(lower) >= 30)
             {
-                return null;
+                return false;
             }
-            // The worker spawns tunnels with spawnAnywhereIfNoGoodCell false;
-            // only divert when the basement genuinely supports an infestation.
-            if (!InfestationCellFinder.TryFindCell(out IntVec3 _, basement))
+            if (!InfestationCellFinder.TryFindCell(out IntVec3 _, lower))
             {
-                return null;
+                return false;
             }
-            return basement;
+            surface = map;
+            basement = lower;
+            return true;
         }
 
         /// <summary>The sky level to divert a hostile drop-pod raid onto, or
@@ -116,9 +121,35 @@ namespace AsAboveSoBelow
         }
     }
 
+    /// <summary>Let infestations FIRE when only the basement qualifies. On a
+    /// surface without overhead mountain (most colonies), vanilla CanFireNow
+    /// rejects the incident outright and the basement opt-in would never see
+    /// action; with the toggle on, a valid basement counts as infestation
+    /// ground for the surface target.</summary>
+    [HarmonyPatch(typeof(IncidentWorker_Infestation), "CanFireNowSub")]
+    internal static class Patch_Infestation_CanFire
+    {
+        private static void Postfix(IncidentParms parms, ref bool __result)
+        {
+            try
+            {
+                if (!__result && ThreatDivert.BasementInfestationEligible(parms, out Map _, out Map _))
+                {
+                    __result = true;
+                }
+            }
+            catch (System.Exception e)
+            {
+                ABGuard.Disable(ABGuard.Threats, e, "infestation can-fire");
+            }
+        }
+    }
+
     /// <summary>Divert surface infestations into the basement level. Prefix on
     /// the worker, so storyteller selection and points ran against the surface
-    /// as usual; only the map the tunnels spawn on changes.</summary>
+    /// as usual; only the map the tunnels spawn on changes. Forced (no roll)
+    /// when the surface itself has no valid infestation cell - in that case
+    /// the incident only fired because the basement qualified.</summary>
     [HarmonyPatch(typeof(IncidentWorker_Infestation), "TryExecuteWorker")]
     internal static class Patch_Infestation_Divert
     {
@@ -126,11 +157,16 @@ namespace AsAboveSoBelow
         {
             try
             {
-                Map basement = ThreatDivert.InfestationTarget(parms);
-                if (basement != null)
+                if (!ThreatDivert.BasementInfestationEligible(parms, out Map basement, out Map surface))
+                {
+                    return;
+                }
+                bool surfaceValid = InfestationCellFinder.TryFindCell(out IntVec3 _, surface);
+                if (!surfaceValid || Rand.Chance(ABMod.Settings.threatDivertChance))
                 {
                     parms.target = basement;
-                    ABLog.Dev("Diverted infestation to basement map " + basement.uniqueID + ".");
+                    ABLog.Dev("Diverted infestation to basement map " + basement.uniqueID
+                        + (surfaceValid ? " (roll)." : " (surface has no valid cell)."));
                 }
             }
             catch (System.Exception e)

@@ -44,6 +44,9 @@
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
   <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
+  <AB_RemoveLink>Remove</AB_RemoveLink>
+  <AB_RemoveLinkDesc>Mark this for removal. A builder will deconstruct it, which also removes the linked end on the other level. Vertical links cannot be damaged, so this is the only way to get rid of them.</AB_RemoveLinkDesc>
+  <AB_RemoveQueued>Already marked for removal.</AB_RemoveQueued>
   <AB_ColumnWealth>Raids scale with whole-column wealth</AB_ColumnWealth>
   <AB_ColumnWealthTip>The storyteller counts wealth and pawns on all your levels, not just the surface. Prevents hiding wealth from raid scaling in the basement. Recommended on for honest difficulty.</AB_ColumnWealthTip>
   <AB_WorldIntegration>World integration</AB_WorldIntegration>
