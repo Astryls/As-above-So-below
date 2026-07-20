@@ -24,6 +24,8 @@
   <AB_BelowDimTip>How much the view of the level below is darkened when seen from above.</AB_BelowDimTip>
   <AB_BelowDepthShift>Below view depth offset</AB_BelowDepthShift>
   <AB_BelowDepthShiftTip>Shifts the whole view of the level below slightly down-screen so elevated platforms and walls read as raised instead of painted onto the ground. Measured in cells; 0 restores exact alignment.</AB_BelowDepthShiftTip>
+  <AB_SlabEdge>Draw roof slab edges</AB_SlabEdge>
+  <AB_SlabEdgeTip>Rooftops, sky floors, and landings show a dark side face along edges that border open air, so upper stories read as slabs stacked on the story below. The south face height follows the below view depth offset.</AB_SlabEdgeTip>
   <AB_BelowParallax>Below view parallax</AB_BelowParallax>
   <AB_BelowParallaxTip>The level below drifts slightly against the camera as you pan, mimicking real perspective depth. Purely visual; a stronger depth illusion at the cost of a little roof edge misalignment near the screen edges.</AB_BelowParallaxTip>
   <AB_BelowParallaxStrength>Parallax strength</AB_BelowParallaxStrength>

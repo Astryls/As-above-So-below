@@ -51,6 +51,14 @@ namespace AsAboveSoBelow
 
         private const float MaskAltitude = -0.10f;
 
+        /// <summary>Skirt quads sit slightly above the mask plane; render
+        /// queues do the real ordering, the altitude only avoids z-fighting.</summary>
+        private const float SkirtAltitude = -0.05f;
+
+        /// <summary>Width of the thin ledge outline on east/west slab edges and
+        /// the minimum south face height when the depth shift slider sits at 0.</summary>
+        private const float SkirtLedgeWidth = 0.08f;
+
         private const int MaskRebuildIntervalFrames = 15;
 
         /// <summary>Cells of padding around the view so panning does not force a
@@ -332,6 +340,24 @@ namespace AsAboveSoBelow
         private static readonly List<int> maskTris = new List<int>();
         private static readonly List<Color32> maskColors = new List<Color32>();
 
+        // Slab-edge skirt: dark side faces along rooftop/air borders so upper
+        // stories read as slabs stacked on the story below (the "stacked"
+        // look, user-directed 2026-07-20). South-facing edges get a face whose
+        // height matches the fixed depth shift - together they form one
+        // coherent 2.5D extrusion: the shift moves the ground south by exactly
+        // the strip the face covers, so no terrain is doubled or lost at the
+        // seam. East/west edges get a thin outline; north edges need nothing
+        // (the slab top occludes its own far side). Mountain-cap borders are
+        // excluded so the layered mountain edge keeps its verified look.
+        // Geometry rebuilds inside the existing mask job (same inputs, same
+        // cadence) and draws at IDENTITY - the skirt is sky-anchored slab
+        // geometry, not below content - though the mask still dims it like
+        // the rest of the hole, which reads as natural side-face shading.
+        private static Mesh skirtMesh;
+        private static Material skirtMat;
+        private static readonly List<Vector3> skirtVerts = new List<Vector3>();
+        private static readonly List<int> skirtTris = new List<int>();
+
         // Async mask lane. The worker reads live terrain and fog grids - object
         // reference and bool reads are atomic, and a torn read only mis-dims a
         // cell until the next rebuild (cosmetic, self-correcting), so no
@@ -346,6 +372,9 @@ namespace AsAboveSoBelow
         private static readonly List<Vector3> jobVerts = new List<Vector3>();
         private static readonly List<int> jobTris = new List<int>();
         private static readonly List<Color32> jobColors = new List<Color32>();
+        private static readonly List<Vector3> jobSkirtVerts = new List<Vector3>();
+        private static readonly List<int> jobSkirtTris = new List<int>();
+        private static float maskJobSkirtSouth = -1f;
 
         /// <summary>Forced-queue draw for one printed below-view submesh
         /// (SectionLayer_ABBelowThings): same band as the cloned layers,
@@ -479,6 +508,18 @@ namespace AsAboveSoBelow
                     color = Color.white
                 };
             }
+            if (skirtMat == null)
+            {
+                // Solid dark steel, forced above every below-band queue but
+                // under the sky map's own terrain: below things never overdraw
+                // the face, rooftop tiles always do.
+                skirtMat = new Material(ShaderDatabase.Transparent)
+                {
+                    mainTexture = BaseContent.WhiteTex,
+                    color = new Color(0.16f, 0.17f, 0.19f, 1f),
+                    renderQueue = Mathf.Max(BelowQueueCeiling - 60, 1)
+                };
+            }
             TryApplyMaskJob();
             int frame = Time.frameCount;
             bool viewContained = maskMesh != null
@@ -507,6 +548,10 @@ namespace AsAboveSoBelow
             {
                 Graphics.DrawMesh(maskMesh, Matrix4x4.identity, maskMat, 0);
             }
+            if (skirtMesh != null && skirtMesh.vertexCount > 0)
+            {
+                Graphics.DrawMesh(skirtMesh, Matrix4x4.identity, skirtMat, 0);
+            }
         }
 
         private static void StartMaskJob(Map sky, Map lower, CellRect rect)
@@ -528,12 +573,15 @@ namespace AsAboveSoBelow
             int sizeZ = sky.Size.z;
             float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
             int step = NextMaskStep(rect);
+            maskJobSkirtSouth = CurrentSkirtSouth();
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
                     BuildMaskBuffers(skyTerrain, lowerFog, sizeX, sizeZ, maskJobRect, step,
                         (byte)(255f * baseDim), jobVerts, jobTris, jobColors);
+                    BuildSkirtBuffers(skyTerrain, sizeX, sizeZ, maskJobRect, maskJobSkirtSouth,
+                        jobSkirtVerts, jobSkirtTris);
                 }
                 catch (Exception e)
                 {
@@ -569,6 +617,7 @@ namespace AsAboveSoBelow
                 maskMesh.SetTriangles(jobTris, 0);
                 maskMesh.RecalculateBounds();
             }
+            UploadSkirt(jobSkirtVerts, jobSkirtTris);
             maskLastRect = maskJobRect;
             maskLastLowerId = maskJobLowerId;
         }
@@ -620,6 +669,9 @@ namespace AsAboveSoBelow
                 maskMesh.SetTriangles(maskTris, 0);
                 maskMesh.RecalculateBounds();
             }
+            BuildSkirtBuffers(sky.terrainGrid, sky.Size.x, sky.Size.z, rect,
+                CurrentSkirtSouth(), skirtVerts, skirtTris);
+            UploadSkirt(skirtVerts, skirtTris);
         }
 
         /// <summary>Pure buffer build shared by the sync path (main thread) and
@@ -679,6 +731,113 @@ namespace AsAboveSoBelow
                     tris.Add(vi + 3);
                 }
             }
+        }
+
+        /// <summary>South face height for the slab skirt this rebuild: the
+        /// depth shift value (so shift and face compose into one extrusion),
+        /// floored at the ledge width by the builder so the toggle still
+        /// outlines edges when the shift slider sits at 0. Negative = off.</summary>
+        private static float CurrentSkirtSouth()
+        {
+            ABSettings settings = ABMod.Settings;
+            if (settings != null && !settings.drawSlabEdge)
+            {
+                return -1f;
+            }
+            return Mathf.Clamp(settings?.belowDepthShift ?? 0.25f, 0f, 1f);
+        }
+
+        private static void EnsureSkirtMesh()
+        {
+            if (skirtMesh == null)
+            {
+                skirtMesh = new Mesh
+                {
+                    name = "AB_SlabSkirt",
+                    indexFormat = IndexFormat.UInt32
+                };
+            }
+        }
+
+        private static void UploadSkirt(List<Vector3> verts, List<int> tris)
+        {
+            EnsureSkirtMesh();
+            skirtMesh.Clear();
+            if (verts.Count > 0)
+            {
+                skirtMesh.SetVertices(verts);
+                skirtMesh.SetTriangles(tris, 0);
+                skirtMesh.RecalculateBounds();
+            }
+        }
+
+        /// <summary>Pure buffer build for the slab-edge skirt; worker-safe for
+        /// the same reason the mask build is (terrain reads are atomic and a
+        /// torn read self-corrects next rebuild). Iterates AIR cells and emits
+        /// a south-facing face when the north neighbor is slab, plus thin
+        /// outlines against east/west slabs. Slab = any sky terrain that is
+        /// neither open air nor mountain cap (rooftop, built floors, landing
+        /// platforms), matching the mask's own solidity rule.</summary>
+        private static void BuildSkirtBuffers(TerrainGrid skyTerrain, int sizeX, int sizeZ,
+            CellRect rect, float southFace, List<Vector3> verts, List<int> tris)
+        {
+            verts.Clear();
+            tris.Clear();
+            if (southFace < 0f)
+            {
+                return;
+            }
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            TerrainDef cap = ABDefOf.AB_MountainTop;
+            float face = Mathf.Max(southFace, SkirtLedgeWidth);
+            int minX = Mathf.Max(rect.minX, 0);
+            int maxX = Mathf.Min(rect.maxX, sizeX - 1);
+            int minZ = Mathf.Max(rect.minZ, 0);
+            int maxZ = Mathf.Min(rect.maxZ, sizeZ - 1);
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    if (skyTerrain.TerrainAt(new IntVec3(x, 0, z)) != air)
+                    {
+                        continue;
+                    }
+                    if (z + 1 < sizeZ && IsSlab(skyTerrain, x, z + 1, air, cap))
+                    {
+                        AddSkirtQuad(verts, tris, x, x + 1f, z + 1f - face, z + 1f);
+                    }
+                    if (x + 1 < sizeX && IsSlab(skyTerrain, x + 1, z, air, cap))
+                    {
+                        AddSkirtQuad(verts, tris, x + 1f - SkirtLedgeWidth, x + 1f, z, z + 1f);
+                    }
+                    if (x - 1 >= 0 && IsSlab(skyTerrain, x - 1, z, air, cap))
+                    {
+                        AddSkirtQuad(verts, tris, x, x + SkirtLedgeWidth, z, z + 1f);
+                    }
+                }
+            }
+        }
+
+        private static bool IsSlab(TerrainGrid grid, int x, int z, TerrainDef air, TerrainDef cap)
+        {
+            TerrainDef t = grid.TerrainAt(new IntVec3(x, 0, z));
+            return t != null && t != air && t != cap;
+        }
+
+        private static void AddSkirtQuad(List<Vector3> verts, List<int> tris,
+            float x0, float x1, float z0, float z1)
+        {
+            int vi = verts.Count;
+            verts.Add(new Vector3(x0, SkirtAltitude, z0));
+            verts.Add(new Vector3(x0, SkirtAltitude, z1));
+            verts.Add(new Vector3(x1, SkirtAltitude, z1));
+            verts.Add(new Vector3(x1, SkirtAltitude, z0));
+            tris.Add(vi);
+            tris.Add(vi + 1);
+            tris.Add(vi + 2);
+            tris.Add(vi);
+            tris.Add(vi + 2);
+            tris.Add(vi + 3);
         }
 
         public static void DrawBelowDynamic(Map map)
