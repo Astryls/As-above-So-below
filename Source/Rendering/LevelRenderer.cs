@@ -424,67 +424,10 @@ namespace AsAboveSoBelow
             Graphics.DrawMesh(sub.mesh, Matrix4x4.Translate(new Vector3(0f, 0f, -south)), mat, 0);
         }
 
-        private static int wallRevealQueue = -1;
-
-        /// <summary>Queue for the rooftop rim wall-top reveal strips: above
-        /// EVERY sky terrain family (the strips must paint over the rooftop
-        /// tiles) and the ambient edge shadows, but below the cutout family so
-        /// sky walls and buildings cover them. Measured from live materials
-        /// like the mountain cap's window, MAX over the same family list
-        /// BelowQueueCeiling takes the MIN of.</summary>
-        private static int WallRevealQueue
-        {
-            get
-            {
-                if (wallRevealQueue < 0)
-                {
-                    int max = 0;
-                    max = MaxQueue(max, TerrainDefOf.Soil?.graphic?.MatSingle);
-                    max = MaxQueue(max, ABDefOf.AB_RoofSurface?.graphic?.MatSingle);
-                    max = MaxQueue(max, ABDefOf.AB_MountainTop?.graphic?.MatSingle);
-                    max = MaxQueue(max, TerrainDefOf.MetalTile?.graphic?.MatSingle);
-                    max = MaxQueue(max, TerrainDefOf.WoodPlankFloor?.graphic?.MatSingle);
-                    if (MatBases.EdgeShadow != null)
-                    {
-                        max = Mathf.Max(max, MatBases.EdgeShadow.renderQueue);
-                    }
-                    if (max < 500)
-                    {
-                        // Implausible measurement: fall back to the Unity
-                        // geometry default so the strips still sit over terrain.
-                        max = 2000;
-                    }
-                    int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : 0;
-                    wallRevealQueue = cutout > max + 1 ? Mathf.Min(max + 1, cutout - 1) : max + 1;
-                }
-                return wallRevealQueue;
-            }
-        }
-
-        private static int MaxQueue(int current, Material m)
-        {
-            if (m == null)
-            {
-                return current;
-            }
-            int q = m.renderQueue;
-            if (q <= 0 && m.shader != null)
-            {
-                q = m.shader.renderQueue;
-            }
-            return q >= 500 ? Mathf.Max(current, q) : current;
-        }
-
-        /// <summary>Identity draw for one rim-reveal submesh through its
-        /// measured over-terrain queue clone.</summary>
-        internal static void DrawWallRevealSubMesh(LayerSubMesh sub)
-        {
-            Material mat = BelowMaterialFor(sub.material, WallRevealQueue);
-            if (mat != null)
-            {
-                Graphics.DrawMesh(sub.mesh, Matrix4x4.identity, mat, 0);
-            }
-        }
+        // The rim wall-top reveal layer needs NO queue helper here: it draws
+        // through native materials with flattened vertex altitude (see
+        // SectionLayer_ABWallReveal). A measured-queue clone sorted the strips
+        // over sky walls standing on the rim (playtest #131).
 
         public static void DrawBelowStatic(Map map)
         {

@@ -14,14 +14,20 @@ namespace AsAboveSoBelow
     /// through the outer tile ring and the slab reads as resting on the wall
     /// line below instead of floating.
     ///
-    /// Draw order does the covering, not geometry: the strips render in the
-    /// same measured queue window the mountain cap uses (above every terrain
-    /// family and ambient edge shadows, below the cutout family), so the
-    /// steel tile underdraws them and anything the player builds on the rim
-    /// draws over them. Laying a sky floor replaces the rooftop terrain and
-    /// disqualifies the cell outright. The below-things band is untouched:
-    /// rooftop opacity-by-construction still holds - this layer only ever
-    /// paints ON TOP of the roof, never through it.
+    /// Draw order does the covering, not geometry - and it is ALTITUDE, not
+    /// a forced queue, that places the strips (round-17 regression fix): the
+    /// strips draw through their NATIVE materials via the base DrawLayer,
+    /// sharing the render queue of every other printed thing, with every
+    /// vertex flattened to the floor-emplacement altitude. RimWorld's map
+    /// shaders do not depth-write, so within one queue the GPU paints by
+    /// camera distance: the strips land above the rooftop terrain but under
+    /// every real sky-side print. The first build instead cloned materials
+    /// at measured-max-terrain-queue+1, which sorted the strips OVER a sky
+    /// wall standing on the rim - the below wall's bricks painted out the
+    /// sky wall's south face (playtest #131). Laying a sky floor replaces
+    /// the rooftop terrain and disqualifies the cell outright. The below
+    /// -things band is untouched: rooftop opacity-by-construction still
+    /// holds - this layer only ever paints ON TOP of the roof.
     ///
     /// Clipping happens at print time on the freshly appended quads
     /// (PrintPlane structure: 4 verts / 4 Vector3 uvs / 4 colors / 6 tris
@@ -57,6 +63,11 @@ namespace AsAboveSoBelow
         private readonly List<Vector3> qUvs = new List<Vector3>();
         private readonly List<Color32> qCols = new List<Color32>();
 
+        /// <summary>Flattened altitude for every strip vertex: above terrain
+        /// (y=0), below every real print altitude (plants 4+, buildings 5.5),
+        /// so camera-distance sorting inside the shared queue does the rest.</summary>
+        private float stripAltitude;
+
         public override void Regenerate()
         {
             ClearSubMeshes(MeshParts.All);
@@ -77,6 +88,7 @@ namespace AsAboveSoBelow
                 TerrainDef rooftop = ABDefOf.AB_RoofSurface;
                 FogGrid lowerFog = lower.fogGrid;
                 float width = Mathf.Clamp(ABMod.Settings?.wallRevealWidth ?? 0.5f, 0.15f, 0.75f);
+                stripAltitude = AltitudeLayer.FloorEmplacement.AltitudeFor();
                 bool printed = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
@@ -231,9 +243,11 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                // PrintPlane structure only: parallel arrays in quads. Anything
-                // else (a custom Print pushing bare geometry) is dropped whole.
-                if (added % 4 != 0 || sub.tris.Count - tFrom != added / 4 * 6
+                // Shadow volumes never belong in the strips (drawn as plain
+                // geometry they render solid black); PrintPlane structure
+                // only for everything else - parallel arrays in quads.
+                if (ABRimPrint.IsShadowMaterial(sub.material)
+                    || added % 4 != 0 || sub.tris.Count - tFrom != added / 4 * 6
                     || sub.uvs.Count != sub.verts.Count || sub.colors.Count != sub.verts.Count)
                 {
                     ABRimPrint.Truncate(sub, vFrom, tFrom);
@@ -354,7 +368,8 @@ namespace AsAboveSoBelow
             int vi = sub.verts.Count;
             for (int k = 0; k < 4; k++)
             {
-                sub.verts.Add(qVerts[b + k]);
+                Vector3 v = qVerts[b + k];
+                sub.verts.Add(new Vector3(v.x, stripAltitude, v.z));
                 sub.uvs.Add(qUvs[b + k]);
                 sub.colors.Add(qCols[b + k]);
             }
@@ -383,18 +398,16 @@ namespace AsAboveSoBelow
             sub.tris.Add(vi + 3);
         }
 
-        /// <summary>Bilinear sample of the source quad's per-vert altitude, uv,
-        /// and color at one clipped corner - preserves the PrintPlane north
-        /// -vert altitude bias, atlas UV sub-rects, and any vertex tinting.</summary>
+        /// <summary>Bilinear sample of the source quad's uv and color at one
+        /// clipped corner - preserves atlas UV sub-rects and vertex tinting.
+        /// Altitude is NOT sampled: every strip vertex flattens to
+        /// stripAltitude so the native-queue draw sorts under real prints.</summary>
         private void AddClippedVert(LayerSubMesh sub, int i00, int i01, int i11, int i10,
             float xMin, float xMax, float zMin, float zMax, float x, float z)
         {
             float s = (x - xMin) / (xMax - xMin);
             float t = (z - zMin) / (zMax - zMin);
-            float y = Mathf.Lerp(
-                Mathf.Lerp(qVerts[i00].y, qVerts[i10].y, s),
-                Mathf.Lerp(qVerts[i01].y, qVerts[i11].y, s), t);
-            sub.verts.Add(new Vector3(x, y, z));
+            sub.verts.Add(new Vector3(x, stripAltitude, z));
             sub.uvs.Add(Vector3.Lerp(
                 Vector3.Lerp(qUvs[i00], qUvs[i10], s),
                 Vector3.Lerp(qUvs[i01], qUvs[i11], s), t));
@@ -402,25 +415,7 @@ namespace AsAboveSoBelow
                 Color32.Lerp(qCols[i00], qCols[i10], s),
                 Color32.Lerp(qCols[i01], qCols[i11], s), t));
         }
-
-        /// <summary>Draws through queue clones in the measured over-terrain
-        /// window instead of the native cutout materials, so the strips paint
-        /// over the steel tile but under every sky-side building.</summary>
-        public override void DrawLayer()
-        {
-            if (!Visible)
-            {
-                return;
-            }
-            List<LayerSubMesh> subs = subMeshes;
-            for (int i = 0; i < subs.Count; i++)
-            {
-                LayerSubMesh sub = subs[i];
-                if (sub.finalized && !sub.disabled)
-                {
-                    LevelRenderer.DrawWallRevealSubMesh(sub);
-                }
-            }
-        }
     }
 }
+// The base DrawLayer draws the strips natively at identity - no override
+// needed: the altitude flatten above is the entire ordering mechanism.

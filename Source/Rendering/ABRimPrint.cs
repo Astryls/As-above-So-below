@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -56,6 +57,40 @@ namespace AsAboveSoBelow
                 Truncate(subs[i],
                     i < vertCounts.Count ? vertCounts[i] : 0,
                     i < triCounts.Count ? triCounts[i] : 0);
+            }
+        }
+
+        /// <summary>True for the sun shadow volume material Printer_Shadow
+        /// prints with (Graphic.Print appends the ShadowGraphic after the body
+        /// quads). Drawn as plain geometry outside the shadow screen pass it
+        /// renders as solid black shapes, so both rim layers drop it.</summary>
+        internal static bool IsShadowMaterial(Material m)
+        {
+            return m != null && m == MatBases.SunShadowFade;
+        }
+
+        /// <summary>Drops unsafe geometry a print appended: shadow volumes
+        /// (uv-less colored verts with the sun shadow fade material) and any
+        /// submesh whose parallel arrays no longer line up - a count mismatch
+        /// would poison FinalizeMesh for the whole section layer.</summary>
+        internal static void DropUnsafeNewGeometry(List<LayerSubMesh> subs,
+            List<int> vertCounts, List<int> triCounts)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                LayerSubMesh sub = subs[i];
+                int vFrom = i < vertCounts.Count ? vertCounts[i] : 0;
+                int tFrom = i < triCounts.Count ? triCounts[i] : 0;
+                if (sub.verts.Count <= vFrom)
+                {
+                    continue;
+                }
+                if (IsShadowMaterial(sub.material)
+                    || sub.uvs.Count != sub.verts.Count
+                    || sub.colors.Count != sub.verts.Count)
+                {
+                    Truncate(sub, vFrom, tFrom);
+                }
             }
         }
 

@@ -83,6 +83,13 @@ namespace AsAboveSoBelow
                     try
                     {
                         ed.Print(this);
+                        // Graphic.Print appends the thing's ShadowGraphic
+                        // volume (uv-less, sun shadow fade material). Drawn
+                        // through the facade's queue clone it renders as a
+                        // solid black slab and its count mismatch would
+                        // poison FinalizeMesh - drop it and anything else
+                        // malformed (playtest #131, the black borders).
+                        ABRimPrint.DropUnsafeNewGeometry(subMeshes, vertsBefore, trisBefore);
                         printed = true;
                     }
                     catch (Exception e)
