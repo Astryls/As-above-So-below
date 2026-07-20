@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Vertical resource ducts exist only when the Vanilla Expanded Framework
+       is loaded. One duct bridges EVERY VEF pipe resource generically (Vanilla
+       Pipes Expanded, Helixien gas, Vanilla Temperature Expanded AC, and any
+       other PipeNetDef): nets of the same resource touching the duct's cell or
+       a cardinal neighbor on both levels connect as if they were one - unmet
+       demand is served straight from the far side's production and storage
+       through PipeSystem's own injection hooks, so no tank is needed on either
+       level. The duct itself carries no VEF comps; run any pipe up to (or
+       under) the shaft. -->
+  <Operation Class="PatchOperationFindMod">
+    <mods>
+      <li>Vanilla Expanded Framework</li>
+    </mods>
+    <match Class="PatchOperationAdd">
+      <xpath>/Defs</xpath>
+      <value>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalDuctDown</defName>
+          <label>vertical duct (down)</label>
+          <description>A sealed utility duct carrying piped resources to the level below. Pipe networks of the same resource touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <tickerType>Never</tickerType>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalDuctDown</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalDuctDown</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>-1</deltaLevel>
+              <counterpartDef>AB_VerticalDuctUp</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeVef>true</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalDuctUp</defName>
+          <label>vertical duct (up)</label>
+          <description>A sealed utility duct carrying piped resources to the level above. Pipe networks of the same resource touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <tickerType>Never</tickerType>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalDuctUp</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalDuctUp</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>1</deltaLevel>
+              <counterpartDef>AB_VerticalDuctDown</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeVef>true</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+      </value>
+    </match>
+  </Operation>
+
+</Patch>

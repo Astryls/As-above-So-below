@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Vertical chem pipes exist only when Rimefeller is loaded. Each shaft end
+       carries two small hidden Rimefeller tanks (oil and fuel), so the shaft
+       IS storage on both pipeline nets: derricks and crackers pump into it
+       through Rimefeller's own logic and consumers draw from it, meaning a
+       level needs no player-built tank of its own. The bridge levels oil and
+       fuel fill fractions across the pair through Rimefeller's public APIs. -->
+  <Operation Class="PatchOperationFindMod">
+    <mods>
+      <li>Rimefeller</li>
+    </mods>
+    <match Class="PatchOperationAdd">
+      <xpath>/Defs</xpath>
+      <value>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalChemPipeDown</defName>
+          <label>vertical chem pipe (down)</label>
+          <description>A sealed pipeline riser carrying oil and chemfuel to the level below. Pipeline networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: Rimefeller pipe comps expect comp ticks. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="Rimefeller.CompProperties_StorageTank">
+              <Contents>Oil</Contents>
+              <StorageCap>100</StorageCap>
+            </li>
+            <li Class="Rimefeller.CompProperties_StorageTank">
+              <Contents>Fuel</Contents>
+              <StorageCap>100</StorageCap>
+            </li>
+          </comps>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalChemPipeDown</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalChemPipeDown</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>-1</deltaLevel>
+              <counterpartDef>AB_VerticalChemPipeUp</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeChem>true</bridgeChem>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalChemPipeUp</defName>
+          <label>vertical chem pipe (up)</label>
+          <description>A sealed pipeline riser carrying oil and chemfuel to the level above. Pipeline networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: Rimefeller pipe comps expect comp ticks. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="Rimefeller.CompProperties_StorageTank">
+              <Contents>Oil</Contents>
+              <StorageCap>100</StorageCap>
+            </li>
+            <li Class="Rimefeller.CompProperties_StorageTank">
+              <Contents>Fuel</Contents>
+              <StorageCap>100</StorageCap>
+            </li>
+          </comps>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalChemPipeUp</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalChemPipeUp</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>1</deltaLevel>
+              <counterpartDef>AB_VerticalChemPipeDown</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeChem>true</bridgeChem>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+      </value>
+    </match>
+  </Operation>
+
+</Patch>

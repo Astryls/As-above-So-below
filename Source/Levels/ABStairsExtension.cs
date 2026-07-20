@@ -20,13 +20,18 @@ namespace AsAboveSoBelow
         /// path and from stairwell heat exchange (a sealed shaft).</summary>
         public bool utilityOnly;
 
-        /// <summary>Whether this link equalizes Dubs Bad Hygiene water networks
-        /// touching its cells. On for stairs and the vertical water pipe.</summary>
-        public bool bridgeWater = true;
+        /// <summary>Whether this link bridges Dubs Bad Hygiene water networks
+        /// touching its cells. Only the vertical water pipe sets this; stairs
+        /// never carry resources.</summary>
+        public bool bridgeWater;
 
-        /// <summary>Whether this link equalizes Vanilla Expanded Framework pipe
-        /// networks touching its cells. On for stairs; utility shafts are
-        /// single-purpose.</summary>
-        public bool bridgeVef = true;
+        /// <summary>Whether this link bridges Vanilla Expanded Framework pipe
+        /// networks (Vanilla Pipes Expanded, Helixien gas, Vanilla Temperature
+        /// Expanded) touching its cells. Only the vertical duct sets this.</summary>
+        public bool bridgeVef;
+
+        /// <summary>Whether this link bridges Rimefeller oil and fuel pipeline
+        /// networks. Only the vertical chem pipe sets this.</summary>
+        public bool bridgeChem;
     }
 }

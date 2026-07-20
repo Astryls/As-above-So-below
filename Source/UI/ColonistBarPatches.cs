@@ -18,6 +18,9 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(ColonistBar), "CheckRecacheEntries")]
     internal static class Patch_ColonistBar_LevelOrder
     {
+        private static readonly AccessTools.FieldRef<ColonistBar, bool> DirtyRef =
+            AccessTools.FieldRefAccess<ColonistBar, bool>("entriesDirty");
+
         private static readonly AccessTools.FieldRef<ColonistBar, List<ColonistBar.Entry>> EntriesRef =
             AccessTools.FieldRefAccess<ColonistBar, List<ColonistBar.Entry>>("cachedEntries");
 
@@ -33,9 +36,18 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<ColonistBar, ColonistBarColonistDrawer> DrawerRef =
             AccessTools.FieldRefAccess<ColonistBar, ColonistBarColonistDrawer>("drawer");
 
-        private static void Postfix(ColonistBar __instance)
+        /// <summary>CheckRecacheEntries is called every UI frame but early-outs
+        /// on a dirty flag; a plain postfix would re-sort and re-allocate every
+        /// frame regardless. Mirror the flag so the reorder runs only on frames
+        /// where vanilla actually rebuilt the entries.</summary>
+        private static void Prefix(ColonistBar __instance, out bool __state)
         {
-            if (!ABGuard.On(ABGuard.Ui))
+            __state = DirtyRef(__instance);
+        }
+
+        private static void Postfix(ColonistBar __instance, bool __state)
+        {
+            if (!__state || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }
@@ -80,15 +92,15 @@ namespace AsAboveSoBelow
                 }
                 // Sort keys: caravans (map null) last in original order; maps
                 // cluster by column ground id, then descending level within it.
-                List<int> sorted = new List<int>(groupOrder);
-                sorted.Sort((a, b) =>
+                // Keys precomputed: IndexOf inside a comparator is O(n^2).
+                Dictionary<int, long> sortKey = new Dictionary<int, long>(groupOrder.Count);
+                for (int i = 0; i < groupOrder.Count; i++)
                 {
-                    Map ma = groupMap[a];
-                    Map mb = groupMap[b];
-                    long ka = KeyFor(ma, groupOrder.IndexOf(a));
-                    long kb = KeyFor(mb, groupOrder.IndexOf(b));
-                    return ka.CompareTo(kb);
-                });
+                    int g = groupOrder[i];
+                    sortKey[g] = KeyFor(groupMap[g], i);
+                }
+                List<int> sorted = new List<int>(groupOrder);
+                sorted.Sort((a, b) => sortKey[a].CompareTo(sortKey[b]));
                 bool changed = false;
                 for (int i = 0; i < sorted.Count; i++)
                 {

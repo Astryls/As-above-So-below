@@ -28,23 +28,43 @@ namespace AsAboveSoBelow
         /// and natural-roof cells are never touched.</summary>
         public static void ReconcileRooftops(Map sky)
         {
+            // Full immediate sweep (load-time self heal, hidden by the loading
+            // screen). Periodic play-time sweeps go through the sliced form.
+            int cursor = 0;
+            while (ReconcileRooftopsSlice(sky, ref cursor, int.MaxValue))
+            {
+            }
+        }
+
+        /// <summary>Time-sliced rooftop reconciliation: processes up to
+        /// maxCells grid cells starting at the cursor and returns true while
+        /// more remain. Allocation free (direct cell index walk), so the
+        /// periodic sweep costs a bounded slice per tick instead of a
+        /// whole-map spike. Conservative by design: only ever flips between
+        /// the two terrains this mod owns (see CoveredBelow).</summary>
+        public static bool ReconcileRooftopsSlice(Map sky, ref int cursor, int maxCells)
+        {
             if (!ABGuard.On(ABGuard.RoofSync) || sky == null)
             {
-                return;
+                return false;
             }
             try
             {
                 Map ground = sky.LowerMap() ?? sky.GroundMap();
                 if (ground == null || ground.Disposed || ground == sky)
                 {
-                    return;
+                    return false;
                 }
                 TerrainGrid grid = sky.terrainGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainDef rooftop = ABDefOf.AB_RoofSurface;
+                CellIndices indices = sky.cellIndices;
+                int total = indices.NumGridCells;
+                int end = maxCells >= total - cursor ? total : cursor + maxCells;
                 int fixedCells = 0;
-                foreach (IntVec3 c in sky.AllCells)
+                for (; cursor < end; cursor++)
                 {
+                    IntVec3 c = indices.IndexToCell(cursor);
                     TerrainDef top = grid.TerrainAt(c);
                     if (top != air && top != rooftop)
                     {
@@ -69,10 +89,12 @@ namespace AsAboveSoBelow
                 {
                     ABLog.Dev("Rooftop reconciliation fixed " + fixedCells + " cell(s) on map " + sky.uniqueID + ".");
                 }
+                return cursor < total;
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.RoofSync, e, "rooftop reconciliation");
+                return false;
             }
         }
 

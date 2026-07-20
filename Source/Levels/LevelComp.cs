@@ -112,26 +112,101 @@ namespace AsAboveSoBelow
 
         private const int WeatherSyncInterval = 150;
 
-        private const int PipeBridgeInterval = 250;
+        /// <summary>Matches the VEF pipe net tick (100) so each direct
+        /// injection covers exactly one net tick window.</summary>
+        private const int PipeBridgeInterval = 100;
+
+        /// <summary>Stairwell heat exchange; slower than pipes because the
+        /// exchange constant was tuned at this cadence.</summary>
+        private const int ClimateExchangeInterval = 250;
 
         private const int SubscribeRetryInterval = 250;
 
         /// <summary>Cadence of the stuck-hostile scan on pocket levels. Gated
-        /// behind a cheap any-hostiles check, so calm maps pay one lookup.</summary>
+        /// behind a cheap any-hostiles check, so calm maps pay one lookup.
+        /// Never visibility-throttled: NPC behavior is simulation.</summary>
         private const int HostileScanInterval = 250;
 
         /// <summary>Low-frequency safety net over the event-driven rooftop sync:
-        /// a bounded whole-map sweep (~sub-millisecond) that converges the
-        /// air/rooftop state even if roof events misfire for any reason.</summary>
+        /// a time-sliced whole-map sweep that converges the air/rooftop state
+        /// even if roof events misfire for any reason.</summary>
         private const int RooftopSweepInterval = 2000;
+
+        /// <summary>Interval stretch for purely visual mirroring systems
+        /// (weather, sweep) while this map is not the one on screen. On-view
+        /// catch-up fires immediately, so the player never sees stale state.</summary>
+        private const int HiddenWeatherMultiplier = 4;
+
+        private const int HiddenSweepMultiplier = 5;
+
+        /// <summary>Cells reconciled per tick while a rooftop sweep is active;
+        /// a full 250x250 map converges in ~16 ticks with no single-tick spike.</summary>
+        private const int SweepCellsPerTick = 4096;
+
+        // Elapsed-time scheduling instead of TicksGame modulo: modulo beats are
+        // silently missed when a debug time skip, save or load, or another
+        // mod's tick throttling makes component ticks non-contiguous, and an
+        // interval that stretches while hidden needs a due-tick anyway. The
+        // dues are deliberately not scribed; after a load each fires once at
+        // its stagger offset and re-seats the cadence.
+        private int nextWeatherDue = -1;
+
+        private int nextSweepDue = -1;
+
+        private int nextHostileDue = -1;
+
+        private int nextClimateDue = -1;
+
+        private int nextPipesDue = -1;
+
+        /// <summary>Cursor of the active time-sliced rooftop sweep; -1 = idle.</summary>
+        private int sweepCursor = -1;
+
+        private bool wasVisible;
+
+        private static int Stagger(Map map, int interval) => map.uniqueID % interval;
+
+        /// <summary>Lazy-init + elapsed-time due check with a per-map stagger.</summary>
+        private bool Due(ref int due, int now, int interval)
+        {
+            if (due < 0)
+            {
+                due = now + Stagger(map, interval) + 1;
+                return false;
+            }
+            if (now < due)
+            {
+                return false;
+            }
+            due = now + interval;
+            return true;
+        }
 
         /// <summary>Sky comps sync weather from the ground; the ground comp drives
         /// pipe network bridging for every stairwell pair (each pair has one end
-        /// on the ground map under the three-level cap).</summary>
+        /// on the ground map under the three-level cap). Visual mirroring
+        /// (weather, rooftop sweep) stretches its cadence while the map is not
+        /// on screen and catches up the moment it becomes visible; simulation
+        /// (pipes, climate, hostiles) never throttles.</summary>
         public override void MapComponentTick()
         {
-            if (level != 0 && !syncSubscribed
-                && Find.TickManager.TicksGame % SubscribeRetryInterval == 0)
+            int now = Find.TickManager.TicksGame;
+            bool visible = map == Find.CurrentMap;
+            if (visible && !wasVisible)
+            {
+                // The player just switched here: sync the visual mirrors now
+                // instead of waiting out a stretched hidden-cadence window.
+                if (level == 1)
+                {
+                    nextWeatherDue = 0;
+                    if (sweepCursor < 0)
+                    {
+                        sweepCursor = 0;
+                    }
+                }
+            }
+            wasVisible = visible;
+            if (level != 0 && !syncSubscribed && now % SubscribeRetryInterval == 0)
             {
                 // FinalizeInit's subscription can bail silently when a link or
                 // the events object is not ready yet; retry until it lands so
@@ -140,7 +215,7 @@ namespace AsAboveSoBelow
                 TrySubscribeSync();
             }
             if (level != 0 && ABGuard.On(ABGuard.HostileMove)
-                && (Find.TickManager.TicksGame + (map.uniqueID % HostileScanInterval)) % HostileScanInterval == 0)
+                && Due(ref nextHostileDue, now, HostileScanInterval))
             {
                 try
                 {
@@ -153,9 +228,8 @@ namespace AsAboveSoBelow
             }
             if (level == 1)
             {
-                int now = Find.TickManager.TicksGame;
-                if (ABGuard.On(ABGuard.Weather)
-                    && (now + (map.uniqueID % WeatherSyncInterval)) % WeatherSyncInterval == 0)
+                int weatherInterval = visible ? WeatherSyncInterval : WeatherSyncInterval * HiddenWeatherMultiplier;
+                if (ABGuard.On(ABGuard.Weather) && Due(ref nextWeatherDue, now, weatherInterval))
                 {
                     try
                     {
@@ -174,19 +248,24 @@ namespace AsAboveSoBelow
                         ABGuard.Disable(ABGuard.Weather, e, "weather sync");
                     }
                 }
-                if ((now + (map.uniqueID % RooftopSweepInterval)) % RooftopSweepInterval == 0)
+                int sweepInterval = visible ? RooftopSweepInterval : RooftopSweepInterval * HiddenSweepMultiplier;
+                if (sweepCursor < 0 && Due(ref nextSweepDue, now, sweepInterval))
                 {
-                    LevelSync.ReconcileRooftops(map);
+                    sweepCursor = 0;
+                }
+                if (sweepCursor >= 0
+                    && !LevelSync.ReconcileRooftopsSlice(map, ref sweepCursor, SweepCellsPerTick))
+                {
+                    sweepCursor = -1;
                 }
             }
             else if (level == 0)
             {
-                if (stairsList == null || stairsList.Count == 0
-                    || (Find.TickManager.TicksGame + (map.uniqueID % PipeBridgeInterval)) % PipeBridgeInterval != 0)
+                if (stairsList == null || stairsList.Count == 0)
                 {
                     return;
                 }
-                if (ABGuard.On(ABGuard.Climate))
+                if (ABGuard.On(ABGuard.Climate) && Due(ref nextClimateDue, now, ClimateExchangeInterval))
                 {
                     try
                     {
@@ -197,7 +276,7 @@ namespace AsAboveSoBelow
                         ABGuard.Disable(ABGuard.Climate, e, "stairwell heat exchange");
                     }
                 }
-                if (ABGuard.On(ABGuard.Pipes))
+                if (ABGuard.On(ABGuard.Pipes) && Due(ref nextPipesDue, now, PipeBridgeInterval))
                 {
                     try
                     {

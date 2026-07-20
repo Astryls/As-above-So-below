@@ -49,5 +49,9 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\2023507013\1.6\Assemblies\PipeSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Rimefeller">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\1321849735\1.6\Assemblies\Rimefeller.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 </Project>

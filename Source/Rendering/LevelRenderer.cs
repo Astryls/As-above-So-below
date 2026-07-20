@@ -226,6 +226,21 @@ namespace AsAboveSoBelow
         private static readonly List<int> maskTris = new List<int>();
         private static readonly List<Color32> maskColors = new List<Color32>();
 
+        // Async mask lane. The worker reads live terrain and fog grids - object
+        // reference and bool reads are atomic, and a torn read only mis-dims a
+        // cell until the next rebuild (cosmetic, self-correcting), so no
+        // snapshot copy is needed. The worker owns the job buffers from start
+        // to done; the main thread uploads them into the mesh afterward. Any
+        // worker exception trips ABGuard.Async and the sync path takes over.
+        private static volatile bool maskJobRunning;
+        private static volatile bool maskJobDone;
+        private static Exception maskJobError;
+        private static CellRect maskJobRect;
+        private static int maskJobLowerId;
+        private static readonly List<Vector3> jobVerts = new List<Vector3>();
+        private static readonly List<int> jobTris = new List<int>();
+        private static readonly List<Color32> jobColors = new List<Color32>();
+
         public static void DrawBelowStatic(Map map)
         {
             if (!ABGuard.On(ABGuard.Rendering) || map == null || map != Find.CurrentMap)
@@ -351,6 +366,7 @@ namespace AsAboveSoBelow
                     color = Color.white
                 };
             }
+            TryApplyMaskJob();
             int frame = Time.frameCount;
             bool viewContained = maskMesh != null
                 && maskLastRect.Contains(new IntVec3(view.minX, 0, view.minZ))
@@ -359,10 +375,20 @@ namespace AsAboveSoBelow
                 || lower.uniqueID != maskLastLowerId)
             {
                 CellRect buildRect = view.ExpandedBy(MaskPadCells).ClipInsideMap(sky);
-                RebuildMask(sky, lower, buildRect);
-                maskLastFrame = frame;
-                maskLastRect = buildRect;
-                maskLastLowerId = lower.uniqueID;
+                if (ABGuard.On(ABGuard.Async))
+                {
+                    StartMaskJob(sky, lower, buildRect);
+                    // The stale mesh keeps drawing until the worker delivers;
+                    // the pad absorbs the pan in the meantime.
+                    maskLastFrame = frame;
+                }
+                else
+                {
+                    RebuildMask(sky, lower, buildRect);
+                    maskLastFrame = frame;
+                    maskLastRect = buildRect;
+                    maskLastLowerId = lower.uniqueID;
+                }
             }
             if (maskMesh != null && maskMesh.vertexCount > 0)
             {
@@ -370,28 +396,76 @@ namespace AsAboveSoBelow
             }
         }
 
+        private static void StartMaskJob(Map sky, Map lower, CellRect rect)
+        {
+            if (maskJobRunning)
+            {
+                return;
+            }
+            maskJobRunning = true;
+            maskJobDone = false;
+            maskJobError = null;
+            maskJobRect = rect;
+            maskJobLowerId = lower.uniqueID;
+            // Captured on the main thread; the worker touches only these locals
+            // and the job buffers.
+            TerrainGrid skyTerrain = sky.terrainGrid;
+            FogGrid lowerFog = lower.fogGrid;
+            int sizeX = sky.Size.x;
+            int sizeZ = sky.Size.z;
+            float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
+            int step = NextMaskStep(rect);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    BuildMaskBuffers(skyTerrain, lowerFog, sizeX, sizeZ, maskJobRect, step,
+                        (byte)(255f * baseDim), jobVerts, jobTris, jobColors);
+                }
+                catch (Exception e)
+                {
+                    maskJobError = e;
+                }
+                finally
+                {
+                    maskJobDone = true;
+                }
+            });
+        }
+
+        /// <summary>Main thread: upload a finished worker result into the mask
+        /// mesh, or trip the async guard if the worker faulted.</summary>
+        private static void TryApplyMaskJob()
+        {
+            if (!maskJobRunning || !maskJobDone)
+            {
+                return;
+            }
+            maskJobRunning = false;
+            if (maskJobError != null)
+            {
+                ABGuard.Disable(ABGuard.Async, maskJobError, "async mask build");
+                return;
+            }
+            EnsureMaskMesh();
+            maskMesh.Clear();
+            if (jobVerts.Count > 0)
+            {
+                maskMesh.SetVertices(jobVerts);
+                maskMesh.SetColors(jobColors);
+                maskMesh.SetTriangles(jobTris, 0);
+                maskMesh.RecalculateBounds();
+            }
+            maskLastRect = maskJobRect;
+            maskLastLowerId = maskJobLowerId;
+        }
+
         private static int maskLastStep = 1;
 
-        private static void RebuildMask(Map sky, Map lower, CellRect rect)
+        /// <summary>Resolution switches use hysteresis so zooming near the
+        /// threshold does not pop between block sizes. Main thread only.</summary>
+        private static int NextMaskStep(CellRect rect)
         {
-            if (maskMesh == null)
-            {
-                maskMesh = new Mesh
-                {
-                    name = "AB_BelowMask",
-                    indexFormat = IndexFormat.UInt32
-                };
-            }
-            maskVerts.Clear();
-            maskTris.Clear();
-            maskColors.Clear();
-            float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
-            byte dimAlpha = (byte)(255f * baseDim);
-            TerrainGrid skyTerrain = sky.terrainGrid;
-            TerrainDef air = ABDefOf.AB_OpenAir;
-            FogGrid lowerFog = lower.fogGrid;
-            // Resolution switches use hysteresis so zooming near the threshold does
-            // not pop between block sizes.
             int step = maskLastStep;
             if (step == 1 && rect.Width > 150)
             {
@@ -402,13 +476,55 @@ namespace AsAboveSoBelow
                 step = 1;
             }
             maskLastStep = step;
+            return step;
+        }
+
+        private static void EnsureMaskMesh()
+        {
+            if (maskMesh == null)
+            {
+                maskMesh = new Mesh
+                {
+                    name = "AB_BelowMask",
+                    indexFormat = IndexFormat.UInt32
+                };
+            }
+        }
+
+        /// <summary>Synchronous rebuild: build into the shared buffers and
+        /// upload immediately. Fallback path when the async lane is off.</summary>
+        private static void RebuildMask(Map sky, Map lower, CellRect rect)
+        {
+            EnsureMaskMesh();
+            float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
+            BuildMaskBuffers(sky.terrainGrid, lower.fogGrid, sky.Size.x, sky.Size.z, rect,
+                NextMaskStep(rect), (byte)(255f * baseDim), maskVerts, maskTris, maskColors);
+            maskMesh.Clear();
+            if (maskVerts.Count > 0)
+            {
+                maskMesh.SetVertices(maskVerts);
+                maskMesh.SetColors(maskColors);
+                maskMesh.SetTriangles(maskTris, 0);
+                maskMesh.RecalculateBounds();
+            }
+        }
+
+        /// <summary>Pure buffer build shared by the sync path (main thread) and
+        /// the async lane (worker). Touches nothing but the passed grids and
+        /// output lists; must stay free of Unity API calls.</summary>
+        private static void BuildMaskBuffers(TerrainGrid skyTerrain, FogGrid lowerFog,
+            int sizeX, int sizeZ, CellRect rect, int step, byte dimAlpha,
+            List<Vector3> verts, List<int> tris, List<Color32> colors)
+        {
+            verts.Clear();
+            tris.Clear();
+            colors.Clear();
+            TerrainDef air = ABDefOf.AB_OpenAir;
             // Anchor the sampling grid to world coordinates so blocks stay put
             // while the camera pans; a view-anchored grid shifts a cell whenever
             // the view edge parity flips, which reads as jitter.
             int startX = rect.minX - (((rect.minX % step) + step) % step);
             int startZ = rect.minZ - (((rect.minZ % step) + step) % step);
-            int sizeX = sky.Size.x;
-            int sizeZ = sky.Size.z;
             for (int x = startX; x <= rect.maxX; x += step)
             {
                 for (int z = startZ; z <= rect.maxZ; z += step)
@@ -424,7 +540,7 @@ namespace AsAboveSoBelow
                     // the constant depth dim. Natural day-night shading arrives
                     // for free through the shared shader globals.
                     byte a = lowerFog.IsFogged(c) ? (byte)255 : dimAlpha;
-                    int vi = maskVerts.Count;
+                    int vi = verts.Count;
                     float x0 = Mathf.Max(x, 0);
                     float z0 = Mathf.Max(z, 0);
                     float x1 = Mathf.Min(x + step, sizeX);
@@ -433,30 +549,22 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    maskVerts.Add(new Vector3(x0, MaskAltitude, z0));
-                    maskVerts.Add(new Vector3(x0, MaskAltitude, z1));
-                    maskVerts.Add(new Vector3(x1, MaskAltitude, z1));
-                    maskVerts.Add(new Vector3(x1, MaskAltitude, z0));
+                    verts.Add(new Vector3(x0, MaskAltitude, z0));
+                    verts.Add(new Vector3(x0, MaskAltitude, z1));
+                    verts.Add(new Vector3(x1, MaskAltitude, z1));
+                    verts.Add(new Vector3(x1, MaskAltitude, z0));
                     Color32 col = new Color32(0, 0, 0, a);
-                    maskColors.Add(col);
-                    maskColors.Add(col);
-                    maskColors.Add(col);
-                    maskColors.Add(col);
-                    maskTris.Add(vi);
-                    maskTris.Add(vi + 1);
-                    maskTris.Add(vi + 2);
-                    maskTris.Add(vi);
-                    maskTris.Add(vi + 2);
-                    maskTris.Add(vi + 3);
+                    colors.Add(col);
+                    colors.Add(col);
+                    colors.Add(col);
+                    colors.Add(col);
+                    tris.Add(vi);
+                    tris.Add(vi + 1);
+                    tris.Add(vi + 2);
+                    tris.Add(vi);
+                    tris.Add(vi + 2);
+                    tris.Add(vi + 3);
                 }
-            }
-            maskMesh.Clear();
-            if (maskVerts.Count > 0)
-            {
-                maskMesh.SetVertices(maskVerts);
-                maskMesh.SetColors(maskColors);
-                maskMesh.SetTriangles(maskTris, 0);
-                maskMesh.RecalculateBounds();
             }
         }
 

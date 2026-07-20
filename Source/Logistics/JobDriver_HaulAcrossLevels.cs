@@ -11,7 +11,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public class JobDriver_HaulAcrossLevels : JobDriver
     {
-        private const int ClimbTicks = 90;
+        private const int ClimbTicks = Building_ABStairs.BaseClimbTicks;
 
         private Building_ABStairs Stairs => job.GetTarget(TargetIndex.B).Thing as Building_ABStairs;
 

@@ -33,16 +33,15 @@
     <statBases>
       <WorkToBuild>1000</WorkToBuild>
     </statBases>
-    <!-- Normal ticker: the power bridge equalizes in CompTick. -->
+    <!-- Normal ticker: the direct grid link recomputes flow in CompTick. -->
     <tickerType>Normal</tickerType>
     <researchPrerequisites>
       <li>Electricity</li>
     </researchPrerequisites>
     <comps>
-      <li Class="CompProperties_Battery">
-        <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
-        <storedEnergyMax>1000</storedEnergyMax>
-        <efficiency>1.0</efficiency>
+      <li Class="CompProperties_Power">
+        <compClass>AsAboveSoBelow.CompABGridLink</compClass>
+        <basePowerConsumption>0</basePowerConsumption>
         <transmitsPower>true</transmitsPower>
       </li>
     </comps>
@@ -63,8 +62,6 @@
         <deltaLevel>-1</deltaLevel>
         <counterpartDef>AB_VerticalConduitUp</counterpartDef>
         <utilityOnly>true</utilityOnly>
-        <bridgeWater>false</bridgeWater>
-        <bridgeVef>false</bridgeVef>
       </li>
     </modExtensions>
   </ThingDef>
@@ -84,8 +81,6 @@
         <deltaLevel>1</deltaLevel>
         <counterpartDef>AB_VerticalConduitDown</counterpartDef>
         <utilityOnly>true</utilityOnly>
-        <bridgeWater>false</bridgeWater>
-        <bridgeVef>false</bridgeVef>
       </li>
     </modExtensions>
   </ThingDef>

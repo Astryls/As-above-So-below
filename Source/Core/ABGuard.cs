@@ -41,10 +41,14 @@ namespace AsAboveSoBelow
         public static readonly ABGuardSwitch HostileMove = new ABGuardSwitch("hostileMove");
         public static readonly ABGuardSwitch World = new ABGuardSwitch("world");
 
+        /// <summary>Background-thread compute lanes (see-below mask build).
+        /// Tripping this falls back to synchronous rebuilds, never off.</summary>
+        public static readonly ABGuardSwitch Async = new ABGuardSwitch("async");
+
         private static readonly ABGuardSwitch[] All =
         {
             Ui, LevelGen, Rendering, Movement, Logistics, RoofSync, Weather, Power, Pipes, Climate,
-            Threats, HostileMove, World
+            Threats, HostileMove, World, Async
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;

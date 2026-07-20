@@ -28,7 +28,7 @@ namespace AsAboveSoBelow
         /// not recurse through TryIssueJobPackage.</summary>
         private static bool inVirtualScan;
 
-        private static readonly Dictionary<int, int> nextAllowedTick = new Dictionary<int, int>();
+        private static readonly ABPawnCooldown retryCooldown = new ABPawnCooldown();
 
         private static void Postfix(Pawn pawn, ref Job __result, JobGiver_GetJoy __instance)
         {
@@ -46,22 +46,16 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            Map map = pawn.Map;
-            LevelComp comp = map.Levels();
-            if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
             {
                 return;
             }
             int now = Find.TickManager.TicksGame;
-            if (nextAllowedTick.TryGetValue(pawn.thingIDNumber, out int next) && now < next)
+            if (!retryCooldown.Ready(pawn, now))
             {
                 return;
             }
-            if (nextAllowedTick.Count > 512)
-            {
-                nextAllowedTick.Clear();
-            }
-            nextAllowedTick[pawn.thingIDNumber] = now + RetryCooldownTicks;
+            retryCooldown.ChargeUntil(pawn, now + RetryCooldownTicks);
             try
             {
                 __result = TryTowards(__instance, pawn, comp.upperMap)

@@ -25,7 +25,7 @@ namespace AsAboveSoBelow
 
         private const int MaxItemsPerScan = 25;
 
-        private static readonly Dictionary<int, int> nextAllowedTick = new Dictionary<int, int>();
+        private static readonly ABPawnCooldown emptyScanCooldown = new ABPawnCooldown();
 
         public override Job NonScanJob(Pawn pawn)
         {
@@ -45,19 +45,14 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            LevelComp comp = pawn.Map.Levels();
-            if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
             {
                 return null;
             }
             int now = Find.TickManager.TicksGame;
-            if (nextAllowedTick.TryGetValue(pawn.thingIDNumber, out int next) && now < next)
+            if (!emptyScanCooldown.Ready(pawn, now))
             {
                 return null;
-            }
-            if (nextAllowedTick.Count > 512)
-            {
-                nextAllowedTick.Clear();
             }
             try
             {
@@ -72,7 +67,7 @@ namespace AsAboveSoBelow
                 ABGuard.Disable(ABGuard.Logistics, e, "cross level fetch");
                 return null;
             }
-            nextAllowedTick[pawn.thingIDNumber] = now + EmptyScanCooldownTicks;
+            emptyScanCooldown.ChargeUntil(pawn, now + EmptyScanCooldownTicks);
             return null;
         }
 

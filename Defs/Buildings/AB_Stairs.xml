@@ -26,8 +26,9 @@
       <Flammability>0</Flammability>
       <Mass>35</Mass>
     </statBases>
-    <!-- Normal ticker: the power bridge equalizes in CompTick. Never-tickers get no comp ticks at all. -->
-    <tickerType>Normal</tickerType>
+    <!-- Stairs carry pawns only; utilities cross through the dedicated
+         vertical links, so stairs need no ticker at all. -->
+    <tickerType>Never</tickerType>
     <minifiedDef>MinifiedThing</minifiedDef>
     <thingCategories>
       <li>BuildingsMisc</li>
@@ -35,14 +36,6 @@
     <placeWorkers>
       <li>AsAboveSoBelow.PlaceWorker_ABStairs</li>
     </placeWorkers>
-    <comps>
-      <li Class="CompProperties_Battery">
-        <compClass>AsAboveSoBelow.CompABPowerBridge</compClass>
-        <storedEnergyMax>1000</storedEnergyMax>
-        <efficiency>1.0</efficiency>
-        <transmitsPower>true</transmitsPower>
-      </li>
-    </comps>
   </ThingDef>
 
   <ThingDef ParentName="AB_StairsBase">

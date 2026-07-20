@@ -30,28 +30,22 @@ namespace AsAboveSoBelow
         /// does not recurse.</summary>
         internal static bool VirtualScanActive;
 
-        private static readonly Dictionary<int, int> nextAllowedTick = new Dictionary<int, int>();
+        private static readonly ABPawnCooldown migrationCooldown = new ABPawnCooldown();
 
-        private static readonly Dictionary<int, int> nextAllowedEmergencyTick = new Dictionary<int, int>();
+        private static readonly ABPawnCooldown emergencyCooldown = new ABPawnCooldown();
 
         public static ThinkResult? TryMigrateForWork(JobGiver_Work giver, Pawn pawn)
         {
-            Map map = pawn.Map;
-            LevelComp comp = map.Levels();
-            if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
             {
                 return null;
             }
             int now = Find.TickManager.TicksGame;
-            if (nextAllowedTick.TryGetValue(pawn.thingIDNumber, out int next) && now < next)
+            if (!migrationCooldown.Ready(pawn, now))
             {
                 return null;
             }
-            if (nextAllowedTick.Count > 512)
-            {
-                nextAllowedTick.Clear();
-            }
-            nextAllowedTick[pawn.thingIDNumber] = now + MigrationCooldownTicks;
+            migrationCooldown.ChargeUntil(pawn, now + MigrationCooldownTicks);
 
             ThinkResult? work = TryTowards(giver, pawn, comp.upperMap) ?? TryTowards(giver, pawn, comp.lowerMap);
             if (work.HasValue)
@@ -72,13 +66,12 @@ namespace AsAboveSoBelow
         /// scan can never starve the real work scanner.</summary>
         public static ThinkResult? TryMigrateForEmergencyWork(JobGiver_Work giver, Pawn pawn)
         {
-            LevelComp comp = pawn.Map.Levels();
-            if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
             {
                 return null;
             }
             int now = Find.TickManager.TicksGame;
-            if (nextAllowedEmergencyTick.TryGetValue(pawn.thingIDNumber, out int next) && now < next)
+            if (!emergencyCooldown.Ready(pawn, now))
             {
                 return null;
             }
@@ -88,11 +81,7 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (nextAllowedEmergencyTick.Count > 512)
-            {
-                nextAllowedEmergencyTick.Clear();
-            }
-            nextAllowedEmergencyTick[pawn.thingIDNumber] = now + EmergencyMigrationCooldownTicks;
+            emergencyCooldown.ChargeUntil(pawn, now + EmergencyMigrationCooldownTicks);
             ThinkResult? work = up ? TryTowards(giver, pawn, comp.upperMap) : null;
             if (!work.HasValue && low)
             {
@@ -302,7 +291,7 @@ namespace AsAboveSoBelow
 
         /// <summary>Runs the vanilla work scan as if the pawn stood at the stairwell
         /// exit on the target map. Position and map index are swapped through the
-        /// private fields (the MultiFloors-proven technique) and restored in a
+        /// private fields (a technique MultiFloors also uses, implemented independently here) and restored in a
         /// finally block no matter what the scan does. Any job the scan produces is
         /// discarded; the real job gets picked normally after the transfer.</summary>
         private static bool WorkExistsAt(JobGiver_Work giver, Pawn pawn, Map target, IntVec3 entryCell)
@@ -331,7 +320,7 @@ namespace AsAboveSoBelow
     /// Temporarily relocates a pawn (private position and map index fields) so
     /// vanilla map-scoped queries run as if the pawn stood on another level.
     /// Callers must Restore in a finally block. Shared by cross-level work and
-    /// hauling; the MultiFloors-proven technique.
+    /// hauling; a technique MultiFloors also uses, implemented independently here.
     /// </summary>
     internal static class ABVirtualPosition
     {

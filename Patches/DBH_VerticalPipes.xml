@@ -3,9 +3,12 @@
 
   <!-- Vertical water pipes exist only when Dubs Bad Hygiene is loaded. They
        mirror DBH's own gating: buildable from the start in full DBH, behind
-       Plumbing research in lite mode (same MayRequire trick DBH uses). The
-       bridge equalizes the water networks touching the shaft's cell on both
-       levels, so players run their pipes to the shaft ends. -->
+       Plumbing research in lite mode (same MayRequire trick DBH uses). Each
+       shaft end carries a DBH pipe comp plus a small hidden water tank, so
+       the shaft IS a tower on both nets: wells and pumps fill it through
+       DBH's own logic and fixtures drink from it, meaning a level needs no
+       player-built tank of its own. The bridge levels the two nets' fill
+       fractions through DBH's public Pull and Push APIs. -->
   <Operation Class="PatchOperationFindMod">
     <mods>
       <li>Dubs Bad Hygiene</li>
@@ -17,7 +20,7 @@
         <ThingDef ParentName="AB_VerticalLinkBase">
           <defName>AB_VerticalWaterPipeDown</defName>
           <label>vertical water pipe (down)</label>
-          <description>A sealed riser pipe carrying water to the level below. Water networks touching it on both levels equalize through the shaft; nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+          <description>A sealed riser pipe carrying water to the level below. Water networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
           <designationCategory>Hygiene</designationCategory>
           <costList>
             <Steel>15</Steel>
@@ -25,7 +28,16 @@
           <statBases>
             <WorkToBuild>600</WorkToBuild>
           </statBases>
-          <tickerType>Never</tickerType>
+          <!-- Normal ticker: DBH's storage comp receives pumped water in CompTick. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="DubsBadHygiene.CompProperties_Pipe">
+              <mode>Water</mode>
+            </li>
+            <li Class="DubsBadHygiene.CompProperties_WaterStorage">
+              <WaterStorageCap>100</WaterStorageCap>
+            </li>
+          </comps>
           <researchPrerequisites>
             <li MayRequire="dbhlitemode">Plumbing</li>
           </researchPrerequisites>
@@ -49,7 +61,7 @@
         <ThingDef ParentName="AB_VerticalLinkBase">
           <defName>AB_VerticalWaterPipeUp</defName>
           <label>vertical water pipe (up)</label>
-          <description>A sealed riser pipe carrying water to the level above. Water networks touching it on both levels equalize through the shaft; nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+          <description>A sealed riser pipe carrying water to the level above. Water networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
           <designationCategory>Hygiene</designationCategory>
           <costList>
             <Steel>15</Steel>
@@ -57,7 +69,16 @@
           <statBases>
             <WorkToBuild>600</WorkToBuild>
           </statBases>
-          <tickerType>Never</tickerType>
+          <!-- Normal ticker: DBH's storage comp receives pumped water in CompTick. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="DubsBadHygiene.CompProperties_Pipe">
+              <mode>Water</mode>
+            </li>
+            <li Class="DubsBadHygiene.CompProperties_WaterStorage">
+              <WaterStorageCap>100</WaterStorageCap>
+            </li>
+          </comps>
           <researchPrerequisites>
             <li MayRequire="dbhlitemode">Plumbing</li>
           </researchPrerequisites>

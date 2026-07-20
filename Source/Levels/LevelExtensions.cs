@@ -71,6 +71,16 @@ namespace AsAboveSoBelow
             return c != null && (c.upperMap != null || c.lowerMap != null);
         }
 
+        /// <summary>One-call form of the standard scan guard: true when the map
+        /// has a level comp with at least one linked level, handing the comp
+        /// back. Replaces the comp-null-or-no-links boilerplate that was
+        /// duplicated at eleven call sites.</summary>
+        public static bool TryLinkedLevels(this Map map, out LevelComp comp)
+        {
+            comp = map.Levels();
+            return comp != null && (comp.upperMap != null || comp.lowerMap != null);
+        }
+
         public static bool IsLevelMap(this Map map)
         {
             LevelComp c = map.Levels();

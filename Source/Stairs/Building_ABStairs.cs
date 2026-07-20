@@ -15,6 +15,11 @@ namespace AsAboveSoBelow
     /// </summary>
     public class Building_ABStairs : Building
     {
+        /// <summary>Base climb duration in ticks before the per-type factor,
+        /// quality scaling, and the settings slider. Single source of truth for
+        /// every driver that walks a pawn through a link.</summary>
+        public const int BaseClimbTicks = 90;
+
         protected Building_ABStairs counterpart;
 
         /// <summary>Second link, used only by elevators (primary = up, second =

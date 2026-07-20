@@ -160,7 +160,7 @@ namespace AsAboveSoBelow
     /// capture float menu order; the job def picks the intent.</summary>
     public class JobDriver_ABTakePawnAcrossLevels : JobDriver
     {
-        private const int ClimbTicks = 90;
+        private const int ClimbTicks = Building_ABStairs.BaseClimbTicks;
 
         private Pawn Victim => job.GetTarget(TargetIndex.A).Thing as Pawn;
 

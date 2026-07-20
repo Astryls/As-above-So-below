@@ -13,7 +13,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public class JobDriver_UseStairs : JobDriver
     {
-        private const int ClimbTicks = 90;
+        private const int ClimbTicks = Building_ABStairs.BaseClimbTicks;
 
         private Building_ABStairs Stairs => job.GetTarget(TargetIndex.A).Thing as Building_ABStairs;
 
