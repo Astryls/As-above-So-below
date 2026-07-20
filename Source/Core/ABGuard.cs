@@ -39,11 +39,12 @@ namespace AsAboveSoBelow
         public static readonly ABGuardSwitch Climate = new ABGuardSwitch("climate");
         public static readonly ABGuardSwitch Threats = new ABGuardSwitch("threats");
         public static readonly ABGuardSwitch HostileMove = new ABGuardSwitch("hostileMove");
+        public static readonly ABGuardSwitch World = new ABGuardSwitch("world");
 
         private static readonly ABGuardSwitch[] All =
         {
             Ui, LevelGen, Rendering, Movement, Logistics, RoofSync, Weather, Power, Pipes, Climate,
-            Threats, HostileMove
+            Threats, HostileMove, World
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;

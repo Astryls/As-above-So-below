@@ -10,6 +10,8 @@
     <pocketMapProperties>
       <biome>AB_Underground</biome>
       <temperature>12</temperature>
+      <!-- Explicit (vanilla default): the level dies with the surface map, no orphans. -->
+      <destroyOnParentMapAbandoned>true</destroyOnParentMapAbandoned>
     </pocketMapProperties>
     <genSteps>
       <li>AB_SolidRock</li>
@@ -24,6 +26,8 @@
     <pocketMapProperties>
       <biome>AB_OpenSky</biome>
       <temperature>10</temperature>
+      <!-- Explicit (vanilla default): the level dies with the surface map, no orphans. -->
+      <destroyOnParentMapAbandoned>true</destroyOnParentMapAbandoned>
     </pocketMapProperties>
     <genSteps>
       <li>AB_SkyTerrain</li>

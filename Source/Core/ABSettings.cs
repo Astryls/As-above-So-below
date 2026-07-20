@@ -20,6 +20,8 @@ namespace AsAboveSoBelow
         public bool threatBasementInfest;
         public bool threatSkyDrops;
         public float threatDivertChance = 0.25f;
+        public bool columnWealth = true;
+        public bool worldIntegration = true;
 
         public void DoWindowContents(Rect inRect)
         {
@@ -42,6 +44,9 @@ namespace AsAboveSoBelow
                 listing.Label("AB_ThreatDivertChance".Translate() + ": " + threatDivertChance.ToStringPercent(), tooltip: "AB_ThreatDivertChanceTip".Translate());
                 threatDivertChance = listing.Slider(threatDivertChance, 0.05f, 1f);
             }
+            listing.GapLine();
+            listing.CheckboxLabeled("AB_ColumnWealth".Translate(), ref columnWealth, "AB_ColumnWealthTip".Translate());
+            listing.CheckboxLabeled("AB_WorldIntegration".Translate(), ref worldIntegration, "AB_WorldIntegrationTip".Translate());
             listing.GapLine();
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
@@ -72,6 +77,8 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);
             Scribe_Values.Look(ref threatSkyDrops, "threatSkyDrops", false);
             Scribe_Values.Look(ref threatDivertChance, "threatDivertChance", 0.25f);
+            Scribe_Values.Look(ref columnWealth, "columnWealth", true);
+            Scribe_Values.Look(ref worldIntegration, "worldIntegration", true);
         }
     }
 }

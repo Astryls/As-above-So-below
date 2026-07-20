@@ -44,6 +44,14 @@
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
   <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
+  <AB_ColumnWealth>Raids scale with whole-column wealth</AB_ColumnWealth>
+  <AB_ColumnWealthTip>The storyteller counts wealth and pawns on all your levels, not just the surface. Prevents hiding wealth from raid scaling in the basement. Recommended on for honest difficulty.</AB_ColumnWealthTip>
+  <AB_WorldIntegration>World integration</AB_WorldIntegration>
+  <AB_WorldIntegrationTip>Caravans can include colonists from other levels (they take the stairs to join the gathering), transport pods and shuttles can launch from the sky level, trade beacons on any level sell their goods, and comms consoles work below ground.</AB_WorldIntegrationTip>
+  <AB_CaravanNeedsSurfacePawn>Caravans must form on the surface: include at least one colonist who is on the surface level.</AB_CaravanNeedsSurfacePawn>
+  <AB_CaravanPawnNoStairs>{0} cannot reach any stairs to the surface and will not join the caravan.</AB_CaravanPawnNoStairs>
+  <AB_CaravanPawnsDescending>{0} colonist(s) are taking the stairs to join the caravan.</AB_CaravanPawnsDescending>
+  <AB_AbandonLevelsWarning>{0} colonist(s) are still on other levels of this colony. Abandoning the settlement destroys every level with it, and they will be lost. Are you sure?</AB_AbandonLevelsWarning>
   <AB_ThreatBasementInfest>Infestations can target the basement</AB_ThreatBasementInfest>
   <AB_ThreatBasementInfestTip>When an infestation fires at your colony, it has a chance to burrow up into the basement level instead of the surface. Threat size and storyteller pacing are unchanged; only the battlefield moves. Off by default.</AB_ThreatBasementInfestTip>
   <AB_ThreatSkyDrops>Drop-pod raids can target the sky level</AB_ThreatSkyDrops>
