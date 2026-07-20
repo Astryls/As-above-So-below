@@ -10,6 +10,9 @@ namespace AsAboveSoBelow
         public bool showCeilingHint = true;
         public bool showLevelWidget = true;
         public float belowDim = 0.12f;
+        public float belowDepthShift = 0.25f;
+        public bool belowParallax;
+        public float belowParallaxStrength = 0.35f;
         public float climbTimeMultiplier = 1f;
         public bool crossLevelWork = true;
         public bool idleReturnHome = true;
@@ -50,6 +53,14 @@ namespace AsAboveSoBelow
             listing.GapLine();
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
+            listing.Label("AB_BelowDepthShift".Translate() + ": " + belowDepthShift.ToString("0.00"), tooltip: "AB_BelowDepthShiftTip".Translate());
+            belowDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
+            listing.CheckboxLabeled("AB_BelowParallax".Translate(), ref belowParallax, "AB_BelowParallaxTip".Translate());
+            if (belowParallax)
+            {
+                listing.Label("AB_BelowParallaxStrength".Translate() + ": " + belowParallaxStrength.ToString("0.00"), tooltip: "AB_BelowParallaxStrengthTip".Translate());
+                belowParallaxStrength = listing.Slider(belowParallaxStrength, 0.1f, 0.8f);
+            }
             listing.Label("AB_ClimbTime".Translate() + ": " + climbTimeMultiplier.ToStringPercent(), tooltip: "AB_ClimbTimeTip".Translate());
             climbTimeMultiplier = listing.Slider(climbTimeMultiplier, 0.25f, 3f);
             listing.GapLine();
@@ -68,6 +79,9 @@ namespace AsAboveSoBelow
             // Key renamed so the old heavier default is not carried over from
             // earlier test sessions; real surface lighting now does most of the work.
             Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);
+            Scribe_Values.Look(ref belowDepthShift, "belowDepthShift", 0.25f);
+            Scribe_Values.Look(ref belowParallax, "belowParallax", false);
+            Scribe_Values.Look(ref belowParallaxStrength, "belowParallaxStrength", 0.35f);
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
             Scribe_Values.Look(ref idleReturnHome, "idleReturnHome", true);
             Scribe_Values.Look(ref crossLevelHauling, "crossLevelHauling", true);

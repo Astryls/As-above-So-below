@@ -66,7 +66,84 @@ namespace AsAboveSoBelow
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>
         public static volatile bool OffsetActive;
 
-        private static readonly Matrix4x4 OffsetMatrix = Matrix4x4.Translate(new Vector3(0f, BelowOffset, 0f));
+        // --- Faux-perspective transform ---
+        // Every piece of the below view (cloned section layers, the printed
+        // things layer, and the mirrored dynamic pass) draws through ONE affine
+        // transform so the whole lower level moves as a unit:
+        //   p' = k * p + (1 - k) * cam  +  (0, BelowOffset, -depthShift)
+        // The fixed south (down-screen) shift detaches the ground from the
+        // base of elevated walls - RimWorld draws tall things reaching
+        // up-screen, so "lower = down-screen" is the direction that reads as
+        // depth. The optional parallax term scales the below plane about the
+        // camera's ground position with k = 1 - strength / RootSize: the
+        // displacement at the vertical screen edge is `strength` cells at
+        // every zoom, so the misalignment bound is constant on screen and
+        // shrinks in world terms as the player zooms in. The air-cell mask is
+        // deliberately NOT transformed: it dims the sky level's holes
+        // themselves, not the content seen through them.
+        private static int transformFrame = -1;
+        private static Matrix4x4 belowMatrix = Matrix4x4.Translate(new Vector3(0f, BelowOffset, 0f));
+        private static float shiftK = 1f;
+        private static float shiftAddX;
+        private static float shiftAddZ;
+
+        /// <summary>Per-frame below-band transform; refreshes lazily on first
+        /// use each frame (a single int compare afterward).</summary>
+        internal static Matrix4x4 BelowMatrix
+        {
+            get
+            {
+                RefreshBelowTransform();
+                return belowMatrix;
+            }
+        }
+
+        /// <summary>Applies the current frame's below-view transform to one
+        /// dynamic draw position (called from the DrawPos postfix). Main
+        /// thread only while OffsetActive is true; the fields are written at
+        /// frame start before the pass begins.</summary>
+        internal static void ApplyDrawShift(ref Vector3 v)
+        {
+            v.x = v.x * shiftK + shiftAddX;
+            v.y += BelowOffset;
+            v.z = v.z * shiftK + shiftAddZ;
+        }
+
+        private static void RefreshBelowTransform()
+        {
+            int frame = Time.frameCount;
+            if (frame == transformFrame)
+            {
+                return;
+            }
+            transformFrame = frame;
+            ABSettings settings = ABMod.Settings;
+            float south = Mathf.Clamp(settings?.belowDepthShift ?? 0.25f, 0f, 1f);
+            float k = 1f;
+            float addX = 0f;
+            float addZ = -south;
+            if (settings != null && settings.belowParallax)
+            {
+                CameraDriver driver = Find.CameraDriver;
+                Camera cam = Find.Camera;
+                if (driver != null && cam != null)
+                {
+                    float strength = Mathf.Clamp(settings.belowParallaxStrength, 0f, 1f);
+                    // Clamped so k never drops below 0.8 even if RootSize
+                    // reports something implausible mid-transition.
+                    float s = Mathf.Clamp(strength / Mathf.Max(driver.RootSize, 5f), 0f, 0.2f);
+                    k = 1f - s;
+                    Vector3 c = cam.transform.position;
+                    addX = c.x * s;
+                    addZ = c.z * s - south;
+                }
+            }
+            shiftK = k;
+            shiftAddX = addX;
+            shiftAddZ = addZ;
+            belowMatrix = Matrix4x4.Translate(new Vector3(addX, BelowOffset, addZ))
+                * Matrix4x4.Scale(new Vector3(k, 1f, k));
+        }
 
         private static readonly AccessTools.FieldRef<Section, List<SectionLayer>> LayersRef =
             AccessTools.FieldRefAccess<Section, List<SectionLayer>>("layers");
@@ -282,7 +359,7 @@ namespace AsAboveSoBelow
             Material mat = BelowMaterialFor(sub.material, queue);
             if (mat != null)
             {
-                Graphics.DrawMesh(sub.mesh, OffsetMatrix, mat, 0);
+                Graphics.DrawMesh(sub.mesh, BelowMatrix, mat, 0);
             }
         }
 
@@ -370,7 +447,7 @@ namespace AsAboveSoBelow
                             Material mat = BelowMaterialFor(sub.material, queue: baseQueue);
                             if (mat != null)
                             {
-                                Graphics.DrawMesh(sub.mesh, OffsetMatrix, mat, 0);
+                                Graphics.DrawMesh(sub.mesh, BelowMatrix, mat, 0);
                             }
                         }
                     }
@@ -627,6 +704,7 @@ namespace AsAboveSoBelow
             }
             try
             {
+                RefreshBelowTransform();
                 OffsetActive = true;
                 if (!TryDrawFilteredDynamic(map, lower))
                 {

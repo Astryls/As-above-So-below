@@ -63,8 +63,9 @@ namespace AsAboveSoBelow
 
     /// <summary>
     /// Patches every declared DrawPos getter (vanilla and modded Thing subclasses)
-    /// with a postfix that shifts the result down while the lower map's dynamic
-    /// draw pass runs. Inactive cost is a single static bool read.
+    /// with a postfix that applies the below-view transform (altitude drop plus
+    /// the faux-perspective depth shift and optional parallax) while the lower
+    /// map's dynamic draw pass runs. Inactive cost is a single static bool read.
     /// </summary>
     [StaticConstructorOnStartup]
     internal static class DrawPosOffsetPatcher
@@ -112,7 +113,7 @@ namespace AsAboveSoBelow
         {
             if (LevelRenderer.OffsetActive)
             {
-                __result.y += LevelRenderer.BelowOffset;
+                LevelRenderer.ApplyDrawShift(ref __result);
             }
         }
     }
