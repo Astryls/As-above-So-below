@@ -10,9 +10,10 @@
     <rotatable>false</rotatable>
     <size>(1,1)</size>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <!-- Immortal, same as stairs: see AB_StairsBase. -->
+    <useHitPoints>false</useHitPoints>
     <statBases>
-      <MaxHitPoints>80</MaxHitPoints>
-      <Flammability>0.5</Flammability>
+      <Flammability>0</Flammability>
       <Mass>8</Mass>
     </statBases>
     <minifiedDef>MinifiedThing</minifiedDef>

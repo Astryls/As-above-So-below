@@ -96,10 +96,22 @@ namespace AsAboveSoBelow
         private static bool IsIdle(Pawn p)
         {
             JobDef cur = p.CurJobDef;
-            return cur == null
+            if (cur == null
                 || cur == JobDefOf.Wait_Wander
                 || cur == JobDefOf.GotoWander
-                || cur == JobDefOf.Wait;
+                || cur == JobDefOf.Wait)
+            {
+                return true;
+            }
+            // Raid trash AI loves to bash the only player buildings on a pocket
+            // level - the stairs. They are immortal now, so a hostile swinging
+            // at a link building is going nowhere: treat as idle and re-order.
+            if ((cur == JobDefOf.AttackMelee || cur == JobDefOf.AttackStatic)
+                && p.CurJob != null && p.CurJob.targetA.Thing is Building_ABStairs)
+            {
+                return true;
+            }
+            return false;
         }
 
         private static bool HasReachableTarget(Pawn p)

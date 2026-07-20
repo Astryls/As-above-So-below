@@ -363,9 +363,46 @@ namespace AsAboveSoBelow
             }
         }
 
+        private static UnityEngine.Texture removeIcon;
+
+        private static UnityEngine.Texture RemoveIcon
+        {
+            get
+            {
+                if (removeIcon == null)
+                {
+                    removeIcon = DesignatorUtility.FindAllowedDesignator<Designator_Deconstruct>()?.icon
+                        ?? BaseContent.BadTex;
+                }
+                return removeIcon;
+            }
+        }
+
         protected virtual List<Gizmo> BuildGizmos()
         {
             List<Gizmo> list = new List<Gizmo>();
+            // Links are immortal (no hit points), so removal always routes
+            // through deconstruction; surface it right on the building with the
+            // vanilla deconstruct icon.
+            if (Faction == Faction.OfPlayer)
+            {
+                bool queued = Map.designationManager.DesignationOn(this, DesignationDefOf.Deconstruct) != null;
+                Command_Action remove = new Command_Action
+                {
+                    defaultLabel = "AB_RemoveLink".Translate(),
+                    defaultDesc = "AB_RemoveLinkDesc".Translate(),
+                    icon = RemoveIcon,
+                    action = delegate
+                    {
+                        Map.designationManager.AddDesignation(new Designation(this, DesignationDefOf.Deconstruct));
+                    }
+                };
+                if (queued)
+                {
+                    remove.Disable("AB_RemoveQueued".Translate());
+                }
+                list.Add(remove);
+            }
             Building_ABStairs cp = Counterpart;
             if (cp != null)
             {

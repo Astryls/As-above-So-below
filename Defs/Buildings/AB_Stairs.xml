@@ -11,6 +11,10 @@
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <!-- Immortal: raid AI trashes the only player buildings on a pocket level
+         instead of using them, severing the column. No hit points means no
+         damage, no fire, no target; removal is the gizmo/deconstruct path. -->
+    <useHitPoints>false</useHitPoints>
     <stuffCategories>
       <li>Metallic</li>
       <li>Woody</li>
@@ -18,9 +22,8 @@
     </stuffCategories>
     <costStuffCount>75</costStuffCount>
     <statBases>
-      <MaxHitPoints>300</MaxHitPoints>
       <WorkToBuild>3200</WorkToBuild>
-      <Flammability>1.0</Flammability>
+      <Flammability>0</Flammability>
       <Mass>35</Mass>
     </statBases>
     <!-- Normal ticker: the power bridge equalizes in CompTick. Never-tickers get no comp ticks at all. -->
@@ -65,7 +68,6 @@
     <fillPercent>0.50</fillPercent>
     <costStuffCount>300</costStuffCount>
     <statBases>
-      <MaxHitPoints>600</MaxHitPoints>
       <WorkToBuild>12000</WorkToBuild>
       <Mass>160</Mass>
     </statBases>
@@ -124,9 +126,8 @@
     </stuffCategories>
     <costStuffCount>200</costStuffCount>
     <statBases>
-      <MaxHitPoints>450</MaxHitPoints>
       <WorkToBuild>9000</WorkToBuild>
-      <Flammability>0.5</Flammability>
+      <Flammability>0</Flammability>
       <Mass>70</Mass>
     </statBases>
     <graphicData>
@@ -155,15 +156,16 @@
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <!-- Immortal, same as stairs: see AB_StairsBase. -->
+    <useHitPoints>false</useHitPoints>
     <stuffCategories>
       <li>Metallic</li>
       <li>Woody</li>
     </stuffCategories>
     <costStuffCount>25</costStuffCount>
     <statBases>
-      <MaxHitPoints>120</MaxHitPoints>
       <WorkToBuild>800</WorkToBuild>
-      <Flammability>1.0</Flammability>
+      <Flammability>0</Flammability>
       <Mass>10</Mass>
     </statBases>
     <!-- No power bridge comp: ladders do not carry utility lines. -->

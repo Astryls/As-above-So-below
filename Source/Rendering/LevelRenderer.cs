@@ -14,8 +14,11 @@ namespace AsAboveSoBelow
     /// they sort under everything on the sky map, re-runs the lower map's dynamic
     /// drawing with a global draw offset for live pawns and projectiles, and covers
     /// ONLY the open-air cells with a custom mask mesh that encodes, per cell, the
-    /// surface's fog of war (opaque: unexplored stays hidden) and real per-cell
-    /// light (dark at night, lamp glow visible). Because the mask geometry exists
+    /// surface's fog of war (opaque: unexplored stays hidden) plus a slight
+    /// constant depth dim (slider). The sky map's own day-night darkening
+    /// already reaches the below meshes through the shared shader globals, so
+    /// the mask adds NO light-based shading of its own - stacking the two read
+    /// as near-black nights (playtest regression). Because the mask geometry exists
     /// only over air cells it can never cover the sky level's own rock, floors, or
     /// buildings, regardless of shader depth behavior. Vanilla overlay meshes are
     /// deliberately NOT drawn into the below-view for exactly that reason.
@@ -50,10 +53,10 @@ namespace AsAboveSoBelow
         /// rebuild every frame; rebuilds happen when the camera escapes the pad.</summary>
         private const int MaskPadCells = 8;
 
-        /// <summary>Night opacity cap. High enough to sell darkness, low enough
-        /// that the ground below stays readable. Lowered from 0.62 after playtest
-        /// feedback: night below-views read nearly black at the old cap.</summary>
-        private const float MaskMaxDarkness = 0.45f;
+        // Historical: a light-based night cap (0.62, then 0.45) lived here. It
+        // double-darkened against the sky map's own natural night dimming and
+        // was removed entirely after playtest feedback; only fog opacity and
+        // the constant baseDim slider remain.
 
         /// <summary>True only while the lower map's dynamic draw runs; DrawPos
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>
@@ -88,12 +91,12 @@ namespace AsAboveSoBelow
                 typeof(SectionLayer_EdgeShadows)
             };
             AddByName(set, "Verse.SectionLayer_SunShadows");
-            // Water depth shading. Vanilla routes this through the WaterDepth
-            // subcamera; the below-view redraws its submeshes flat at the below
-            // offset instead, so deep water reads as depth-shaded rather than a flat
-            // slab. Exact type: it subclasses SectionLayer_Terrain and would be
-            // missed by an inheritance check.
-            AddByName(set, "Verse.SectionLayer_Watergen");
+            // SectionLayer_Watergen is deliberately ABSENT: it is the water
+            // depth-shading layer and only renders correctly through vanilla's
+            // WaterDepth subcamera. Drawn flat in the below pass it painted an
+            // opaque black slab over every river and lake (playtest round 12).
+            // Plain water comes from the terrain layer with a shader swap in
+            // BelowMaterialFor.
             // Version or DLC dependent layers, added when present.
             AddByName(set, "Verse.SectionLayer_Sand");
             AddByName(set, "RimWorld.SectionLayer_TerrainEdges");
@@ -133,7 +136,7 @@ namespace AsAboveSoBelow
                 { typeof(SectionLayer_Gas), 85 },
                 { typeof(SectionLayer_PollutionCloud), 80 }
             };
-            AddOffsetByName(map, "Verse.SectionLayer_Watergen", 290);
+
             AddOffsetByName(map, "Verse.SectionLayer_Sand", 285);
             AddOffsetByName(map, "RimWorld.SectionLayer_TerrainEdges", 280);
             AddOffsetByName(map, "Verse.SectionLayer_TerrainScatter", 275);
@@ -204,6 +207,21 @@ namespace AsAboveSoBelow
                 belowMats.Clear();
             }
             clone = new Material(source) { renderQueue = queue };
+            // Water shaders sample per-map globals (flow and depth buffers) that
+            // belong to the CURRENT map - viewed from the sky level those
+            // globals are the sky map's empty buffers and the water renders
+            // black. Swap to a plain terrain draw of the same base texture:
+            // still, readable water instead of an animated void.
+            Shader shader = clone.shader;
+            if (shader != null && shader.name != null && shader.name.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                clone.shader = ShaderDatabase.TerrainHard;
+                if (clone.mainTexture == null)
+                {
+                    clone.shader = ShaderDatabase.SolidColor;
+                    clone.color = new Color(0.25f, 0.36f, 0.47f);
+                }
+            }
             belowMats[key] = clone;
             return clone;
         }
@@ -370,11 +388,10 @@ namespace AsAboveSoBelow
             maskTris.Clear();
             maskColors.Clear();
             float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
-            float skyGlowNow = sky.skyManager.CurSkyGlow;
+            byte dimAlpha = (byte)(255f * baseDim);
             TerrainGrid skyTerrain = sky.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
-            GlowGrid lowerGlow = lower.glowGrid;
-            RoofGrid lowerRoofs = lower.roofGrid;
+            FogGrid lowerFog = lower.fogGrid;
             // Resolution switches use hysteresis so zooming near the threshold does
             // not pop between block sizes.
             int step = maskLastStep;
@@ -405,11 +422,10 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    // Artificial glow from the lower map, sky light from the
-                    // current map (identical tile, updated every frame).
-                    float artificial = lowerGlow.GroundGlowAt(c, ignoreCavePlants: false, ignoreSky: true);
-                    float light = lowerRoofs.Roofed(c) ? artificial : Mathf.Max(skyGlowNow, artificial);
-                    byte a = (byte)(255f * Mathf.Clamp01(baseDim + (1f - light) * (MaskMaxDarkness - baseDim)));
+                    // Unexplored surface stays hidden; explored cells get only
+                    // the constant depth dim. Natural day-night shading arrives
+                    // for free through the shared shader globals.
+                    byte a = lowerFog.IsFogged(c) ? (byte)255 : dimAlpha;
                     int vi = maskVerts.Count;
                     float x0 = Mathf.Max(x, 0);
                     float z0 = Mathf.Max(z, 0);
