@@ -56,8 +56,12 @@
   <AB_IdleReturnHomeTip>Colonists with nothing to do on any level head back down to the surface instead of roaming the level they worked on.</AB_IdleReturnHomeTip>
   <AB_CrossLevelHauling>Haul items between levels</AB_CrossLevelHauling>
   <AB_CrossLevelHaulingTip>When an item's best storage is on another level, haulers carry it through the stairs. Runs after normal hauling on the same level.</AB_CrossLevelHaulingTip>
+  <AB_CrossLevelSupply>Fetch needed materials from other levels</AB_CrossLevelSupply>
+  <AB_CrossLevelSupplyTip>When a level needs materials it does not have - construction materials for blueprints and frames, ingredients for bills, or meals for patients and prisoners - a colonist takes the stairs to a linked level that has them and carries them back. Covers the case where the resources sit in a stockpile on another level and no idle hauler is standing there to push them across.</AB_CrossLevelSupplyTip>
   <AB_CrossLevelNeeds>Colonists cross levels to sleep in their beds</AB_CrossLevelNeeds>
   <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
+  <AB_CrossLevelPrisoners>Wardens move prisoners between levels</AB_CrossLevelPrisoners>
+  <AB_CrossLevelPrisonersTip>When a prisoner's only usable cell is on another level, or you have assigned them a bed on another level, a warden carries them through the stairs to it. You can also right-click a prisoner to send them to a cell above or below.</AB_CrossLevelPrisonersTip>
   <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
   <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
   <AB_RemoveLink>Remove</AB_RemoveLink>
@@ -81,6 +85,8 @@
   <AB_RescueDownTo>Rescue {0} (bed on the level below)</AB_RescueDownTo>
   <AB_CaptureUpTo>Capture {0} (bed on the level above)</AB_CaptureUpTo>
   <AB_CaptureDownTo>Capture {0} (bed on the level below)</AB_CaptureDownTo>
+  <AB_TakePrisonerUpTo>Take {0} to a cell on the level above</AB_TakePrisonerUpTo>
+  <AB_TakePrisonerDownTo>Take {0} to a cell on the level below</AB_TakePrisonerDownTo>
   <AB_ExtendUp>Extend shaft up</AB_ExtendUp>
   <AB_ExtendUpDesc>Extend the elevator shaft to the level above, opening it if needed, and place a linked car there.</AB_ExtendUpDesc>
   <AB_ExtendDown>Extend shaft down</AB_ExtendDown>

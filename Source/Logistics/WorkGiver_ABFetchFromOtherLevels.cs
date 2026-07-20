@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.AI;
 using Verse.AI.Group;
@@ -77,8 +78,17 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            Map demandMap = pawn.Map;
             ICollection<Thing> haulables = target.listerHaulables.ThingsPotentiallyNeedingHauling();
-            if (haulables.Count == 0)
+            bool anyHaulables = haulables.Count > 0;
+            // Materials this pawn's OWN level still needs (blueprints, frames, bill
+            // ingredients, patient/prisoner food) that sit in a stockpile on the
+            // linked level. Those never enter the haulables lister, so the pure
+            // push side leaves a level of builders starved when no idle hauler is
+            // standing on the source level. Cheap pre-check keeps idle scans free.
+            bool wantDemand = ABMod.Settings.crossLevelSupply
+                && CrossLevelDemand.HasFetchableDemand(demandMap, target, pawn);
+            if (!anyHaulables && !wantDemand)
             {
                 return null;
             }
@@ -91,36 +101,49 @@ namespace AsAboveSoBelow
                 return null;
             }
             bool found = false;
+            bool demandFetch = false;
             CrossLevelWork.VirtualScanActive = true;
             try
             {
-                int examined = 0;
-                foreach (Thing t in haulables)
+                if (anyHaulables)
                 {
-                    if (++examined > MaxItemsPerScan)
+                    int examined = 0;
+                    foreach (Thing t in haulables)
                     {
-                        break;
+                        if (++examined > MaxItemsPerScan)
+                        {
+                            break;
+                        }
+                        if (t == null || !t.Spawned || t.Map != target || t.IsForbidden(pawn)
+                            || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, t, forced: false))
+                        {
+                            continue;
+                        }
+                        // Better storage on the linked level itself?
+                        if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, target,
+                            StoreUtility.CurrentStoragePriorityOf(t), pawn.Faction,
+                            out IntVec3 _, out IHaulDestination _, needAccurateResult: false))
+                        {
+                            found = true;
+                            break;
+                        }
+                        // Or does it want to travel to yet another level (for example
+                        // back down to this pawn's own fridge)? Cached verdict.
+                        if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null)
+                        {
+                            found = true;
+                            break;
+                        }
                     }
-                    if (t == null || !t.Spawned || t.Map != target || t.IsForbidden(pawn)
-                        || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, t, forced: false))
-                    {
-                        continue;
-                    }
-                    // Better storage on the linked level itself?
-                    if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, target,
-                        StoreUtility.CurrentStoragePriorityOf(t), pawn.Faction,
-                        out IntVec3 _, out IHaulDestination _, needAccurateResult: false))
-                    {
-                        found = true;
-                        break;
-                    }
-                    // Or does it want to travel to yet another level (for example
-                    // back down to this pawn's own fridge)? Cached verdict.
-                    if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null)
-                    {
-                        found = true;
-                        break;
-                    }
+                }
+                if (!found && wantDemand)
+                {
+                    // Pawn is virtually on `target` now, so reachability is measured
+                    // there. A demanded stack that can actually be picked up means
+                    // the trip is worthwhile.
+                    demandFetch = CrossLevelDemand.FindFetchableDemand(demandMap, target, pawn,
+                        requireReachable: true) != null;
+                    found = demandFetch;
                 }
             }
             finally
@@ -132,7 +155,51 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            if (demandFetch)
+            {
+                // Job queues do not survive the transfer, so stash the return trip:
+                // on arrival, pick up a demanded stack and haul it back down.
+                ABPendingOrders.Set(pawn, target, delegate
+                {
+                    IssueDemandHaulBack(pawn, target, demandMap);
+                });
+            }
             return CrossLevelWork.MakeStairsJob(stairs, exit);
+        }
+
+        /// <summary>Runs on arrival on the source level: grab a stack the origin
+        /// level still needs and issue the cross-level haul back toward it. Fails
+        /// open - if nothing is fetchable anymore the pawn just re-scans normally.</summary>
+        private static void IssueDemandHaulBack(Pawn pawn, Map sourceMap, Map demandMap)
+        {
+            try
+            {
+                if (pawn == null || !pawn.Spawned || pawn.Dead || pawn.Map != sourceMap
+                    || pawn.Drafted || pawn.GetLord() != null
+                    || pawn.carryTracker?.CarriedThing != null)
+                {
+                    return;
+                }
+                Thing t = CrossLevelDemand.FindFetchableDemand(demandMap, sourceMap, pawn,
+                    requireReachable: true);
+                if (t == null)
+                {
+                    return;
+                }
+                if (!CrossLevelWork.TryResolveStairs(pawn, demandMap, out Building_ABStairs stairs,
+                    out Building_ABStairs exit))
+                {
+                    return;
+                }
+                Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
+                job.targetC = exit;
+                job.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                pawn.jobs?.TryTakeOrderedJob(job, JobTag.Misc);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "demand haul back");
+            }
         }
     }
 }

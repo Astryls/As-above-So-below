@@ -227,59 +227,11 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>One-shot runtime queue dump (run #133): logs the REAL
-        /// queues of everything involved in the rim ordering fight, including
-        /// the atlas materials the wall print actually produced - these are
-        /// the same global-atlas materials the sky map's own things layer
-        /// draws with, so they tell us exactly what the strips must stay
-        /// under. Log.Warning so the bridge forwards it. Remove after #133.</summary>
-        private static bool queuesLogged;
-
-        private static string QDesc(Material m)
-        {
-            if (m == null)
-            {
-                return "null";
-            }
-            return "q" + m.renderQueue + "(sh " + (m.shader != null ? m.shader.name + " q" + m.shader.renderQueue : "null") + ")";
-        }
-
-        private void LogQueuesOnce()
-        {
-            if (queuesLogged)
-            {
-                return;
-            }
-            queuesLogged = true;
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append(ABLog.Tag).Append(" [diag #133] revealQ=").Append(LevelRenderer.DiagWallRevealQueue)
-                .Append(" bandCeiling=").Append(LevelRenderer.DiagBelowQueueCeiling)
-                .Append(" cutoutShader=").Append(ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : -1)
-                .Append(" edgeShadowMat=").Append(QDesc(MatBases.EdgeShadow))
-                .Append(" roofTileMat=").Append(QDesc(ABDefOf.AB_RoofSurface?.graphic?.MatSingle))
-                .Append(" soilMat=").Append(QDesc(TerrainDefOf.Soil?.graphic?.MatSingle))
-                .Append(" | wall print mats:");
-            List<LayerSubMesh> subs = subMeshes;
-            for (int i = 0; i < subs.Count; i++)
-            {
-                LayerSubMesh sub = subs[i];
-                int vFrom = i < vertsBefore.Count ? vertsBefore[i] : 0;
-                if (sub.verts.Count <= vFrom)
-                {
-                    continue;
-                }
-                sb.Append(' ').Append(sub.material != null ? sub.material.name : "null")
-                    .Append('=').Append(QDesc(sub.material));
-            }
-            Log.Warning(sb.ToString());
-        }
-
         /// <summary>Rewrites everything the print just appended as strip
         /// -clipped quads. Returns true when any geometry survived.</summary>
         private bool ClipNewGeometry()
         {
             bool any = false;
-            LogQueuesOnce();
             List<LayerSubMesh> subs = subMeshes;
             for (int i = 0; i < subs.Count; i++)
             {

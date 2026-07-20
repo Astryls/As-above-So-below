@@ -180,7 +180,12 @@ namespace AsAboveSoBelow
             this.FailOnDestroyedOrNull(TargetIndex.A);
             this.FailOnDespawnedOrNull(TargetIndex.B);
             this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
-            this.FailOn(() => Victim == null || Victim.Dead || !Victim.Downed);
+            // Prisoner transport carries awake prisoners too (vanilla escort does
+            // the same); every other intent requires a downed victim.
+            this.FailOn(() => Victim == null || Victim.Dead
+                || (job.def == ABDefOf.AB_TakePrisonerAcrossLevels
+                    ? !Victim.IsPrisonerOfColony
+                    : !Victim.Downed));
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.OnCell)
                 .FailOnSomeonePhysicallyInteracting(TargetIndex.A);
             yield return Toils_Haul.StartCarryThing(TargetIndex.A);
@@ -192,9 +197,16 @@ namespace AsAboveSoBelow
             transfer.initAction = delegate
             {
                 Building_ABStairs dest = job.GetTarget(TargetIndex.C).Thing as Building_ABStairs;
-                StairTransfer.Transfer(pawn, Stairs,
-                    job.def == ABDefOf.AB_CaptureAcrossLevels ? CarriedIntent.Capture : CarriedIntent.Rescue,
-                    dest);
+                CarriedIntent intent = CarriedIntent.Rescue;
+                if (job.def == ABDefOf.AB_CaptureAcrossLevels)
+                {
+                    intent = CarriedIntent.Capture;
+                }
+                else if (job.def == ABDefOf.AB_TakePrisonerAcrossLevels)
+                {
+                    intent = CarriedIntent.Imprison;
+                }
+                StairTransfer.Transfer(pawn, Stairs, intent, dest);
             };
             transfer.defaultCompleteMode = ToilCompleteMode.Instant;
             yield return transfer;
@@ -383,6 +395,153 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Logistics, e, "cross level capture option");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Automatic warden handling for prisoners whose cell is on a linked
+    /// level (T7 prisoner transport): mirrors vanilla WorkGiver_Warden_TakeToBed
+    /// but only fires when there is no usable prison bed on this level, or the
+    /// prisoner has been assigned a bed on a linked level. The warden carries the
+    /// prisoner through the stairs (awake or downed) and a queued vanilla escort
+    /// or wounded-transport job tucks them into the cell found on arrival. Runs
+    /// after vanilla take-to-bed (lower priorityInType) so a local cell always
+    /// wins first.</summary>
+    public class WorkGiver_ABWardenTakeToBedAcrossLevels : WorkGiver_Warden
+    {
+        public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
+        {
+            if (!ABGuard.On(ABGuard.Logistics))
+            {
+                return null;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelPrisoners)
+            {
+                return null;
+            }
+            Map map = pawn.Map;
+            if (map == null || !map.ConnectedToOtherLevel())
+            {
+                return null;
+            }
+            if (!(t is Pawn prisoner) || !prisoner.IsPrisonerOfColony
+                || !ShouldTakeCareOfPrisoner(pawn, prisoner, forced))
+            {
+                return null;
+            }
+            try
+            {
+                // Downed prisoners follow vanilla's wounded-transport gating.
+                if (prisoner.Downed && (!HealthAIUtility.ShouldSeekMedicalRest(prisoner) || prisoner.InBed()))
+                {
+                    return null;
+                }
+                // Respect an explicit reassignment: if the prisoner owns a bed on a
+                // directly linked level, take them there even when a local cell is
+                // free. Otherwise only act when no usable local prison bed exists.
+                LevelComp comp = map.Levels();
+                Building_Bed owned = prisoner.ownership?.OwnedBed;
+                bool ownedOnLinkedLevel = owned != null && owned.Spawned && comp != null
+                    && (owned.Map == comp.upperMap || owned.Map == comp.lowerMap);
+                if (!ownedOnLinkedLevel)
+                {
+                    if (RestUtility.FindBedFor(prisoner, pawn, checkSocialProperness: true,
+                        ignoreOtherReservations: false, GuestStatus.Prisoner) != null)
+                    {
+                        return null;
+                    }
+                    // An awake prisoner already content in a local bed needs no move.
+                    if (!prisoner.Downed && RestUtility.FindBedFor(prisoner, prisoner,
+                        checkSocialProperness: true, ignoreOtherReservations: false, GuestStatus.Prisoner) != null)
+                    {
+                        return null;
+                    }
+                }
+                Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(pawn, prisoner,
+                    GuestStatus.Prisoner, out Building_ABStairs exit);
+                if (stairs == null || exit == null)
+                {
+                    return null;
+                }
+                Job job = JobMaker.MakeJob(ABDefOf.AB_TakePrisonerAcrossLevels, prisoner, stairs);
+                job.targetC = exit;
+                job.count = 1;
+                return job;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "cross level warden take to bed");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Right-click order to move an existing prisoner to a cell on a
+    /// linked level, offered when this level has no usable prison bed for them
+    /// but a linked one does. Gives the player direct control over which cell a
+    /// prisoner ends up in even when the autonomous warden would keep them local.</summary>
+    public class FloatMenuOptionProvider_TakePrisonerAcrossLevels : FloatMenuOptionProvider
+    {
+        protected override bool Drafted => true;
+
+        protected override bool Undrafted => true;
+
+        protected override bool Multiselect => false;
+
+        protected override bool RequiresManipulation => true;
+
+        protected override FloatMenuOption GetSingleOptionFor(Pawn clickedPawn, FloatMenuContext context)
+        {
+            if (!ABGuard.On(ABGuard.Logistics))
+            {
+                return null;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelPrisoners)
+            {
+                return null;
+            }
+            Pawn taker = context.FirstSelectedPawn;
+            if (taker == null || clickedPawn == null || !clickedPawn.IsPrisonerOfColony)
+            {
+                return null;
+            }
+            Map map = taker.Map;
+            if (map == null || !map.ConnectedToOtherLevel() || clickedPawn.Map != map)
+            {
+                return null;
+            }
+            if (clickedPawn.InAggroMentalState
+                || clickedPawn.IsForbidden(taker)
+                || !taker.CanReserveAndReach(clickedPawn, PathEndMode.OnCell, Danger.Deadly))
+            {
+                return null;
+            }
+            try
+            {
+                Building_ABStairs stairs = TakePawnAcrossLevels.FindStairsTowardBed(taker, clickedPawn,
+                    GuestStatus.Prisoner, out Building_ABStairs exit);
+                if (stairs == null || exit == null)
+                {
+                    return null;
+                }
+                bool up = exit.Map.Level() > map.Level();
+                string label = (up ? "AB_TakePrisonerUpTo" : "AB_TakePrisonerDownTo").Translate(clickedPawn.LabelShort);
+                FloatMenuOption option = new FloatMenuOption(label, delegate
+                {
+                    Job job = JobMaker.MakeJob(ABDefOf.AB_TakePrisonerAcrossLevels, clickedPawn, stairs);
+                    job.targetC = exit;
+                    job.count = 1;
+                    job.playerForced = true;
+                    taker.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+                }, MenuOptionPriority.High, null, clickedPawn);
+                return FloatMenuUtility.DecoratePrioritizedTask(option, taker, clickedPawn);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "cross level take prisoner option");
                 return null;
             }
         }

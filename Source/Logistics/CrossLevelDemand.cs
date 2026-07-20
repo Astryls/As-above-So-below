@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AsAboveSoBelow
 {
@@ -45,6 +46,59 @@ namespace AsAboveSoBelow
             }
             CacheEntry entry = GetEntry(map);
             return entry.need.TryGetValue(def, out int n) && n > 0;
+        }
+
+        /// <summary>A stack on sourceMap of a material that demandMap still needs
+        /// and sourceMap can spare, or null. Lets a colonist on a level that needs
+        /// something (a basement full of blueprints, a level with a hungry prisoner)
+        /// go and fetch it from a linked level even when the material sits in a
+        /// valid stockpile there and so never appears in the haulables lister - the
+        /// gap the pure push side could not cover. Reachability is only meaningful
+        /// with the pawn virtually placed on sourceMap, so pass requireReachable
+        /// true only from inside such a swap.</summary>
+        public static Thing FindFetchableDemand(Map demandMap, Map sourceMap, Pawn pawn, bool requireReachable)
+        {
+            if (demandMap == null || demandMap.Disposed || sourceMap == null || sourceMap.Disposed
+                || pawn == null)
+            {
+                return null;
+            }
+            CacheEntry entry = GetEntry(demandMap);
+            foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
+            {
+                if (kvp.Value <= 0)
+                {
+                    continue;
+                }
+                List<Thing> things = sourceMap.listerThings.ThingsOfDef(kvp.Key);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    Thing t = things[i];
+                    if (t == null || !t.Spawned || t.Map != sourceMap || t.IsForbidden(pawn))
+                    {
+                        continue;
+                    }
+                    // Never strip a level of a material it needs for its own work.
+                    if (!ExportAllowed(sourceMap, t))
+                    {
+                        continue;
+                    }
+                    if (requireReachable
+                        && !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, t, forced: false))
+                    {
+                        continue;
+                    }
+                    return t;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Cheap pre-check (no reachability) for the fetch work giver: does
+        /// sourceMap hold anything demandMap needs and can spare?</summary>
+        public static bool HasFetchableDemand(Map demandMap, Map sourceMap, Pawn pawn)
+        {
+            return FindFetchableDemand(demandMap, sourceMap, pawn, requireReachable: false) != null;
         }
 
         /// <summary>Quantity-aware pin: exporting this stack is fine as long as the
