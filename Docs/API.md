@@ -92,12 +92,17 @@ ABApi.RegisterExitDuty("MyGuestLeaveDuty");
 // pocket maps do not have.
 
 ABApi.RegisterNeedJobGiver("MyMod.JobGiver_GetMyNeed");
+ABApi.RegisterNeedJobGiver("MyMod.JobGiver_RampageThing", allowInMentalState: true);
 // Cross-level satisfaction for modded needs: when your giver finds nothing
 // on the pawn's map, it re-runs virtually at each linked stairwell exit and
 // the pawn commutes on a hit. Your own think-tree gating (need thresholds,
 // chance nodes) is inherited - the hook only fires when your giver ran.
-// Register partner/facility-seeking givers, NOT solo fallbacks. Built in:
-// RJW (JoinInBed, DoQuickie) and Intimacy (GetIntimacy) when active.
+// allowInMentalState extends this to mental-break givers (vanilla binge,
+// berserk and murderous rage ship registered that way: the binger hunts
+// beer downstairs, the berserker comes down the stairs). Register CONCRETE
+// runtime types (JobGiver_Binge is abstract - the nodes are BingeDrug and
+// BingeFood), partner/facility-seekers only, NOT solo or wander fallbacks.
+// Built in: vanilla break trio, RJW sex+breeding family, Intimacy.
 ```
 
 Soft-reference pattern (no hard dependency): resolve `AsAboveSoBelow.ABApi`

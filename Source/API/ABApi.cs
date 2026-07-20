@@ -178,13 +178,18 @@ namespace AsAboveSoBelow
         /// giver re-rolls on arrival. Your think tree gating (need thresholds)
         /// is inherited: the hook only fires when your giver was invoked.
         /// Register partner/facility-seeking givers only - solo fallbacks
-        /// (masturbate-style) satisfy locally and would mask migration.
-        /// Built in: RJW JoinInBed/DoQuickie, Intimacy GetIntimacy.
+        /// (masturbate-style) satisfy locally and would mask migration; wander
+        /// givers never return null and never trigger. allowInMentalState
+        /// lets the giver act during mental breaks too (vanilla binge and
+        /// berserk are built in that way: the binger hunts beer downstairs).
+        /// Register CONCRETE runtime types, not abstract bases.
+        /// Built in: vanilla BingeDrug/BingeFood/Berserk/MurderousRage
+        /// (mental-safe), RJW sex+breeding family, Intimacy GetIntimacy.
         /// Note: givers that override TryIssueJobPackage itself (rare) are not
         /// covered; the hook lives on the base implementation.</summary>
-        public static void RegisterNeedJobGiver(string jobGiverFullTypeName)
+        public static void RegisterNeedJobGiver(string jobGiverFullTypeName, bool allowInMentalState = false)
         {
-            NeedMigration.Register(jobGiverFullTypeName);
+            NeedMigration.Register(jobGiverFullTypeName, allowInMentalState);
         }
 
         // ---------- Internal raisers (fail-open: a broken subscriber can

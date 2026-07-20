@@ -19,13 +19,14 @@ WATCH = plausible interaction, verify during play - INCOMPAT = declared incompat
 | Reverse Commands | EXPLICIT | Cross-level orders replay via ABPendingOrders (direct links only) |
 | Fluffy Animal Tab | EXPLICIT | Column pawns appended via RecachePawns |
 | Declutter UI | EXPLICIT | Level buttons bypass its global-controls rehost |
-| RimJobWorld (+ ~40 addons incl. animations, Sexperience, Menstruation) | EXPLICIT | Sex need satisfies cross-level: JoinInBed + DoQuickie registered in the need-migration engine (assembly-verified type names); partners/beds on other levels are found via virtual scan and the pawn commutes. Solo (Masturbate) and hostile-context givers deliberately excluded. Everything else is same-map pawn state |
+| RimJobWorld (+ ~40 addons incl. animations, Sexperience, Menstruation) | EXPLICIT | Sex need satisfies cross-level: JoinInBed, DoQuickie, plus the rape/breeding family (Breed, Bestiality, ComfortPrisonerRape, RandomRape, RapeEnemy) registered in the need-migration engine (assembly-verified names); targets on other levels are found by each giver's own scan from the stairwell exit and the pawn commutes. Colonist-initiated only (engine filter); enemy AI variants and solo Masturbate excluded; mental-state contexts excluded engine-wide. Everything else is same-map pawn state |
 | Intimacy - Friends n' Lovers (+ Gender Works) | EXPLICIT | Intimacy need satisfies cross-level: JobGiver_GetIntimacy registered (their giver system mirrors vanilla joy). Inactive in current list; registration activates with the mod |
 | Common Sense | EXPLICIT | Decompiled patch surface audited: no JobGiver_Work patch (migration safe); patches JobGiver_GetJoy.TryGiveJob - our cross-level recreation postfix runs at LOW Harmony priority so CS's joy tweaks get first refusal. Opportunistic tasks hook JobTracker (orthogonal). Bill/ingredient patches run consistently under virtual position swaps |
 | Hauler's Dream | OK | Carry capacity / move speed stat patches + own jobs; orthogonal to our separate cross-level haul work givers |
 | Smarter Construction | OK | Patches construction work giver ordering; under our virtual work scan its checks evaluate against the target map consistently (position swap is coherent). No map-keyed caches found |
 | Romance on the Rim | OK | Dates/proposals are same-map jobs with reachability checks; partners on different levels simply date when co-located. Couples converge nightly via cross-level bed ownership. Candidate for a future API-based date-summons |
 | Allow Tool / Pick Up And Haul class haulers | OK | Same-map work givers and inventory hauling; our carried-thing transfer detaches explicitly before despawn |
+| Clean Pathfinding 2 Continued | OK | Full patch surface decompile-audited: PathFinder cost transpiler + RegionCostCalculator fixes (same-map cost math we never call), per-map MapComponent_DoorPathing (instantiates on our levels - doorpathing zones work in the basement), wander tweaks (wander givers unregistered in our engine), TryFindBestExitSpot transpiler (moot on edge-less pocket maps; our exit assist owns departures). Zero cross-map/Reachability/think-tree overlap. Its avoid-darkness costs apply on levels too - pawns keep to lit tunnels, working as intended |
 | MultiFloors | INCOMPAT | Competing z-level system (declared incompatibleWith) |
 | Z-Levels Beta | INCOMPAT | Competing z-level system (declared incompatibleWith) |
 
@@ -71,9 +72,12 @@ stairs and re-rolls on arrival. 600t per-pawn retry cooldown; colonists only; lo
 
 Generalization of the joy mechanism for ANY mod-added need: registered ThinkNode_JobGiver types get
 the virtual re-scan + stairs commute when they return null. One low-priority postfix on the base
-TryIssueJobPackage (JobGiver_Work overrides it - untouched); cost with nothing registered is one
-static bool per giver evaluation. Built-in registrations: RJW, Intimacy. Public:
-ABApi.RegisterNeedJobGiver.
+TryIssueJobPackage (JobGiver_Work overrides it - untouched). Two tiers: normal (player-controlled
+colonists) and MENTAL-SAFE (also fires during mental breaks, with a faction+humanlike filter since
+IsColonistPlayerControlled is false in a state). Built-in mental-safe: vanilla BingeDrug, BingeFood,
+Berserk, MurderousRage - binges hunt beer on other levels, berserkers and rage targets cross the
+stairs. Built-in normal: RJW sex+breeding family (RandomRape mental-safe), Intimacy. Public:
+ABApi.RegisterNeedJobGiver(name, allowInMentalState).
 
 ## Known incompatibility surface to re-check each RimWorld update
 
