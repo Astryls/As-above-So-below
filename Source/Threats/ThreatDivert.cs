@@ -195,6 +195,12 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // T12 API: incidents can opt into pocket levels via XML.
+                ABIncidentLevelPolicy policy = __instance.def?.GetModExtension<ABIncidentLevelPolicy>();
+                if (policy != null && policy.allowOnPocketLevels)
+                {
+                    return;
+                }
                 if (parms == null || !(parms.target is Map map) || map.Disposed)
                 {
                     return;

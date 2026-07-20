@@ -96,6 +96,7 @@ namespace AsAboveSoBelow
             {
                 Map map = MapGenerator.GenerateMap(sourceMap.Size, parent, generatorDef, null, null, true);
                 Find.World.pocketMaps.Add(parent);
+                ABApi.NotifyLevelCreated(map);
                 return map;
             }
             finally

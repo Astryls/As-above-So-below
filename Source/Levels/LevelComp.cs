@@ -288,6 +288,10 @@ namespace AsAboveSoBelow
         {
             base.MapRemoved();
             UnsubscribeSync();
+            if (level != 0)
+            {
+                ABApi.NotifyLevelRemoved(map);
+            }
             if (level == 1)
             {
                 NoteSkyLevel(-1);

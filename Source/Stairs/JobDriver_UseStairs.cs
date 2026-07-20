@@ -206,6 +206,7 @@ namespace AsAboveSoBelow
                 }
                 // Arrived hostiles join (or start) the assault on this map.
                 HostileDescend.NoteArrived(p, targetMap);
+                ABApi.NotifyPawnTransferred(p, sourceMap, targetMap);
                 FinishCarriedDelivery(p, intent);
                 PullFollowers(p, stairs, sourceMap, dest);
                 ContinueRide(p, dest, rideFinal, targetMap);

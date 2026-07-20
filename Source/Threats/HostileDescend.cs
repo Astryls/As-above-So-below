@@ -83,6 +83,10 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            if (ABVehicleCompat.IsVehicle(p))
+            {
+                return false;
+            }
             if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
             {
                 return false;
@@ -112,12 +116,17 @@ namespace AsAboveSoBelow
                 || duty == DutyDefOf.Kidnap
                 || duty == DutyDefOf.Steal
                 || duty == DutyDefOf.TakeWoundedGuest
-                || duty == DutyDefOf.PrisonerEscape;
+                || duty == DutyDefOf.PrisonerEscape
+                || ABApi.IsRegisteredExitDuty(duty);
         }
 
         private static bool ShouldDescendFriendly(Pawn p)
         {
             if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
+            {
+                return false;
+            }
+            if (ABVehicleCompat.IsVehicle(p))
             {
                 return false;
             }
