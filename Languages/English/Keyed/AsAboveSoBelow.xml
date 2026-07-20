@@ -26,6 +26,12 @@
   <AB_BelowDepthShiftTip>Shifts the whole view of the level below slightly down-screen so elevated platforms and walls read as raised instead of painted onto the ground. Measured in cells; 0 restores exact alignment.</AB_BelowDepthShiftTip>
   <AB_SlabEdge>Draw roof slab edges</AB_SlabEdge>
   <AB_SlabEdgeTip>Rooftops, sky floors, and landings show a dark side face along edges that border open air, so upper stories read as slabs stacked on the story below. The south face height follows the below view depth offset.</AB_SlabEdgeTip>
+  <AB_WallReveal>Reveal rim walls on rooftops</AB_WallReveal>
+  <AB_WallRevealTip>The outer ring of rooftop tiles shows a strip of the supporting wall's top along edges that border open air, so the roof reads as resting on the wall line below instead of floating. Covered by anything built on the rim.</AB_WallRevealTip>
+  <AB_WallRevealWidth>Rim wall strip width</AB_WallRevealWidth>
+  <AB_WallRevealWidthTip>How much of the outer rooftop tile shows the wall underneath, in cells.</AB_WallRevealWidthTip>
+  <AB_WallFacade>Draw wall faces under slab edges</AB_WallFacade>
+  <AB_WallFacadeTip>South-facing slab edges show a sliver of the actual wall underneath in place of the plain dark face, so a wall built on the roof edge and the wall below it read as one continuous tall wall. Follows the below view depth offset.</AB_WallFacadeTip>
   <AB_BelowScale>Below level object scale</AB_BelowScale>
   <AB_BelowScaleTip>Pawns, animals, items, plants, and furniture on the level below draw smaller than life size, mimicking the zoom out of looking down a full story. Every object shrinks in place on its own cell, so nothing slides or misaligns. Walls and other connected structures keep their true size.</AB_BelowScaleTip>
   <AB_BelowParallax>Below view parallax</AB_BelowParallax>

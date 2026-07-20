@@ -13,6 +13,9 @@ namespace AsAboveSoBelow
         public float belowDim = 0.12f;
         public float belowDepthShift = 0.25f;
         public bool drawSlabEdge = true;
+        public bool drawWallReveal = true;
+        public float wallRevealWidth = 0.5f;
+        public bool drawWallFacade = true;
         public float belowThingScale = 0.85f;
         public bool belowParallax;
         public float belowParallaxStrength = 0.35f;
@@ -59,6 +62,21 @@ namespace AsAboveSoBelow
             listing.Label("AB_BelowDepthShift".Translate() + ": " + belowDepthShift.ToString("0.00"), tooltip: "AB_BelowDepthShiftTip".Translate());
             belowDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
             listing.CheckboxLabeled("AB_SlabEdge".Translate(), ref drawSlabEdge, "AB_SlabEdgeTip".Translate());
+            listing.CheckboxLabeled("AB_WallReveal".Translate(), ref drawWallReveal, "AB_WallRevealTip".Translate());
+            if (drawWallReveal)
+            {
+                listing.Label("AB_WallRevealWidth".Translate() + ": " + wallRevealWidth.ToString("0.00"), tooltip: "AB_WallRevealWidthTip".Translate());
+                float newRevealWidth = listing.Slider(wallRevealWidth, 0.25f, 0.6f);
+                if (Mathf.Abs(newRevealWidth - wallRevealWidth) > 0.0005f)
+                {
+                    // Strip geometry bakes the width into clipped verts;
+                    // reprint so the slider applies live (same amortized
+                    // path the below scale slider uses).
+                    DirtyBelowThingsLayers();
+                }
+                wallRevealWidth = newRevealWidth;
+            }
+            listing.CheckboxLabeled("AB_WallFacade".Translate(), ref drawWallFacade, "AB_WallFacadeTip".Translate());
             listing.Label("AB_BelowScale".Translate() + ": " + belowThingScale.ToStringPercent(), tooltip: "AB_BelowScaleTip".Translate());
             float newBelowScale = listing.Slider(belowThingScale, 0.7f, 1f);
             if (Mathf.Abs(newBelowScale - belowThingScale) > 0.0005f)
@@ -112,6 +130,9 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);
             Scribe_Values.Look(ref belowDepthShift, "belowDepthShift", 0.25f);
             Scribe_Values.Look(ref drawSlabEdge, "drawSlabEdge", true);
+            Scribe_Values.Look(ref drawWallReveal, "drawWallReveal", true);
+            Scribe_Values.Look(ref wallRevealWidth, "wallRevealWidth", 0.5f);
+            Scribe_Values.Look(ref drawWallFacade, "drawWallFacade", true);
             Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
             Scribe_Values.Look(ref belowParallax, "belowParallax", false);
             Scribe_Values.Look(ref belowParallaxStrength, "belowParallaxStrength", 0.35f);
