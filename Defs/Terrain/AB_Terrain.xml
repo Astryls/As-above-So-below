@@ -18,8 +18,9 @@
   <TerrainDef>
     <defName>AB_RoofSurface</defName>
     <label>rooftop</label>
-    <description>The corrugated steel top side of a roof on the level below. Sturdy enough to walk on and build on.</description>
-    <texturePath>Terrain/AB_RoofSurface</texturePath>
+    <description>The tiled steel top side of a roof on the level below. Sturdy enough to walk on and build on.</description>
+    <texturePath>Terrain/Surfaces/GenericFloorTile</texturePath>
+    <color>(0.32, 0.32, 0.32)</color>
     <edgeType>Hard</edgeType>
     <renderPrecedence>230</renderPrecedence>
     <layerable>false</layerable>
