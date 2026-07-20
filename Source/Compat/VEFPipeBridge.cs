@@ -23,15 +23,18 @@ namespace AsAboveSoBelow
     /// not matter: the Extra fields persist until the net's next tick and are
     /// zeroed on consumption.
     ///
-    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException): foreign
-    /// types must never appear in ANY method signature (parameters or return
-    /// type) or class-level member here - locals inside method bodies only.
-    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects over
-    /// every method in every assembly) resolve signature types even for methods
-    /// that are never called, which hard-crashes the scan when VEF is absent.
-    /// Method BODIES are safe: they are JIT compiled only on first invocation,
-    /// and every call site is gated by ABPipeCompat's detection check. That is
-    /// why everything below lives inside clean-signature methods.
+    /// HARD SOFT-COMPAT RULE (learned from a live TypeLoadException, then
+    /// relearned when this file broke it): foreign types must never appear in
+    /// ANY method signature (parameters or return type), field, local function
+    /// or lambda capture here - locals inside plain method bodies only.
+    /// Assembly-wide attribute scans (LudeonTK's debug menu setup reflects
+    /// over every method in every assembly) resolve signature types even for
+    /// methods that are never called, which hard-crashes the scan when VEF is
+    /// absent ("Could not resolve type with token ... expected class
+    /// 'PipeSystem.PipeNet'"). Method BODIES are safe: they are JIT compiled
+    /// only on first invocation, and every call site is gated by ABPipeCompat's
+    /// detection check. Hence the object-typed private signatures below with
+    /// casts on entry.
     /// </summary>
     public static class VEFPipeBridge
     {
@@ -83,8 +86,9 @@ namespace AsAboveSoBelow
         /// <summary>The shaft counts as touching a net when the net's grid
         /// covers its cell or any cardinal neighbor, so players can butt pipes
         /// against the shaft instead of running them under it.</summary>
-        private static bool Touches(PipeNet net, IntVec3 c, Map map)
+        private static bool Touches(object netObj, IntVec3 c, Map map)
         {
+            PipeNet net = (PipeNet)netObj;
             if (net.networkGrid[c])
             {
                 return true;
@@ -105,8 +109,10 @@ namespace AsAboveSoBelow
         /// consumers that are off but could turn on) from 'from' net's
         /// production surplus and stored resource. Injections already promised
         /// by other shafts this window are respected on both sides.</summary>
-        private static void DirectFeed(PipeNet from, PipeNet to)
+        private static void DirectFeed(object fromObj, object toObj)
         {
+            PipeNet from = (PipeNet)fromObj;
+            PipeNet to = (PipeNet)toObj;
             float offWanting = 0f;
             List<CompResourceTrader> receivers = to.receivers;
             for (int i = 0; i < receivers.Count; i++)
@@ -136,8 +142,10 @@ namespace AsAboveSoBelow
         /// <summary>Damped equalization toward equal fill fractions, tanks on
         /// both sides only; the direct feed above is what keeps storageless
         /// levels running.</summary>
-        private static void EqualizeStorages(PipeNet netA, PipeNet netB)
+        private static void EqualizeStorages(object netAObj, object netBObj)
         {
+            PipeNet netA = (PipeNet)netAObj;
+            PipeNet netB = (PipeNet)netBObj;
             float storedA = netA.CurrentStored();
             float storedB = netB.CurrentStored();
             float capA = storedA + netA.AvailableCapacity;
