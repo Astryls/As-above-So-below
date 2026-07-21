@@ -571,6 +571,21 @@ namespace AsAboveSoBelow
                             {
                                 continue;
                             }
+                            if (sub.material == MatBases.ShadowMask)
+                            {
+                                // dontRender terrain (our AB_OpenAir) bakes into
+                                // the terrain layer with the shadow-mask material,
+                                // a stencil/mask material - NOT visible color.
+                                // Drawn flat as below-content it renders as a
+                                // solid red shader artifact. It never appeared
+                                // when the map below was the ground (no air
+                                // cells), but in a stacked column the map below a
+                                // sky level is ITSELF a sky level (+2 viewing +1)
+                                // whose open air produces this submesh. Skip it:
+                                // those cells read as empty holes, which is
+                                // correct - the see-below only reaches one level.
+                                continue;
+                            }
                             Material mat = BelowMaterialFor(sub.material, queue: baseQueue);
                             if (mat != null)
                             {

@@ -113,8 +113,10 @@ namespace AsAboveSoBelow
         {
             ClearSubMeshes(MeshParts.All);
             Map map = section.map;
-            if (!ABGuard.On(ABGuard.Rendering) || map.Level() != 1)
+            if (!ABGuard.On(ABGuard.Rendering) || map.Level() <= 0)
             {
+                // Every sky level (not just +1) draws its own fog-toned cap
+                // over the mountain mass on the level directly below it.
                 return;
             }
             try

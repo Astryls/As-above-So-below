@@ -76,7 +76,7 @@ namespace AsAboveSoBelow
         {
             ClearSubMeshes(MeshParts.All);
             Map map = section.map;
-            if (!ABGuard.On(ABGuard.Rendering) || map.Level() != 1)
+            if (!ABGuard.On(ABGuard.Rendering) || map.Level() <= 0)
             {
                 return;
             }
