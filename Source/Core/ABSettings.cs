@@ -10,6 +10,7 @@ namespace AsAboveSoBelow
         public bool showLiveBelow = true;
         public bool showCeilingHint = true;
         public bool showLevelWidget = true;
+        public bool cameraFollowStairs = true;
         public float belowDim = 0.12f;
         public float belowDepthShift = 0.25f;
         public bool drawSlabEdge = true;
@@ -49,6 +50,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
             listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
             listing.CheckboxLabeled("AB_ShowLevelWidget".Translate(), ref showLevelWidget, "AB_ShowLevelWidgetTip".Translate());
+            listing.CheckboxLabeled("AB_CameraFollowStairs".Translate(), ref cameraFollowStairs, "AB_CameraFollowStairsTip".Translate());
             listing.GapLine();
             listing.CheckboxLabeled("AB_ThreatBasementInfest".Translate(), ref threatBasementInfest, "AB_ThreatBasementInfestTip".Translate());
             listing.CheckboxLabeled("AB_ThreatSkyDrops".Translate(), ref threatSkyDrops, "AB_ThreatSkyDropsTip".Translate());
@@ -136,6 +138,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
             Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
             Scribe_Values.Look(ref showLevelWidget, "showLevelWidget", true);
+            Scribe_Values.Look(ref cameraFollowStairs, "cameraFollowStairs", true);
             Scribe_Values.Look(ref climbTimeMultiplier, "climbTimeMultiplier", 1f);
             // Key renamed so the old heavier default is not carried over from
             // earlier test sessions; real surface lighting now does most of the work.

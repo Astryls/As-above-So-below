@@ -170,6 +170,23 @@ namespace AsAboveSoBelow
             }
             Map sourceMap = stairs.Map;
             IntVec3 sourcePos = stairs.Position;
+            // Ride the camera down/up with a colonist the player is watching: only
+            // when this exact pawn is the sole selection and the player is looking
+            // at the level being left (never yanks the view for AI haulers, pets,
+            // or hostiles crossing on their own).
+            bool followCam = false;
+            try
+            {
+                ABSettings s = ABMod.Settings;
+                followCam = s != null && s.cameraFollowStairs
+                    && p.Faction == Faction.OfPlayer && !p.RaceProps.Animal
+                    && Find.Selector.SingleSelectedThing == p
+                    && sourceMap == Find.CurrentMap;
+            }
+            catch
+            {
+                followCam = false;
+            }
             Thing carried = null;
             try
             {
@@ -208,6 +225,10 @@ namespace AsAboveSoBelow
                 // Arrived hostiles join (or start) the assault on this map.
                 HostileDescend.NoteArrived(p, targetMap);
                 ABApi.NotifyPawnTransferred(p, sourceMap, targetMap);
+                if (followCam && p.Spawned && !p.Dead)
+                {
+                    LevelCamera.FollowPawn(p);
+                }
                 FinishCarriedDelivery(p, intent);
                 PullFollowers(p, stairs, sourceMap, dest);
                 ContinueRide(p, dest, rideFinal, targetMap);

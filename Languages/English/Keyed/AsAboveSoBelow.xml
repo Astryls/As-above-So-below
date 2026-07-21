@@ -99,6 +99,8 @@
   <AB_LevelWidgetTip>You can also press Page Up and Page Down.</AB_LevelWidgetTip>
   <AB_ShowLevelWidget>Show level view buttons</AB_ShowLevelWidget>
   <AB_ShowLevelWidgetTip>Adds view level above and view level below buttons next to the other view toggles in the bottom right.</AB_ShowLevelWidgetTip>
+  <AB_CameraFollowStairs>Camera follows colonists through stairs</AB_CameraFollowStairs>
+  <AB_CameraFollowStairsTip>When you send a selected colonist up or down stairs (or an elevator), the view rides along to the level they arrive on, centered on them at the same zoom. Only follows the pawn you have selected and are watching - autonomous haulers, pets, and enemies never move your camera.</AB_CameraFollowStairsTip>
   <AB_GridLinkReceiving>Grid link: receiving {0} W from the connected level.</AB_GridLinkReceiving>
   <AB_GridLinkSending>Grid link: sending {0} W to the connected level.</AB_GridLinkSending>
   <AB_GridLinkIdle>Grid link: connected, no flow needed.</AB_GridLinkIdle>
