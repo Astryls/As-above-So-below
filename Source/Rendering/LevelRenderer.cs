@@ -340,20 +340,31 @@ namespace AsAboveSoBelow
             // state only the current map's own render pass establishes. This
             // never bit the single-level see-below on a rocky test map (hard
             // rock terrain), but a soil-heavy ground surfaces it immediately.
-            // Swap them to the hard terrain shader: same texture, crisp edges
-            // instead of soft (imperceptible in the dimmed/shrunk view below),
-            // safe cross-map. Water (TerrainWater) is deliberately NOT swapped -
-            // its shader reads per-map globals that DrawBelowStatic re-points at
-            // the lower map each frame. Non-terrain shaders (Cutout things,
-            // Transparent) never match and are untouched.
-            clone = new Material(source);
+            // Fix: draw such terrain through the HARD terrain shader instead
+            // (crisp edges instead of soft - imperceptible in the dimmed/shrunk
+            // view below, and it renders correctly cross-map: the sky levels'
+            // own AB_MountainTop is a hard-shader terrain drawn through this
+            // very path). Build a FRESH TerrainHard material carrying the
+            // source texture/color - reassigning .shader onto a clone of the
+            // FadeRough material did NOT carry _MainTex and rendered black.
+            // Water (TerrainWater) is deliberately NOT swapped: DrawBelowStatic
+            // re-points its per-map globals each frame. Non-terrain shaders
+            // (Cutout things, Transparent) never match and clone unchanged.
             Shader src = source.shader;
             if (src == ShaderDatabase.TerrainFade || src == ShaderDatabase.TerrainFadeRough
                 || src == ShaderDatabase.TerrainFadeRoughPolluted)
             {
-                clone.shader = ShaderDatabase.TerrainHard;
+                clone = new Material(ShaderDatabase.TerrainHard)
+                {
+                    mainTexture = source.mainTexture,
+                    color = source.HasProperty("_Color") ? source.color : Color.white,
+                    renderQueue = queue
+                };
             }
-            clone.renderQueue = queue;
+            else
+            {
+                clone = new Material(source) { renderQueue = queue };
+            }
             belowMats[key] = clone;
             return clone;
         }
