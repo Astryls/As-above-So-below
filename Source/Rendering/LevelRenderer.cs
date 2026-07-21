@@ -334,10 +334,26 @@ namespace AsAboveSoBelow
             {
                 belowMats.Clear();
             }
-            // Pure clone at a forced queue - water materials included: their
-            // shader reads per-map globals that DrawBelowStatic re-points at
-            // the lower map each frame, so vanilla water just works from above.
-            clone = new Material(source) { renderQueue = queue };
+            // Clone at a forced queue. The Fade/FadeRough terrain shaders (the
+            // natural ground: soil, grass, sand) render as a solid RED artifact
+            // when drawn for a NON-current map - they sample per-map edge/fade
+            // state only the current map's own render pass establishes. This
+            // never bit the single-level see-below on a rocky test map (hard
+            // rock terrain), but a soil-heavy ground surfaces it immediately.
+            // Swap them to the hard terrain shader: same texture, crisp edges
+            // instead of soft (imperceptible in the dimmed/shrunk view below),
+            // safe cross-map. Water (TerrainWater) is deliberately NOT swapped -
+            // its shader reads per-map globals that DrawBelowStatic re-points at
+            // the lower map each frame. Non-terrain shaders (Cutout things,
+            // Transparent) never match and are untouched.
+            clone = new Material(source);
+            Shader src = source.shader;
+            if (src == ShaderDatabase.TerrainFade || src == ShaderDatabase.TerrainFadeRough
+                || src == ShaderDatabase.TerrainFadeRoughPolluted)
+            {
+                clone.shader = ShaderDatabase.TerrainHard;
+            }
+            clone.renderQueue = queue;
             belowMats[key] = clone;
             return clone;
         }
