@@ -55,10 +55,12 @@ namespace AsAboveSoBelow
                 return null;
             }
             LevelComp comp = map.Levels();
-            if (comp == null || comp.level != 1)
+            if (comp == null || comp.level <= 0)
             {
                 return null;
             }
+            // Mirror the level directly below: a stacked sky level follows +1,
+            // which follows the surface, so seasons/snaps propagate up the stack.
             Map ground = comp.lowerMap ?? comp.groundMap;
             if (ground == null || ground.Disposed)
             {

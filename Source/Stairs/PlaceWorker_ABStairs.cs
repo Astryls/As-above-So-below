@@ -19,7 +19,8 @@ namespace AsAboveSoBelow
                 return true;
             }
             int target = map.Level() + ext.deltaLevel;
-            if (target < -1 || target > 1)
+            int maxUpper = ABMod.Settings?.MaxUpper ?? 1;
+            if (target < -1 || target > maxUpper)
             {
                 return new AcceptanceReport("AB_LevelCap".Translate());
             }

@@ -7,6 +7,7 @@ namespace AsAboveSoBelow
     public class ABSettings : ModSettings
     {
         public bool verboseLogging;
+        public int maxUpperLevels = 1;
         public bool showLiveBelow = true;
         public bool showCeilingHint = true;
         public bool showLevelWidget = true;
@@ -35,10 +36,18 @@ namespace AsAboveSoBelow
         public bool columnWealth = true;
         public bool worldIntegration = true;
 
+        /// <summary>Player-chosen ceiling on sky levels above the surface,
+        /// hard-clamped to the design cap of three. The basement (one below) is
+        /// always available.</summary>
+        public int MaxUpper => Mathf.Clamp(maxUpperLevels, 1, 3);
+
         public void DoWindowContents(Rect inRect)
         {
             Listing_Standard listing = new Listing_Standard();
             listing.Begin(inRect);
+            listing.Label("AB_MaxUpperLevels".Translate() + ": " + MaxUpper, tooltip: "AB_MaxUpperLevelsTip".Translate());
+            maxUpperLevels = Mathf.RoundToInt(listing.Slider(MaxUpper, 1, 3));
+            listing.GapLine();
             listing.CheckboxLabeled("AB_CrossLevelWork".Translate(), ref crossLevelWork, "AB_CrossLevelWorkTip".Translate());
             listing.CheckboxLabeled("AB_IdleReturnHome".Translate(), ref idleReturnHome, "AB_IdleReturnHomeTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
@@ -135,6 +144,7 @@ namespace AsAboveSoBelow
         {
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
+            Scribe_Values.Look(ref maxUpperLevels, "maxUpperLevels", 1);
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
             Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
             Scribe_Values.Look(ref showLevelWidget, "showLevelWidget", true);

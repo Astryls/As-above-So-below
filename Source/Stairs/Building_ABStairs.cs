@@ -174,12 +174,13 @@ namespace AsAboveSoBelow
             try
             {
                 int target = Map.Level() + delta;
+                int maxUpper = ABMod.Settings?.MaxUpper ?? 1;
                 Map targetMap = null;
                 if (target == 0)
                 {
                     targetMap = Map.GroundMap();
                 }
-                else if (target >= -1 && target <= 1)
+                else if (target >= -1 && target <= maxUpper)
                 {
                     MapGeneratorDef gen = target == -1 ? ABDefOf.AB_Basement : ABDefOf.AB_Sky;
                     bool generated;

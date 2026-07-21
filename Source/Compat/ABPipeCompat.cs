@@ -50,9 +50,18 @@ namespace AsAboveSoBelow
             }
         }
 
+        private static readonly List<Building_ABStairs> columnStairs = new List<Building_ABStairs>();
+
         private static void BridgeLink(Building_ABStairs a, Building_ABStairs b)
         {
             if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
+            {
+                return;
+            }
+            // Bridge each pair exactly once, from its lower end (b sits above a).
+            // The column is enumerated whole, so both ends are visited; the
+            // level guard stops a +1<->+2 pair injecting twice.
+            if (b.Map.Level() <= a.Map.Level())
             {
                 return;
             }
@@ -88,10 +97,10 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            List<Building_ABStairs> stairs = groundComp.Stairs;
-            for (int i = 0; i < stairs.Count; i++)
+            groundComp.CollectColumnStairs(columnStairs);
+            for (int i = 0; i < columnStairs.Count; i++)
             {
-                Building_ABStairs a = stairs[i];
+                Building_ABStairs a = columnStairs[i];
                 if (a == null || !a.Spawned)
                 {
                     continue;
@@ -100,6 +109,7 @@ namespace AsAboveSoBelow
                 // Elevator middle cars hold a second link (down).
                 BridgeLink(a, a.SecondCounterpart);
             }
+            columnStairs.Clear();
         }
     }
 }

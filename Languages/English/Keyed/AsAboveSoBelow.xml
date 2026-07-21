@@ -17,7 +17,9 @@
   <AB_BasementCreated>The basement level has been opened. It is solid rock, mine it out to expand.</AB_BasementCreated>
   <AB_SkyCreated>The sky level has been opened. Build floors above roofed rooms to expand upward.</AB_SkyCreated>
   <AB_OnlySurfaceForNow>Must be placed on the surface level.</AB_OnlySurfaceForNow>
-  <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
+  <AB_LevelCap>Level limit reached.</AB_LevelCap>
+  <AB_MaxUpperLevels>Maximum sky levels</AB_MaxUpperLevels>
+  <AB_MaxUpperLevelsTip>How many levels can be built above the surface (the basement below is always available). Each sky level is a full simulated map, so more levels cost more each tick even when idle. Existing stairwells above this limit keep working; the cap only blocks building new ones higher. Mountains shrink inward by one tile on each level up.</AB_MaxUpperLevelsTip>
   <AB_ShowLiveBelow>Show live movement on the level below</AB_ShowLiveBelow>
   <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
   <AB_BelowDim>Darken the level below</AB_BelowDim>

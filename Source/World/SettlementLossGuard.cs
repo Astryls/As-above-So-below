@@ -30,7 +30,12 @@ namespace AsAboveSoBelow
             {
                 return true;
             }
-            int stranded = CountColonists(comp.upperMap) + CountColonists(comp.lowerMap);
+            int stranded = 0;
+            System.Collections.Generic.List<Map> levels = comp.LinkedLevelMaps();
+            for (int i = 0; i < levels.Count; i++)
+            {
+                stranded += CountColonists(levels[i]);
+            }
             if (stranded == 0)
             {
                 return true;

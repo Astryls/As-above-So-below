@@ -97,7 +97,13 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            __result += ChildWealth(comp.upperMap) + ChildWealth(comp.lowerMap);
+            // Every level in the column, so wealth cannot be hidden by parking
+            // it two or more levels up (raised sky cap) or in the basement.
+            List<Map> levels = comp.LinkedLevelMaps();
+            for (int i = 0; i < levels.Count; i++)
+            {
+                __result += ChildWealth(levels[i]);
+            }
         }
 
         /// <summary>The vanilla player-home wealth formula applied to a linked
@@ -130,29 +136,27 @@ namespace AsAboveSoBelow
                 return;
             }
             LevelComp comp = __instance.Levels();
-            if (comp == null || comp.level != 0 || (comp.upperMap == null && comp.lowerMap == null))
+            if (comp == null || comp.level != 0 || !comp.HasMultiLevels)
             {
                 return;
             }
-            __result = WithColumn(__result, comp.upperMap, comp.lowerMap);
+            __result = WithColumn(__result, comp.LinkedLevelMaps());
         }
 
-        private static IEnumerable<Pawn> WithColumn(IEnumerable<Pawn> surface, Map upper, Map lower)
+        private static IEnumerable<Pawn> WithColumn(IEnumerable<Pawn> surface, List<Map> levels)
         {
             foreach (Pawn p in surface)
             {
                 yield return p;
             }
-            if (upper != null && !upper.Disposed)
+            for (int i = 0; i < levels.Count; i++)
             {
-                foreach (Pawn p in upper.mapPawns.PawnsInFaction(RimWorld.Faction.OfPlayer))
+                Map m = levels[i];
+                if (m == null || m.Disposed)
                 {
-                    yield return p;
+                    continue;
                 }
-            }
-            if (lower != null && !lower.Disposed)
-            {
-                foreach (Pawn p in lower.mapPawns.PawnsInFaction(RimWorld.Faction.OfPlayer))
+                foreach (Pawn p in m.mapPawns.PawnsInFaction(RimWorld.Faction.OfPlayer))
                 {
                     yield return p;
                 }

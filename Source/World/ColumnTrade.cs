@@ -30,8 +30,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             comp = ground?.Levels();
-            return comp != null && comp.level == 0
-                && (comp.upperMap != null || comp.lowerMap != null);
+            return comp != null && comp.level == 0 && comp.HasMultiLevels;
         }
     }
 
@@ -46,13 +45,10 @@ namespace AsAboveSoBelow
                 return;
             }
             IEnumerable<Thing> result = __result;
-            if (comp.upperMap != null && !comp.upperMap.Disposed)
+            List<Map> levels = comp.LinkedLevelMaps();
+            for (int i = 0; i < levels.Count; i++)
             {
-                result = result.Concat(TradeUtility.AllLaunchableThingsForTrade(comp.upperMap, trader));
-            }
-            if (comp.lowerMap != null && !comp.lowerMap.Disposed)
-            {
-                result = result.Concat(TradeUtility.AllLaunchableThingsForTrade(comp.lowerMap, trader));
+                result = result.Concat(TradeUtility.AllLaunchableThingsForTrade(levels[i], trader));
             }
             __result = result;
         }
@@ -74,7 +70,10 @@ namespace AsAboveSoBelow
             try
             {
                 inColumnLaunch = true;
-                foreach (Map level in new[] { map, comp.upperMap, comp.lowerMap })
+                // Surface beacons first, then every linked level's vaults.
+                List<Map> levels = comp.LinkedLevelMaps();
+                levels.Insert(0, map);
+                foreach (Map level in levels)
                 {
                     if (level == null || level.Disposed || debt <= 0)
                     {

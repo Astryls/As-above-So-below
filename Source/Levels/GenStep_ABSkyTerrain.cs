@@ -24,7 +24,14 @@ namespace AsAboveSoBelow
 
         public override void Generate(Map map, GenStepParams parms)
         {
-            Map ground = map.GroundMap();
+            // The mountain mass is projected from the level DIRECTLY BELOW this
+            // one, not the surface: each step up erodes one more ring, so a
+            // stack of sky levels forms a shrinking ziggurat exactly like the
+            // first sky level does over the surface. The vertical links are not
+            // wired until after generation, so LowerMap() is still null here and
+            // the below map is read from the generation context (falls back to
+            // the ground map for the first level, where they are the same).
+            Map ground = LevelMapGen.CurrentContext?.belowMap ?? map.GroundMap();
             List<ThingDef> rocks = Find.World.NaturalRockTypesIn(map.Tile).ToList();
             if (rocks.Count == 0)
             {

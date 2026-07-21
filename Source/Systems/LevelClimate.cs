@@ -16,6 +16,8 @@ namespace AsAboveSoBelow
 
         private const float MaxExchange = 800f;
 
+        private static readonly List<Building_ABStairs> columnStairs = new List<Building_ABStairs>();
+
         public static void TickGroundPairs(LevelComp groundComp)
         {
             ABSettings settings = ABMod.Settings;
@@ -23,10 +25,10 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            List<Building_ABStairs> stairs = groundComp.Stairs;
-            for (int i = 0; i < stairs.Count; i++)
+            groundComp.CollectColumnStairs(columnStairs);
+            for (int i = 0; i < columnStairs.Count; i++)
             {
-                Building_ABStairs a = stairs[i];
+                Building_ABStairs a = columnStairs[i];
                 if (a == null || !a.Spawned)
                 {
                     continue;
@@ -40,11 +42,18 @@ namespace AsAboveSoBelow
                 // Elevator middle cars hold a second link (down).
                 ExchangeLink(a, a.SecondCounterpart);
             }
+            columnStairs.Clear();
         }
 
         private static void ExchangeLink(Building_ABStairs a, Building_ABStairs b)
         {
             if (b == null || !b.Spawned || b.Map == null || b.Map.Disposed)
+            {
+                return;
+            }
+            // Exchange each pair once, from its lower end (b above a): the whole
+            // column is enumerated, so both ends are visited.
+            if (b.Map.Level() <= a.Map.Level())
             {
                 return;
             }

@@ -65,12 +65,79 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Fills the buffer with every spawned stairwell across the
+        /// whole column (this comp being the ground controller). The utility
+        /// bridges run once from the ground comp yet must reach pairs that live
+        /// entirely off the ground map - e.g. a link between +1 and +2 when the
+        /// player raised the sky-level cap. Allocation free against a
+        /// caller-owned buffer.</summary>
+        public void CollectColumnStairs(List<Building_ABStairs> buffer)
+        {
+            buffer.Clear();
+            if (mapByLevel != null && mapByLevel.Count > 0)
+            {
+                foreach (KeyValuePair<int, Map> kvp in mapByLevel)
+                {
+                    Map m = kvp.Value;
+                    if (m == null || m.Disposed)
+                    {
+                        continue;
+                    }
+                    List<Building_ABStairs> s = m.Levels()?.Stairs;
+                    if (s == null)
+                    {
+                        continue;
+                    }
+                    for (int i = 0; i < s.Count; i++)
+                    {
+                        if (s[i] != null)
+                        {
+                            buffer.Add(s[i]);
+                        }
+                    }
+                }
+            }
+            else if (stairsList != null)
+            {
+                // No multi-level registry (ground-only): just our own stairs.
+                for (int i = 0; i < stairsList.Count; i++)
+                {
+                    if (stairsList[i] != null)
+                    {
+                        buffer.Add(stairsList[i]);
+                    }
+                }
+            }
+        }
+
         public void DeregisterStairs(Building_ABStairs stairs)
         {
             stairsList?.Remove(stairs);
         }
 
         public bool HasMultiLevels => mapByLevel != null && mapByLevel.Count > 1;
+
+        /// <summary>New list of every live map in this column except this comp's
+        /// own map. For the infrequent column-wide aggregations (storyteller
+        /// wealth and pawns, trade beacons, settlement-loss headcount) that must
+        /// see every level, not just the two adjacent maps - a small allocation
+        /// off the hot path is fine. Returns empty when no levels are linked.</summary>
+        public List<Map> LinkedLevelMaps()
+        {
+            List<Map> result = new List<Map>();
+            if (mapByLevel != null)
+            {
+                foreach (KeyValuePair<int, Map> kvp in mapByLevel)
+                {
+                    Map m = kvp.Value;
+                    if (m != null && !m.Disposed && m != map)
+                    {
+                        result.Add(m);
+                    }
+                }
+            }
+            return result;
+        }
 
         public LevelComp(Map map) : base(map)
         {
@@ -97,15 +164,16 @@ namespace AsAboveSoBelow
             {
                 groundMap = map;
             }
-            if (level == 1)
+            if (level > 0)
             {
                 NoteSkyLevel(1);
             }
             TrySubscribeSync();
-            if (level == 1)
+            if (level > 0)
             {
                 // Self-heal any air/rooftop drift against the live roof grid;
-                // a no-op when the event path kept everything in sync.
+                // a no-op when the event path kept everything in sync. Every
+                // sky level reconciles against the level directly below it.
                 LevelSync.ReconcileRooftops(map);
             }
         }
@@ -182,9 +250,11 @@ namespace AsAboveSoBelow
             return true;
         }
 
-        /// <summary>Sky comps sync weather from the ground; the ground comp drives
-        /// pipe network bridging for every stairwell pair (each pair has one end
-        /// on the ground map under the three-level cap). Visual mirroring
+        /// <summary>Sky comps sync weather from the level directly below them;
+        /// the ground comp drives pipe network bridging for every stairwell pair
+        /// in the whole column (enumerated via CollectColumnStairs, so pairs
+        /// living entirely above the ground - e.g. +1<->+2 - are covered too).
+        /// Visual mirroring
         /// (weather, rooftop sweep) stretches its cadence while the map is not
         /// on screen and catches up the moment it becomes visible; simulation
         /// (pipes, climate, hostiles) never throttles.</summary>
@@ -196,7 +266,7 @@ namespace AsAboveSoBelow
             {
                 // The player just switched here: sync the visual mirrors now
                 // instead of waiting out a stretched hidden-cadence window.
-                if (level == 1)
+                if (level > 0)
                 {
                     nextWeatherDue = 0;
                     if (sweepCursor < 0)
@@ -226,7 +296,7 @@ namespace AsAboveSoBelow
                     ABGuard.Disable(ABGuard.HostileMove, e, "hostile descend scan");
                 }
             }
-            if (level == 1)
+            if (level > 0)
             {
                 int weatherInterval = visible ? WeatherSyncInterval : WeatherSyncInterval * HiddenWeatherMultiplier;
                 if (ABGuard.On(ABGuard.Weather) && Due(ref nextWeatherDue, now, weatherInterval))
@@ -261,7 +331,10 @@ namespace AsAboveSoBelow
             }
             else if (level == 0)
             {
-                if (stairsList == null || stairsList.Count == 0)
+                // The bridges enumerate the whole column, so keep driving them
+                // whenever any level exists even if the ground map itself holds
+                // no stairs (e.g. only a +1<->+2 utility shaft remains).
+                if ((stairsList == null || stairsList.Count == 0) && !HasMultiLevels)
                 {
                     return;
                 }
@@ -300,7 +373,7 @@ namespace AsAboveSoBelow
                 return;
             }
             Map self = map;
-            if (level == 1)
+            if (level > 0)
             {
                 Map ground = lowerMap ?? groundMap;
                 if (ground == null || ground.events == null)
@@ -321,7 +394,7 @@ namespace AsAboveSoBelow
             // Surface ceiling hints regenerate from the Roofs flag; after a load the
             // surface sections can build before this sky map's links restore, so
             // nudge a one-time whole-map regen. Cosmetic: failure is swallowed.
-            if (level == 1)
+            if (level > 0)
             {
                 try
                 {
@@ -371,7 +444,7 @@ namespace AsAboveSoBelow
             {
                 ABApi.NotifyLevelRemoved(map);
             }
-            if (level == 1)
+            if (level > 0)
             {
                 NoteSkyLevel(-1);
             }

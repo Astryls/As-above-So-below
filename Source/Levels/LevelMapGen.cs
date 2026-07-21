@@ -15,6 +15,12 @@ namespace AsAboveSoBelow
         {
             public Map groundMap;
             public int levelToGenerate;
+            /// <summary>The map directly beneath the one being generated. For a
+            /// sky level this is the level it rises from, so the ledge erodes
+            /// the mountain inward one more ring per level up. Links are wired
+            /// after generation, so the sky genstep cannot read LowerMap() yet
+            /// and takes the below map from here.</summary>
+            public Map belowMap;
         }
 
         /// <summary>Set only while a level map is generating; consumed by LevelComp's constructor.</summary>
@@ -27,9 +33,10 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (destLevel < -1 || destLevel > 1 || destLevel == 0)
+            int maxUpper = ABMod.Settings?.MaxUpper ?? 1;
+            if (destLevel < -1 || destLevel > maxUpper || destLevel == 0)
             {
-                ABLog.Dev("Rejected level generation request for level " + destLevel + " (cap is one up, one down).");
+                ABLog.Dev("Rejected level generation request for level " + destLevel + " (cap is " + maxUpper + " up, one down).");
                 return null;
             }
             try
@@ -90,7 +97,10 @@ namespace AsAboveSoBelow
             CurrentContext = new Context
             {
                 groundMap = groundMap,
-                levelToGenerate = destLevel
+                levelToGenerate = destLevel,
+                // sourceMap is the level the player is climbing from, i.e. the
+                // map directly below the new one for any sky generation.
+                belowMap = sourceMap
             };
             try
             {

@@ -85,7 +85,8 @@ namespace AsAboveSoBelow
                 icon = def.uiIcon
             };
             int targetLevel = Map.Level() + delta;
-            if (targetLevel < -1 || targetLevel > 1)
+            int maxUpper = ABMod.Settings?.MaxUpper ?? 1;
+            if (targetLevel < -1 || targetLevel > maxUpper)
             {
                 extend.Disable("AB_LevelCap".Translate());
             }
