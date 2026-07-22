@@ -236,10 +236,16 @@ namespace AsAboveSoBelow
             return true;
         }
 
+        /// <summary>Structures need room: the roll requires at least one
+        /// clear square of this size of open plateau ground (user spec:
+        /// ancient vents and friends are 7x7-scale complexes).</summary>
+        internal const int RequiredClearSquare = 7;
+
         /// <summary>Called from GenStep_ABSkyTerrain (order 200, before the
-        /// vanilla mutator gen steps at 220+): roll the configured landmarks
-        /// and add their mutators to the sky map's pocket tile.</summary>
-        internal static void RollAndApply(Map skyMap, int plateauCellCount, ABSettings settings)
+        /// vanilla mutator gen steps at 220+): roll the configured landmarks,
+        /// add their mutators to the sky map's pocket tile, and arm the
+        /// placement fence so workers stay on the plateau mask.</summary>
+        internal static void RollAndApply(Map skyMap, int plateauCellCount, bool[] plateauMask, ABSettings settings)
         {
             if (!SystemActive || settings == null || !settings.skyLandmarks)
             {
@@ -252,10 +258,18 @@ namespace AsAboveSoBelow
             try
             {
                 // Landmarks are surface features: they need open plateau
-                // ground. All-rock classic peaks skip them.
+                // ground. All-rock classic peaks skip them, and so does any
+                // plateau without one clear 7x7 square to actually stand a
+                // structure on (user spec: no mountain land, no landmark).
                 if (plateauCellCount < 80)
                 {
                     ABLog.Dev("Sky landmarks: no open plateau (" + plateauCellCount + " cells), skipped.");
+                    return;
+                }
+                if (!HasClearSquare(plateauMask, skyMap.Size.x, skyMap.Size.z, RequiredClearSquare))
+                {
+                    ABLog.Dev("Sky landmarks: no clear " + RequiredClearSquare + "x" + RequiredClearSquare
+                        + " plateau square, skipped.");
                     return;
                 }
                 int max = Mathf.Clamp(settings.skyLandmarkMax, 1, 3);
@@ -294,13 +308,54 @@ namespace AsAboveSoBelow
                         && pool.TryRandomElementByWeight(d => Mathf.Max(d.commonality, 0.05f), out LandmarkDef pick))
                     {
                         Apply(skyMap, pick);
+                        applied++;
                     }
+                }
+                if (applied > 0)
+                {
+                    // Fence worker placement to the plateau until the last
+                    // mutator gen step finishes (ABLandmarkPlacement).
+                    ABLandmarkPlacement.BeginScope(skyMap, plateauMask);
                 }
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.LevelGen, e, "sky landmark roll");
             }
+        }
+
+        /// <summary>True when at least one size x size square of mask cells
+        /// exists. Row-cached scan with early exit; gen-time only.</summary>
+        internal static bool HasClearSquare(bool[] mask, int w, int h, int size)
+        {
+            if (mask == null || w < size || h < size)
+            {
+                return false;
+            }
+            for (int z = 0; z <= h - size; z++)
+            {
+                for (int x = 0; x <= w - size; x++)
+                {
+                    bool ok = true;
+                    for (int dz = 0; dz < size && ok; dz++)
+                    {
+                        int rowBase = (z + dz) * w + x;
+                        for (int dx = 0; dx < size; dx++)
+                        {
+                            if (!mask[rowBase + dx])
+                            {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (ok)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private static void Apply(Map skyMap, LandmarkDef def)

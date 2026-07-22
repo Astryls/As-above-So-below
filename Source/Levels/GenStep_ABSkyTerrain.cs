@@ -217,8 +217,17 @@ namespace AsAboveSoBelow
 
             // Pass 7: landmarks (settings): roll and add tile mutators; the
             // vanilla Mutator* gen steps in the AB_Sky generator def run the
-            // actual workers after this step returns.
-            ABSkyLandmarks.RollAndApply(map, plateauCells.Count, settings);
+            // actual workers after this step returns. The plateau mask (open
+            // meadow minus tarn water) both gates the roll (a clear 7x7 must
+            // exist) and fences worker placement to real mountain ground.
+            bool[] plateauMask = new bool[cellCount];
+            foreach (IntVec3 c in map.AllCells)
+            {
+                int idx = indices.CellToIndex(c);
+                plateauMask[idx] = kind[idx] == KindPlateau
+                    && !(grid.TerrainAt(c)?.IsWater ?? false);
+            }
+            ABSkyLandmarks.RollAndApply(map, plateauCells.Count, plateauMask, settings);
         }
 
         /// <summary>Hidden-valley control (settings): each enclosed meadow

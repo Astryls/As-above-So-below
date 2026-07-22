@@ -76,7 +76,7 @@
   <AB_LegendHidden>Hidden valley</AB_LegendHidden>
   <AB_LegendAir>Open air</AB_LegendAir>
   <AB_SkyLandmarks>Landmarks on sky levels</AB_SkyLandmarks>
-  <AB_SkyLandmarksTip>Newly generated sky levels can host landmarks - ancient smoke vents, monuments, and other features from the Odyssey landmark system, including landmarks added by mods such as Vanilla Landmarks Expanded. Applies when a sky level is first generated.</AB_SkyLandmarksTip>
+  <AB_SkyLandmarksTip>Newly generated sky levels can host landmarks - ancient smoke vents, monuments, and other features from the Odyssey landmark system, including landmarks added by mods such as Vanilla Landmarks Expanded. Landmarks need real mountain ground: they only appear on levels with an open plateau at least 7x7 clear, and their structures are confined to the plateau. Applies when a sky level is first generated.</AB_SkyLandmarksTip>
   <AB_LandmarkChance>Random landmark chance</AB_LandmarkChance>
   <AB_LandmarkChanceTip>The chance that a newly generated sky level with open plateau ground rolls one landmark from the pool of landmarks set to Random.</AB_LandmarkChanceTip>
   <AB_LandmarkMax>Landmarks per level</AB_LandmarkMax>
