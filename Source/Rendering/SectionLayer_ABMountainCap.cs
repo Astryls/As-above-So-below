@@ -54,20 +54,99 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            int terrain = 2000;
-            Material soil = TerrainDefOf.Soil?.graphic?.MatSingle;
-            if (soil != null)
+            // Sample the MAX across every terrain family we stand on (the
+            // BelowQueueCeiling / WallRevealQueue lesson: terrain shader
+            // families do NOT share one queue, and sampling Soil alone can
+            // park the fill under another family's terrain).
+            int terrain = 0;
+            terrain = MaxQ(terrain, TerrainDefOf.Soil?.graphic?.MatSingle);
+            terrain = MaxQ(terrain, ABDefOf.AB_RoofSurface?.graphic?.MatSingle);
+            terrain = MaxQ(terrain, ABDefOf.AB_MountainTop?.graphic?.MatSingle);
+            terrain = MaxQ(terrain, TerrainDefOf.MetalTile?.graphic?.MatSingle);
+            terrain = MaxQ(terrain, TerrainDefOf.WoodPlankFloor?.graphic?.MatSingle);
+            if (ShaderDatabase.TerrainHard != null && ShaderDatabase.TerrainHard.renderQueue >= 500)
             {
-                terrain = soil.renderQueue > 0 ? soil.renderQueue
-                    : (soil.shader != null ? soil.shader.renderQueue : 2000);
+                terrain = Mathf.Max(terrain, ShaderDatabase.TerrainHard.renderQueue);
+            }
+            if (terrain < 500)
+            {
+                terrain = 2000;
             }
             int shadow = MatBases.EdgeShadow != null ? MatBases.EdgeShadow.renderQueue : terrain;
             int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : terrain + 450;
             // Above terrain and ambient edge shadows; below the cutout family so
             // real wall sprites and their overhang decals draw over the fill,
             // exactly like walls over vanilla rough stone.
-            lowQueue = Mathf.Clamp(Mathf.Max(terrain, shadow) + 1, terrain + 1, cutout - 1);
+            lowQueue = Mathf.Clamp(Mathf.Max(terrain, shadow) + 1, Mathf.Min(terrain + 1, cutout - 1), cutout - 1);
             queueReady = true;
+        }
+
+        private static int MaxQ(int current, Material m)
+        {
+            if (m == null)
+            {
+                return current;
+            }
+            int q = m.renderQueue;
+            if (q <= 0 && m.shader != null)
+            {
+                q = m.shader.renderQueue;
+            }
+            return q >= 500 ? Mathf.Max(current, q) : current;
+        }
+
+        /// <summary>Probe support: names the fill branch and material the cap
+        /// layer would use at one cell, plus the queue relationship against
+        /// the cap terrain underlay - so a "wrong look" report pins the
+        /// failing stage (branch choice, variant harvest, tint, or queue
+        /// inversion) without guesswork.</summary>
+        internal static string DebugCapFillInfo(Map sky, Map ground, IntVec3 c)
+        {
+            try
+            {
+                EnsureQueue();
+                ThingDef rock = GroundRockAt(ground, c) ?? FallbackRock(sky);
+                Graphic g = rock?.graphic;
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.Append("fill: rock=").Append(rock?.defName ?? "null")
+                    .Append(" graphic=").Append(g?.GetType().Name ?? "null")
+                    .Append(" drawSize=").Append(g != null ? g.drawSize.ToString() : "-");
+                if (g is Graphic_Linked)
+                {
+                    Material baseMat = AtlasBaseFor(rock);
+                    sb.Append(" branch=atlas baseMat=")
+                        .Append(baseMat != null ? baseMat.name : "NULL");
+                }
+                else
+                {
+                    Material[] variants = VariantsFor(rock);
+                    if (variants != null)
+                    {
+                        Material chosen = variants[StableCellIndex(c, variants.Length)];
+                        Material clone = QueueClone(chosen);
+                        sb.Append(" branch=variant count=").Append(variants.Length)
+                            .Append(" mat=").Append(chosen != null ? chosen.name : "NULL")
+                            .Append(" shader=").Append(chosen != null && chosen.shader != null ? chosen.shader.name : "-")
+                            .Append(" color=").Append(chosen != null ? chosen.color.ToString() : "-")
+                            .Append(" cloneQueue=").Append(clone != null ? clone.renderQueue : -1);
+                    }
+                    else
+                    {
+                        Material flat = AtlasBaseFor(rock);
+                        sb.Append(" branch=FALLBACK-FLAT mat=")
+                            .Append(flat != null ? flat.name : "NULL");
+                    }
+                }
+                Material capMat = ABDefOf.AB_MountainTop?.graphic?.MatSingle;
+                sb.Append(" lowQueue=").Append(lowQueue)
+                    .Append(" capTerrainQueue=").Append(capMat != null ? capMat.renderQueue : -1)
+                    .Append(" guard=").Append(ABGuard.On(ABGuard.Rendering) ? "on" : "OFF");
+                return sb.ToString();
+            }
+            catch (System.Exception e)
+            {
+                return "fill probe failed: " + e.Message;
+            }
         }
 
         private static readonly AccessTools.FieldRef<Graphic_Linked, Graphic> SubGraphicRef =

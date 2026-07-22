@@ -1338,6 +1338,7 @@ namespace AsAboveSoBelow
                 }
                 sb.AppendLine("  cap fill: massCell=" + SectionLayer_ABMountainCap.IsMassCell(sky, sg, capDef, c)
                     + " linkMask=" + mask + " (15 = fully interior)");
+                sb.AppendLine("  " + SectionLayer_ABMountainCap.DebugCapFillInfo(sky, ground, c));
             }
             Log.Warning(ABLog.Tag + " LEDGEPROBE:\n" + sb);
             Messages.Message("AB probe logged for " + c + " - check the dev log.", MessageTypeDefOf.NeutralEvent, false);

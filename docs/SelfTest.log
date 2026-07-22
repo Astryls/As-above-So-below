@@ -74,3 +74,15 @@ result: 6/6 checks passed -- ALL PASS
   PASS  cliff rim walls present
 
 ----
+[As above, So below] SELF-TEST: peak-plateau self-test
+when: 2026-07-22 16:53:37
+result: 6/6 checks passed -- ALL PASS
+
+  PASS  setting on
+  PASS  sky level exists
+  PASS  plateau ground present
+  PASS  plateau is open sky (unroofed)
+  PASS  plateau vegetation present
+  PASS  cliff rim walls present
+
+----
