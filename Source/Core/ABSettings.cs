@@ -53,6 +53,9 @@ namespace AsAboveSoBelow
         public float cavernOpenness = 0.35f;
         // Naturalistic mountain peaks on new sky levels.
         public bool naturalPeaks = true;
+        // New sky levels take the surface map's biome (greenery, regrowth,
+        // weather); off = the stark high-altitude AB_OpenSky placeholder.
+        public bool skyBiomeInherit = true;
         public float peakSoilFraction = 0.15f;
         public float peakVegetation = 1f;
 
@@ -101,6 +104,7 @@ namespace AsAboveSoBelow
                 threatDivertChance = listing.Slider(threatDivertChance, 0.05f, 1f);
             }
             listing.GapLine();
+            listing.CheckboxLabeled("AB_SkyBiomeInherit".Translate(), ref skyBiomeInherit, "AB_SkyBiomeInheritTip".Translate());
             listing.CheckboxLabeled("AB_NaturalPeaks".Translate(), ref naturalPeaks, "AB_NaturalPeaksTip".Translate());
             if (naturalPeaks)
             {
@@ -255,6 +259,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernBiome, "cavernBiome", BiomesCavernsCompat.RandomChoice);
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.35f);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
+            Scribe_Values.Look(ref skyBiomeInherit, "skyBiomeInherit", true);
             Scribe_Values.Look(ref peakSoilFraction, "peakSoilFraction", 0.15f);
             Scribe_Values.Look(ref peakVegetation, "peakVegetation", 1f);
         }

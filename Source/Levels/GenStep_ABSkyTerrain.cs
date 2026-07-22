@@ -40,6 +40,24 @@ namespace AsAboveSoBelow
         public override void Generate(Map map, GenStepParams parms)
         {
             Map ground = map.GroundMap();
+            // Biome inheritance (2026-07-22): the sky level lives in the same
+            // climate as the ground it caps, so by default the pocket map's
+            // deep-scribed PrimaryBiome swaps from the AB_OpenSky placeholder
+            // to the surface biome - regrowth, wild plant lists, weather and
+            // every other biome-scoped system follow (the cavern basement's
+            // proven mechanism). Applies at creation only: existing saves keep
+            // the biome their sky map was born with; the toggle restores the
+            // stark alpine AB_OpenSky look for new levels.
+            if (ground != null && map.pocketTileInfo != null
+                && (ABMod.Settings?.skyBiomeInherit ?? true))
+            {
+                BiomeDef surfaceBiome = ground.TileInfo?.PrimaryBiome;
+                if (surfaceBiome != null)
+                {
+                    map.pocketTileInfo.PrimaryBiome = surfaceBiome;
+                    ABLog.Dev("Sky level biome inherited from surface: " + surfaceBiome.defName + ".");
+                }
+            }
             List<ThingDef> rocks = Find.World.NaturalRockTypesIn(map.Tile).ToList();
             if (rocks.Count == 0)
             {

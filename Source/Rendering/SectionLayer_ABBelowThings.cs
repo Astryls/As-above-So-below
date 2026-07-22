@@ -124,9 +124,24 @@ namespace AsAboveSoBelow
                             // Realtime things belong to the filtered dynamic pass.
                             continue;
                         }
-                        // Multi-cell things print once, from their root cell.
+                        // Multi-cell things print once - from their first
+                        // occupied cell that is open air on THIS level, not
+                        // the root cell: a thing rooted under the mass or a
+                        // rooftop with its body sticking out under open air
+                        // (Medieval Overhaul's 2x2 rock formations hugging a
+                        // mountain edge) would otherwise never print and
+                        // vanish from the sky view entirely. Deterministic
+                        // across section boundaries exactly like the rim
+                        // print layers' first-qualifying-cell rule.
                         IntVec3 pos = t.Position;
-                        if (pos.x != c.x || pos.z != c.z)
+                        if (t.def.size.x != 1 || t.def.size.z != 1)
+                        {
+                            if (!IsBelowPrintAnchor(t, c, map, skyTerrain, air))
+                            {
+                                continue;
+                            }
+                        }
+                        else if (pos.x != c.x || pos.z != c.z)
                         {
                             continue;
                         }
@@ -175,6 +190,27 @@ namespace AsAboveSoBelow
         /// <summary>Per-submesh vertex counts captured just before one thing
         /// prints; anything appended past these marks belongs to that thing.</summary>
         private readonly List<int> vertCountsBefore = new List<int>();
+
+        /// <summary>First occupied cell (row-major scan) that is open air on
+        /// the sky level; the print anchors there. Cells outside the sky map
+        /// bounds cannot anchor (nothing would ever iterate them).</summary>
+        private static bool IsBelowPrintAnchor(Thing t, IntVec3 c, Map sky,
+            TerrainGrid skyTerrain, TerrainDef air)
+        {
+            CellRect rect = t.OccupiedRect();
+            for (int z = rect.minZ; z <= rect.maxZ; z++)
+            {
+                for (int x = rect.minX; x <= rect.maxX; x++)
+                {
+                    IntVec3 q = new IntVec3(x, 0, z);
+                    if (q.InBounds(sky) && skyTerrain.TerrainAt(q) == air)
+                    {
+                        return q.x == c.x && q.z == c.z;
+                    }
+                }
+            }
+            return false;
+        }
 
         /// <summary>The "fake zoom out" filter: linked graphics (walls, fences,
         /// conduits, natural rock) are excluded - each cell prints its own
