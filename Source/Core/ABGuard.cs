@@ -12,11 +12,20 @@ namespace AsAboveSoBelow
     {
         internal readonly string name;
         internal bool on = true;
+        internal string lastContext;
 
         internal ABGuardSwitch(string name)
         {
             this.name = name;
         }
+
+        // Settings-panel readouts (visibility of system status): the guards
+        // were invisible without log diving before the 2026-07-22 rework.
+        public string Name => name;
+
+        public bool IsOn => on;
+
+        public string LastContext => lastContext;
     }
 
     /// <summary>
@@ -61,8 +70,25 @@ namespace AsAboveSoBelow
             if (subsystem.on)
             {
                 subsystem.on = false;
+                subsystem.lastContext = context;
                 Log.Error(ABLog.Tag + " Subsystem '" + subsystem.name + "' hit an error in " + context
                     + " and shut itself down to protect your game. Other features keep running. Details: " + e);
+            }
+        }
+
+        /// <summary>Every switch, for the settings panel's status readout.</summary>
+        public static ABGuardSwitch[] AllSwitches => All;
+
+        /// <summary>Re-arm one tripped switch from the settings panel. The
+        /// subsystem gets another chance; if the fault persists it trips
+        /// again on the next error with a fresh log line.</summary>
+        public static void ReArm(ABGuardSwitch subsystem)
+        {
+            if (!subsystem.on)
+            {
+                subsystem.on = true;
+                subsystem.lastContext = null;
+                ABLog.Dev("Kill switch '" + subsystem.name + "' re-armed from settings.");
             }
         }
 
@@ -75,6 +101,7 @@ namespace AsAboveSoBelow
                 if (!All[i].on)
                 {
                     All[i].on = true;
+                    All[i].lastContext = null;
                     cleared++;
                 }
             }
