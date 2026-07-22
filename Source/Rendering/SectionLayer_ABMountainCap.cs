@@ -106,7 +106,7 @@ namespace AsAboveSoBelow
             {
                 EnsureQueue();
                 ThingDef rock = GroundRockAt(ground, c) ?? FallbackRock(sky);
-                Graphic g = rock?.graphic;
+                Graphic g = LiveGraphicFor(rock);
                 System.Text.StringBuilder sb = new System.Text.StringBuilder();
                 sb.Append("fill: rock=").Append(rock?.defName ?? "null")
                     .Append(" graphic=").Append(g?.GetType().Name ?? "null")
@@ -155,6 +155,35 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<Graphic_Random, Graphic[]> SubGraphicsRef =
             AccessTools.FieldRefAccess<Graphic_Random, Graphic[]>("subGraphics");
 
+        /// <summary>The def's LIVE graphic: graphicData.Graphic (lazily rebuilt
+        /// from the CURRENT graphicData), NOT the def.graphic field. The field
+        /// is baked once at PostLoad and never refreshed - Better Mountains
+        /// swaps rockDef.graphicData at startup and vanilla keeps working only
+        /// because Thing rendering also reads graphicData.Graphic; reading the
+        /// stale field made our fill render the vanilla atlas while the walls
+        /// around it rendered BM art (run #53 probe: graphic=
+        /// Graphic_LinkedCornerFiller on a BM-swapped Granite).</summary>
+        private static Graphic LiveGraphicFor(ThingDef rockDef)
+        {
+            GraphicData gd = rockDef?.graphicData;
+            if (gd != null)
+            {
+                try
+                {
+                    Graphic g = gd.Graphic;
+                    if (g != null && g != BaseContent.BadGraphic)
+                    {
+                        return g;
+                    }
+                }
+                catch
+                {
+                    // fall through to the baked field
+                }
+            }
+            return rockDef?.graphic;
+        }
+
         /// <summary>The rock's atlas BASE material (the inner graphic of its linked
         /// wrapper, def-tinted). Cached per def and VALIDATED against the def's
         /// live graphic: Better Mountains replaces rockDef.graphicData wholesale
@@ -169,7 +198,7 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            Graphic current = rockDef.graphic;
+            Graphic current = LiveGraphicFor(rockDef);
             if (atlasBase.TryGetValue(rockDef, out (Graphic graphic, Material mat) entry)
                 && entry.graphic == current)
             {
@@ -205,7 +234,7 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            Graphic current = rockDef.graphic;
+            Graphic current = LiveGraphicFor(rockDef);
             if (variantMats.TryGetValue(rockDef, out (Graphic graphic, Material[] mats) entry)
                 && entry.graphic == current)
             {
@@ -338,7 +367,8 @@ namespace AsAboveSoBelow
                     // native walls show. No link masks, no corner fillers (no
                     // baked rounding to cover, and BM's look is lip-less);
                     // meadow fade skirts unchanged.
-                    if (!(rock?.graphic is Graphic_Linked))
+                    Graphic liveGraphic = LiveGraphicFor(rock);
+                    if (!(liveGraphic is Graphic_Linked))
                     {
                         EmitSkirts(map, grid, c, SkirtTone(rock), y);
                         Material[] variants = VariantsFor(rock);
@@ -347,7 +377,7 @@ namespace AsAboveSoBelow
                             Material vmat = QueueClone(variants[StableCellIndex(c, variants.Length)]);
                             if (vmat != null)
                             {
-                                Vector2 ds = rock.graphic.drawSize;
+                                Vector2 ds = liveGraphic != null ? liveGraphic.drawSize : Vector2.one;
                                 float hw = Mathf.Max(ds.x, 1f) * 0.5f;
                                 float hh = Mathf.Max(ds.y, 1f) * 0.5f;
                                 LayerSubMesh vsub = GetSubMesh(vmat);
