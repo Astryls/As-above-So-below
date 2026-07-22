@@ -365,18 +365,13 @@ namespace AsAboveSoBelow
         private static readonly List<int> maskTris = new List<int>();
         private static readonly List<Color32> maskColors = new List<Color32>();
 
-        // Slab-edge skirt (height-language rework): ground-side edge shading
-        // in the AIR cells only, vertex-colored -
-        //  - a narrow contact-shadow gradient hanging from north rims (slab
-        //    north of air): the ascending facade's foot shading the ground it
-        //    stands on. Narrow and one-sided ON PURPOSE: a uniform dark ring
-        //    around a gap is exactly the "pit" cue this rework removes.
-        //  - thin dark ledge hairlines against east/west slab edges.
-        //  - a bright top-corner lip line where slab sits SOUTH of the air,
-        //    vanilla's own treatment for a mountain's north edge.
-        // The old full-height descending south faces told the pit story and
-        // are gone; SectionLayer_ABRimFacade tells the height story from the
-        // slab's side of the boundary. Mountain-cap borders stay excluded.
+        // Slab-edge skirt (depth-cue removal, 2026-07-22): the painted-depth
+        // experiments (descending faces, ascending facades, contact shadows,
+        // bright lips) are all retired by user direction. What remains is the
+        // minimal edge delineation: one thin dark hairline in the air cell
+        // against EVERY adjacent slab edge, so rooftop and floor borders read
+        // as clean seams rather than raw texture boundaries. Mountain-cap
+        // borders stay excluded (the rock art carries its own edges).
         // Geometry rebuilds inside the existing mask job (same inputs, same
         // cadence) and draws at IDENTITY.
         private static Mesh skirtMesh;
@@ -894,23 +889,15 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Depth of the contact-shadow gradient hanging from north
-        /// rims into the air cell, in cells (mockup height_2 tuning).</summary>
-        private const float ContactShadowDepth = 0.28f;
-
-        private static readonly Color32 SkirtShadowNear = new Color32(0, 0, 0, 96);
-        private static readonly Color32 SkirtShadowFar = new Color32(0, 0, 0, 0);
         private static readonly Color32 SkirtLedge = new Color32(16, 16, 14, 110);
-        private static readonly Color32 SkirtLip = new Color32(205, 202, 182, 200);
 
         /// <summary>Pure buffer build for the slab-edge skirt; worker-safe for
         /// the same reason the mask build is (terrain reads are atomic and a
         /// torn read self-corrects next rebuild). Iterates AIR cells and emits
-        /// per edge kind: contact-shadow gradient under a north slab rim, thin
-        /// dark hairlines against east/west slabs, bright top-corner lip line
-        /// against a south slab. Slab = any sky terrain that is neither open
-        /// air nor mountain cap (rooftop, built floors, landing platforms),
-        /// matching the mask's own solidity rule.</summary>
+        /// one thin dark hairline against every adjacent slab edge. Slab = any
+        /// sky terrain that is neither open air nor mountain cap (rooftop,
+        /// built floors, landing platforms), matching the mask's own solidity
+        /// rule.</summary>
         private static void BuildSkirtBuffers(TerrainGrid skyTerrain, int sizeX, int sizeZ,
             CellRect rect, bool enabled, List<Vector3> verts, List<int> tris, List<Color32> colors)
         {
@@ -937,10 +924,8 @@ namespace AsAboveSoBelow
                     }
                     if (z + 1 < sizeZ && IsSlab(skyTerrain, x, z + 1, air, cap))
                     {
-                        // Facade foot: shadow fades from the boundary downward
-                        // onto the ground (grounds the cliff, not a pit ring).
-                        AddSkirtQuad(verts, tris, colors, x, x + 1f, z + 1f - ContactShadowDepth, z + 1f,
-                            SkirtShadowFar, SkirtShadowNear, SkirtShadowNear, SkirtShadowFar);
+                        AddSkirtQuad(verts, tris, colors, x, x + 1f, z + 1f - SkirtLedgeWidth, z + 1f,
+                            SkirtLedge, SkirtLedge, SkirtLedge, SkirtLedge);
                     }
                     if (x + 1 < sizeX && IsSlab(skyTerrain, x + 1, z, air, cap))
                     {
@@ -954,10 +939,8 @@ namespace AsAboveSoBelow
                     }
                     if (z - 1 >= 0 && IsSlab(skyTerrain, x, z - 1, air, cap))
                     {
-                        // Slab south of the air: its lit top corner, vanilla's
-                        // own north-mountain-edge treatment.
                         AddSkirtQuad(verts, tris, colors, x, x + 1f, z, z + SkirtLedgeWidth,
-                            SkirtLip, SkirtLip, SkirtLip, SkirtLip);
+                            SkirtLedge, SkirtLedge, SkirtLedge, SkirtLedge);
                     }
                 }
             }

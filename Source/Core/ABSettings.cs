@@ -15,16 +15,14 @@ namespace AsAboveSoBelow
         public bool oneColonistBar = true;
         public bool cameraFollowStairs = true;
         public bool cameraLockKeybind = true;
-        // Height-language rework (2026-07-22): the below view renders PLUMB
-        // (no south shift, no camera parallax). Elevation is told by ascending
-        // rim facades on the slab's own edge cells, a narrow contact shadow at
-        // their feet, and a low base dim - never by displacing the ground.
+        // Depth-cue removal (2026-07-22, user direction): the below view
+        // renders PLUMB (no south shift, no camera parallax) with a low base
+        // dim, thin edge hairlines, and the wall-top reveal - no facades,
+        // shadows, or lips. The painted-depth experiments are retired.
         public float belowDim = 0.06f;
         public bool drawSlabEdge = true;
         public bool drawWallReveal = true;
         public float wallRevealWidth = 0.5f;
-        public bool drawWallFacade = true;
-        public float rimFacadeHeight = 0.55f;
         public float belowThingScale = 0.85f;
         public float climbTimeMultiplier = 1f;
         public bool crossLevelWork = true;
@@ -166,19 +164,6 @@ namespace AsAboveSoBelow
                 }
                 wallRevealWidth = newRevealWidth;
             }
-            listing.CheckboxLabeled("AB_WallFacade".Translate(), ref drawWallFacade, "AB_WallFacadeTip".Translate());
-            if (drawWallFacade)
-            {
-                listing.Label("AB_RimFacadeHeight".Translate() + ": " + rimFacadeHeight.ToString("0.00"), tooltip: "AB_RimFacadeHeightTip".Translate());
-                float newFacadeHeight = listing.Slider(rimFacadeHeight, 0.25f, 1f);
-                if (Mathf.Abs(newFacadeHeight - rimFacadeHeight) > 0.0005f)
-                {
-                    // Facade band height is baked into section mesh verts;
-                    // reprint so the slider applies live.
-                    DirtyBelowThingsLayers();
-                }
-                rimFacadeHeight = newFacadeHeight;
-            }
             listing.Label("AB_BelowScale".Translate() + ": " + belowThingScale.ToStringPercent(), tooltip: "AB_BelowScaleTip".Translate());
             float newBelowScale = listing.Slider(belowThingScale, 0.7f, 1f);
             if (Mathf.Abs(newBelowScale - belowThingScale) > 0.0005f)
@@ -232,8 +217,6 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref drawSlabEdge, "drawSlabEdge", true);
             Scribe_Values.Look(ref drawWallReveal, "drawWallReveal", true);
             Scribe_Values.Look(ref wallRevealWidth, "wallRevealWidth", 0.5f);
-            Scribe_Values.Look(ref drawWallFacade, "drawWallFacade", true);
-            Scribe_Values.Look(ref rimFacadeHeight, "rimFacadeHeight", 0.55f);
             Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
             Scribe_Values.Look(ref crossLevelOrders, "crossLevelOrders", true);

@@ -213,13 +213,22 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>The "fake zoom out" filter: linked graphics (walls, fences,
-        /// conduits, natural rock) are excluded - each cell prints its own
-        /// quad, so per-cell shrink would open a gap at every cell boundary,
-        /// and the mountain-edge rock faces must stay flush with the cap
-        /// layer's fill. Everything else shrinks in place about its center.</summary>
+        /// conduits) are excluded - each cell prints its own quad, so per-cell
+        /// shrink would open a gap at every cell boundary. Natural rock and
+        /// ores are excluded BY DEF, not by link type: Better Mountains swaps
+        /// rock graphics to non-linked Graphic_Random wholesale, and shrinking
+        /// each rock cell about its own center tore the surface mountains
+        /// into a gappy field when seen from the sky (run #50). Rock stays
+        /// full-size and flush regardless of who drew it. Everything else
+        /// shrinks in place about its center.</summary>
         private static bool CanScale(Thing t)
         {
-            GraphicData g = t.def.graphicData;
+            ThingDef d = t.def;
+            if (d.mineable || (d.building != null && d.building.isNaturalRock))
+            {
+                return false;
+            }
+            GraphicData g = d.graphicData;
             return g == null || g.linkType == LinkDrawerType.None;
         }
 
