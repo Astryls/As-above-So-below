@@ -20,6 +20,23 @@ namespace AsAboveSoBelow
     {
         private const int MigrationCooldownTicks = 1200;
 
+        /// <summary>Retry cadence for the priority-aware probe (a local job
+        /// exists but a linked level might hold strictly better-ranked work).
+        /// Bypassed instantly when the global work version changes (fresh
+        /// designations), so new orders never wait this out.</summary>
+        private const int BetterWorkCooldownTicks = 900;
+
+        /// <summary>Colony-wide cap on priority probes per tick. Smooths the
+        /// stampede after mass job-end moments (morning wake-ups, version
+        /// bumps); a denied pawn simply keeps its local job and retries on a
+        /// later think cycle.</summary>
+        private const int MaxProbesPerTick = 2;
+
+        /// <summary>Cap on HasJobOnCell evaluations per cell-scanning giver
+        /// during a probe (grow zones can be huge). A capped miss is caught
+        /// later by the idle-migration path, never lost.</summary>
+        private const int MaxCellsPerGiverProbe = 300;
+
         /// <summary>Retry cadence after an emergency virtual scan that found
         /// nothing actionable (e.g. someone is down but no bed exists anywhere).
         /// First response is instant: the cooldown is only charged when the
@@ -33,6 +50,82 @@ namespace AsAboveSoBelow
         private static readonly ABPawnCooldown migrationCooldown = new ABPawnCooldown();
 
         private static readonly ABPawnCooldown emergencyCooldown = new ABPawnCooldown();
+
+        /// <summary>Per-pawn cooldown that also stores the work version it was
+        /// charged at: a version bump (new designations anywhere) re-arms every
+        /// pawn at once, O(1), no pawn iteration.</summary>
+        private sealed class VersionedCooldown
+        {
+            private struct Entry
+            {
+                public int until;
+                public int version;
+            }
+
+            private readonly Dictionary<int, Entry> entries = new Dictionary<int, Entry>();
+
+            public bool Ready(Pawn pawn, int now)
+            {
+                if (!entries.TryGetValue(pawn.thingIDNumber, out Entry e))
+                {
+                    return true;
+                }
+                return now >= e.until || e.version != LevelWorkSummary.WorkVersion;
+            }
+
+            public void Charge(Pawn pawn, int untilTick)
+            {
+                if (entries.Count > 512)
+                {
+                    entries.Clear();
+                }
+                entries[pawn.thingIDNumber] = new Entry
+                {
+                    until = untilTick,
+                    version = LevelWorkSummary.WorkVersion
+                };
+            }
+        }
+
+        private static readonly VersionedCooldown betterWorkCooldown = new VersionedCooldown();
+
+        private static int probeBudgetTick = -1;
+
+        private static int probeBudgetUsed;
+
+        private static bool TryClaimProbeBudget(int now)
+        {
+            if (now != probeBudgetTick)
+            {
+                probeBudgetTick = now;
+                probeBudgetUsed = 0;
+            }
+            if (probeBudgetUsed >= MaxProbesPerTick)
+            {
+                return false;
+            }
+            probeBudgetUsed++;
+            return true;
+        }
+
+        /// <summary>Non-humanlike workers (Misc. Robots, Biotech mechs) run on a
+        /// battery; never ship them to another level when it is low - their
+        /// recharge AI wants them near home. Shared by the cross-level haul and
+        /// fetch givers.</summary>
+        public static bool LowPowerWorker(Pawn pawn)
+        {
+            if (pawn.RaceProps == null || pawn.RaceProps.Humanlike || pawn.needs == null)
+            {
+                return false;
+            }
+            Need_Rest rest = pawn.needs.rest;
+            if (rest != null && rest.CurLevelPercentage < 0.45f)
+            {
+                return true;
+            }
+            Need_MechEnergy energy = pawn.needs.energy;
+            return energy != null && energy.CurLevelPercentage < 0.35f;
+        }
 
         public static ThinkResult? TryMigrateForWork(JobGiver_Work giver, Pawn pawn)
         {
@@ -53,6 +146,206 @@ namespace AsAboveSoBelow
                 return work;
             }
             return TryReturnHome(giver, pawn, comp);
+        }
+
+        /// <summary>Priority-aware migration: the local scan DID find a job, but
+        /// only at a rank the pawn considers low. If a linked level plausibly
+        /// holds work from a giver strictly EARLIER in the pawn's own ordered
+        /// giver list (which encodes both manual priorities and natural work
+        /// order), probe just that truncated prefix remotely and take the
+        /// stairs on a hit. Gate chain runs cheapest-first: pure memory checks,
+        /// then the cooldown, then the per-level summary bits, and only then
+        /// the real (truncated) scan.</summary>
+        public static ThinkResult? TryMigrateForBetterWork(JobGiver_Work giver, Pawn pawn, ThinkResult local)
+        {
+            Job localJob = local.Job;
+            if (localJob == null)
+            {
+                return null;
+            }
+            WorkGiverDef localDef = localJob.workGiverDef;
+            if (localDef == null)
+            {
+                // Non-scan jobs carry no giver stamp; without a rank to compare
+                // against, stay conservative and keep the local job.
+                return null;
+            }
+            List<WorkGiver> order = pawn.workSettings?.WorkGiversInOrderNormal;
+            if (order == null || order.Count == 0)
+            {
+                return null;
+            }
+            int stop = -1;
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (order[i].def == localDef)
+                {
+                    stop = i;
+                    break;
+                }
+            }
+            if (stop <= 0)
+            {
+                // Top-ranked already (or an unknown giver): nothing can beat it.
+                return null;
+            }
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
+            {
+                return null;
+            }
+            int now = Find.TickManager.TicksGame;
+            if (!betterWorkCooldown.Ready(pawn, now))
+            {
+                return null;
+            }
+            if (!TryClaimProbeBudget(now))
+            {
+                return null;
+            }
+            // Charged before the scan so empty probes are rate-limited too.
+            betterWorkCooldown.Charge(pawn, now + BetterWorkCooldownTicks);
+            return TryTowardsBetter(giver, pawn, comp.upperMap, order, stop)
+                ?? TryTowardsBetter(giver, pawn, comp.lowerMap, order, stop);
+        }
+
+        private static ThinkResult? TryTowardsBetter(JobGiver_Work giver, Pawn pawn, Map target,
+            List<WorkGiver> order, int stop)
+        {
+            if (target == null || target.Disposed)
+            {
+                return null;
+            }
+            // Summary bits first: no plausible better-ranked work type on that
+            // level means no swap, no scan, no stairs search.
+            if (!LevelWorkSummary.AnyPlausibleBefore(target, order, stop))
+            {
+                return null;
+            }
+            if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            {
+                return null;
+            }
+            if (!ProbeBetterWorkAt(pawn, target, exit.Position, order, stop, out IntVec3 workDest))
+            {
+                return null;
+            }
+            StairRouter.Reroute(pawn, target, workDest, ref stairs, ref exit);
+            // Charge the shared migration cooldown so the idle path cannot
+            // immediately bounce the pawn back after arrival.
+            migrationCooldown.ChargeUntil(pawn, Find.TickManager.TicksGame + MigrationCooldownTicks);
+            ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level()
+                + ": higher-priority work found, taking stairs.");
+            return new ThinkResult(MakeStairsJob(stairs, exit), giver, JobTag.Misc);
+        }
+
+        /// <summary>Runs the pawn's own giver order, truncated to ranks strictly
+        /// better than the local job's, with the pawn virtually placed at the
+        /// stairwell exit on the target map. Existence check only: any hit
+        /// justifies the trip and the real job re-resolves after arrival.</summary>
+        private static bool ProbeBetterWorkAt(Pawn pawn, Map target, IntVec3 entryCell,
+            List<WorkGiver> order, int stop, out IntVec3 workDest)
+        {
+            workDest = IntVec3.Invalid;
+            if (!ABVirtualPosition.TrySwap(pawn, target, entryCell, out ABVirtualPosition.Token token))
+            {
+                return false;
+            }
+            bool found = false;
+            VirtualScanActive = true;
+            try
+            {
+                for (int i = 0; i < stop && !found; i++)
+                {
+                    WorkGiver wg = order[i];
+                    WorkGiverDef def = wg.def;
+                    if (def?.workType == null
+                        || LevelWorkSummary.IsOwnCrossLevelGiver(def)
+                        || !LevelWorkSummary.Plausible(target, def.workType))
+                    {
+                        continue;
+                    }
+                    if (wg.MissingRequiredCapacity(pawn) != null || wg.ShouldSkip(pawn))
+                    {
+                        continue;
+                    }
+                    Job nonScan = wg.NonScanJob(pawn);
+                    if (nonScan != null)
+                    {
+                        // Existence proven; the job itself is discarded.
+                        workDest = nonScan.targetA.IsValid && nonScan.targetA.HasThing
+                            ? nonScan.targetA.Thing.PositionHeld
+                            : (nonScan.targetA.IsValid ? nonScan.targetA.Cell : IntVec3.Invalid);
+                        found = true;
+                        break;
+                    }
+                    if (wg is WorkGiver_Scanner scanner)
+                    {
+                        found = ProbeGiver(scanner, pawn, out workDest);
+                    }
+                }
+            }
+            finally
+            {
+                ABVirtualPosition.Restore(pawn, token);
+                VirtualScanActive = false;
+            }
+            return found;
+        }
+
+        /// <summary>Compact existence version of vanilla's per-giver scan. The
+        /// closest valid thing (or first valid cell) is enough; prioritized
+        /// scanners lose their fine ordering here, which only affects WHERE the
+        /// pawn re-scans from after arrival, not whether the work is real.</summary>
+        private static bool ProbeGiver(WorkGiver_Scanner scanner, Pawn pawn, out IntVec3 workDest)
+        {
+            workDest = IntVec3.Invalid;
+            if (scanner.def.scanThings)
+            {
+                bool Validator(Thing th) => !th.IsForbidden(pawn) && scanner.HasJobOnThing(pawn, th);
+                IEnumerable<Thing> potential = scanner.PotentialWorkThingsGlobal(pawn);
+                Thing hit;
+                if (scanner.AllowUnreachable)
+                {
+                    IEnumerable<Thing> search = potential
+                        ?? pawn.Map.listerThings.ThingsMatching(scanner.PotentialWorkThingRequest);
+                    hit = GenClosest.ClosestThing_Global(pawn.Position, search, 99999f, Validator);
+                }
+                else
+                {
+                    hit = GenClosest.ClosestThingReachable(pawn.Position, pawn.Map,
+                        scanner.PotentialWorkThingRequest, scanner.PathEndMode,
+                        TraverseParms.For(pawn, scanner.MaxPathDanger(pawn)), 9999f, Validator,
+                        potential, 0, scanner.MaxRegionsToScanBeforeGlobalSearch, potential != null);
+                }
+                if (hit != null)
+                {
+                    workDest = hit.PositionHeld;
+                    return true;
+                }
+            }
+            if (scanner.def.scanCells)
+            {
+                int examined = 0;
+                Danger maxDanger = scanner.MaxPathDanger(pawn);
+                foreach (IntVec3 cell in scanner.PotentialWorkCellsGlobal(pawn))
+                {
+                    if (++examined > MaxCellsPerGiverProbe)
+                    {
+                        break;
+                    }
+                    if (cell.IsForbidden(pawn) || !scanner.HasJobOnCell(pawn, cell))
+                    {
+                        continue;
+                    }
+                    if (!scanner.AllowUnreachable && !pawn.CanReach(cell, scanner.PathEndMode, maxDanger))
+                    {
+                        continue;
+                    }
+                    workDest = cell;
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Migration for the emergency work pass (rescue, tend,

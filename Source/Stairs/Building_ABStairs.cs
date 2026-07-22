@@ -450,10 +450,22 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Float-menu eligibility: humanlike colonists as before, plus
+        /// player-owned tool-user machines (controlled Biotech mechs, Misc.
+        /// Robots) so a stranded machine can always be ordered home manually.</summary>
+        protected static bool CanBeOrderedToUse(Pawn selPawn)
+        {
+            if (selPawn.RaceProps.Humanlike)
+            {
+                return true;
+            }
+            return selPawn.Faction == Faction.OfPlayer && selPawn.RaceProps.ToolUser;
+        }
+
         protected virtual List<FloatMenuOption> BuildUseOptions(Pawn selPawn)
         {
             List<FloatMenuOption> list = new List<FloatMenuOption>();
-            if (!selPawn.RaceProps.Humanlike)
+            if (!CanBeOrderedToUse(selPawn))
             {
                 return list;
             }

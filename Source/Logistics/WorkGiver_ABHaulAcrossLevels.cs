@@ -20,7 +20,10 @@ namespace AsAboveSoBelow
         {
             return !ABGuard.On(ABGuard.Logistics)
                 || ABMod.Settings == null || !ABMod.Settings.crossLevelHauling
-                || !pawn.Map.ConnectedToOtherLevel();
+                || !pawn.Map.ConnectedToOtherLevel()
+                // Battery-driven workers (Misc. Robots, mechs) stay near home
+                // when low; their recharge AI will want them shortly.
+                || CrossLevelWork.LowPowerWorker(pawn);
         }
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)

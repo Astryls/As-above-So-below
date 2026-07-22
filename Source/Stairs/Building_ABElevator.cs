@@ -107,7 +107,7 @@ namespace AsAboveSoBelow
         protected override List<FloatMenuOption> BuildUseOptions(Pawn selPawn)
         {
             List<FloatMenuOption> list = new List<FloatMenuOption>();
-            if (!selPawn.RaceProps.Humanlike)
+            if (!CanBeOrderedToUse(selPawn))
             {
                 return list;
             }

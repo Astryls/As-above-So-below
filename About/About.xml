@@ -3,9 +3,7 @@
   <name>As above, So below</name>
   <packageId>astryl.AsAboveSoBelow</packageId>
   <author>astryl</author>
-  <description>[img]REPLACE_HERO[/img]
-
-Build upward and dig deeper. As above, So below adds one sky level above your colony and one solid rock basement below it. Every level is a real, fully simulated map, and your pawns treat the whole column as a single base.
+  <description>Build upward and dig deeper. As above, So below adds one sky level above your colony and one solid rock basement below it. Every level is a real, fully simulated map, and your pawns treat the whole column as a single base.
 
 [h1]Three Levels, One Colony[/h1]
 [list]
@@ -15,10 +13,13 @@ Build upward and dig deeper. As above, So below adds one sky level above your co
 [/list]
 
 [h1]A Living View Below[/h1]
-From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood.
+From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood. Combat works through the gaps too: a sniper on the rim can fire down at raiders on the surface, and they can shoot right back.
+
+[h1]Sky Terrain Worth Climbing[/h1]
+Where a mountain peak rises past the surface, the sky level generates real summit terrain: open plateaus, meadows, rocky outcrops, small tarns, and sometimes a hidden valley that has been sealed away since the planet cooled. With the Odyssey DLC, landmarks can appear up there as well. The mod settings include a live generation preview, so you can tune openness, water, soil, ore, and vegetation and see a sample before you ever climb.
 
 [h1]One Workforce[/h1]
-Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony.
+Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony. Priorities count across levels too: when a job with higher priority waits on another floor, pawns take the stairs for it instead of settling for busywork where they stand.
 
 [h1]Stairs, Ladders, Elevators[/h1]
 [list]
@@ -48,19 +49,19 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
 [*]Event driven, with zero recurring cost until you build a level.
 [*]Levels you are not looking at throttle their visual updates and catch up the instant you switch view.
 [*]Heavy work is time sliced or moved off the main thread the engine safe way.
+[*]Cross level work checks are cached, budgeted, and reuse results until something actually changes, so a big colony stays smooth.
 [*]Per system kill switches: if anything ever errors, that subsystem shuts itself off and the rest keeps working.
 [*]Tested running alongside Performance Optimizer, Missile Girl, Performance Esmolas, Slower Pawn Tick Rate, and Dubs Performance Analyzer with no conflicts.
 [/list]
 
 [h1]Compatibility[/h1]
 [list]
-[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, and more.
+[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Biomes! Caverns, Better Mountains, Medieval Overhaul, and more.
 [*]Modders: an open API for cross level jobs, custom vertical links, and incident policy.
-[*]Not compatible: MultiFloors and Z-Levels, they solve the same problem their own way.
+[*]Not compatible: MultiFloors, it solves the same problem its own way.
 [*]Requires Harmony. Built for RimWorld 1.6. Safe to add to an existing save; to remove it, empty and dismantle your extra levels first.
 [/list]
 
-[hr][/hr]
 [h3] My Quality Commitment:[/h3]
 [list]
 [*] [b]Fully Tested:[/b] Every feature and line of code has been thoroughly tested in-game to ensure it functions as intended and integrates smoothly.

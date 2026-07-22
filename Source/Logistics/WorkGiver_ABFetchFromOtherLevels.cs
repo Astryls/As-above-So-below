@@ -46,6 +46,12 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            if (CrossLevelWork.LowPowerWorker(pawn))
+            {
+                // Battery-driven workers (Misc. Robots, mechs) stay near home
+                // when low; their recharge AI will want them shortly.
+                return null;
+            }
             if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
             {
                 return null;

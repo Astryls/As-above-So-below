@@ -42,6 +42,7 @@ namespace AsAboveSoBelow
         public float belowThingScale = 0.85f;
         public float climbTimeMultiplier = 1f;
         public bool crossLevelWork = true;
+        public bool priorityCrossLevelWork = true;
         public bool crossLevelOrders = true;
         public bool crossLevelCombat = true;
         public bool crossLevelAutoEngage = true;
@@ -424,7 +425,19 @@ namespace AsAboveSoBelow
         // ------------------------------------------------------------------
         private void DoWorkTab(Listing_Standard listing)
         {
+            // Snapshot before the checkbox mutates it, so measure and draw
+            // passes of the same frame agree on row count.
+            bool showPriorityWork = crossLevelWork;
+
             listing.CheckboxLabeled("AB_CrossLevelWork".Translate(), ref crossLevelWork, "AB_CrossLevelWorkTip".Translate());
+            if (showPriorityWork)
+            {
+                listing.Indent(16f);
+                listing.ColumnWidth -= 16f;
+                listing.CheckboxLabeled("AB_PriorityCrossLevelWork".Translate(), ref priorityCrossLevelWork, "AB_PriorityCrossLevelWorkTip".Translate());
+                listing.ColumnWidth += 16f;
+                listing.Outdent(16f);
+            }
             listing.CheckboxLabeled("AB_CrossLevelOrders".Translate(), ref crossLevelOrders, "AB_CrossLevelOrdersTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelSupply".Translate(), ref crossLevelSupply, "AB_CrossLevelSupplyTip".Translate());
@@ -600,6 +613,7 @@ namespace AsAboveSoBelow
         private void ResetWork()
         {
             crossLevelWork = true;
+            priorityCrossLevelWork = true;
             crossLevelOrders = true;
             crossLevelHauling = true;
             crossLevelSupply = true;
@@ -676,6 +690,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref wallRevealWidth, "wallRevealWidth", 0.5f);
             Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
+            Scribe_Values.Look(ref priorityCrossLevelWork, "priorityCrossLevelWork", true);
             Scribe_Values.Look(ref crossLevelOrders, "crossLevelOrders", true);
             Scribe_Values.Look(ref crossLevelCombat, "crossLevelCombat", true);
             Scribe_Values.Look(ref crossLevelAutoEngage, "crossLevelAutoEngage", true);

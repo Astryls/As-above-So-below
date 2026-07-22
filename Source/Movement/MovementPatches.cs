@@ -9,14 +9,18 @@ using Verse.AI.Group;
 
 namespace AsAboveSoBelow
 {
-    /// <summary>When the vanilla work scan finds nothing on the pawn's map, look for
-    /// work on directly linked levels and send the pawn to the stairs.</summary>
+    /// <summary>Cross-level work, two tiers. Tier 1 (idle): the vanilla scan
+    /// found nothing on the pawn's map, so look for any work on linked levels.
+    /// Tier 2 (priority-aware): the scan DID find a job, but only at a rank
+    /// the pawn considers low - probe linked levels for strictly better-ranked
+    /// work (a warden set to priority 1 leaves priority-2 mining to go convert
+    /// the prisoner in the basement).</summary>
     [HarmonyPatch(typeof(JobGiver_Work), nameof(JobGiver_Work.TryIssueJobPackage))]
     internal static class Patch_JobGiverWork_CrossLevel
     {
         private static void Postfix(JobGiver_Work __instance, Pawn pawn, ref ThinkResult __result)
         {
-            if (CrossLevelWork.VirtualScanActive || __result.Job != null || !ABGuard.On(ABGuard.Movement))
+            if (CrossLevelWork.VirtualScanActive || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }
@@ -37,15 +41,30 @@ namespace AsAboveSoBelow
             }
             try
             {
-                // The think tree runs an emergency JobGiver_Work (rescue, tend,
-                // firefight - vanilla caches those givers into a list the normal
-                // pass never scans) BEFORE the normal one. The emergency instance
-                // migrates through its own pre-checked, separately-cooled path so
-                // doctors cross levels for downed pawns without empty emergency
-                // scans starving the real work scanner.
-                ThinkResult? result = __instance.emergency
-                    ? CrossLevelWork.TryMigrateForEmergencyWork(__instance, pawn)
-                    : CrossLevelWork.TryMigrateForWork(__instance, pawn);
+                ThinkResult? result;
+                if (__result.Job != null)
+                {
+                    // A local job exists. Emergency results (firefight, rescue,
+                    // urgent tend) always stand; otherwise ask whether a linked
+                    // level holds strictly better-ranked work.
+                    if (__instance.emergency || !settings.priorityCrossLevelWork)
+                    {
+                        return;
+                    }
+                    result = CrossLevelWork.TryMigrateForBetterWork(__instance, pawn, __result);
+                }
+                else
+                {
+                    // The think tree runs an emergency JobGiver_Work (rescue, tend,
+                    // firefight - vanilla caches those givers into a list the normal
+                    // pass never scans) BEFORE the normal one. The emergency instance
+                    // migrates through its own pre-checked, separately-cooled path so
+                    // doctors cross levels for downed pawns without empty emergency
+                    // scans starving the real work scanner.
+                    result = __instance.emergency
+                        ? CrossLevelWork.TryMigrateForEmergencyWork(__instance, pawn)
+                        : CrossLevelWork.TryMigrateForWork(__instance, pawn);
+                }
                 if (result.HasValue)
                 {
                     __result = result.Value;

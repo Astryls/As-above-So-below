@@ -318,7 +318,10 @@ namespace AsAboveSoBelow
         {
             for (int i = 0; i < things.Count; i++)
             {
-                if (!(things[i] is IConstructible constructible) || things[i].Faction != Faction.OfPlayer)
+                // Install/reinstall blueprints carry their own thing and have no
+                // material cost; asking them logs a vanilla error.
+                if (things[i] is Blueprint_Install
+                    || !(things[i] is IConstructible constructible) || things[i].Faction != Faction.OfPlayer)
                 {
                     continue;
                 }

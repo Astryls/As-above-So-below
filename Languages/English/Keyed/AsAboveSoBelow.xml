@@ -138,6 +138,8 @@
   <AB_RitualNoRoute>{0} has no stair route to the ritual.</AB_RitualNoRoute>
   <AB_CrossLevelWork>Colonists take stairs to work on other levels</AB_CrossLevelWork>
   <AB_CrossLevelWorkTip>When a colonist finds no work on their current level, they check directly linked levels and take the stairs if there is something to do there.</AB_CrossLevelWorkTip>
+  <AB_PriorityCrossLevelWork>Chase higher-priority work across levels</AB_PriorityCrossLevelWork>
+  <AB_PriorityCrossLevelWorkTip>Colonists also check other levels while they still have work here: if a linked level holds work of strictly higher priority (by their work settings), they take the stairs for it instead of settling for the lower-priority local job. A warden set to priority 1 will leave priority-2 mining to go tend the prisoners in the basement. Equal-priority work always stays local, and results are cached so the extra checks stay cheap.</AB_PriorityCrossLevelWorkTip>
   <AB_IdleReturnHome>Idle colonists return to the surface</AB_IdleReturnHome>
   <AB_IdleReturnHomeTip>Colonists with nothing to do on any level head back down to the surface instead of roaming the level they worked on.</AB_IdleReturnHomeTip>
   <AB_CrossLevelHauling>Haul items between levels</AB_CrossLevelHauling>
