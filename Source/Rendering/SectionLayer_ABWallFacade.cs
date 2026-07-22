@@ -48,8 +48,13 @@ namespace AsAboveSoBelow
             relevantChangeTypes = (ulong)ABDefOf.AB_BelowThings | (ulong)MapMeshFlagDefOf.Terrain;
         }
 
-        public override bool Visible =>
-            ABGuard.On(ABGuard.Rendering) && (ABMod.Settings?.drawWallFacade ?? true);
+        /// <summary>RETIRED by the height-language rework (2026-07-22): this
+        /// layer drew the below wall's face as a sliver SOUTH of the rim line
+        /// (on the air side, descending), which reads as a pit wall. The
+        /// ascending SectionLayer_ABRimFacade plus the wall-top reveal tell
+        /// the height story from the slab's side instead. Class kept for its
+        /// verified clip machinery and the round-17 history above.</summary>
+        public override bool Visible => false;
 
         private const float Eps = 0.001f;
 
@@ -74,6 +79,12 @@ namespace AsAboveSoBelow
 
         public override void Regenerate()
         {
+            // Retired (see Visible): never build geometry.
+            ClearSubMeshes(MeshParts.All);
+        }
+
+        private void Regenerate_Retired()
+        {
             ClearSubMeshes(MeshParts.All);
             Map map = section.map;
             if (!ABGuard.On(ABGuard.Rendering) || map.Level() != 1)
@@ -92,7 +103,9 @@ namespace AsAboveSoBelow
                 TerrainDef cap = ABDefOf.AB_MountainTop;
                 FogGrid lowerFog = lower.fogGrid;
                 shiftZ = Mathf.Max(
-                    Mathf.Clamp(ABMod.Settings?.belowDepthShift ?? 0.25f, 0f, 1f),
+                    // Retired path: the depth-shift setting is gone; the old
+                    // default is pinned so this reference code still compiles.
+                    0.25f,
                     LevelRenderer.SkirtLedgeWidth);
                 bool printed = false;
                 foreach (IntVec3 c in section.CellRect)

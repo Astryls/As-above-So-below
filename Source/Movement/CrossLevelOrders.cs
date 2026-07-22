@@ -280,9 +280,10 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            // The see-below renderer draws the lower map shifted (depth shift +
-            // optional parallax): a click on a below sprite lands slightly off its
-            // true cell. Inverse-map the click exactly like item selection does.
+            // Height-language rework: the below view renders plumb, so this
+            // mapping is identity today. Funneled through ScreenToBelowPos
+            // anyway so a future transform has one inversion point, exactly
+            // like item selection.
             Map cur = Find.CurrentMap;
             if (cur != null && cur != map && cur.Levels()?.lowerMap == map)
             {

@@ -55,10 +55,8 @@ namespace AsAboveSoBelow
         /// queues do the real ordering, the altitude only avoids z-fighting.</summary>
         private const float SkirtAltitude = -0.05f;
 
-        /// <summary>Width of the thin ledge outline on east/west slab edges and
-        /// the minimum south face height when the depth shift slider sits at 0.
-        /// Internal: the wall facade floors its baked south shift at the same
-        /// value so facade sliver and skirt face always share one height.</summary>
+        /// <summary>Width of the thin ledge hairlines on east/west slab edges
+        /// and of the bright top-corner lip line on south slab edges.</summary>
         internal const float SkirtLedgeWidth = 0.08f;
 
         private const int MaskRebuildIntervalFrames = 15;
@@ -76,26 +74,19 @@ namespace AsAboveSoBelow
         /// postfixes read it. Volatile because pre-draw can use worker threads.</summary>
         public static volatile bool OffsetActive;
 
-        // --- Faux-perspective transform ---
-        // Every piece of the below view (cloned section layers, the printed
-        // things layer, and the mirrored dynamic pass) draws through ONE affine
-        // transform so the whole lower level moves as a unit:
-        //   p' = k * p + (1 - k) * cam  +  (0, BelowOffset, -depthShift)
-        // The fixed south (down-screen) shift detaches the ground from the
-        // base of elevated walls - RimWorld draws tall things reaching
-        // up-screen, so "lower = down-screen" is the direction that reads as
-        // depth. The optional parallax term scales the below plane about the
-        // camera's ground position with k = 1 - strength / RootSize: the
-        // displacement at the vertical screen edge is `strength` cells at
-        // every zoom, so the misalignment bound is constant on screen and
-        // shrinks in world terms as the player zooms in. The air-cell mask is
-        // deliberately NOT transformed: it dims the sky level's holes
-        // themselves, not the content seen through them.
+        // --- Below-view transform (height-language rework, 2026-07-22) ---
+        // The lower level draws PLUMB: x/z pass through untouched and only
+        // the altitude drops by BelowOffset so the band sorts under the sky
+        // map. The old faux-perspective terms (fixed south depth shift +
+        // camera-anchored parallax scale) are deleted - displacing the ground
+        // put the vertical face on the AIR side of the rim line and read as
+        // "floor sunk into a pit". Height is told the vanilla way instead:
+        // ascending rim facades on the slab's own edge cells
+        // (SectionLayer_ABRimFacade), a narrow contact shadow at their feet
+        // (skirt), a bright south-rim lip, and bright plumb ground. Side
+        // effect: screen<->below mapping is exact at every zoom.
         private static int transformFrame = -1;
-        private static Matrix4x4 belowMatrix = Matrix4x4.Translate(new Vector3(0f, BelowOffset, 0f));
-        private static float shiftK = 1f;
-        private static float shiftAddX;
-        private static float shiftAddZ;
+        private static readonly Matrix4x4 belowMatrixConst = Matrix4x4.Translate(new Vector3(0f, BelowOffset, 0f));
 
         /// <summary>Uniform per-object shrink for below-level content (the
         /// "fake zoom out"): printed things scale at print time in
@@ -112,7 +103,7 @@ namespace AsAboveSoBelow
             get
             {
                 RefreshBelowTransform();
-                return belowMatrix;
+                return belowMatrixConst;
             }
         }
 
@@ -122,9 +113,7 @@ namespace AsAboveSoBelow
         /// frame start before the pass begins.</summary>
         internal static void ApplyDrawShift(ref Vector3 v)
         {
-            v.x = v.x * shiftK + shiftAddX;
             v.y += BelowOffset;
-            v.z = v.z * shiftK + shiftAddZ;
         }
 
         /// <summary>Ensures the per-frame below transform is current. Safe to
@@ -149,14 +138,12 @@ namespace AsAboveSoBelow
 
         /// <summary>Inverse of the see-below transform: maps a point in the sky map's
         /// world space (e.g. the cursor) back to the surface world position that renders
-        /// there. Used to find which surface CELL is under the cursor for item selection.
-        /// Only inverts the x/z affine part (the y/BelowOffset and per-object shrink do
-        /// not move the on-screen center).</summary>
+        /// there. Identity in x/z since the height-language rework (the below view is
+        /// plumb); kept so every consumer funnels through ONE inversion point should a
+        /// transform ever return.</summary>
         internal static Vector3 ScreenToBelowPos(Vector3 screenPos)
         {
-            RefreshBelowTransform();
-            float k = Mathf.Abs(shiftK) < 0.0001f ? 1f : shiftK;
-            return new Vector3((screenPos.x - shiftAddX) / k, screenPos.y, (screenPos.z - shiftAddZ) / k);
+            return screenPos;
         }
 
         private static void RefreshBelowTransform()
@@ -169,31 +156,6 @@ namespace AsAboveSoBelow
             transformFrame = frame;
             ABSettings settings = ABMod.Settings;
             BelowThingScale = Mathf.Clamp(settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
-            float south = Mathf.Clamp(settings?.belowDepthShift ?? 0.25f, 0f, 1f);
-            float k = 1f;
-            float addX = 0f;
-            float addZ = -south;
-            if (settings != null && settings.belowParallax)
-            {
-                CameraDriver driver = Find.CameraDriver;
-                Camera cam = Find.Camera;
-                if (driver != null && cam != null)
-                {
-                    float strength = Mathf.Clamp(settings.belowParallaxStrength, 0f, 1f);
-                    // Clamped so k never drops below 0.8 even if RootSize
-                    // reports something implausible mid-transition.
-                    float s = Mathf.Clamp(strength / Mathf.Max(driver.RootSize, 5f), 0f, 0.2f);
-                    k = 1f - s;
-                    Vector3 c = cam.transform.position;
-                    addX = c.x * s;
-                    addZ = c.z * s - south;
-                }
-            }
-            shiftK = k;
-            shiftAddX = addX;
-            shiftAddZ = addZ;
-            belowMatrix = Matrix4x4.Translate(new Vector3(addX, BelowOffset, addZ))
-                * Matrix4x4.Scale(new Vector3(k, 1f, k));
         }
 
         private static readonly AccessTools.FieldRef<Section, List<SectionLayer>> LayersRef =
@@ -403,23 +365,25 @@ namespace AsAboveSoBelow
         private static readonly List<int> maskTris = new List<int>();
         private static readonly List<Color32> maskColors = new List<Color32>();
 
-        // Slab-edge skirt: dark side faces along rooftop/air borders so upper
-        // stories read as slabs stacked on the story below (the "stacked"
-        // look, user-directed 2026-07-20). South-facing edges get a face whose
-        // height matches the fixed depth shift - together they form one
-        // coherent 2.5D extrusion: the shift moves the ground south by exactly
-        // the strip the face covers, so no terrain is doubled or lost at the
-        // seam. East/west edges get a thin outline; north edges need nothing
-        // (the slab top occludes its own far side). Mountain-cap borders are
-        // excluded so the layered mountain edge keeps its verified look.
+        // Slab-edge skirt (height-language rework): ground-side edge shading
+        // in the AIR cells only, vertex-colored -
+        //  - a narrow contact-shadow gradient hanging from north rims (slab
+        //    north of air): the ascending facade's foot shading the ground it
+        //    stands on. Narrow and one-sided ON PURPOSE: a uniform dark ring
+        //    around a gap is exactly the "pit" cue this rework removes.
+        //  - thin dark ledge hairlines against east/west slab edges.
+        //  - a bright top-corner lip line where slab sits SOUTH of the air,
+        //    vanilla's own treatment for a mountain's north edge.
+        // The old full-height descending south faces told the pit story and
+        // are gone; SectionLayer_ABRimFacade tells the height story from the
+        // slab's side of the boundary. Mountain-cap borders stay excluded.
         // Geometry rebuilds inside the existing mask job (same inputs, same
-        // cadence) and draws at IDENTITY - the skirt is sky-anchored slab
-        // geometry, not below content - though the mask still dims it like
-        // the rest of the hole, which reads as natural side-face shading.
+        // cadence) and draws at IDENTITY.
         private static Mesh skirtMesh;
         private static Material skirtMat;
         private static readonly List<Vector3> skirtVerts = new List<Vector3>();
         private static readonly List<int> skirtTris = new List<int>();
+        private static readonly List<Color32> skirtColors = new List<Color32>();
 
         // Async mask lane. The worker reads live terrain and fog grids - object
         // reference and bool reads are atomic, and a torn read only mis-dims a
@@ -437,7 +401,8 @@ namespace AsAboveSoBelow
         private static readonly List<Color32> jobColors = new List<Color32>();
         private static readonly List<Vector3> jobSkirtVerts = new List<Vector3>();
         private static readonly List<int> jobSkirtTris = new List<int>();
-        private static float maskJobSkirtSouth = -1f;
+        private static readonly List<Color32> jobSkirtColors = new List<Color32>();
+        private static bool maskJobSkirtOn;
 
         /// <summary>Forced-queue draw for one printed below-view submesh
         /// (SectionLayer_ABBelowThings): same band as the cloned layers,
@@ -676,15 +641,12 @@ namespace AsAboveSoBelow
             }
             if (skirtMat == null)
             {
-                // Solid dark steel, forced above every below-band queue but
-                // under the sky map's own terrain: below things never overdraw
-                // the face, rooftop tiles always do.
-                skirtMat = new Material(ShaderDatabase.Transparent)
-                {
-                    mainTexture = BaseContent.WhiteTex,
-                    color = new Color(0.16f, 0.17f, 0.19f, 1f),
-                    renderQueue = Mathf.Max(BelowQueueCeiling - 60, 1)
-                };
+                // White vertex-color material: one mesh carries the contact
+                // shadow, the hairlines, and the bright lip in per-vertex
+                // tints. Same forced queue as before - above every below-band
+                // queue, under the sky map's own terrain.
+                skirtMat = SolidColorMaterials.NewSolidColorMaterial(Color.white, ShaderDatabase.VertexColor);
+                skirtMat.renderQueue = Mathf.Max(BelowQueueCeiling - 60, 1);
             }
             TryApplyMaskJob();
             int frame = Time.frameCount;
@@ -739,15 +701,15 @@ namespace AsAboveSoBelow
             int sizeZ = sky.Size.z;
             float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
             int step = NextMaskStep(rect);
-            maskJobSkirtSouth = CurrentSkirtSouth();
+            maskJobSkirtOn = CurrentSkirtOn();
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
                     BuildMaskBuffers(skyTerrain, lowerFog, sizeX, sizeZ, maskJobRect, step,
                         (byte)(255f * baseDim), jobVerts, jobTris, jobColors);
-                    BuildSkirtBuffers(skyTerrain, sizeX, sizeZ, maskJobRect, maskJobSkirtSouth,
-                        jobSkirtVerts, jobSkirtTris);
+                    BuildSkirtBuffers(skyTerrain, sizeX, sizeZ, maskJobRect, maskJobSkirtOn,
+                        jobSkirtVerts, jobSkirtTris, jobSkirtColors);
                 }
                 catch (Exception e)
                 {
@@ -783,7 +745,7 @@ namespace AsAboveSoBelow
                 maskMesh.SetTriangles(jobTris, 0);
                 maskMesh.RecalculateBounds();
             }
-            UploadSkirt(jobSkirtVerts, jobSkirtTris);
+            UploadSkirt(jobSkirtVerts, jobSkirtTris, jobSkirtColors);
             maskLastRect = maskJobRect;
             maskLastLowerId = maskJobLowerId;
         }
@@ -836,8 +798,8 @@ namespace AsAboveSoBelow
                 maskMesh.RecalculateBounds();
             }
             BuildSkirtBuffers(sky.terrainGrid, sky.Size.x, sky.Size.z, rect,
-                CurrentSkirtSouth(), skirtVerts, skirtTris);
-            UploadSkirt(skirtVerts, skirtTris);
+                CurrentSkirtOn(), skirtVerts, skirtTris, skirtColors);
+            UploadSkirt(skirtVerts, skirtTris, skirtColors);
         }
 
         /// <summary>Pure buffer build shared by the sync path (main thread) and
@@ -899,18 +861,12 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>South face height for the slab skirt this rebuild: the
-        /// depth shift value (so shift and face compose into one extrusion),
-        /// floored at the ledge width by the builder so the toggle still
-        /// outlines edges when the shift slider sits at 0. Negative = off.</summary>
-        private static float CurrentSkirtSouth()
+        /// <summary>Whether the slab-edge skirt (contact shadow + hairlines +
+        /// bright south-rim lip) builds this rebuild.</summary>
+        private static bool CurrentSkirtOn()
         {
             ABSettings settings = ABMod.Settings;
-            if (settings != null && !settings.drawSlabEdge)
-            {
-                return -1f;
-            }
-            return Mathf.Clamp(settings?.belowDepthShift ?? 0.25f, 0f, 1f);
+            return settings == null || settings.drawSlabEdge;
         }
 
         private static void EnsureSkirtMesh()
@@ -925,37 +881,48 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void UploadSkirt(List<Vector3> verts, List<int> tris)
+        private static void UploadSkirt(List<Vector3> verts, List<int> tris, List<Color32> colors)
         {
             EnsureSkirtMesh();
             skirtMesh.Clear();
             if (verts.Count > 0)
             {
                 skirtMesh.SetVertices(verts);
+                skirtMesh.SetColors(colors);
                 skirtMesh.SetTriangles(tris, 0);
                 skirtMesh.RecalculateBounds();
             }
         }
 
+        /// <summary>Depth of the contact-shadow gradient hanging from north
+        /// rims into the air cell, in cells (mockup height_2 tuning).</summary>
+        private const float ContactShadowDepth = 0.28f;
+
+        private static readonly Color32 SkirtShadowNear = new Color32(0, 0, 0, 96);
+        private static readonly Color32 SkirtShadowFar = new Color32(0, 0, 0, 0);
+        private static readonly Color32 SkirtLedge = new Color32(16, 16, 14, 110);
+        private static readonly Color32 SkirtLip = new Color32(205, 202, 182, 200);
+
         /// <summary>Pure buffer build for the slab-edge skirt; worker-safe for
         /// the same reason the mask build is (terrain reads are atomic and a
         /// torn read self-corrects next rebuild). Iterates AIR cells and emits
-        /// a south-facing face when the north neighbor is slab, plus thin
-        /// outlines against east/west slabs. Slab = any sky terrain that is
-        /// neither open air nor mountain cap (rooftop, built floors, landing
-        /// platforms), matching the mask's own solidity rule.</summary>
+        /// per edge kind: contact-shadow gradient under a north slab rim, thin
+        /// dark hairlines against east/west slabs, bright top-corner lip line
+        /// against a south slab. Slab = any sky terrain that is neither open
+        /// air nor mountain cap (rooftop, built floors, landing platforms),
+        /// matching the mask's own solidity rule.</summary>
         private static void BuildSkirtBuffers(TerrainGrid skyTerrain, int sizeX, int sizeZ,
-            CellRect rect, float southFace, List<Vector3> verts, List<int> tris)
+            CellRect rect, bool enabled, List<Vector3> verts, List<int> tris, List<Color32> colors)
         {
             verts.Clear();
             tris.Clear();
-            if (southFace < 0f)
+            colors.Clear();
+            if (!enabled)
             {
                 return;
             }
             TerrainDef air = ABDefOf.AB_OpenAir;
             TerrainDef cap = ABDefOf.AB_MountainTop;
-            float face = Mathf.Max(southFace, SkirtLedgeWidth);
             int minX = Mathf.Max(rect.minX, 0);
             int maxX = Mathf.Min(rect.maxX, sizeX - 1);
             int minZ = Mathf.Max(rect.minZ, 0);
@@ -970,15 +937,27 @@ namespace AsAboveSoBelow
                     }
                     if (z + 1 < sizeZ && IsSlab(skyTerrain, x, z + 1, air, cap))
                     {
-                        AddSkirtQuad(verts, tris, x, x + 1f, z + 1f - face, z + 1f);
+                        // Facade foot: shadow fades from the boundary downward
+                        // onto the ground (grounds the cliff, not a pit ring).
+                        AddSkirtQuad(verts, tris, colors, x, x + 1f, z + 1f - ContactShadowDepth, z + 1f,
+                            SkirtShadowFar, SkirtShadowNear, SkirtShadowNear, SkirtShadowFar);
                     }
                     if (x + 1 < sizeX && IsSlab(skyTerrain, x + 1, z, air, cap))
                     {
-                        AddSkirtQuad(verts, tris, x + 1f - SkirtLedgeWidth, x + 1f, z, z + 1f);
+                        AddSkirtQuad(verts, tris, colors, x + 1f - SkirtLedgeWidth, x + 1f, z, z + 1f,
+                            SkirtLedge, SkirtLedge, SkirtLedge, SkirtLedge);
                     }
                     if (x - 1 >= 0 && IsSlab(skyTerrain, x - 1, z, air, cap))
                     {
-                        AddSkirtQuad(verts, tris, x, x + SkirtLedgeWidth, z, z + 1f);
+                        AddSkirtQuad(verts, tris, colors, x, x + SkirtLedgeWidth, z, z + 1f,
+                            SkirtLedge, SkirtLedge, SkirtLedge, SkirtLedge);
+                    }
+                    if (z - 1 >= 0 && IsSlab(skyTerrain, x, z - 1, air, cap))
+                    {
+                        // Slab south of the air: its lit top corner, vanilla's
+                        // own north-mountain-edge treatment.
+                        AddSkirtQuad(verts, tris, colors, x, x + 1f, z, z + SkirtLedgeWidth,
+                            SkirtLip, SkirtLip, SkirtLip, SkirtLip);
                     }
                 }
             }
@@ -990,14 +969,21 @@ namespace AsAboveSoBelow
             return t != null && t != air && t != cap;
         }
 
-        private static void AddSkirtQuad(List<Vector3> verts, List<int> tris,
-            float x0, float x1, float z0, float z1)
+        /// <summary>Vertex order (x0,z0), (x0,z1), (x1,z1), (x1,z0); colors
+        /// follow the same order (c00, c01, c11, c10).</summary>
+        private static void AddSkirtQuad(List<Vector3> verts, List<int> tris, List<Color32> colors,
+            float x0, float x1, float z0, float z1,
+            Color32 c00, Color32 c01, Color32 c11, Color32 c10)
         {
             int vi = verts.Count;
             verts.Add(new Vector3(x0, SkirtAltitude, z0));
             verts.Add(new Vector3(x0, SkirtAltitude, z1));
             verts.Add(new Vector3(x1, SkirtAltitude, z1));
             verts.Add(new Vector3(x1, SkirtAltitude, z0));
+            colors.Add(c00);
+            colors.Add(c01);
+            colors.Add(c11);
+            colors.Add(c10);
             tris.Add(vi);
             tris.Add(vi + 1);
             tris.Add(vi + 2);

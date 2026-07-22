@@ -23,23 +23,19 @@
   <AB_SelectBelowInPlace>Select pawns on the level below</AB_SelectBelowInPlace>
   <AB_SelectBelowInPlaceTip>Click a pawn visible through open air on the level below to select it without leaving the sky view. Requires showing live movement on the level below.</AB_SelectBelowInPlaceTip>
   <AB_BelowDim>Darken the level below</AB_BelowDim>
-  <AB_BelowDimTip>How much the view of the level below is darkened when seen from above.</AB_BelowDimTip>
-  <AB_BelowDepthShift>Below view depth offset</AB_BelowDepthShift>
-  <AB_BelowDepthShiftTip>Shifts the whole view of the level below slightly down-screen so elevated platforms and walls read as raised instead of painted onto the ground. Measured in cells; 0 restores exact alignment.</AB_BelowDepthShiftTip>
-  <AB_SlabEdge>Draw roof slab edges</AB_SlabEdge>
-  <AB_SlabEdgeTip>Rooftops, sky floors, and landings show a dark side face along edges that border open air, so upper stories read as slabs stacked on the story below. The south face height follows the below view depth offset.</AB_SlabEdgeTip>
+  <AB_BelowDimTip>How much the view of the level below is darkened when seen from above. Kept low by default: the ground below staying bright and visible is part of what makes the upper level read as raised rather than the gap reading as a pit.</AB_BelowDimTip>
+  <AB_SlabEdge>Draw slab edge shading</AB_SlabEdge>
+  <AB_SlabEdgeTip>Edges that border open air get grounding touches on the ground side: a narrow contact shadow at the foot of south-facing slab edges, thin ledge lines on east and west edges, and a bright top corner where a slab meets open air on its north side.</AB_SlabEdgeTip>
   <AB_WallReveal>Reveal rim walls on rooftops</AB_WallReveal>
   <AB_WallRevealTip>The outer ring of rooftop tiles shows a strip of the supporting wall's top along edges that border open air, so the roof reads as resting on the wall line below instead of floating. Covered by anything built on the rim.</AB_WallRevealTip>
   <AB_WallRevealWidth>Rim wall strip width</AB_WallRevealWidth>
   <AB_WallRevealWidthTip>How much of the outer rooftop tile shows the wall underneath, in cells.</AB_WallRevealWidthTip>
-  <AB_WallFacade>Draw wall faces under slab edges</AB_WallFacade>
-  <AB_WallFacadeTip>South-facing slab edges show a sliver of the actual wall underneath in place of the plain dark face, so a wall built on the roof edge and the wall below it read as one continuous tall wall. Follows the below view depth offset.</AB_WallFacadeTip>
+  <AB_WallFacade>Draw rim facades</AB_WallFacade>
+  <AB_WallFacadeTip>Slab edges that border open air on their south side render their own side face: a band rising from a dark contact line at the edge to a bright lit top corner, tinted by the supporting wall or floor material. This is what makes the upper level read as standing on the ground below.</AB_WallFacadeTip>
+  <AB_RimFacadeHeight>Rim facade height</AB_RimFacadeHeight>
+  <AB_RimFacadeHeightTip>How tall the slab side face is, in cells. Taller reads as a higher story but covers more of the slab's edge row.</AB_RimFacadeHeightTip>
   <AB_BelowScale>Below level object scale</AB_BelowScale>
   <AB_BelowScaleTip>Pawns, animals, items, plants, and furniture on the level below draw smaller than life size, mimicking the zoom out of looking down a full story. Every object shrinks in place on its own cell, so nothing slides or misaligns. Walls and other connected structures keep their true size.</AB_BelowScaleTip>
-  <AB_BelowParallax>Below view parallax</AB_BelowParallax>
-  <AB_BelowParallaxTip>The level below drifts slightly against the camera as you pan, mimicking real perspective depth. Purely visual; a stronger depth illusion at the cost of a little roof edge misalignment near the screen edges.</AB_BelowParallaxTip>
-  <AB_BelowParallaxStrength>Parallax strength</AB_BelowParallaxStrength>
-  <AB_BelowParallaxStrengthTip>How far the level below is displaced at the screen edge, in cells. The on-screen displacement stays constant across zoom levels.</AB_BelowParallaxStrengthTip>
   <AB_ClimbTime>Stair climb time</AB_ClimbTime>
   <AB_ClimbTimeTip>Multiplies how long every stairs type takes to climb. Ladders are slower and grand staircases faster than normal stairs regardless.</AB_ClimbTimeTip>
   <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
