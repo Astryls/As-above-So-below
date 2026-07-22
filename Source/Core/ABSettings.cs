@@ -15,15 +15,17 @@ namespace AsAboveSoBelow
         public bool oneColonistBar = true;
         public bool cameraFollowStairs = true;
         public bool cameraLockKeybind = true;
-        public float belowDim = 0.12f;
-        public float belowDepthShift = 0.25f;
+        // Height-language rework (2026-07-22): the below view renders PLUMB
+        // (no south shift, no camera parallax). Elevation is told by ascending
+        // rim facades on the slab's own edge cells, a narrow contact shadow at
+        // their feet, and a low base dim - never by displacing the ground.
+        public float belowDim = 0.06f;
         public bool drawSlabEdge = true;
         public bool drawWallReveal = true;
         public float wallRevealWidth = 0.5f;
         public bool drawWallFacade = true;
+        public float rimFacadeHeight = 0.55f;
         public float belowThingScale = 0.85f;
-        public bool belowParallax;
-        public float belowParallaxStrength = 0.35f;
         public float climbTimeMultiplier = 1f;
         public bool crossLevelWork = true;
         public bool crossLevelOrders = true;
@@ -145,16 +147,6 @@ namespace AsAboveSoBelow
             listing.GapLine();
             listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
             belowDim = listing.Slider(belowDim, 0f, 0.8f);
-            listing.Label("AB_BelowDepthShift".Translate() + ": " + belowDepthShift.ToString("0.00"), tooltip: "AB_BelowDepthShiftTip".Translate());
-            float newDepthShift = listing.Slider(belowDepthShift, 0f, 0.6f);
-            if (Mathf.Abs(newDepthShift - belowDepthShift) > 0.0005f)
-            {
-                // The wall facade bakes the south shift into its clipped
-                // verts; reprint so the slider applies live (amortized by
-                // MapDrawer like the other reprint sliders).
-                DirtyBelowThingsLayers();
-            }
-            belowDepthShift = newDepthShift;
             listing.CheckboxLabeled("AB_SlabEdge".Translate(), ref drawSlabEdge, "AB_SlabEdgeTip".Translate());
             listing.CheckboxLabeled("AB_WallReveal".Translate(), ref drawWallReveal, "AB_WallRevealTip".Translate());
             if (drawWallReveal)
@@ -171,6 +163,18 @@ namespace AsAboveSoBelow
                 wallRevealWidth = newRevealWidth;
             }
             listing.CheckboxLabeled("AB_WallFacade".Translate(), ref drawWallFacade, "AB_WallFacadeTip".Translate());
+            if (drawWallFacade)
+            {
+                listing.Label("AB_RimFacadeHeight".Translate() + ": " + rimFacadeHeight.ToString("0.00"), tooltip: "AB_RimFacadeHeightTip".Translate());
+                float newFacadeHeight = listing.Slider(rimFacadeHeight, 0.25f, 1f);
+                if (Mathf.Abs(newFacadeHeight - rimFacadeHeight) > 0.0005f)
+                {
+                    // Facade band height is baked into section mesh verts;
+                    // reprint so the slider applies live.
+                    DirtyBelowThingsLayers();
+                }
+                rimFacadeHeight = newFacadeHeight;
+            }
             listing.Label("AB_BelowScale".Translate() + ": " + belowThingScale.ToStringPercent(), tooltip: "AB_BelowScaleTip".Translate());
             float newBelowScale = listing.Slider(belowThingScale, 0.7f, 1f);
             if (Mathf.Abs(newBelowScale - belowThingScale) > 0.0005f)
@@ -181,12 +185,6 @@ namespace AsAboveSoBelow
                 DirtyBelowThingsLayers();
             }
             belowThingScale = newBelowScale;
-            listing.CheckboxLabeled("AB_BelowParallax".Translate(), ref belowParallax, "AB_BelowParallaxTip".Translate());
-            if (belowParallax)
-            {
-                listing.Label("AB_BelowParallaxStrength".Translate() + ": " + belowParallaxStrength.ToString("0.00"), tooltip: "AB_BelowParallaxStrengthTip".Translate());
-                belowParallaxStrength = listing.Slider(belowParallaxStrength, 0.1f, 0.8f);
-            }
             listing.Label("AB_ClimbTime".Translate() + ": " + climbTimeMultiplier.ToStringPercent(), tooltip: "AB_ClimbTimeTip".Translate());
             climbTimeMultiplier = listing.Slider(climbTimeMultiplier, 0.25f, 3f);
             listing.GapLine();
@@ -224,17 +222,15 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cameraFollowStairs, "cameraFollowStairs", true);
             Scribe_Values.Look(ref cameraLockKeybind, "cameraLockKeybind", true);
             Scribe_Values.Look(ref climbTimeMultiplier, "climbTimeMultiplier", 1f);
-            // Key renamed so the old heavier default is not carried over from
-            // earlier test sessions; real surface lighting now does most of the work.
-            Scribe_Values.Look(ref belowDim, "belowDimLight", 0.12f);
-            Scribe_Values.Look(ref belowDepthShift, "belowDepthShift", 0.25f);
+            // Key renamed (again) with the height-language rework so the old
+            // pit-strength dim does not carry over; elevation cues do the work now.
+            Scribe_Values.Look(ref belowDim, "belowDimHeight", 0.06f);
             Scribe_Values.Look(ref drawSlabEdge, "drawSlabEdge", true);
             Scribe_Values.Look(ref drawWallReveal, "drawWallReveal", true);
             Scribe_Values.Look(ref wallRevealWidth, "wallRevealWidth", 0.5f);
             Scribe_Values.Look(ref drawWallFacade, "drawWallFacade", true);
+            Scribe_Values.Look(ref rimFacadeHeight, "rimFacadeHeight", 0.55f);
             Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
-            Scribe_Values.Look(ref belowParallax, "belowParallax", false);
-            Scribe_Values.Look(ref belowParallaxStrength, "belowParallaxStrength", 0.35f);
             Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
             Scribe_Values.Look(ref crossLevelOrders, "crossLevelOrders", true);
             Scribe_Values.Look(ref crossLevelCombat, "crossLevelCombat", true);
