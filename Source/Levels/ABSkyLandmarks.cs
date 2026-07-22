@@ -49,6 +49,7 @@ namespace AsAboveSoBelow
         };
 
         private static List<LandmarkDef> cachedAll;
+        private static Dictionary<LandmarkDef, string> displayLabels;
 
         internal static bool SystemActive => ModsConfig.OdysseyActive;
 
@@ -57,9 +58,78 @@ namespace AsAboveSoBelow
             if (cachedAll == null)
             {
                 cachedAll = new List<LandmarkDef>(DefDatabase<LandmarkDef>.AllDefsListForReading);
-                cachedAll.SortBy(d => d.label ?? d.defName);
+                cachedAll.SortBy(d => DisplayLabel(d));
             }
             return cachedAll;
+        }
+
+        /// <summary>Row label with duplicate disambiguation: families like the
+        /// ancient vents all inherit ONE label ("ancient vent") from their
+        /// abstract parent, with the distinguishing name living on the REQUIRED
+        /// mutator ("ancient smoke vent" / "ancient tox vent" / "ancient heat
+        /// vent"). When several landmarks share a label, each shows its required
+        /// mutator's label instead; defName is the last resort.</summary>
+        internal static string DisplayLabel(LandmarkDef def)
+        {
+            if (displayLabels == null)
+            {
+                displayLabels = new Dictionary<LandmarkDef, string>();
+                List<LandmarkDef> all = DefDatabase<LandmarkDef>.AllDefsListForReading;
+                Dictionary<string, int> counts = new Dictionary<string, int>();
+                for (int i = 0; i < all.Count; i++)
+                {
+                    string baseLabel = all[i].label ?? all[i].defName;
+                    counts.TryGetValue(baseLabel, out int c);
+                    counts[baseLabel] = c + 1;
+                }
+                for (int i = 0; i < all.Count; i++)
+                {
+                    LandmarkDef d = all[i];
+                    string baseLabel = d.label ?? d.defName;
+                    string resolved = baseLabel;
+                    if (counts[baseLabel] > 1)
+                    {
+                        string mutatorLabel = RequiredMutatorLabel(d);
+                        resolved = !mutatorLabel.NullOrEmpty() && mutatorLabel != baseLabel
+                            ? mutatorLabel
+                            : baseLabel + " (" + d.defName + ")";
+                    }
+                    displayLabels[d] = resolved;
+                }
+            }
+            return displayLabels.TryGetValue(def, out string label) ? label : (def.label ?? def.defName);
+        }
+
+        private static string RequiredMutatorLabel(LandmarkDef def)
+        {
+            for (int i = 0; i < def.mutatorChances.Count; i++)
+            {
+                MutatorChance mc = def.mutatorChances[i];
+                if (mc.required && mc.mutator != null && !mc.mutator.label.NullOrEmpty())
+                {
+                    return mc.mutator.label;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Row tooltip: the landmark's own description when it has
+        /// one, else the required mutator's (the vents keep theirs there).</summary>
+        internal static string DescriptionFor(LandmarkDef def)
+        {
+            if (!def.description.NullOrEmpty())
+            {
+                return def.description;
+            }
+            for (int i = 0; i < def.mutatorChances.Count; i++)
+            {
+                MutatorChance mc = def.mutatorChances[i];
+                if (mc.required && mc.mutator != null && !mc.mutator.description.NullOrEmpty())
+                {
+                    return mc.mutator.description;
+                }
+            }
+            return null;
         }
 
         internal static int DefaultModeFor(LandmarkDef def)

@@ -330,7 +330,7 @@ namespace AsAboveSoBelow
                     {
                         // icon missing: label carries the row
                     }
-                    string label = (def.label ?? def.defName).CapitalizeFirst();
+                    string label = ABSkyLandmarks.DisplayLabel(def).CapitalizeFirst();
                     string source = def.modContentPack?.Name;
                     Widgets.Label(new Rect(row.x + 28f, row.y + 4f, row.width - 28f - 116f, 22f), label);
                     if (!source.NullOrEmpty())
@@ -342,9 +342,10 @@ namespace AsAboveSoBelow
                         Widgets.Label(new Rect(sx, row.y + 4f, Mathf.Max(0f, row.xMax - 116f - sx), 22f), source);
                         GUI.color = Color.white;
                     }
-                    if (!def.description.NullOrEmpty())
+                    string tip = ABSkyLandmarks.DescriptionFor(def);
+                    if (!tip.NullOrEmpty())
                     {
-                        TooltipHandler.TipRegion(new Rect(row.x, row.y, row.width - 116f, row.height), def.description);
+                        TooltipHandler.TipRegion(new Rect(row.x, row.y, row.width - 116f, row.height), tip);
                     }
                     int mode = ABSkyLandmarks.ModeFor(this, def);
                     if (Widgets.ButtonText(new Rect(row.xMax - 112f, row.y + 2f, 110f, 24f), ABSkyLandmarks.ModeLabel(mode)))
