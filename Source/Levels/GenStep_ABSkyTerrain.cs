@@ -92,7 +92,15 @@ namespace AsAboveSoBelow
             // Outcrop mounts on the plateaus, then treated exactly like walls.
             if (naturalistic)
             {
-                AddOutcrops(map, indices, kind);
+                float outcropDensity = Mathf.Clamp(settings?.peakOutcropDensity ?? 1f, 0f, 2f);
+                if (outcropDensity > 0.001f)
+                {
+                    AddOutcrops(map, indices, kind, outcropDensity);
+                }
+                // Hidden-valley control runs AFTER outcrops: outcrop lumps can
+                // themselves seal a meadow pocket.
+                BreachHiddenValleys(map, indices, kind,
+                    Mathf.Clamp(settings?.peakHiddenValleys ?? 1f, 0f, 1f));
             }
 
             bool[] wall = new bool[cellCount];
@@ -197,13 +205,247 @@ namespace AsAboveSoBelow
             FogEnclosedMeadows(map, indices, kind, fog);
 
             // Pass 5: ore lumps inside the mass walls.
-            ABOreGen.ScatterOres(map, oreCells, OreLumpsPer10kCells);
+            ABOreGen.ScatterOres(map, oreCells,
+                Mathf.Clamp(settings?.skyOreDensity ?? 6f, 0f, 12f));
+
+            // Pass 5b: mountain tarns - small water bodies pooled on the
+            // plateau (settings; watered cells leave the flora list).
+            SeedTarns(map, indices, kind, plateauCells, settings);
 
             // Pass 6: plateau flora from the surface biome.
             SeedPlateauFlora(map, ground, plateauCells, settings);
         }
 
-        private const float OreLumpsPer10kCells = 6f;
+        /// <summary>Hidden-valley control (settings): each enclosed meadow
+        /// pocket stays sealed with probability keepChance (1 = always, the
+        /// classic behavior); the rest get a 1-wide walkable notch carved to
+        /// the nearest exposed cell (shortest BFS cut through the wall), so
+        /// they generate as reachable canyon meadows instead. Runs pre-terrain
+        /// on the kind[] grid, so notch cells get normal ledge treatment and
+        /// the later fog pass sees them as connected.</summary>
+        private static void BreachHiddenValleys(Map map, CellIndices indices, byte[] kind, float keepChance)
+        {
+            if (keepChance >= 0.999f)
+            {
+                return;
+            }
+            int cellCount = indices.NumGridCells;
+            IntVec3[] adj = GenAdj.AdjacentCells;
+            // Reachability flood, exactly FogEnclosedMeadows' seeding rule.
+            bool[] reached = new bool[cellCount];
+            Queue<IntVec3> queue = new Queue<IntVec3>();
+            foreach (IntVec3 c in map.AllCells)
+            {
+                int idx = indices.CellToIndex(c);
+                byte k = kind[idx];
+                bool seed = k == KindLedge;
+                if (!seed && k == KindPlateau)
+                {
+                    for (int i = 0; i < adj.Length && !seed; i++)
+                    {
+                        IntVec3 n = c + adj[i];
+                        seed = n.InBounds(map) && kind[indices.CellToIndex(n)] == KindOutside;
+                    }
+                }
+                if (seed)
+                {
+                    reached[idx] = true;
+                    queue.Enqueue(c);
+                }
+            }
+            while (queue.Count > 0)
+            {
+                IntVec3 c = queue.Dequeue();
+                for (int i = 0; i < adj.Length; i++)
+                {
+                    IntVec3 n = c + adj[i];
+                    if (!n.InBounds(map))
+                    {
+                        continue;
+                    }
+                    int idx = indices.CellToIndex(n);
+                    if (reached[idx] || (kind[idx] != KindPlateau && kind[idx] != KindLedge))
+                    {
+                        continue;
+                    }
+                    reached[idx] = true;
+                    queue.Enqueue(n);
+                }
+            }
+            // Group unreached plateau cells into pockets.
+            int[] comp = new int[cellCount];
+            List<List<IntVec3>> pockets = new List<List<IntVec3>>();
+            Stack<IntVec3> stack = new Stack<IntVec3>();
+            foreach (IntVec3 c in map.AllCells)
+            {
+                int idx = indices.CellToIndex(c);
+                if (kind[idx] != KindPlateau || reached[idx] || comp[idx] != 0)
+                {
+                    continue;
+                }
+                List<IntVec3> pocket = new List<IntVec3>();
+                pockets.Add(pocket);
+                int id = pockets.Count;
+                comp[idx] = id;
+                stack.Push(c);
+                while (stack.Count > 0)
+                {
+                    IntVec3 p = stack.Pop();
+                    pocket.Add(p);
+                    for (int i = 0; i < adj.Length; i++)
+                    {
+                        IntVec3 n = p + adj[i];
+                        if (!n.InBounds(map))
+                        {
+                            continue;
+                        }
+                        int nIdx = indices.CellToIndex(n);
+                        if (comp[nIdx] == 0 && !reached[nIdx] && kind[nIdx] == KindPlateau)
+                        {
+                            comp[nIdx] = id;
+                            stack.Push(n);
+                        }
+                    }
+                }
+            }
+            if (pockets.Count == 0)
+            {
+                return;
+            }
+            IntVec3[] card = GenAdj.CardinalDirections;
+            int breachedCount = 0;
+            for (int p = 0; p < pockets.Count; p++)
+            {
+                if (Rand.Chance(keepChance))
+                {
+                    continue;
+                }
+                List<IntVec3> pocket = pockets[p];
+                // Shortest cut: BFS from the pocket through wall cells
+                // (4-connected, so the notch is a clean 1-wide path) until a
+                // wall cell touches walkable daylight.
+                bool[] visited = new bool[cellCount];
+                int[] parent = new int[cellCount];
+                Queue<IntVec3> bfs = new Queue<IntVec3>();
+                for (int i = 0; i < pocket.Count; i++)
+                {
+                    int idx = indices.CellToIndex(pocket[i]);
+                    visited[idx] = true;
+                    parent[idx] = -1;
+                    bfs.Enqueue(pocket[i]);
+                }
+                IntVec3 hit = IntVec3.Invalid;
+                while (bfs.Count > 0 && hit == IntVec3.Invalid)
+                {
+                    IntVec3 c = bfs.Dequeue();
+                    int cIdx = indices.CellToIndex(c);
+                    for (int i = 0; i < card.Length; i++)
+                    {
+                        IntVec3 n = c + card[i];
+                        if (!n.InBounds(map))
+                        {
+                            continue;
+                        }
+                        int nIdx = indices.CellToIndex(n);
+                        if (visited[nIdx])
+                        {
+                            continue;
+                        }
+                        byte nk = kind[nIdx];
+                        if (nk == KindWall)
+                        {
+                            visited[nIdx] = true;
+                            parent[nIdx] = cIdx;
+                            bfs.Enqueue(n);
+                            continue;
+                        }
+                        if (kind[cIdx] == KindWall
+                            && (nk == KindOutside || ((nk == KindLedge || nk == KindPlateau) && reached[nIdx])))
+                        {
+                            hit = c;
+                            break;
+                        }
+                    }
+                }
+                if (hit == IntVec3.Invalid)
+                {
+                    continue;
+                }
+                int walk = indices.CellToIndex(hit);
+                while (walk >= 0 && kind[walk] == KindWall)
+                {
+                    kind[walk] = KindLedge;
+                    walk = parent[walk];
+                }
+                breachedCount++;
+            }
+            if (breachedCount > 0)
+            {
+                ABLog.Dev("Peak plateau: breached " + breachedCount + " enclosed valley(s) per settings.");
+            }
+        }
+
+        /// <summary>Mountain tarns (settings): small shallow pools scattered
+        /// on open plateau ground, deep water at the heart of the larger
+        /// ones. Density 1 lands roughly one tarn per ~1400 open cells; 0
+        /// disables. Watered cells are removed from the flora list.</summary>
+        private static void SeedTarns(Map map, CellIndices indices, byte[] kind,
+            List<IntVec3> plateauCells, ABSettings settings)
+        {
+            float density = Mathf.Clamp(settings?.peakTarns ?? 1f, 0f, 2f);
+            if (density <= 0.001f || plateauCells.Count < 120)
+            {
+                return;
+            }
+            float expected = plateauCells.Count / 1400f * density;
+            int count = Mathf.FloorToInt(expected);
+            if (Rand.Chance(expected - count))
+            {
+                count++;
+            }
+            if (count <= 0)
+            {
+                return;
+            }
+            TerrainGrid grid = map.terrainGrid;
+            HashSet<IntVec3> watered = new HashSet<IntVec3>();
+            for (int i = 0; i < count; i++)
+            {
+                IntVec3 center = plateauCells.RandomElement();
+                int size = Rand.RangeInclusive(8, 26);
+                List<IntVec3> lump = GridShapeMaker.IrregularLump(center, map, size);
+                int placed = 0;
+                for (int j = 0; j < lump.Count; j++)
+                {
+                    IntVec3 c = lump[j];
+                    if (!c.InBounds(map) || kind[indices.CellToIndex(c)] != KindPlateau)
+                    {
+                        continue;
+                    }
+                    grid.SetTerrain(c, TerrainDefOf.WaterShallow);
+                    watered.Add(c);
+                    placed++;
+                }
+                // Deep heart for the bigger pools, vanilla-lake style.
+                if (placed >= 14)
+                {
+                    List<IntVec3> heart = GridShapeMaker.IrregularLump(center, map, Mathf.Max(4, placed / 4));
+                    for (int j = 0; j < heart.Count; j++)
+                    {
+                        IntVec3 c = heart[j];
+                        if (watered.Contains(c))
+                        {
+                            grid.SetTerrain(c, TerrainDefOf.WaterDeep);
+                        }
+                    }
+                }
+            }
+            if (watered.Count > 0)
+            {
+                plateauCells.RemoveAll(watered.Contains);
+                ABLog.Dev("Peak plateau: " + watered.Count + " tarn cell(s) pooled.");
+            }
+        }
 
         /// <summary>Distance-from-open-air classification of the solid mass.
         /// Distances are 8-connected BFS steps; out-of-bounds never seeds, so
@@ -272,8 +514,12 @@ namespace AsAboveSoBelow
             // Rock/meadow boundaries inside the mass become the cliffs for
             // free. Components that never open fall back to the legacy 1-wide
             // ledge so small crags keep their classic look.
+            ABSettings gs = ABMod.Settings;
+            float meadowCutoff = Mathf.Clamp(gs?.peakMeadowCutoff ?? MeadowCutoffDefault, 0.45f, 0.75f);
+            float meadowScale = Mathf.Clamp(gs?.peakMeadowScale ?? 0.024f, 0.012f, 0.048f);
+            int terraceMax = Mathf.Clamp(gs?.peakTerraceMax ?? 4, 1, 6);
             Perlin terraceNoise = new Perlin(0.035, 2.0, 0.5, 4, Rand.Range(0, int.MaxValue), QualityMode.Medium);
-            Perlin meadowNoise = new Perlin(0.024, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
+            Perlin meadowNoise = new Perlin(meadowScale, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
             int[] comp = new int[cellCount];
             List<bool> compHasPlateau = new List<bool> { false };
             Stack<IntVec3> stack = new Stack<IntVec3>();
@@ -294,7 +540,7 @@ namespace AsAboveSoBelow
                     int idx = indices.CellToIndex(c);
                     int ed = edgeDist[idx];
                     byte k;
-                    if (Noise01(meadowNoise, c) > MeadowCutoff)
+                    if (Noise01(meadowNoise, c) > meadowCutoff)
                     {
                         // Open zone: meadow landing, but ALWAYS one cell back
                         // from the mass edge - the outermost ring stays
@@ -313,7 +559,7 @@ namespace AsAboveSoBelow
                     else
                     {
                         // Rock zone: classic ledge-and-wall silhouette.
-                        k = ed <= TerraceWidth(terraceNoise, c) ? KindLedge : KindWall;
+                        k = ed <= TerraceWidth(terraceNoise, c, terraceMax) ? KindLedge : KindWall;
                     }
                     kind[idx] = k;
                     for (int i = 0; i < adj.Length; i++)
@@ -343,25 +589,25 @@ namespace AsAboveSoBelow
             return kind;
         }
 
-        /// <summary>Meadow-field threshold over the clamped perlin (bell-shaped
-        /// around 0.5): values above open plateau. 0.60 lands near 25-30% of the
-        /// deep interior open, 70-75% rock.</summary>
-        private const float MeadowCutoff = 0.60f;
+        /// <summary>Default meadow-field threshold over the clamped perlin
+        /// (bell-shaped around 0.5): values above open plateau. 0.60 lands
+        /// near 25-30% of the deep interior open, 70-75% rock. The live value
+        /// comes from the plateau openness setting.</summary>
+        private const float MeadowCutoffDefault = 0.60f;
 
-        /// <summary>Walkable rim depth, 1..4 cells: mostly the classic single
-        /// ledge, with stretches cut two to four cells into the mountain.</summary>
-        private static int TerraceWidth(Perlin noise, IntVec3 c)
+        /// <summary>Walkable rim depth, 1..max cells: mostly the classic
+        /// single ledge, with stretches cut deeper into the mountain. The
+        /// power curve reproduces the original 1/2/3/4 quantiles at max=4
+        /// (thresholds 0.5 / 0.75 / 0.9), so the default look is unchanged.</summary>
+        private static int TerraceWidth(Perlin noise, IntVec3 c, int max)
         {
             float n = Noise01(noise, c);
-            if (n < 0.5f)
+            if (n < 0.5f || max <= 1)
             {
                 return 1;
             }
-            if (n < 0.75f)
-            {
-                return 2;
-            }
-            return n < 0.9f ? 3 : 4;
+            int w = 1 + Mathf.FloorToInt(Mathf.Pow(Mathf.InverseLerp(0.5f, 1f, n), 1.6f) * max);
+            return Mathf.Clamp(w, 1, max);
         }
 
         private static float Noise01(Perlin noise, IntVec3 c)
@@ -439,7 +685,7 @@ namespace AsAboveSoBelow
         /// reclassified as wall, so the main pass gives them rock, thick roof,
         /// ore eligibility and (when bulky) a fogged core - miniature peaks
         /// standing on the mountain top.</summary>
-        private static void AddOutcrops(Map map, CellIndices indices, byte[] kind)
+        private static void AddOutcrops(Map map, CellIndices indices, byte[] kind, float density)
         {
             List<IntVec3> plateau = new List<IntVec3>();
             foreach (IntVec3 c in map.AllCells)
@@ -453,7 +699,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            int lumps = Mathf.Max(1, plateau.Count / 900);
+            int lumps = Mathf.Max(1, Mathf.RoundToInt(plateau.Count / 900f * density));
             for (int i = 0; i < lumps; i++)
             {
                 IntVec3 center = plateau.RandomElement();

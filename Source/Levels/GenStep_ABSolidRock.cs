@@ -40,10 +40,10 @@ namespace AsAboveSoBelow
             map.fogGrid.Refog(CellRect.WholeMap(map));
 
             // Ore veins throughout the fill so the basement is worth mining.
-            ABOreGen.ScatterOres(map, null, OreLumpsPer10kCells);
+            // Density from settings (applies to newly generated basements).
+            ABOreGen.ScatterOres(map, null,
+                Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f));
         }
-
-        private const float OreLumpsPer10kCells = 6f;
     }
 
     /// <summary>Scatters mineable ore lumps into natural rock, weighted by each

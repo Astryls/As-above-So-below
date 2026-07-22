@@ -74,7 +74,9 @@ namespace AsAboveSoBelow
                 return;
             }
             map.pocketTileInfo.PrimaryBiome = biome;
-            ABLog.Dev("Cavern basement: " + biome.defName + ", openness " + openness.ToString("0.00") + ".");
+            float chamberFreq = Mathf.Clamp(ABMod.Settings?.cavernChamberFreq ?? 0.02f, 0.01f, 0.05f);
+            ABLog.Dev("Cavern basement: " + biome.defName + ", openness " + openness.ToString("0.00")
+                + ", chambers " + chamberFreq.ToString("0.000") + ".");
 
             // 2. Worm-carve one connected network. Every worm after the first
             // starts on an already carved cell, so the whole system links up.
@@ -124,10 +126,13 @@ namespace AsAboveSoBelow
                     }
                     pos = next;
                     CarveDisc(c, Rand.Value < 0.9f ? 1.4f : 2.1f);
-                    if (Rand.Value < 0.02f)
+                    if (Rand.Value < chamberFreq)
                     {
-                        // Occasional chamber. Radius stays collapse-safe-ish;
-                        // the pillar pass below is the hard guarantee.
+                        // Occasional chamber (frequency from settings; higher
+                        // also gives BC's radius-5 scatterer validators more
+                        // room, quieting the known-benign placement warning).
+                        // Radius stays collapse-safe-ish; the pillar pass
+                        // below is the hard guarantee.
                         CarveDisc(c, Rand.Range(3f, 4.8f));
                     }
                 }
@@ -204,7 +209,18 @@ namespace AsAboveSoBelow
             // 5. Their own dressing: stalagmites everywhere, crystals in the
             // crystal biome. Both are self-contained scatterers with their own
             // placement validators.
-            BiomesCavernsCompat.RunForeignGenStep("BMT_ScatterStalagmiteGenerator", map);
+            // Formation density (settings): run BC's scatterer 0..2 times,
+            // fractional part as a chance for one more pass.
+            float formations = Mathf.Clamp(ABMod.Settings?.cavernFormations ?? 1f, 0f, 2f);
+            int formationRuns = Mathf.FloorToInt(formations);
+            if (Rand.Chance(formations - formationRuns))
+            {
+                formationRuns++;
+            }
+            for (int fi = 0; fi < formationRuns; fi++)
+            {
+                BiomesCavernsCompat.RunForeignGenStep("BMT_ScatterStalagmiteGenerator", map);
+            }
             if (biome.defName == "BMT_CrystalCaverns")
             {
                 BiomesCavernsCompat.RunForeignGenStep("BMT_CrystalsGenerator", map);

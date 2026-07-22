@@ -32,6 +32,46 @@
   <AB_WallRevealWidthTip>How much of the outer rooftop tile shows the wall underneath, in cells.</AB_WallRevealWidthTip>
   <AB_BelowScale>Below level object scale</AB_BelowScale>
   <AB_BelowScaleTip>Pawns, animals, items, plants, and furniture on the level below draw smaller than life size, mimicking the zoom out of looking down a full story. Every object shrinks in place on its own cell, so nothing slides or misaligns. Walls and other connected structures keep their true size.</AB_BelowScaleTip>
+  <AB_TabGeneration>Generation</AB_TabGeneration>
+  <AB_TabView>View and camera</AB_TabView>
+  <AB_TabWork>Work and logistics</AB_TabWork>
+  <AB_TabCombat>Combat and threats</AB_TabCombat>
+  <AB_TabAdvanced>Advanced</AB_TabAdvanced>
+  <AB_GenNote>Generation settings apply when a level is first created. Existing sky and basement levels keep the look they were generated with.</AB_GenNote>
+  <AB_Presets>Peak presets</AB_Presets>
+  <AB_PresetsTip>One-click looks for newly generated mountain peaks. Default restores every generation setting; the others adjust the peak sliders below and leave ore and cavern settings alone.</AB_PresetsTip>
+  <AB_PresetDefault>Default</AB_PresetDefault>
+  <AB_PresetDramatic>Dramatic</AB_PresetDramatic>
+  <AB_PresetSubtle>Subtle</AB_PresetSubtle>
+  <AB_PresetLush>Lush</AB_PresetLush>
+  <AB_PlateauOpenness>Plateau openness</AB_PlateauOpenness>
+  <AB_PlateauOpennessTip>How much of the mountain's deep interior opens into walkable meadow plateau instead of solid rock. Low values give craggy, mostly-solid peaks; high values give broad open highlands.</AB_PlateauOpennessTip>
+  <AB_MeadowScale>Meadow size</AB_MeadowScale>
+  <AB_MeadowScaleTip>The scale of the meadow pattern. High values carve a few large connected meadows; low values scatter many small pockets and winding rock fingers.</AB_MeadowScaleTip>
+  <AB_TerraceMax>Edge band width</AB_TerraceMax>
+  <AB_TerraceMaxTip>The deepest the walkable rock terrace along the mountain edge can cut into the mass, in cells. 1 is the classic single ledge; higher values open wide shelf stretches.</AB_TerraceMaxTip>
+  <AB_OutcropDensity>Outcrop density</AB_OutcropDensity>
+  <AB_OutcropDensityTip>How many rocky outcrop mounts stud the open plateaus. 0% removes them entirely.</AB_OutcropDensityTip>
+  <AB_Tarns>Mountain lakes</AB_Tarns>
+  <AB_TarnsTip>Small tarns pooled on the open plateau, with deep water at the heart of the larger ones. 0% keeps the plateau dry.</AB_TarnsTip>
+  <AB_HiddenValleys>Hidden valleys</AB_HiddenValleys>
+  <AB_HiddenValleysTip>The share of fully rock-enclosed meadow pockets that stay sealed and unexplored (hidden valleys). The rest are breached with a narrow walkable notch and generate as reachable canyon meadows instead.</AB_HiddenValleysTip>
+  <AB_SkyOre>Sky level ore density</AB_SkyOre>
+  <AB_SkyOreTip>Ore lumps per 10,000 mountain mass cells on newly generated sky levels.</AB_SkyOreTip>
+  <AB_BasementOre>Basement ore density</AB_BasementOre>
+  <AB_BasementOreTip>Ore lumps per 10,000 cells in newly generated basement rock.</AB_BasementOreTip>
+  <AB_ChamberFreq>Cavern chamber frequency</AB_ChamberFreq>
+  <AB_ChamberFreqTip>How often the cavern network widens into a large chamber, per carve step (shown as a percentage). Chambers are also where the cavern biome's own lakes and terrain features tend to land, so raise this for wetter, roomier caverns.</AB_ChamberFreqTip>
+  <AB_CavernFormations>Cavern formation density</AB_CavernFormations>
+  <AB_CavernFormationsTip>Density of stalagmites and other Biomes! Caverns formations in generated caverns. 0% skips them entirely.</AB_CavernFormationsTip>
+  <AB_GuardPanel>Subsystem status</AB_GuardPanel>
+  <AB_GuardPanelTip>Every subsystem runs behind its own kill switch: if one hits an error it shuts itself down so the rest of the mod and your game keep running. Tripped subsystems are listed here and can be re-armed; they also reset when a game is loaded.</AB_GuardPanelTip>
+  <AB_GuardAllGreen>All {0} subsystems running normally.</AB_GuardAllGreen>
+  <AB_GuardTripped>{0} - shut down after an error in {1}</AB_GuardTripped>
+  <AB_ReArm>Re-arm</AB_ReArm>
+  <AB_ResetTab>Reset this tab to defaults</AB_ResetTab>
+  <AB_ResetAll>Reset all settings to defaults</AB_ResetAll>
+  <AB_ResetAllConfirm>Reset every setting on every tab to its default value?</AB_ResetAllConfirm>
   <AB_SkyBiomeInherit>Sky level inherits surface biome</AB_SkyBiomeInherit>
   <AB_SkyBiomeInheritTip>Newly created sky levels use the same biome as the surface map below, so plateau greenery, tree regrowth, wild plant mix, and weather match the world around the mountain. Applies when a sky level is first generated; existing sky levels keep the biome they were created with. Off restores the stark high-altitude look.</AB_SkyBiomeInheritTip>
   <AB_ClimbTime>Stair climb time</AB_ClimbTime>
