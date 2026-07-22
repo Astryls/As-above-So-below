@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <BiomeDef ParentName="Biome_Underground">
+    <defName>AB_Underground</defName>
+    <label>deep underground</label>
+    <description>Solid rock beneath the surface, untouched by sun or wind.</description>
+    <plantDensity>0</plantDensity>
+    <maxFishPopulation>0</maxFishPopulation>
+  </BiomeDef>
+
+  <BiomeDef>
+    <defName>AB_OpenSky</defName>
+    <label>open sky</label>
+    <description>The open air above the colony.</description>
+    <generatesNaturally>false</generatesNaturally>
+    <animalDensity>0</animalDensity>
+    <!-- Modest density + a hardy highland mix so plateau vegetation regrows
+         naturally. Wild spawning is per-cell fertility-gated, so open air and
+         rooftops stay bare; only plateau soil/gravel (and player soil) qualify. -->
+    <plantDensity>0.35</plantDensity>
+    <!-- Dictionary-style records: <DefName>commonality</DefName>. The li-record
+         form belongs to diseases/terrainsByFertility, NOT wildPlants; using it
+         here aborts the whole file's def load (learned run #40). -->
+    <wildPlants>
+      <Plant_Grass>6</Plant_Grass>
+      <Plant_TallGrass>1.2</Plant_TallGrass>
+      <Plant_Bush>1</Plant_Bush>
+      <Plant_Brambles>0.6</Plant_Brambles>
+      <Plant_Dandelion>0.5</Plant_Dandelion>
+      <Plant_TreePine>0.35</Plant_TreePine>
+      <Plant_TreeBirch>0.25</Plant_TreeBirch>
+      <Plant_TreeOak>0.2</Plant_TreeOak>
+    </wildPlants>
+    <wildAnimalsCanWanderInto>false</wildAnimalsCanWanderInto>
+    <diseaseMtbDays>120</diseaseMtbDays>
+    <baseWeatherCommonalities>
+      <Clear>1</Clear>
+    </baseWeatherCommonalities>
+  </BiomeDef>
+
+</Defs>

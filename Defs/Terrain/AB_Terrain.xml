@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <TerrainDef>
+    <defName>AB_OpenAir</defName>
+    <label>open air</label>
+    <description>Nothing here but a long drop to the level below.</description>
+    <texturePath>Terrain/AB_OpenAir</texturePath>
+    <dontRender>true</dontRender>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>15</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Impassable</passability>
+    <avoidWander>true</avoidWander>
+    <fertility>0</fertility>
+  </TerrainDef>
+
+  <TerrainDef>
+    <defName>AB_RoofSurface</defName>
+    <label>rooftop</label>
+    <description>The tiled steel top side of a roof on the level below. Sturdy enough to walk on and build on.</description>
+    <texturePath>Terrain/Surfaces/GenericFloorTile</texturePath>
+    <color>(0.32, 0.32, 0.32)</color>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>230</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Standable</passability>
+    <pathCost>1</pathCost>
+    <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
+  <TerrainDef>
+    <defName>AB_MountainTop</defName>
+    <label>mountain top</label>
+    <description>The unbroken top of the mountain mass below. Bare, dark stone; nothing grows up here, but floors can be laid over it.</description>
+    <texturePath>Terrain/AB_MountainTop</texturePath>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>231</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Standable</passability>
+    <pathCost>2</pathCost>
+    <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
+</Defs>

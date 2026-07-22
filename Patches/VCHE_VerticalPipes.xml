@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Vertical chemfuel pipes exist only when Vanilla Chemfuel Expanded is
+       loaded. VCHE rides the VEF PipeSystem, so the generic vertical duct
+       already bridges its nets when pipes are butted against the shaft; this
+       dedicated riser matches the Rimefeller compat instead: each end carries
+       two small hidden PipeSystem buffers (chemfuel and deepchem), so the
+       shaft IS a tank on both nets - pipes connect straight to it, pumpjacks
+       and refineries feed through it, and a level needs no player-built tank
+       of its own. The generic VEF bridge (ABPipeCompat / VEFPipeBridge)
+       direct-feeds unmet demand and levels the buffers across the pair. -->
+  <Operation Class="PatchOperationFindMod">
+    <mods>
+      <li>Vanilla Chemfuel Expanded</li>
+    </mods>
+    <match Class="PatchOperationAdd">
+      <xpath>/Defs</xpath>
+      <value>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalChemfuelPipeDown</defName>
+          <label>vertical chemfuel pipe (down)</label>
+          <description>A sealed pipeline riser carrying chemfuel and deepchem to the level below. Pipe networks of either resource touching it on both levels connect through the shaft as if they were one, and the shaft itself buffers a little of each, so no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: PipeSystem storage comps expect comp ticks. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="PipeSystem.CompProperties_ResourceStorage">
+              <pipeNet>VCHE_ChemfuelNet</pipeNet>
+              <storageCapacity>100</storageCapacity>
+              <drawStorageBar>false</drawStorageBar>
+              <addTransferGizmo>false</addTransferGizmo>
+            </li>
+            <li Class="PipeSystem.CompProperties_ResourceStorage">
+              <pipeNet>VCHE_DeepchemNet</pipeNet>
+              <storageCapacity>100</storageCapacity>
+              <drawStorageBar>false</drawStorageBar>
+              <addTransferGizmo>false</addTransferGizmo>
+            </li>
+          </comps>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalChemfuelPipeDown</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalChemfuelPipeDown</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>-1</deltaLevel>
+              <counterpartDef>AB_VerticalChemfuelPipeUp</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeVef>true</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalChemfuelPipeUp</defName>
+          <label>vertical chemfuel pipe (up)</label>
+          <description>A sealed pipeline riser carrying chemfuel and deepchem to the level above. Pipe networks of either resource touching it on both levels connect through the shaft as if they were one, and the shaft itself buffers a little of each, so no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Misc</designationCategory>
+          <costList>
+            <Steel>25</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>800</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: PipeSystem storage comps expect comp ticks. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="PipeSystem.CompProperties_ResourceStorage">
+              <pipeNet>VCHE_ChemfuelNet</pipeNet>
+              <storageCapacity>100</storageCapacity>
+              <drawStorageBar>false</drawStorageBar>
+              <addTransferGizmo>false</addTransferGizmo>
+            </li>
+            <li Class="PipeSystem.CompProperties_ResourceStorage">
+              <pipeNet>VCHE_DeepchemNet</pipeNet>
+              <storageCapacity>100</storageCapacity>
+              <drawStorageBar>false</drawStorageBar>
+              <addTransferGizmo>false</addTransferGizmo>
+            </li>
+          </comps>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalChemfuelPipeUp</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalChemfuelPipeUp</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>1</deltaLevel>
+              <counterpartDef>AB_VerticalChemfuelPipeDown</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeVef>true</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+      </value>
+    </match>
+  </Operation>
+
+</Patch>

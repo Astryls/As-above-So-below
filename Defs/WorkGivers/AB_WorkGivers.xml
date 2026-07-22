@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <WorkGiverDef>
+    <defName>AB_HaulAcrossLevels</defName>
+    <label>haul things to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABHaulAcrossLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>haul</verb>
+    <gerund>hauling</gerund>
+    <priorityInType>10</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>AB_RescueAcrossLevels</defName>
+    <label>rescue to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABRescueAcrossLevels</giverClass>
+    <workType>Doctor</workType>
+    <verb>rescue</verb>
+    <gerund>rescuing</gerund>
+    <priorityInType>70</priorityInType>
+    <emergency>true</emergency>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>AB_WardenTakeToBedAcrossLevels</defName>
+    <label>take prisoners to cells on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABWardenTakeToBedAcrossLevels</giverClass>
+    <workType>Warden</workType>
+    <verb>take</verb>
+    <gerund>taking to a cell</gerund>
+    <priorityInType>85</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>AB_FetchFromOtherLevels</defName>
+    <label>fetch things from other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>fetch</verb>
+    <gerund>fetching from</gerund>
+    <priorityInType>8</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+</Defs>

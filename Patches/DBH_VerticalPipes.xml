@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Vertical water pipes exist only when Dubs Bad Hygiene is loaded. They
+       mirror DBH's own gating: buildable from the start in full DBH, behind
+       Plumbing research in lite mode (same MayRequire trick DBH uses). Each
+       shaft end carries a DBH pipe comp plus a small hidden water tank, so
+       the shaft IS a tower on both nets: wells and pumps fill it through
+       DBH's own logic and fixtures drink from it, meaning a level needs no
+       player-built tank of its own. The bridge levels the two nets' fill
+       fractions through DBH's public Pull and Push APIs. -->
+  <Operation Class="PatchOperationFindMod">
+    <mods>
+      <li>Dubs Bad Hygiene</li>
+    </mods>
+    <match Class="PatchOperationAdd">
+      <xpath>/Defs</xpath>
+      <value>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalWaterPipeDown</defName>
+          <label>vertical water pipe (down)</label>
+          <description>A sealed riser pipe carrying water to the level below. Water networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Hygiene</designationCategory>
+          <costList>
+            <Steel>15</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>600</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: DBH's storage comp receives pumped water in CompTick. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="DubsBadHygiene.CompProperties_Pipe">
+              <mode>Water</mode>
+            </li>
+            <li Class="DubsBadHygiene.CompProperties_WaterStorage">
+              <WaterStorageCap>100</WaterStorageCap>
+            </li>
+          </comps>
+          <researchPrerequisites>
+            <li MayRequire="dbhlitemode">Plumbing</li>
+          </researchPrerequisites>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalWaterPipeDown</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalWaterPipeDown</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>-1</deltaLevel>
+              <counterpartDef>AB_VerticalWaterPipeUp</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeWater>true</bridgeWater>
+              <bridgeVef>false</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+        <ThingDef ParentName="AB_VerticalLinkBase">
+          <defName>AB_VerticalWaterPipeUp</defName>
+          <label>vertical water pipe (up)</label>
+          <description>A sealed riser pipe carrying water to the level above. Water networks touching it on both levels connect through the shaft as if they were one; no tank is needed on either level. Nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
+          <designationCategory>Hygiene</designationCategory>
+          <costList>
+            <Steel>15</Steel>
+          </costList>
+          <statBases>
+            <WorkToBuild>600</WorkToBuild>
+          </statBases>
+          <!-- Normal ticker: DBH's storage comp receives pumped water in CompTick. -->
+          <tickerType>Normal</tickerType>
+          <comps>
+            <li Class="DubsBadHygiene.CompProperties_Pipe">
+              <mode>Water</mode>
+            </li>
+            <li Class="DubsBadHygiene.CompProperties_WaterStorage">
+              <WaterStorageCap>100</WaterStorageCap>
+            </li>
+          </comps>
+          <researchPrerequisites>
+            <li MayRequire="dbhlitemode">Plumbing</li>
+          </researchPrerequisites>
+          <graphicData>
+            <texPath>Things/Building/AB_VerticalWaterPipeUp</texPath>
+            <graphicClass>Graphic_Single</graphicClass>
+            <drawSize>(1,1)</drawSize>
+          </graphicData>
+          <uiIconPath>Things/Building/AB_VerticalWaterPipeUp</uiIconPath>
+          <modExtensions>
+            <li Class="AsAboveSoBelow.ABStairsExtension">
+              <deltaLevel>1</deltaLevel>
+              <counterpartDef>AB_VerticalWaterPipeDown</counterpartDef>
+              <utilityOnly>true</utilityOnly>
+              <bridgeWater>true</bridgeWater>
+              <bridgeVef>false</bridgeVef>
+            </li>
+          </modExtensions>
+        </ThingDef>
+
+      </value>
+    </match>
+  </Operation>
+
+</Patch>

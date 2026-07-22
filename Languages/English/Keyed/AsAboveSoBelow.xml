@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
+  <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
+
+  <AB_GoUp>Go up the stairs</AB_GoUp>
+  <AB_GoDown>Go down the stairs</AB_GoDown>
+  <AB_NoPath>no path</AB_NoPath>
+  <AB_NotLinkedShort>not linked</AB_NotLinkedShort>
+  <AB_NotLinkedLine>Not connected to another level yet.</AB_NotLinkedLine>
+  <AB_LinkedAbove>Connected to the level above.</AB_LinkedAbove>
+  <AB_LinkedBelow>Connected to the level below.</AB_LinkedBelow>
+  <AB_ViewAbove>View level above</AB_ViewAbove>
+  <AB_ViewBelow>View level below</AB_ViewBelow>
+  <AB_ViewOtherLevelDesc>Jump the camera to the connected stairwell on the other level. You can also press Page Up and Page Down to switch levels.</AB_ViewOtherLevelDesc>
+  <AB_BasementCreated>The basement level has been opened. It is solid rock, mine it out to expand.</AB_BasementCreated>
+  <AB_SkyCreated>The sky level has been opened. Build floors above roofed rooms to expand upward.</AB_SkyCreated>
+  <AB_OnlySurfaceForNow>Must be placed on the surface level.</AB_OnlySurfaceForNow>
+  <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
+  <AB_ShowLiveBelow>Show live movement on the level below</AB_ShowLiveBelow>
+  <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
+  <AB_SelectBelowInPlace>Select pawns on the level below</AB_SelectBelowInPlace>
+  <AB_SelectBelowInPlaceTip>Click a pawn visible through open air on the level below to select it without leaving the sky view. Requires showing live movement on the level below.</AB_SelectBelowInPlaceTip>
+  <AB_BelowDim>Darken the level below</AB_BelowDim>
+  <AB_BelowDimTip>How much the view of the level below is darkened when seen from above.</AB_BelowDimTip>
+  <AB_BelowDepthShift>Below view depth offset</AB_BelowDepthShift>
+  <AB_BelowDepthShiftTip>Shifts the whole view of the level below slightly down-screen so elevated platforms and walls read as raised instead of painted onto the ground. Measured in cells; 0 restores exact alignment.</AB_BelowDepthShiftTip>
+  <AB_SlabEdge>Draw roof slab edges</AB_SlabEdge>
+  <AB_SlabEdgeTip>Rooftops, sky floors, and landings show a dark side face along edges that border open air, so upper stories read as slabs stacked on the story below. The south face height follows the below view depth offset.</AB_SlabEdgeTip>
+  <AB_WallReveal>Reveal rim walls on rooftops</AB_WallReveal>
+  <AB_WallRevealTip>The outer ring of rooftop tiles shows a strip of the supporting wall's top along edges that border open air, so the roof reads as resting on the wall line below instead of floating. Covered by anything built on the rim.</AB_WallRevealTip>
+  <AB_WallRevealWidth>Rim wall strip width</AB_WallRevealWidth>
+  <AB_WallRevealWidthTip>How much of the outer rooftop tile shows the wall underneath, in cells.</AB_WallRevealWidthTip>
+  <AB_WallFacade>Draw wall faces under slab edges</AB_WallFacade>
+  <AB_WallFacadeTip>South-facing slab edges show a sliver of the actual wall underneath in place of the plain dark face, so a wall built on the roof edge and the wall below it read as one continuous tall wall. Follows the below view depth offset.</AB_WallFacadeTip>
+  <AB_BelowScale>Below level object scale</AB_BelowScale>
+  <AB_BelowScaleTip>Pawns, animals, items, plants, and furniture on the level below draw smaller than life size, mimicking the zoom out of looking down a full story. Every object shrinks in place on its own cell, so nothing slides or misaligns. Walls and other connected structures keep their true size.</AB_BelowScaleTip>
+  <AB_BelowParallax>Below view parallax</AB_BelowParallax>
+  <AB_BelowParallaxTip>The level below drifts slightly against the camera as you pan, mimicking real perspective depth. Purely visual; a stronger depth illusion at the cost of a little roof edge misalignment near the screen edges.</AB_BelowParallaxTip>
+  <AB_BelowParallaxStrength>Parallax strength</AB_BelowParallaxStrength>
+  <AB_BelowParallaxStrengthTip>How far the level below is displaced at the screen edge, in cells. The on-screen displacement stays constant across zoom levels.</AB_BelowParallaxStrengthTip>
+  <AB_ClimbTime>Stair climb time</AB_ClimbTime>
+  <AB_ClimbTimeTip>Multiplies how long every stairs type takes to climb. Ladders are slower and grand staircases faster than normal stairs regardless.</AB_ClimbTimeTip>
+  <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
+  <AB_ShowCeilingHintTip>Cells under a built sky level floor draw a faint ceiling texture, so you can tell there is a structure overhead while looking at the surface.</AB_ShowCeilingHintTip>
+  <AB_StairsCollapsed>A stairwell lost its support and collapsed.</AB_StairsCollapsed>
+  <AB_DismountFirst>Dismount before using stairs or elevators.</AB_DismountFirst>
+  <AB_GoUpDesc>Take the nearest stairs to the level above.</AB_GoUpDesc>
+  <AB_GoDownDesc>Take the nearest stairs to the level below.</AB_GoDownDesc>
+  <AB_NoStairs>no linked stairs on this level</AB_NoStairs>
+  <AB_LinkBlocked>The stairwell could not connect. The matching spot on the other level is blocked.</AB_LinkBlocked>
+  <AB_BlockedOnTarget>The matching spot on the other level is blocked.</AB_BlockedOnTarget>
+  <AB_NoSupportOnTarget>The matching spot on the other level cannot support a stairwell.</AB_NoSupportOnTarget>
+  <AB_NoStairsToLevel>No stairs connect to the {0}</AB_NoStairsToLevel>
+  <AB_LevelAbove>level above</AB_LevelAbove>
+  <AB_LevelBelow>level below</AB_LevelBelow>
+  <AB_CrossLevelOrders>Order selected pawns across levels</AB_CrossLevelOrders>
+  <AB_CrossLevelOrdersTip>When you right-click to command a pawn selected on the level below, they walk to the nearest stairs, ride up, and then carry out the order at the chosen spot on this level. Covers drafted moves, attacks, hauling, and work orders.</AB_CrossLevelOrdersTip>
+  <AB_CrossLevelCombat>Fight across the gap (cross-level combat)</AB_CrossLevelCombat>
+  <AB_CrossLevelCombatTip>Drafted colonists ordered to attack an enemy on the level below (or above), seen through open air, fire straight across the gap when they have a clear line and the target is in range - plunging or rising fire lands on the other level with normal accuracy and damage. When there is no open line of fire, or the target is out of range or in the basement, they instead take the stairs and engage on that level.</AB_CrossLevelCombatTip>
+  <AB_CrossLevelAutoEngage>Pawns fire across the gap on their own</AB_CrossLevelAutoEngage>
+  <AB_CrossLevelAutoEngageTip>Enemies with ranged weapons and no reachable target on their own level shoot up or down through open air at your pawns, and your drafted colonists with fire at will enabled return fire across the gap without being ordered. Turn off to make cross-level shooting player-ordered only.</AB_CrossLevelAutoEngageTip>
+  <AB_ReportAttackingAcross>attacking {0} across levels.</AB_ReportAttackingAcross>
+  <AB_MortarTargetSet>{0} will bombard the target on the other level whenever it is manned, loaded, and free of local threats.</AB_MortarTargetSet>
+  <AB_NoArcPath>No open path for the shell between levels.</AB_NoArcPath>
+  <AB_TurretTargetSet>{0} will fire at the target on the other level whenever it is ready and free of local threats.</AB_TurretTargetSet>
+  <AB_NoGapLine>No clear line of fire through the gap.</AB_NoGapLine>
+  <AB_GapLineLost>{0} lost its line of fire to the other level.</AB_GapLineLost>
+  <AB_StopCrossBombard>Stop cross-level bombardment</AB_StopCrossBombard>
+  <AB_StopCrossBombardTip>Cancel this turret's bombardment order on the other level.</AB_StopCrossBombardTip>
+  <AB_AnimalWander>Wild animals wander across levels</AB_AnimalWander>
+  <AB_AnimalWanderTip>Wild animals treat stairwells as part of the landscape: one occasionally wanders down into the basement to shelter, lingers a while, and leaves again - and any wild animal stuck on a level with nothing to eat finds its way back to the surface. Pen and colony animals never wander on their own, and nothing wanders up to the sky level by itself.</AB_AnimalWanderTip>
+  <AB_CrossLevelRituals>Rituals summon participants from other levels</AB_CrossLevelRituals>
+  <AB_CrossLevelRitualsTip>Ritual role holders and participants on linked levels count as available: starting the ritual first sends everyone off-level to the stairs, and the ceremony begins the moment they all arrive. A gather that cannot complete (a participant dies, the stairs are destroyed) cancels after a few hours.</AB_CrossLevelRitualsTip>
+  <AB_CrossLevelSocial>Linked levels count as one colony</AB_CrossLevelSocial>
+  <AB_CrossLevelSocialTip>Pawns on another level of the same column still count as together and at home. Psychic bonds (including Highmates) skip the bond distance penalty within a column, and sky and basement levels report as part of the player colony, so vanilla and modded "away from the colony" checks treat everyone as home. Per-map alerts and quest map selection keep vanilla behavior.</AB_CrossLevelSocialTip>
+  <AB_RitualGathering>{0} ritual participant(s) are taking the stairs. The ceremony begins when everyone arrives.</AB_RitualGathering>
+  <AB_RitualGatherTimeout>The gathering for {0} took too long and was called off.</AB_RitualGatherTimeout>
+  <AB_RitualNoRoute>{0} has no stair route to the ritual.</AB_RitualNoRoute>
+  <AB_CrossLevelWork>Colonists take stairs to work on other levels</AB_CrossLevelWork>
+  <AB_CrossLevelWorkTip>When a colonist finds no work on their current level, they check directly linked levels and take the stairs if there is something to do there.</AB_CrossLevelWorkTip>
+  <AB_IdleReturnHome>Idle colonists return to the surface</AB_IdleReturnHome>
+  <AB_IdleReturnHomeTip>Colonists with nothing to do on any level head back down to the surface instead of roaming the level they worked on.</AB_IdleReturnHomeTip>
+  <AB_CrossLevelHauling>Haul items between levels</AB_CrossLevelHauling>
+  <AB_CrossLevelHaulingTip>When an item's best storage is on another level, haulers carry it through the stairs. Runs after normal hauling on the same level.</AB_CrossLevelHaulingTip>
+  <AB_CrossLevelSupply>Fetch needed materials from other levels</AB_CrossLevelSupply>
+  <AB_CrossLevelSupplyTip>When a level needs materials it does not have - construction materials for blueprints and frames, ingredients for bills, or meals for patients and prisoners - a colonist takes the stairs to a linked level that has them and carries them back. Covers the case where the resources sit in a stockpile on another level and no idle hauler is standing there to push them across.</AB_CrossLevelSupplyTip>
+  <AB_CrossLevelNeeds>Colonists cross levels to sleep in their beds</AB_CrossLevelNeeds>
+  <AB_CrossLevelNeedsTip>A tired colonist whose bed is on another level takes the stairs instead of sleeping on the ground.</AB_CrossLevelNeedsTip>
+  <AB_CrossLevelPrisoners>Wardens move prisoners between levels</AB_CrossLevelPrisoners>
+  <AB_CrossLevelPrisonersTip>When a prisoner's only usable cell is on another level, or you have assigned them a bed on another level, a warden carries them through the stairs to it. You can also right-click a prisoner to send them to a cell above or below.</AB_CrossLevelPrisonersTip>
+  <AB_HaulUpTo>Haul {0} to the level above</AB_HaulUpTo>
+  <AB_HaulDownTo>Haul {0} to the level below</AB_HaulDownTo>
+  <AB_RemoveLink>Remove</AB_RemoveLink>
+  <AB_RemoveLinkDesc>Mark this for removal. A builder will deconstruct it, which also removes the linked end on the other level. Vertical links cannot be damaged, so this is the only way to get rid of them.</AB_RemoveLinkDesc>
+  <AB_RemoveQueued>Already marked for removal.</AB_RemoveQueued>
+  <AB_ColumnWealth>Raids scale with whole-column wealth</AB_ColumnWealth>
+  <AB_ColumnWealthTip>The storyteller counts wealth and pawns on all your levels, not just the surface. Prevents hiding wealth from raid scaling in the basement. Recommended on for honest difficulty.</AB_ColumnWealthTip>
+  <AB_WorldIntegration>World integration</AB_WorldIntegration>
+  <AB_WorldIntegrationTip>Caravans can include colonists from other levels (they take the stairs to join the gathering), transport pods and shuttles can launch from the sky level, trade beacons on any level sell their goods, and comms consoles work below ground.</AB_WorldIntegrationTip>
+  <AB_CaravanNeedsSurfacePawn>Caravans must form on the surface: include at least one colonist who is on the surface level.</AB_CaravanNeedsSurfacePawn>
+  <AB_CaravanPawnNoStairs>{0} cannot reach any stairs to the surface and will not join the caravan.</AB_CaravanPawnNoStairs>
+  <AB_CaravanPawnsDescending>{0} colonist(s) are taking the stairs to join the caravan.</AB_CaravanPawnsDescending>
+  <AB_AbandonLevelsWarning>{0} colonist(s) are still on other levels of this colony. Abandoning the settlement destroys every level with it, and they will be lost. Are you sure?</AB_AbandonLevelsWarning>
+  <AB_PodTransit>Drop pods fall through sky-level gaps</AB_PodTransit>
+  <AB_PodTransitTip>Incoming drop pods, ship chunks and meteorites bound for the surface pass through the sky level's airspace when there is an open gap above their landing spot. While they cross the upper level, anti-air defenses built up there can engage them. Landing spot, descent time and impact effects are unchanged. Shuttles and anything landing on the sky level itself are unaffected. On by default.</AB_PodTransitTip>
+  <AB_ThreatBasementInfest>Infestations can target the basement</AB_ThreatBasementInfest>
+  <AB_ThreatBasementInfestTip>When an infestation fires at your colony, it has a chance to burrow up into the basement level instead of the surface. Threat size and storyteller pacing are unchanged; only the battlefield moves. Off by default.</AB_ThreatBasementInfestTip>
+  <AB_ThreatSkyDrops>Drop-pod raids can target the sky level</AB_ThreatSkyDrops>
+  <AB_ThreatSkyDropsTip>When a hostile drop-pod raid fires at your colony, it has a chance to land on your rooftops instead of the surface. Raiders who find nothing to fight up there will take your stairs down. Threat size and storyteller pacing are unchanged. Off by default.</AB_ThreatSkyDropsTip>
+  <AB_ThreatDivertChance>Diversion chance</AB_ThreatDivertChance>
+  <AB_ThreatDivertChanceTip>The chance that an eligible incident is diverted to another level instead of hitting the surface.</AB_ThreatDivertChanceTip>
+  <AB_RescueUpTo>Rescue {0} (bed on the level above)</AB_RescueUpTo>
+  <AB_RescueDownTo>Rescue {0} (bed on the level below)</AB_RescueDownTo>
+  <AB_CaptureUpTo>Capture {0} (bed on the level above)</AB_CaptureUpTo>
+  <AB_CaptureDownTo>Capture {0} (bed on the level below)</AB_CaptureDownTo>
+  <AB_TakePrisonerUpTo>Take {0} to a cell on the level above</AB_TakePrisonerUpTo>
+  <AB_TakePrisonerDownTo>Take {0} to a cell on the level below</AB_TakePrisonerDownTo>
+  <AB_ExtendUp>Extend shaft up</AB_ExtendUp>
+  <AB_ExtendUpDesc>Extend the elevator shaft to the level above, opening it if needed, and place a linked car there.</AB_ExtendUpDesc>
+  <AB_ExtendDown>Extend shaft down</AB_ExtendDown>
+  <AB_ExtendDownDesc>Extend the elevator shaft to the level below, opening it if needed, and place a linked car there.</AB_ExtendDownDesc>
+  <AB_RideToSky>Ride to the sky level</AB_RideToSky>
+  <AB_RideToBasement>Ride to the basement</AB_RideToBasement>
+  <AB_LevelSky>Sky level</AB_LevelSky>
+  <AB_LevelSurface>Surface</AB_LevelSurface>
+  <AB_LevelBasement>Basement</AB_LevelBasement>
+  <AB_LevelWidgetTip>You can also press Page Up and Page Down.</AB_LevelWidgetTip>
+  <AB_ShowLevelWidget>Show level view buttons</AB_ShowLevelWidget>
+  <AB_ShowLevelWidgetTip>Adds view level above and view level below buttons next to the other view toggles in the bottom right.</AB_ShowLevelWidgetTip>
+  <AB_OneColonistBar>Merge each column into one colonist bar group</AB_OneColonistBar>
+  <AB_OneColonistBarTip>Draw the sky, surface, and basement of a single column as one continuous block on the colonist bar, with no separator gap between the levels. Other colonies and caravans keep their own groups. Defers to [LTO] Colony Groups when that mod is active.</AB_OneColonistBarTip>
+  <AB_CameraFollowStairs>Camera follows colonists through stairs</AB_CameraFollowStairs>
+  <AB_CameraFollowStairsTip>When you send a selected colonist up or down stairs (or an elevator), the view rides along to the level they arrive on, centered on them at the same zoom. Only follows the pawn you have selected and are watching - autonomous haulers, pets, and enemies never move your camera.</AB_CameraFollowStairsTip>
+  <AB_GridLinkReceiving>Grid link: receiving {0} W from the connected level.</AB_GridLinkReceiving>
+  <AB_GridLinkSending>Grid link: sending {0} W to the connected level.</AB_GridLinkSending>
+  <AB_GridLinkIdle>Grid link: connected, no flow needed.</AB_GridLinkIdle>
+  <AB_CrossLevelPipes>Bridge pipe networks through stairwells</AB_CrossLevelPipes>
+  <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked stairwell on both levels, their stored contents flow between the levels. Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>
+  <AB_CrossLevelTemperature>Stairwells exchange heat between levels</AB_CrossLevelTemperature>
+  <AB_CrossLevelTemperatureTip>Linked stairwells slowly equalize temperature between the rooms they stand in, like a vent between floors. The sky level also follows the surface's outdoor temperature and seasons.</AB_CrossLevelTemperatureTip>
+
+  <AB_CameraLockKeybind>Camera level lock keybind</AB_CameraLockKeybind>
+  <AB_CameraLockKeybindTip>Enables the camera level lock hotkey (End by default, rebindable under Options - Keyboard configuration). While the lock is on, the camera stays on the level you are viewing: it will not ride along when a selected pawn takes the stairs. Manual level switching always works.</AB_CameraLockKeybindTip>
+  <AB_CameraLockOn>Camera level lock ON: the view stays on this level. Press the hotkey again to release.</AB_CameraLockOn>
+  <AB_CameraLockOff>Camera level lock off: the camera follows pawns through stairs again.</AB_CameraLockOff>
+
+  <AB_CavernBasements>Basements generate as living caverns (Biomes! Caverns)</AB_CavernBasements>
+  <AB_CavernBasementsTip>Newly generated basements come out as one of Biomes! Caverns' cave biomes: a connected tunnel network with cave terrain, flora, wildlife, stalagmites and crystals, sealed inside the rock until you break into it. Existing basements are unchanged. Note: the earthen depths biome is constantly hot.</AB_CavernBasementsTip>
+  <AB_CavernBiome>Cavern biome</AB_CavernBiome>
+  <AB_CavernBiomeTip>Which cave biome new basements use. Random picks per basement, weighted toward fungal forest; earthen depths is rare because its constant 55C heat makes a punishing basement.</AB_CavernBiomeTip>
+  <AB_CavernBiomeRandom>Random (weighted)</AB_CavernBiomeRandom>
+  <AB_CavernOpenness>Cavern density</AB_CavernOpenness>
+  <AB_CavernOpennessTip>How much of the basement the tunnel network carves out. Low keeps most of the level as mineable rock with occasional caves; high makes a sprawling open cave system.</AB_CavernOpennessTip>
+
+  <AB_NaturalPeaks>Naturalistic mountain peaks on new sky levels</AB_NaturalPeaks>
+  <AB_NaturalPeaksTip>Mountain tops on newly generated sky levels come out as walkable highland plateaus: natural terrain with patches of soil and vegetation, rocky outcrops, and a cliff rim of solid rock whose depth wanders naturally. Off restores the classic fully solid peak. Existing sky levels are unchanged either way.</AB_NaturalPeaksTip>
+  <AB_PeakSoil>Plateau arable soil</AB_PeakSoil>
+  <AB_PeakSoilTip>How much of the plateau surface is fertile soil you can farm, as opposed to gravel and bare rock.</AB_PeakSoilTip>
+  <AB_PeakVegetation>Plateau vegetation</AB_PeakVegetation>
+  <AB_PeakVegetationTip>Density of wild plants and trees seeded on the plateau at generation, relative to the surface biome's normal density. Regrowth afterwards is natural.</AB_PeakVegetationTip>
+
+</LanguageData>

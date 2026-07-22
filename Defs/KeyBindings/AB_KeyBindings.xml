@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <KeyBindingCategoryDef>
+    <defName>AB_Keys</defName>
+    <label>As above, So below</label>
+    <description>Key bindings for As above, So below.</description>
+  </KeyBindingCategoryDef>
+
+  <KeyBindingDef>
+    <defName>AB_ViewLevelUp</defName>
+    <category>AB_Keys</category>
+    <label>view level above</label>
+    <defaultKeyCodeA>PageUp</defaultKeyCodeA>
+  </KeyBindingDef>
+
+  <KeyBindingDef>
+    <defName>AB_ViewLevelDown</defName>
+    <category>AB_Keys</category>
+    <label>view level below</label>
+    <defaultKeyCodeA>PageDown</defaultKeyCodeA>
+  </KeyBindingDef>
+
+  <KeyBindingDef>
+    <defName>AB_CameraLevelLock</defName>
+    <category>AB_Keys</category>
+    <label>toggle camera level lock</label>
+    <defaultKeyCodeA>End</defaultKeyCodeA>
+  </KeyBindingDef>
+
+</Defs>

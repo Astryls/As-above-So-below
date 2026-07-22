@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ModMetaData>
+  <name>As above, So below</name>
+  <packageId>astryl.AsAboveSoBelow</packageId>
+  <author>astryl</author>
+  <description>[img]REPLACE_HERO[/img]
+
+Build upward and dig deeper. As above, So below adds one sky level above your colony and one solid rock basement below it. Every level is a real, fully simulated map, and your pawns treat the whole column as a single base.
+
+[h1]Three Levels, One Colony[/h1]
+[list]
+[*][b]The sky level[/b]: open air over your roofs. Build on rooftops and watch the surface through the gaps.
+[*][b]The surface[/b]: your normal map, untouched.
+[*][b]The basement[/b]: solid rock at a steady 12C. Bring miners, carve out a bunker, a fridge, or a prison.
+[/list]
+
+[h1]A Living View Below[/h1]
+From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood.
+
+[h1]One Workforce[/h1]
+Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony.
+
+[h1]Stairs, Ladders, Elevators[/h1]
+[list]
+[*][b]Stairs[/b]: the baseline.
+[*][b]Ladder[/b]: cheap and slow.
+[*][b]Grand staircase[/b]: fast, and it scales with quality.
+[*][b]Elevator[/b]: fastest, links all three levels through one shaft.
+[/list]
+
+[h1]Utilities Straight Through The Floor[/h1]
+Dedicated shafts connect networks level to level as if they were one net. No batteries or tanks required on either side.
+[list]
+[*][b]Vertical conduit[/b]: vanilla power flows directly, brownouts and battery charging behave exactly like one grid. Rimatomics electricity crosses too, since it runs on vanilla power nets.
+[*][b]Vertical water pipe[/b]: Dubs Bad Hygiene water, tankless levels just work.
+[*][b]Vertical duct[/b]: every Vanilla Expanded pipe resource, including Vanilla Pipes Expanded, Helixien gas, and Vanilla Temperature Expanded.
+[*][b]Vertical chem pipe[/b]: Rimefeller oil and chemfuel.
+[/list]
+
+[h1]Threats, If You Want Them[/h1]
+Off by default: infestations can tunnel into your basement and drop pods can hit the sky level. Diverted raiders find their way down the stairs to reach you, and nothing ever wanders a pocket level forever.
+
+[h1]Part Of The World[/h1]
+Caravans form across levels, traders see the whole column's goods, storyteller wealth counts every level, and abandoning the settlement warns you about pawns left above or below.
+
+[h1]Built For Performance[/h1]
+[list]
+[*]Event driven, with zero recurring cost until you build a level.
+[*]Levels you are not looking at throttle their visual updates and catch up the instant you switch view.
+[*]Heavy work is time sliced or moved off the main thread the engine safe way.
+[*]Per system kill switches: if anything ever errors, that subsystem shuts itself off and the rest keeps working.
+[*]Tested running alongside Performance Optimizer, Missile Girl, Performance Esmolas, Slower Pawn Tick Rate, and Dubs Performance Analyzer with no conflicts.
+[/list]
+
+[h1]Compatibility[/h1]
+[list]
+[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, and more.
+[*]Modders: an open API for cross level jobs, custom vertical links, and incident policy.
+[*]Not compatible: MultiFloors and Z-Levels, they solve the same problem their own way.
+[*]Requires Harmony. Built for RimWorld 1.6. Safe to add to an existing save; to remove it, empty and dismantle your extra levels first.
+[/list]
+
+[hr][/hr]
+[h3] My Quality Commitment:[/h3]
+[list]
+[*] [b]Fully Tested:[/b] Every feature and line of code has been thoroughly tested in-game to ensure it functions as intended and integrates smoothly.
+[*] [b]Active Support:[/b] I am fully committed to maintaining this mod. If you encounter any bugs, compatibility issues, or unintended behavior, please report them in the comments or a dedicated discussion thread.
+[*] [b]No Abandonware:[/b] I will actively patch, refine, and update this mod to keep it working and up to standard.
+[*] [b]No Coffee:[/b] I will never ask for donations for AI created / assisted mods. I share these in the hopes they spark joy for someone, making AI generated content and then begging for money that could go to artists and people more deserving is NOT responsible AI usage.
+[/list]</description>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+      <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+    <li>Dubwise.DubsBadHygiene</li>
+    <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
+    <li>Dubwise.Rimefeller</li>
+  </loadAfter>
+  <incompatibleWith>
+    <li>telardo.MultiFloors</li>
+    <li>ZLevels1.1</li>
+  </incompatibleWith>
+</ModMetaData>
