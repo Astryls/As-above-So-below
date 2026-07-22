@@ -214,6 +214,11 @@ namespace AsAboveSoBelow
 
             // Pass 6: plateau flora from the surface biome.
             SeedPlateauFlora(map, ground, plateauCells, settings);
+
+            // Pass 7: landmarks (settings): roll and add tile mutators; the
+            // vanilla Mutator* gen steps in the AB_Sky generator def run the
+            // actual workers after this step returns.
+            ABSkyLandmarks.RollAndApply(map, plateauCells.Count, settings);
         }
 
         /// <summary>Hidden-valley control (settings): each enclosed meadow

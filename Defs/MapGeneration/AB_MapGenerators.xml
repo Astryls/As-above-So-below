@@ -33,6 +33,14 @@
     </pocketMapProperties>
     <genSteps>
       <li>AB_SkyTerrain</li>
+      <!-- Vanilla tile-mutator phases (Core defs): AB_SkyTerrain (order 200)
+           adds the rolled landmark mutators to the pocket tile, then these run
+           the real workers at 220/500/700/1600 - structures, ticking setup,
+           the whole landmark experience on the sky level. -->
+      <li>MutatorPostTerrain</li>
+      <li>MutatorCriticalStructures</li>
+      <li>MutatorNonCriticalStructures</li>
+      <li>MutatorFinal</li>
     </genSteps>
   </MapGeneratorDef>
 

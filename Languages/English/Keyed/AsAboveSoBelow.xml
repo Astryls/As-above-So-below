@@ -64,6 +64,30 @@
   <AB_ChamberFreqTip>How often the cavern network widens into a large chamber, per carve step (shown as a percentage). Chambers are also where the cavern biome's own lakes and terrain features tend to land, so raise this for wetter, roomier caverns.</AB_ChamberFreqTip>
   <AB_CavernFormations>Cavern formation density</AB_CavernFormations>
   <AB_CavernFormationsTip>Density of stalagmites and other Biomes! Caverns formations in generated caverns. 0% skips them entirely.</AB_CavernFormationsTip>
+  <AB_PreviewTitle>Generation preview</AB_PreviewTitle>
+  <AB_PreviewUpper>Upper level</AB_PreviewUpper>
+  <AB_PreviewLower>Lower level</AB_PreviewLower>
+  <AB_PreviewReroll>Re-roll sample</AB_PreviewReroll>
+  <AB_PreviewNote>Illustrative sample - real peaks follow your actual mountains.</AB_PreviewNote>
+  <AB_LegendMeadow>Meadow</AB_LegendMeadow>
+  <AB_LegendRock>Rock mass</AB_LegendRock>
+  <AB_LegendLedge>Ledge</AB_LegendLedge>
+  <AB_LegendTarn>Tarn</AB_LegendTarn>
+  <AB_LegendHidden>Hidden valley</AB_LegendHidden>
+  <AB_LegendAir>Open air</AB_LegendAir>
+  <AB_SkyLandmarks>Landmarks on sky levels</AB_SkyLandmarks>
+  <AB_SkyLandmarksTip>Newly generated sky levels can host landmarks - ancient smoke vents, monuments, and other features from the Odyssey landmark system, including landmarks added by mods such as Vanilla Landmarks Expanded. Applies when a sky level is first generated.</AB_SkyLandmarksTip>
+  <AB_LandmarkChance>Random landmark chance</AB_LandmarkChance>
+  <AB_LandmarkChanceTip>The chance that a newly generated sky level with open plateau ground rolls one landmark from the pool of landmarks set to Random.</AB_LandmarkChanceTip>
+  <AB_LandmarkMax>Landmarks per level</AB_LandmarkMax>
+  <AB_LandmarkMaxTip>The most landmarks one sky level can receive, counting forced, enabled, and randomly rolled ones together.</AB_LandmarkMaxTip>
+  <AB_LandmarksExpand>Configure landmarks ({0})...</AB_LandmarksExpand>
+  <AB_LandmarksCollapse>Hide landmark list ({0})</AB_LandmarksCollapse>
+  <AB_LandmarksNeedOdyssey>Landmarks on sky levels require the Odyssey expansion.</AB_LandmarksNeedOdyssey>
+  <AB_LandmarkDisabled>Disabled</AB_LandmarkDisabled>
+  <AB_LandmarkRandom>Random</AB_LandmarkRandom>
+  <AB_LandmarkEnabled>Enabled</AB_LandmarkEnabled>
+  <AB_LandmarkForced>Forced</AB_LandmarkForced>
   <AB_GuardPanel>Subsystem status</AB_GuardPanel>
   <AB_GuardPanelTip>Every subsystem runs behind its own kill switch: if one hits an error it shuts itself down so the rest of the mod and your game keep running. Tripped subsystems are listed here and can be re-armed; they also reset when a game is loaded.</AB_GuardPanelTip>
   <AB_GuardAllGreen>All {0} subsystems running normally.</AB_GuardAllGreen>

@@ -85,9 +85,16 @@ namespace AsAboveSoBelow
         public float basementOreDensity = 6f;    // ore lumps per 10k basement cells
         public float cavernChamberFreq = 0.02f;  // cavern chamber chance per worm step
         public float cavernFormations = 1f;      // BC stalagmite scatter multiplier
+        // Landmarks on sky levels (Odyssey landmark system; see ABSkyLandmarks).
+        public bool skyLandmarks = true;
+        public float skyLandmarkChance = 0.30f;
+        public int skyLandmarkMax = 1;
+        public Dictionary<string, int> landmarkModes;
 
         // --- window state (session only, not scribed) ---
         private int curTab;
+        private bool landmarksExpanded;
+        private bool? landmarksExpandedPending;
         private readonly Vector2[] tabScroll = new Vector2[5];
         private readonly float[] tabHeight = new float[5];
 
@@ -101,6 +108,13 @@ namespace AsAboveSoBelow
 
         public void DoWindowContents(Rect inRect)
         {
+            // Deferred landmark-list expansion (same pass-stability rule as
+            // the tab switch: the control set must not change mid-frame).
+            if (landmarksExpandedPending.HasValue)
+            {
+                landmarksExpanded = landmarksExpandedPending.Value;
+                landmarksExpandedPending = null;
+            }
             // Vanilla TabDrawer draws the tab strip above the rect's top edge.
             Rect content = inRect;
             content.yMin += 42f;
@@ -114,6 +128,14 @@ namespace AsAboveSoBelow
             Widgets.DrawMenuSection(content);
             TabDrawer.DrawTabs(content, tabs);
             Rect outRect = content.ContractedBy(9f);
+            if (curTab == 0)
+            {
+                // Generation tab: the right column is the live preview card
+                // (drawn outside the scroll view, fixed).
+                float pw = Mathf.Min(370f, outRect.width * 0.45f);
+                ABGenPreview.Draw(new Rect(outRect.xMax - pw, outRect.y, pw, outRect.height), this);
+                outRect.width -= pw + 10f;
+            }
             // Gutter reserved unconditionally so content width (and measured
             // height) never oscillates with scrollbar visibility.
             Rect viewRect = new Rect(0f, 0f, outRect.width - 16f,
@@ -258,6 +280,81 @@ namespace AsAboveSoBelow
                     listing.Outdent(16f);
                 }
             }
+            listing.GapLine(10f);
+            DoLandmarkSection(listing);
+        }
+
+        private void DoLandmarkSection(Listing_Standard listing)
+        {
+            if (!ABSkyLandmarks.SystemActive)
+            {
+                GUI.color = NoteDim;
+                listing.Label("AB_LandmarksNeedOdyssey".Translate());
+                GUI.color = Color.white;
+                return;
+            }
+            bool showLandmarks = skyLandmarks;
+            bool expanded = landmarksExpanded;
+            listing.CheckboxLabeled("AB_SkyLandmarks".Translate(), ref skyLandmarks, "AB_SkyLandmarksTip".Translate());
+            if (!showLandmarks)
+            {
+                return;
+            }
+            listing.Indent(16f);
+            listing.ColumnWidth -= 16f;
+            listing.Label("AB_LandmarkChance".Translate() + ": " + skyLandmarkChance.ToStringPercent(), tooltip: "AB_LandmarkChanceTip".Translate());
+            skyLandmarkChance = listing.Slider(skyLandmarkChance, 0f, 1f);
+            listing.Label("AB_LandmarkMax".Translate() + ": " + skyLandmarkMax, tooltip: "AB_LandmarkMaxTip".Translate());
+            skyLandmarkMax = Mathf.RoundToInt(listing.Slider(skyLandmarkMax, 1f, 3f));
+            List<LandmarkDef> all = ABSkyLandmarks.AllLandmarks();
+            if (listing.ButtonText((expanded ? "AB_LandmarksCollapse" : "AB_LandmarksExpand").Translate(all.Count)))
+            {
+                landmarksExpandedPending = !expanded;
+            }
+            if (expanded)
+            {
+                for (int i = 0; i < all.Count; i++)
+                {
+                    LandmarkDef def = all[i];
+                    Rect row = listing.GetRect(28f);
+                    Widgets.DrawHighlightIfMouseover(row);
+                    Rect iconRect = new Rect(row.x, row.y + 3f, 22f, 22f);
+                    try
+                    {
+                        if (!def.iconTexturePath.NullOrEmpty())
+                        {
+                            GUI.DrawTexture(iconRect, def.Texture, ScaleMode.ScaleToFit);
+                        }
+                    }
+                    catch
+                    {
+                        // icon missing: label carries the row
+                    }
+                    string label = (def.label ?? def.defName).CapitalizeFirst();
+                    string source = def.modContentPack?.Name;
+                    Widgets.Label(new Rect(row.x + 28f, row.y + 4f, row.width - 28f - 116f, 22f), label);
+                    if (!source.NullOrEmpty())
+                    {
+                        GUI.color = NoteDim;
+                        Text.Font = GameFont.Small;
+                        Vector2 ls = Text.CalcSize(label);
+                        float sx = row.x + 28f + Mathf.Min(ls.x, row.width - 28f - 200f) + 8f;
+                        Widgets.Label(new Rect(sx, row.y + 4f, Mathf.Max(0f, row.xMax - 116f - sx), 22f), source);
+                        GUI.color = Color.white;
+                    }
+                    if (!def.description.NullOrEmpty())
+                    {
+                        TooltipHandler.TipRegion(new Rect(row.x, row.y, row.width - 116f, row.height), def.description);
+                    }
+                    int mode = ABSkyLandmarks.ModeFor(this, def);
+                    if (Widgets.ButtonText(new Rect(row.xMax - 112f, row.y + 2f, 110f, 24f), ABSkyLandmarks.ModeLabel(mode)))
+                    {
+                        ABSkyLandmarks.SetMode(this, def, (mode + 1) % 4);
+                    }
+                }
+            }
+            listing.ColumnWidth += 16f;
+            listing.Outdent(16f);
         }
 
         /// <summary>Peak-look preset: cutoff, noise scale, terrace, outcrops,
@@ -459,6 +556,10 @@ namespace AsAboveSoBelow
         // Defaults below must mirror the field initializers above.
         private void ResetGeneration()
         {
+            skyLandmarks = true;
+            skyLandmarkChance = 0.30f;
+            skyLandmarkMax = 1;
+            landmarkModes?.Clear();
             skyBiomeInherit = true;
             naturalPeaks = true;
             peakMeadowCutoff = 0.60f;
@@ -610,6 +711,10 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
+            Scribe_Values.Look(ref skyLandmarks, "skyLandmarks", true);
+            Scribe_Values.Look(ref skyLandmarkChance, "skyLandmarkChance", 0.30f);
+            Scribe_Values.Look(ref skyLandmarkMax, "skyLandmarkMax", 1);
+            Scribe_Collections.Look(ref landmarkModes, "landmarkModes", LookMode.Value, LookMode.Value);
         }
     }
 }
