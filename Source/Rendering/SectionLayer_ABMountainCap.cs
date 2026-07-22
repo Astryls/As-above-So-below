@@ -73,9 +73,16 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<Graphic_Linked, Graphic> SubGraphicRef =
             AccessTools.FieldRefAccess<Graphic_Linked, Graphic>("subGraphic");
 
+        private static readonly AccessTools.FieldRef<Graphic_Random, Graphic[]> SubGraphicsRef =
+            AccessTools.FieldRefAccess<Graphic_Random, Graphic[]>("subGraphics");
+
         /// <summary>The rock's atlas BASE material (the inner graphic of its linked
-        /// wrapper, def-tinted). Cached per def; reflection only on first touch.</summary>
-        private static readonly Dictionary<ThingDef, Material> atlasBase = new Dictionary<ThingDef, Material>();
+        /// wrapper, def-tinted). Cached per def and VALIDATED against the def's
+        /// live graphic: Better Mountains replaces rockDef.graphicData wholesale
+        /// (startup AND whenever its mod settings change), so a def-keyed cache
+        /// alone would keep serving the old look after a swap.</summary>
+        private static readonly Dictionary<ThingDef, (Graphic graphic, Material mat)> atlasBase =
+            new Dictionary<ThingDef, (Graphic, Material)>();
 
         private static Material AtlasBaseFor(ThingDef rockDef)
         {
@@ -83,25 +90,87 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (atlasBase.TryGetValue(rockDef, out Material mat))
+            Graphic current = rockDef.graphic;
+            if (atlasBase.TryGetValue(rockDef, out (Graphic graphic, Material mat) entry)
+                && entry.graphic == current)
             {
-                return mat;
+                return entry.mat;
             }
+            Material mat = null;
             try
             {
-                if (rockDef.graphic is Graphic_Linked linked)
+                if (current is Graphic_Linked linked)
                 {
                     Graphic inner = SubGraphicRef(linked);
                     mat = inner?.MatSingle;
                 }
-                mat = mat ?? rockDef.graphic?.MatSingle;
+                mat = mat ?? current?.MatSingle;
             }
             catch
             {
-                mat = rockDef.graphic?.MatSingle;
+                mat = current?.MatSingle;
             }
-            atlasBase[rockDef] = mat;
+            atlasBase[rockDef] = (current, mat);
             return mat;
+        }
+
+        /// <summary>Variant materials for rocks whose graphic is NOT a linked
+        /// atlas - Better Mountains swaps rocks to Graphic_Random with painterly
+        /// per-cell variants. Same live-graphic validation as the atlas cache.</summary>
+        private static readonly Dictionary<ThingDef, (Graphic graphic, Material[] mats)> variantMats =
+            new Dictionary<ThingDef, (Graphic, Material[])>();
+
+        private static Material[] VariantsFor(ThingDef rockDef)
+        {
+            if (rockDef == null)
+            {
+                return null;
+            }
+            Graphic current = rockDef.graphic;
+            if (variantMats.TryGetValue(rockDef, out (Graphic graphic, Material[] mats) entry)
+                && entry.graphic == current)
+            {
+                return entry.mats;
+            }
+            Material[] mats = null;
+            try
+            {
+                if (current is Graphic_Random random)
+                {
+                    Graphic[] subs = SubGraphicsRef(random);
+                    if (subs != null && subs.Length > 0)
+                    {
+                        List<Material> list = new List<Material>(subs.Length);
+                        for (int i = 0; i < subs.Length; i++)
+                        {
+                            Material m = subs[i]?.MatSingle;
+                            if (m != null)
+                            {
+                                list.Add(m);
+                            }
+                        }
+                        if (list.Count > 0)
+                        {
+                            mats = list.ToArray();
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                mats = null;
+            }
+            variantMats[rockDef] = (current, mats);
+            return mats;
+        }
+
+        /// <summary>Deterministic variant pick per cell: stable across regens
+        /// and section boundaries so panning never reshuffles the rocks.</summary>
+        private static int StableCellIndex(IntVec3 c, int count)
+        {
+            int h = (c.x * 73856093) ^ (c.z * 19349663);
+            h &= int.MaxValue;
+            return h % count;
         }
 
         /// <summary>Queue-forced clone per atlas submaterial (16 per rock at most).</summary>
@@ -180,6 +249,48 @@ namespace AsAboveSoBelow
                     // also merges large regions into one material = one seamless
                     // submesh. The mined-floor mapping stays for ELIGIBILITY only.
                     ThingDef rock = GroundRockAt(ground, c) ?? fallbackRock;
+                    // Variant mode (Better Mountains): when the rock's graphic
+                    // is not a linked atlas (BM swaps rocks to Graphic_Random,
+                    // painterly 2x2 variants, no atlas), the atlas machinery
+                    // would sample nonsense sub-rects. Mimic what the walls
+                    // themselves now do: one deterministic variant sprite per
+                    // mass cell, centered at the graphic's own drawSize so
+                    // neighbors overlap into the same composed rockfield BM's
+                    // native walls show. No link masks, no corner fillers (no
+                    // baked rounding to cover, and BM's look is lip-less);
+                    // meadow fade skirts unchanged.
+                    if (!(rock?.graphic is Graphic_Linked))
+                    {
+                        EmitSkirts(map, grid, c, SkirtTone(rock), y);
+                        Material[] variants = VariantsFor(rock);
+                        if (variants != null)
+                        {
+                            Material vmat = QueueClone(variants[StableCellIndex(c, variants.Length)]);
+                            if (vmat != null)
+                            {
+                                Vector2 ds = rock.graphic.drawSize;
+                                float hw = Mathf.Max(ds.x, 1f) * 0.5f;
+                                float hh = Mathf.Max(ds.y, 1f) * 0.5f;
+                                LayerSubMesh vsub = GetSubMesh(vmat);
+                                AddQuad(vsub, c.x + 0.5f - hw, c.z + 0.5f - hh,
+                                    c.x + 0.5f + hw, c.z + 0.5f + hh, y);
+                                emitted = true;
+                            }
+                        }
+                        else
+                        {
+                            // Unknown custom graphic class: flat single-material
+                            // fill beats sampling a wrong atlas window.
+                            Material flat = QueueClone(AtlasBaseFor(rock));
+                            if (flat != null)
+                            {
+                                LayerSubMesh fsub = GetSubMesh(flat);
+                                AddQuad(fsub, c.x, c.z, c.x + 1, c.z + 1, y);
+                                emitted = true;
+                            }
+                        }
+                        continue;
+                    }
                     Material baseMat = AtlasBaseFor(rock);
                     if (baseMat == null)
                     {

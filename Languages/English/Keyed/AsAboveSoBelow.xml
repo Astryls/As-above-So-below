@@ -36,6 +36,8 @@
   <AB_RimFacadeHeightTip>How tall the slab side face is, in cells. Taller reads as a higher story but covers more of the slab's edge row.</AB_RimFacadeHeightTip>
   <AB_BelowScale>Below level object scale</AB_BelowScale>
   <AB_BelowScaleTip>Pawns, animals, items, plants, and furniture on the level below draw smaller than life size, mimicking the zoom out of looking down a full story. Every object shrinks in place on its own cell, so nothing slides or misaligns. Walls and other connected structures keep their true size.</AB_BelowScaleTip>
+  <AB_SkyBiomeInherit>Sky level inherits surface biome</AB_SkyBiomeInherit>
+  <AB_SkyBiomeInheritTip>Newly created sky levels use the same biome as the surface map below, so plateau greenery, tree regrowth, wild plant mix, and weather match the world around the mountain. Applies when a sky level is first generated; existing sky levels keep the biome they were created with. Off restores the stark high-altitude look.</AB_SkyBiomeInheritTip>
   <AB_ClimbTime>Stair climb time</AB_ClimbTime>
   <AB_ClimbTimeTip>Multiplies how long every stairs type takes to climb. Ladders are slower and grand staircases faster than normal stairs regardless.</AB_ClimbTimeTip>
   <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
