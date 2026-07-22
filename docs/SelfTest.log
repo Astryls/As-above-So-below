@@ -50,3 +50,15 @@ result: 8/8 checks passed -- ALL PASS
   PASS  content fresh visitor lingers (no stairs job)
 
 ----
+[As above, So below] SELF-TEST: peak-plateau self-test
+when: 2026-07-22 16:29:07
+result: 6/6 checks passed -- ALL PASS
+
+  PASS  setting on
+  PASS  sky level exists
+  PASS  plateau ground present
+  PASS  plateau is open sky (unroofed)
+  PASS  plateau vegetation present
+  PASS  cliff rim walls present
+
+----
