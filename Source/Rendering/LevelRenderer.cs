@@ -1007,6 +1007,12 @@ namespace AsAboveSoBelow
                     // behavior) rather than no live view at all.
                     lower.dynamicDrawManager.DrawDynamicThings();
                 }
+                // Forbid (and other persistent-handle) overlays for the surface,
+                // enqueued onto THIS map's overlay drawer so vanilla's own
+                // DrawAllOverlays (which runs immediately after DrawDynamicThings)
+                // flushes them at the plumb position. Enqueue only - no drawing -
+                // so OffsetActive is irrelevant here.
+                DrawBelowOverlays(map, lower);
             }
             catch (Exception e)
             {
@@ -1015,6 +1021,59 @@ namespace AsAboveSoBelow
             finally
             {
                 OffsetActive = false;
+            }
+        }
+
+        private static readonly AccessTools.FieldRef<OverlayDrawer, Dictionary<Thing, ThingOverlaysHandle>> OverlayHandlesRef =
+            AccessTools.FieldRefAccess<OverlayDrawer, Dictionary<Thing, ThingOverlaysHandle>>("overlayHandles");
+
+        /// <summary>Mirrors the surface's persistent world-space overlays (forbid
+        /// icons via CompForbiddable's Enable/Disable handle, plus any comp that
+        /// registers a handle) into the sky view. Vanilla only flushes the
+        /// CURRENT map's overlay drawer, so a forbidden item on the surface never
+        /// showed its red X from above. We re-enqueue each surface handle that is
+        /// visible from above onto the sky map's overlay drawer; vanilla's own
+        /// DrawAllOverlays (Map.MapUpdate, right after DrawDynamicThings) then
+        /// renders it from the thing's own position - which is plumb, so the icon
+        /// lands exactly over the item as it appears through the open air. GUI
+        /// overlays (stack counts) ride a separate pass (BelowThingOverlays);
+        /// this covers the world-space overlay family. Gated on the shared
+        /// belowItemOverlays toggle.</summary>
+        internal static void DrawBelowOverlays(Map sky, Map lower)
+        {
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.belowItemOverlays)
+            {
+                return;
+            }
+            OverlayDrawer skyDrawer = sky.overlayDrawer;
+            if (skyDrawer == null || lower.overlayDrawer == null)
+            {
+                return;
+            }
+            Dictionary<Thing, ThingOverlaysHandle> handles = OverlayHandlesRef(lower.overlayDrawer);
+            if (handles == null || handles.Count == 0)
+            {
+                return;
+            }
+            CellRect view = Find.CameraDriver.CurrentViewRect.ClipInsideMap(lower);
+            foreach (KeyValuePair<Thing, ThingOverlaysHandle> kv in handles)
+            {
+                Thing t = kv.Key;
+                if (t == null || !t.Spawned)
+                {
+                    continue;
+                }
+                IntVec3 pos = t.Position;
+                if (!view.Contains(pos) || !BelowSelection.CellVisibleFromAbove(pos, sky, lower))
+                {
+                    continue;
+                }
+                OverlayTypes ot = kv.Value != null ? kv.Value.OverlayTypes : OverlayTypes.None;
+                if (ot != OverlayTypes.None)
+                {
+                    skyDrawer.DrawOverlay(t, ot);
+                }
             }
         }
 
