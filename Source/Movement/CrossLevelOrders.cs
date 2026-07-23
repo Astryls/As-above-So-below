@@ -192,6 +192,11 @@ namespace AsAboveSoBelow
                     return MakeAttackOptions(pawn, targetMap, attackTarget);
                 }
                 WrapOptions(options, pawn, targetMap, entry);
+                // Forced construction with materials in hand: when the clicked
+                // blueprint/frame lacks a material the pawn's own level can
+                // supply, add the carry-and-build order (the wrapped vanilla
+                // option is dead on arrival - no materials on the target level).
+                ABConstructSupply.AddOption(options, pawn, targetMap, cur, clickPos);
             }
             return options;
         }

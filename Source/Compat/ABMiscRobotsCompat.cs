@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using HarmonyLib;
+using RimWorld;
 using Verse;
 using Verse.AI;
 using Verse.AI.Group;
@@ -34,9 +36,19 @@ namespace AsAboveSoBelow
     {
         private const int RouteCooldownTicks = 450;
 
+        private const int WorkRouteCooldownTicks = 900;
+
         private static readonly ABPawnCooldown routeCooldown = new ABPawnCooldown();
 
+        private static readonly ABPawnCooldown workRouteCooldown = new ABPawnCooldown();
+
         private static FieldInfo rechargeStationField;
+
+        private static Type robotType;
+
+        private static MethodInfo getWorkGiversMethod;
+
+        private static readonly object[] WorkGiversArgs = { false };
 
         private static bool active;
 
@@ -48,7 +60,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                Type robotType = AccessTools.TypeByName("AIRobot.X2_AIRobot");
+                robotType = AccessTools.TypeByName("AIRobot.X2_AIRobot");
                 rechargeStationField = robotType != null
                     ? AccessTools.Field(robotType, "rechargeStation")
                     : null;
@@ -84,6 +96,25 @@ namespace AsAboveSoBelow
                 if (active)
                 {
                     ABLog.Dev("Misc. Robots detected, cross-level return routing active (" + patched + " givers patched).");
+                }
+                // Work migration (user report 2026-07-23, Robots++): their custom
+                // X2_JobGiver_Work scans only the robot's own map and never runs
+                // the vanilla JobGiver_Work our migration patch lives on - so
+                // base HAUL bots crossed levels (they enumerate our haul
+                // WorkGiverDefs) while Robots++ construction/mining/etc. bots
+                // idled next to an empty scan forever.
+                Type workGiverType = AccessTools.TypeByName("AIRobot.X2_JobGiver_Work");
+                MethodInfo tryIssue = workGiverType != null
+                    ? AccessTools.DeclaredMethod(workGiverType, "TryIssueJobPackage")
+                    : null;
+                getWorkGiversMethod = robotType != null
+                    ? AccessTools.Method(robotType, "GetWorkGivers", new[] { typeof(bool) })
+                    : null;
+                if (tryIssue != null && getWorkGiversMethod != null)
+                {
+                    HarmonyBoot.Harmony.Patch(tryIssue,
+                        postfix: new HarmonyMethod(typeof(ABMiscRobotsCompat), nameof(WorkJobPostfix)));
+                    ABLog.Dev("Misc. Robots work think node patched: robots follow work across levels (covers Robots++).");
                 }
             }
             catch (Exception e)
@@ -160,6 +191,96 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Movement, e, "robot return routing");
             }
+        }
+
+        /// <summary>Robots++ cross-level work: when a robot's own map scan
+        /// comes up empty, check the linked levels' work summaries for the
+        /// robot's OWN work types (from its GetWorkGivers list) and take the
+        /// stairs on a plausible hit. Arrival re-runs its scan locally; when
+        /// the work dries up the existing return routing brings it home to
+        /// dock. Cold path: only fires on an empty scan, behind a 900-tick
+        /// per-robot cooldown, never for low-battery robots.</summary>
+        private static void WorkJobPostfix(Pawn pawn, ThinkNode __instance, ref ThinkResult __result)
+        {
+            if (!active || getWorkGiversMethod == null || __result.Job != null
+                || !ABGuard.On(ABGuard.Movement))
+            {
+                return;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelWork)
+            {
+                return;
+            }
+            try
+            {
+                if (pawn == null || !pawn.Spawned || pawn.Dead || pawn.Downed || pawn.Map == null
+                    || pawn.GetLord() != null
+                    || robotType == null || !robotType.IsInstanceOfType(pawn))
+                {
+                    return;
+                }
+                if (CrossLevelWork.LowPowerWorker(pawn))
+                {
+                    return;
+                }
+                if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
+                {
+                    return;
+                }
+                int now = Find.TickManager.TicksGame;
+                if (!workRouteCooldown.Ready(pawn, now))
+                {
+                    return;
+                }
+                workRouteCooldown.ChargeUntil(pawn, now + WorkRouteCooldownTicks);
+                if (!(getWorkGiversMethod.Invoke(pawn, WorkGiversArgs) is IList givers)
+                    || givers.Count == 0)
+                {
+                    return;
+                }
+                Map target = FindWorkLevel(givers, comp.upperMap) ?? FindWorkLevel(givers, comp.lowerMap);
+                if (target == null)
+                {
+                    return;
+                }
+                if (!CrossLevelWork.TryStairsJobToward(pawn, target, IntVec3.Invalid, out Job job))
+                {
+                    return;
+                }
+                ABLog.Dev("Routing robot " + pawn.LabelShort + " toward work on level " + target.Level() + ".");
+                __result = new ThinkResult(job, __instance, JobTag.Misc);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "robot work routing");
+            }
+        }
+
+        /// <summary>The first linked level whose work summary says work of any
+        /// of the robot's own work types is plausibly available. Our own
+        /// cross-level givers are skipped (no recursion; they already run
+        /// inside the robot's normal scan).</summary>
+        private static Map FindWorkLevel(IList givers, Map target)
+        {
+            if (target == null || target.Disposed)
+            {
+                return null;
+            }
+            for (int i = 0; i < givers.Count; i++)
+            {
+                WorkGiver giver = givers[i] as WorkGiver;
+                WorkTypeDef workType = giver?.def?.workType;
+                if (workType == null || LevelWorkSummary.IsOwnCrossLevelGiver(giver.def))
+                {
+                    continue;
+                }
+                if (LevelWorkSummary.Plausible(target, workType))
+                {
+                    return target;
+                }
+            }
+            return null;
         }
     }
 }

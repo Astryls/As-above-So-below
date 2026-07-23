@@ -249,4 +249,6 @@
   <AB_FetchFromOtherLevels>Haulers fetch from other levels</AB_FetchFromOtherLevels>
   <AB_FetchFromOtherLevelsTip>Idle haulers check directly linked levels for haul work and go get it, instead of waiting for the slower idle-migration drift.</AB_FetchFromOtherLevelsTip>
 
+  <AB_BringMaterialsAndBuild>Bring {0} and build {1}</AB_BringMaterialsAndBuild>
+
 </LanguageData>
