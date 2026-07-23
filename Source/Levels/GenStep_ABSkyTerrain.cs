@@ -116,6 +116,12 @@ namespace AsAboveSoBelow
             List<IntVec3> plateauCells = new List<IntVec3>();
             Perlin soilNoise = new Perlin(0.05, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
             float soilFrac = Mathf.Clamp(settings != null ? settings.peakSoilFraction : 0.15f, 0f, 0.5f);
+            // Arable patches use the level's biome soil (2026-07-23): after
+            // inheritance this is the surface biome, so Ashlands peaks get ash
+            // soil, ReGrowth biomes their own dirt, and every other modded
+            // biome its native fertile terrain. Vanilla biomes resolve to
+            // plain Soil exactly as before.
+            TerrainDef arableTerrain = ArableTerrainFor(map.Biome);
             foreach (IntVec3 c in map.AllCells)
             {
                 int idx = indices.CellToIndex(c);
@@ -154,7 +160,7 @@ namespace AsAboveSoBelow
                     TerrainDef terrain;
                     if (n > 1f - soilFrac)
                     {
-                        terrain = TerrainDefOf.Soil;
+                        terrain = arableTerrain;
                     }
                     else if (n < 0.22f)
                     {
@@ -730,10 +736,52 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>The biome's own farmable ground for the plateau's arable
+        /// patches: the terrain its fertility table assigns at normal-soil
+        /// fertility, falling back to the biome's most fertile band and then
+        /// to plain soil when the biome defines nothing arable (deserts, the
+        /// stark AB_OpenSky placeholder when inheritance is off). Keeps the
+        /// "plateau arable soil" slider's promise in every biome while letting
+        /// modded biomes color the meadows their own way.</summary>
+        private static TerrainDef ArableTerrainFor(BiomeDef biome)
+        {
+            try
+            {
+                List<TerrainThreshold> byFertility = biome?.terrainsByFertility;
+                if (byFertility != null && byFertility.Count > 0)
+                {
+                    TerrainDef at = TerrainThreshold.TerrainAtValue(byFertility, 0.7f);
+                    if (at != null && at.fertility >= 0.5f)
+                    {
+                        return at;
+                    }
+                    TerrainDef best = null;
+                    for (int i = 0; i < byFertility.Count; i++)
+                    {
+                        TerrainDef t = byFertility[i].terrain;
+                        if (t != null && (best == null || t.fertility > best.fertility))
+                        {
+                            best = t;
+                        }
+                    }
+                    if (best != null && best.fertility >= 0.5f)
+                    {
+                        return best;
+                    }
+                }
+            }
+            catch
+            {
+                // Malformed modded biome data: plain soil is always safe.
+            }
+            return TerrainDefOf.Soil;
+        }
+
         /// <summary>Wild flora on the fresh plateau, drawn from the SURFACE
-        /// biome (the sky level's own biome is the featureless open sky) and
-        /// scaled by the vegetation slider. Cave plants are skipped; regrowth
-        /// afterwards comes from the open-sky biome's hardy highland mix.</summary>
+        /// biome and scaled by the vegetation slider. Fully biome-driven
+        /// (AllWildPlants + commonality), so modded biomes seed their own
+        /// flora. Cave plants are skipped; regrowth afterwards follows the
+        /// level's own (inherited) biome.</summary>
         private static void SeedPlateauFlora(Map map, Map ground, List<IntVec3> plateauCells, ABSettings settings)
         {
             if (plateauCells.Count == 0)

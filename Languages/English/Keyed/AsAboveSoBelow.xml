@@ -97,7 +97,7 @@
   <AB_ResetAll>Reset all settings to defaults</AB_ResetAll>
   <AB_ResetAllConfirm>Reset every setting on every tab to its default value?</AB_ResetAllConfirm>
   <AB_SkyBiomeInherit>Sky level inherits surface biome</AB_SkyBiomeInherit>
-  <AB_SkyBiomeInheritTip>Newly created sky levels use the same biome as the surface map below, so plateau greenery, tree regrowth, wild plant mix, and weather match the world around the mountain. Applies when a sky level is first generated; existing sky levels keep the biome they were created with. Off restores the stark high-altitude look.</AB_SkyBiomeInheritTip>
+  <AB_SkyBiomeInheritTip>Newly created sky levels use the same biome as the surface map below, so plateau soil, greenery, tree regrowth, wild plant mix, and weather match the world around the mountain - including modded biomes, whose own fertile terrain and plants carry up to the peak. Applies when a sky level is first generated; existing sky levels keep the biome they were created with. Off restores the stark high-altitude look.</AB_SkyBiomeInheritTip>
   <AB_ClimbTime>Stair climb time</AB_ClimbTime>
   <AB_ClimbTimeTip>Multiplies how long every stairs type takes to climb. Ladders are slower and grand staircases faster than normal stairs regardless.</AB_ClimbTimeTip>
   <AB_ShowCeilingHint>Show ceiling hints on the surface</AB_ShowCeilingHint>
