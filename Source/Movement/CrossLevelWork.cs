@@ -239,6 +239,25 @@ namespace AsAboveSoBelow
             return new ThinkResult(MakeStairsJob(stairs, exit), giver, JobTag.Misc);
         }
 
+        /// <summary>Existence probe of an ARBITRARY giver list with the pawn
+        /// virtually placed at the stairwell exit: the robot-compat variant of
+        /// the colonist probe (their think node owns its own giver order, so
+        /// rank truncation does not apply - the whole list is checked). Claims
+        /// the global probe budget. Added for the run #71 bounce fix: summary
+        /// bits alone migrate robots toward levels where nothing is actually
+        /// doable (blueprints with no local materials), and the idle go-home
+        /// node immediately routes them back.</summary>
+        internal static bool ProbeWorkAt(Pawn pawn, Map target, IntVec3 entryCell,
+            List<WorkGiver> order, out IntVec3 workDest)
+        {
+            workDest = IntVec3.Invalid;
+            if (order == null || order.Count == 0 || !TryClaimProbeBudget(Find.TickManager.TicksGame))
+            {
+                return false;
+            }
+            return ProbeBetterWorkAt(pawn, target, entryCell, order, order.Count, out workDest);
+        }
+
         /// <summary>Runs the pawn's own giver order, truncated to ranks strictly
         /// better than the local job's, with the pawn virtually placed at the
         /// stairwell exit on the target map. Existence check only: any hit

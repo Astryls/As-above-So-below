@@ -165,8 +165,18 @@ namespace AsAboveSoBelow
             IntVec3 storeCell = IntVec3.Invalid;
             try
             {
-                better = StoreUtility.TryFindBestBetterStoreCellFor(t, pawn, target, current, pawn.Faction,
-                    out storeCell, needAccurateResult: false);
+                // Storage-FOR, not store-CELL (verify sweep 2026-07-23): the
+                // cell-only search misses container destinations - graves,
+                // caskets, and modded container storage (Deep Storage style) on
+                // the linked level were invisible to the push side, so corpses
+                // never rode down to a basement crypt. Containers resolve to
+                // their own position for stair routing.
+                better = StoreUtility.TryFindBestBetterStorageFor(t, pawn, target, current, pawn.Faction,
+                    out storeCell, out IHaulDestination haulDest, needAccurateResult: false);
+                if (better && !storeCell.IsValid && haulDest is Thing destThing)
+                {
+                    storeCell = destThing.Position;
+                }
             }
             finally
             {

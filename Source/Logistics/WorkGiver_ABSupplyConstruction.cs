@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -89,6 +90,15 @@ namespace AsAboveSoBelow
             // source map, so reachability needs no virtual swap.
             Thing t = CrossLevelDemand.FindFetchableDemand(target, pawn.Map, pawn,
                 requireReachable: true, constructionOnly: true);
+            int fixedCount = 0;
+            if (t == null)
+            {
+                // Install blueprints over there whose minified thing sits on
+                // this level: ferry it across; the local install giver takes
+                // it from the drop (run #71 "No path" fix, automatic flow).
+                t = FindInstallMini(pawn, target);
+                fixedCount = 1;
+            }
             if (t == null)
             {
                 return null;
@@ -100,8 +110,35 @@ namespace AsAboveSoBelow
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
             job.targetC = exit;
-            job.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+            job.count = fixedCount > 0
+                ? fixedCount
+                : Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
             return job;
+        }
+
+        /// <summary>A loose minified thing on the pawn's level that an install
+        /// blueprint on the target level is waiting for. Built buildings
+        /// awaiting reinstall are skipped (the uninstall must happen on their
+        /// own level first; that designation migrates workers by itself).</summary>
+        private static Thing FindInstallMini(Pawn pawn, Map target)
+        {
+            List<Thing> blueprints = target.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint);
+            for (int i = 0; i < blueprints.Count; i++)
+            {
+                if (!(blueprints[i] is Blueprint_Install install)
+                    || install.Faction != Faction.OfPlayer || !install.Spawned)
+                {
+                    continue;
+                }
+                Thing mini = install.MiniToInstallOrBuildingToReinstall;
+                if (mini is MinifiedThing && mini.Spawned && mini.Map == pawn.Map
+                    && !mini.IsForbidden(pawn)
+                    && HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: false))
+                {
+                    return mini;
+                }
+            }
+            return null;
         }
     }
 }

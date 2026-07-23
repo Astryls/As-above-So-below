@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using RimWorld;
@@ -302,21 +303,30 @@ namespace AsAboveSoBelow
                     return;
                 }
                 workRouteCooldown.ChargeUntil(pawn, now + WorkRouteCooldownTicks);
-                if (!(getWorkGiversMethod.Invoke(pawn, WorkGiversArgs) is IList givers)
-                    || givers.Count == 0)
+                if (!(getWorkGiversMethod.Invoke(pawn, WorkGiversArgs) is IList raw)
+                    || raw.Count == 0)
                 {
                     return;
                 }
-                Map target = FindWorkLevel(givers, comp.upperMap) ?? FindWorkLevel(givers, comp.lowerMap);
-                if (target == null)
+                List<WorkGiver> order = new List<WorkGiver>(raw.Count);
+                for (int i = 0; i < raw.Count; i++)
+                {
+                    if (raw[i] is WorkGiver wg && wg.def?.workType != null
+                        && !LevelWorkSummary.IsOwnCrossLevelGiver(wg.def))
+                    {
+                        order.Add(wg);
+                    }
+                }
+                if (order.Count == 0)
                 {
                     return;
                 }
-                if (!CrossLevelWork.TryStairsJobToward(pawn, target, IntVec3.Invalid, out Job job))
+                Job job = TryMigrate(pawn, order, comp.upperMap) ?? TryMigrate(pawn, order, comp.lowerMap);
+                if (job == null)
                 {
                     return;
                 }
-                ABLog.Dev("Routing robot " + pawn.LabelShort + " toward work on level " + target.Level() + ".");
+                ABLog.Dev("Routing robot " + pawn.LabelShort + " toward probed work on another level.");
                 __result = new ThinkResult(job, __instance, JobTag.Misc);
             }
             catch (Exception e)
@@ -325,30 +335,44 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>The first linked level whose work summary says work of any
-        /// of the robot's own work types is plausibly available. Our own
-        /// cross-level givers are skipped (no recursion; they already run
-        /// inside the robot's normal scan).</summary>
-        private static Map FindWorkLevel(IList givers, Map target)
+        /// <summary>Probe-gated robot migration (run #71 bounce fix): summary
+        /// bits pre-gate cheaply, then a REAL virtual-position probe of the
+        /// robot's own giver list must find doable work before any stairs job
+        /// is issued - exactly the colonist migration discipline. A basement
+        /// full of blueprints with no local materials no longer lures builder
+        /// bots into a down-and-straight-back-up bounce; the surface-side
+        /// supply giver ferries the materials first, and only then does the
+        /// probe light up.</summary>
+        private static Job TryMigrate(Pawn pawn, List<WorkGiver> order, Map target)
         {
             if (target == null || target.Disposed)
             {
                 return null;
             }
-            for (int i = 0; i < givers.Count; i++)
+            bool plausible = false;
+            for (int i = 0; i < order.Count; i++)
             {
-                WorkGiver giver = givers[i] as WorkGiver;
-                WorkTypeDef workType = giver?.def?.workType;
-                if (workType == null || LevelWorkSummary.IsOwnCrossLevelGiver(giver.def))
+                if (LevelWorkSummary.Plausible(target, order[i].def.workType))
                 {
-                    continue;
-                }
-                if (LevelWorkSummary.Plausible(target, workType))
-                {
-                    return target;
+                    plausible = true;
+                    break;
                 }
             }
-            return null;
+            if (!plausible)
+            {
+                return null;
+            }
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs,
+                out Building_ABStairs exit))
+            {
+                return null;
+            }
+            if (!CrossLevelWork.ProbeWorkAt(pawn, target, exit.Position, order, out IntVec3 workDest))
+            {
+                return null;
+            }
+            StairRouter.Reroute(pawn, target, workDest, ref stairs, ref exit);
+            return CrossLevelWork.MakeStairsJob(stairs, exit);
         }
     }
 }

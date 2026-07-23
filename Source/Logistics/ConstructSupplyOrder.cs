@@ -63,6 +63,32 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // Install blueprints (user report 2026-07-23, run #71): the
+                // vanilla install giver dies on CanReach(mini) when the
+                // minified thing sits on another level ("No path"). Offer the
+                // carry-and-install trip when the mini is a loose minified
+                // item on the pawn's own level. Reinstalling a still-built
+                // building stays vanilla: it must be uninstalled on its own
+                // level first, and the uninstall designation already migrates
+                // workers there.
+                if (constructible is Blueprint_Install install)
+                {
+                    Thing mini = install.MiniToInstallOrBuildingToReinstall;
+                    if (!(mini is MinifiedThing) || !mini.Spawned || mini.Map != pawn.Map
+                        || mini.IsForbidden(pawn)
+                        || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: true))
+                    {
+                        return;
+                    }
+                    Thing carryMini = mini;
+                    Thing installTarget = install;
+                    Map installDest = targetMap;
+                    options.Add(new FloatMenuOption(
+                        "AB_BringAndInstall".Translate(carryMini.LabelShort),
+                        delegate { StartSupplyOrder(pawn, installDest, installTarget, carryMini, 1); },
+                        MenuOptionPriority.High));
+                    return;
+                }
                 IConstructible ic = (IConstructible)constructible;
                 Thing stack = null;
                 int needed = 0;
@@ -107,16 +133,16 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>The player's blueprint or frame at the cell, if any.
-        /// Install/reinstall blueprints carry their own thing and need no
-        /// materials, so they never qualify.</summary>
+        /// <summary>The player's blueprint, frame, or install blueprint at
+        /// the cell, if any. Install blueprints get the carry-and-install
+        /// branch; material blueprints and frames the carry-and-build one.</summary>
         private static Thing ConstructibleAt(Map map, IntVec3 cell)
         {
             List<Thing> things = map.thingGrid.ThingsListAt(cell);
             for (int i = 0; i < things.Count; i++)
             {
                 Thing t = things[i];
-                if (t.Faction == Faction.OfPlayer && !(t is Blueprint_Install) && t is IConstructible)
+                if (t.Faction == Faction.OfPlayer && t is IConstructible)
                 {
                     return t;
                 }
