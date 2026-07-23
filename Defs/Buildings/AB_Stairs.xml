@@ -129,7 +129,7 @@
       <Mass>70</Mass>
     </statBases>
     <graphicData>
-      <texPath>Things/Building/AB_Elevator</texPath>
+      <texPath>Things/Building/AB_Elevator_AB_Elevator</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
