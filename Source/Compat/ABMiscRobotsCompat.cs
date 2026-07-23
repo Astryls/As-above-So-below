@@ -147,18 +147,41 @@ namespace AsAboveSoBelow
         /// cross-level is exactly the stranding we fix.</summary>
         private static void ReturnJobPostfix(Pawn pawn, ref Job __result)
         {
-            if (!active || __result != null || !ABGuard.On(ABGuard.Movement))
+            if (!active || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }
             try
             {
+                // A non-null local answer is only trustworthy when the bound
+                // station is actually on this level (run #72 rule).
+                if (__result != null && !StationElsewhere(pawn))
+                {
+                    return;
+                }
                 __result = RouteHome(pawn);
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "robot return routing");
             }
+        }
+
+        /// <summary>True when this pawn is a robot whose bound recharge
+        /// station sits on a DIFFERENT map: any local answer from a
+        /// return/recharge giver is then invalid - including cell-target Goto
+        /// jobs (run #72: Return2BaseRoom computed a base-room cell on the
+        /// station's map; a bare cell carries no map, so with plumb column
+        /// coordinates the job "completed" instantly on the wrong level and
+        /// looped into vanilla's 10-jobs-per-tick breaker). Thing targets,
+        /// cell targets, and the empty case all collapse into this one rule.</summary>
+        private static bool StationElsewhere(Pawn pawn)
+        {
+            return pawn != null && pawn.Spawned && pawn.Map != null
+                && robotType != null && robotType.IsInstanceOfType(pawn)
+                && rechargeStationField.GetValue(pawn) is Thing station
+                && !station.Destroyed && station.Spawned
+                && station.Map != null && station.Map != pawn.Map;
         }
 
         /// <summary>ThinkNode-shaped return/recharge givers (RechargeEnergyIdle)
@@ -178,14 +201,10 @@ namespace AsAboveSoBelow
             try
             {
                 Job cur = __result.Job;
-                if (cur != null)
+                if (cur != null && !StationElsewhere(pawn))
                 {
-                    Thing target = cur.targetA.Thing;
-                    if (target == null || !target.Spawned || target.Map == pawn?.Map)
-                    {
-                        // Startable local job: theirs to keep.
-                        return;
-                    }
+                    // Station is local: their answer is fine whatever it is.
+                    return;
                 }
                 Job route = RouteHome(pawn);
                 if (route != null)

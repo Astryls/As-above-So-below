@@ -253,5 +253,6 @@
 
   <AB_BringMaterialsAndBuild>Bring {0} and build {1}</AB_BringMaterialsAndBuild>
   <AB_BringAndInstall>Bring {0} and install it here</AB_BringAndInstall>
+  <AB_BringAndRefuel>Bring {0} and refuel {1}</AB_BringAndRefuel>
 
 </LanguageData>

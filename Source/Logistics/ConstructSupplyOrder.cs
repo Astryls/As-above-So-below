@@ -61,6 +61,10 @@ namespace AsAboveSoBelow
                 Thing constructible = ConstructibleAt(targetMap, cell);
                 if (constructible == null)
                 {
+                    // Not a build site: maybe a dry campfire/generator/turret
+                    // (user report 2026-07-23: "need wood" with wood one level
+                    // away - vanilla's fuel search never leaves the map).
+                    AddRefuelOption(options, pawn, targetMap, cell);
                     return;
                 }
                 // Install blueprints (user report 2026-07-23, run #71): the
@@ -131,6 +135,70 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Logistics, e, "construct supply option");
             }
+        }
+
+        /// <summary>The "Bring {fuel} and refuel {thing}" branch: the clicked
+        /// player building wants fuel, the target level has NONE of its
+        /// accepted fuels, and the pawn's level can spare one. One order
+        /// carries a load over and runs the forced vanilla refuel giver on
+        /// arrival.</summary>
+        private static void AddRefuelOption(List<FloatMenuOption> options, Pawn pawn, Map targetMap, IntVec3 cell)
+        {
+            List<Thing> things = targetMap.thingGrid.ThingsListAt(cell);
+            Thing refuelable = null;
+            CompRefuelable comp = null;
+            for (int i = 0; i < things.Count; i++)
+            {
+                if (things[i].Faction != Faction.OfPlayer)
+                {
+                    continue;
+                }
+                comp = things[i].TryGetComp<CompRefuelable>();
+                if (comp != null)
+                {
+                    refuelable = things[i];
+                    break;
+                }
+            }
+            if (refuelable == null)
+            {
+                return;
+            }
+            int needed = Mathf.CeilToInt(comp.TargetFuelLevel - comp.Fuel);
+            if (needed <= 0)
+            {
+                return;
+            }
+            // Any accepted fuel already on the target level: vanilla's own
+            // (wrapped) refuel option works, ours would be noise.
+            foreach (ThingDef def in comp.Props.fuelFilter.AllowedThingDefs)
+            {
+                if (TargetLevelHas(targetMap, def))
+                {
+                    return;
+                }
+            }
+            Thing stack = null;
+            foreach (ThingDef def in comp.Props.fuelFilter.AllowedThingDefs)
+            {
+                stack = LocalStackOf(pawn, def);
+                if (stack != null)
+                {
+                    break;
+                }
+            }
+            if (stack == null)
+            {
+                return;
+            }
+            Thing carry = stack;
+            Thing target = refuelable;
+            Map dest = targetMap;
+            int count = needed;
+            options.Add(new FloatMenuOption(
+                "AB_BringAndRefuel".Translate(carry.def.label, target.LabelShort),
+                delegate { StartSupplyOrder(pawn, dest, target, carry, count); },
+                MenuOptionPriority.High));
         }
 
         /// <summary>The player's blueprint, frame, or install blueprint at
@@ -229,12 +297,25 @@ namespace AsAboveSoBelow
                 {
                     pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out Thing _);
                 }
-                // Blueprints may have turned into frames mid-climb; re-resolve
-                // the giver by what is actually standing there now.
-                WorkGiverDef giverDef = DefDatabase<WorkGiverDef>.GetNamedSilentFail(
-                    constructible is Frame
+                // Re-resolve the giver by what is actually standing there now:
+                // blueprints may have turned into frames mid-climb, and the
+                // refuel branch shares this continuation.
+                string giverName;
+                if (constructible is IConstructible)
+                {
+                    giverName = constructible is Frame
                         ? "ConstructDeliverResourcesToFrames"
-                        : "ConstructDeliverResourcesToBlueprints");
+                        : "ConstructDeliverResourcesToBlueprints";
+                }
+                else if (constructible.TryGetComp<CompRefuelable>() != null)
+                {
+                    giverName = "Refuel";
+                }
+                else
+                {
+                    return;
+                }
+                WorkGiverDef giverDef = DefDatabase<WorkGiverDef>.GetNamedSilentFail(giverName);
                 WorkGiver_Scanner scanner = giverDef?.Worker as WorkGiver_Scanner;
                 Job job = scanner?.JobOnThing(pawn, constructible, forced: true);
                 if (job != null)
