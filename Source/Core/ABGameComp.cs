@@ -36,6 +36,8 @@ namespace AsAboveSoBelow
             ABRitualAttendance.Tick();
             // No-op unless an emerge animation is waiting to be cleared.
             ClimbAnimation.Tick();
+            // No-op unless a bring-and-X arrival continuation queued a retry.
+            ABConstructSupply.Tick();
         }
 
         public override void GameComponentOnGUI()

@@ -87,10 +87,9 @@ namespace AsAboveSoBelow
                     Thing carryMini = mini;
                     Thing installTarget = install;
                     Map installDest = targetMap;
-                    options.Add(new FloatMenuOption(
+                    AddNative(options, install,
                         "AB_BringAndInstall".Translate(carryMini.LabelShort),
-                        delegate { StartSupplyOrder(pawn, installDest, installTarget, carryMini, 1); },
-                        MenuOptionPriority.High));
+                        delegate { StartSupplyOrder(pawn, installDest, installTarget, carryMini, 1); });
                     return;
                 }
                 IConstructible ic = (IConstructible)constructible;
@@ -126,10 +125,9 @@ namespace AsAboveSoBelow
                 Thing carry = stack;
                 int count = needed;
                 Map dest = targetMap;
-                options.Add(new FloatMenuOption(
+                AddNative(options, constructible,
                     "AB_BringMaterialsAndBuild".Translate(carry.def.label, target.LabelShort),
-                    delegate { StartSupplyOrder(pawn, dest, target, carry, count); },
-                    MenuOptionPriority.High));
+                    delegate { StartSupplyOrder(pawn, dest, target, carry, count); });
             }
             catch (Exception e)
             {
@@ -195,10 +193,35 @@ namespace AsAboveSoBelow
             Thing target = refuelable;
             Map dest = targetMap;
             int count = needed;
-            options.Add(new FloatMenuOption(
+            AddNative(options, refuelable,
                 "AB_BringAndRefuel".Translate(carry.def.label, target.LabelShort),
-                delegate { StartSupplyOrder(pawn, dest, target, carry, count); },
-                MenuOptionPriority.High));
+                delegate { StartSupplyOrder(pawn, dest, target, carry, count); });
+        }
+
+        /// <summary>NATIVE FLOAT MENU POLICY (user-directed 2026-07-23): our
+        /// order must read as base game, not mod. The vanilla generator left a
+        /// DISABLED row for this target ("Cannot refuel campfire: Need wood")
+        /// carrying the target's icon and its natural menu slot - remove that
+        /// row, inherit its orderInPriority, show the same thing icon, and use
+        /// Default priority so ours sorts exactly where the enabled vanilla
+        /// order would have been.</summary>
+        private static void AddNative(List<FloatMenuOption> options, Thing target, string label, Action action)
+        {
+            FloatMenuOption ours = new FloatMenuOption(label, action, MenuOptionPriority.Default,
+                null, target);
+            ours.iconThing = target;
+            for (int i = 0; i < options.Count; i++)
+            {
+                FloatMenuOption o = options[i];
+                if (o != null && o.Disabled
+                    && (o.revalidateClickTarget == target || o.iconThing == target))
+                {
+                    ours.orderInPriority = o.orderInPriority;
+                    options.RemoveAt(i);
+                    break;
+                }
+            }
+            options.Add(ours);
         }
 
         /// <summary>The player's blueprint, frame, or install blueprint at
@@ -269,7 +292,7 @@ namespace AsAboveSoBelow
                 job.count = Mathf.Min(needed, Mathf.Min(stack.stackCount,
                     pawn.carryTracker.MaxStackSpaceEver(stack.def)));
                 job.playerForced = true;
-                ABPendingOrders.Set(pawn, targetMap, delegate { FinishOnSite(pawn, constructible); });
+                ABPendingOrders.Set(pawn, targetMap, delegate { FinishOnSite(pawn, constructible, allowRetry: true); });
                 pawn.jobs?.TryTakeOrderedJob(job, JobTag.Misc);
             }
             catch (Exception e)
@@ -283,7 +306,46 @@ namespace AsAboveSoBelow
         /// generic store-cargo job the transfer queued) and run the forced
         /// deliver-resources giver against the clicked constructible - the
         /// pawn hauls its own dropped load to the site and builds.</summary>
-        private static void FinishOnSite(Pawn pawn, Thing constructible)
+        /// <summary>One-shot retry queue (user report 2026-07-23: pawn climbed
+        /// the stairs with the wood and just stood there): the arrival
+        /// continuation runs INSIDE the transfer toil, and any transfer-time
+        /// ordering quirk (reservations mid-cleanup, region updates from the
+        /// fresh spawn) can null the giver's job resolution. A single delayed
+        /// re-attempt a few ticks later, with the pawn fully settled, makes
+        /// the chain seamless without polling.</summary>
+        private static readonly List<(Pawn pawn, Thing target, int tick)> retries =
+            new List<(Pawn pawn, Thing target, int tick)>();
+
+        /// <summary>Called from ABGameComp; no-op unless a retry is queued.</summary>
+        internal static void Tick()
+        {
+            if (retries.Count == 0)
+            {
+                return;
+            }
+            int now = Find.TickManager.TicksGame;
+            for (int i = retries.Count - 1; i >= 0; i--)
+            {
+                (Pawn pawn, Thing target, int tick) r = retries[i];
+                if (now < r.tick)
+                {
+                    continue;
+                }
+                retries.RemoveAt(i);
+                FinishOnSite(r.pawn, r.target, allowRetry: false);
+            }
+        }
+
+        private static void ScheduleRetry(Pawn pawn, Thing target)
+        {
+            if (retries.Count > 32)
+            {
+                retries.Clear();
+            }
+            retries.Add((pawn, target, Find.TickManager.TicksGame + 15));
+        }
+
+        private static void FinishOnSite(Pawn pawn, Thing constructible, bool allowRetry)
         {
             try
             {
@@ -293,9 +355,10 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                Thing dropped = null;
                 if (pawn.carryTracker?.CarriedThing != null)
                 {
-                    pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out Thing _);
+                    pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out dropped);
                 }
                 // Re-resolve the giver by what is actually standing there now:
                 // blueprints may have turned into frames mid-climb, and the
@@ -318,10 +381,28 @@ namespace AsAboveSoBelow
                 WorkGiverDef giverDef = DefDatabase<WorkGiverDef>.GetNamedSilentFail(giverName);
                 WorkGiver_Scanner scanner = giverDef?.Worker as WorkGiver_Scanner;
                 Job job = scanner?.JobOnThing(pawn, constructible, forced: true);
+                // Refuel knows its fuel: the load the pawn just carried over.
+                // If the giver's own resolution balks, feed it directly.
+                if (job == null && giverName == "Refuel" && dropped != null && dropped.Spawned
+                    && !dropped.Destroyed)
+                {
+                    CompRefuelable comp = constructible.TryGetComp<CompRefuelable>();
+                    if (comp != null && comp.Fuel < comp.TargetFuelLevel
+                        && comp.Props.fuelFilter.Allows(dropped.def))
+                    {
+                        job = JobMaker.MakeJob(JobDefOf.Refuel, constructible, dropped);
+                    }
+                }
                 if (job != null)
                 {
                     job.playerForced = true;
                     pawn.jobs?.TryTakeOrderedJob(job, JobTag.Misc);
+                }
+                else if (allowRetry)
+                {
+                    ABLog.Dev("Bring-and-" + giverName + " continuation found no job for "
+                        + pawn.LabelShort + " at transfer time; retrying shortly.");
+                    ScheduleRetry(pawn, constructible);
                 }
             }
             catch (Exception e)

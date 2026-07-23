@@ -31,6 +31,52 @@ namespace AsAboveSoBelow
         private static readonly Dictionary<ThingDef, Snapshot> originals =
             new Dictionary<ThingDef, Snapshot>();
 
+        /// <summary>Copy/paste clipboard: one def's tuning, applied to any
+        /// other def (user request 2026-07-23 - tune stairs down once, paste
+        /// onto stairs up, wide stairs, ladders...).</summary>
+        private static Snapshot clipboard;
+
+        internal static bool CanPaste => clipboard != null;
+
+        internal static void CopyFrom(ThingDef def)
+        {
+            if (def?.graphicData != null)
+            {
+                clipboard = Capture(def.graphicData);
+                Messages.Message("Copied art tuning of " + def.defName + ".", MessageTypeDefOf.NeutralEvent, historical: false);
+            }
+        }
+
+        internal static void PasteTo(ThingDef def)
+        {
+            if (clipboard == null || def?.graphicData == null)
+            {
+                return;
+            }
+            EnsureSnapshot(def);
+            GraphicData gd = def.graphicData;
+            gd.drawSize = clipboard.drawSize;
+            gd.drawOffset = clipboard.drawOffset;
+            gd.drawOffsetNorth = clipboard.north;
+            gd.drawOffsetEast = clipboard.east;
+            gd.drawOffsetSouth = clipboard.south;
+            gd.drawOffsetWest = clipboard.west;
+            Apply(def);
+        }
+
+        private static Snapshot Capture(GraphicData gd)
+        {
+            return new Snapshot
+            {
+                drawSize = gd.drawSize,
+                drawOffset = gd.drawOffset,
+                north = gd.drawOffsetNorth,
+                east = gd.drawOffsetEast,
+                south = gd.drawOffsetSouth,
+                west = gd.drawOffsetWest
+            };
+        }
+
         /// <summary>Defs edited this session, in bake order.</summary>
         private static readonly List<ThingDef> touched = new List<ThingDef>();
 
@@ -52,16 +98,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            GraphicData gd = def.graphicData;
-            originals[def] = new Snapshot
-            {
-                drawSize = gd.drawSize,
-                drawOffset = gd.drawOffset,
-                north = gd.drawOffsetNorth,
-                east = gd.drawOffsetEast,
-                south = gd.drawOffsetSouth,
-                west = gd.drawOffsetWest
-            };
+            originals[def] = Capture(def.graphicData);
         }
 
         /// <summary>Push the current graphicData values to the world: rebuild
@@ -218,7 +255,7 @@ namespace AsAboveSoBelow
         private static readonly string[] RotLabels = { "North", "East", "South", "West" };
 
         public override Vector2 InitialSize =>
-            new Vector2(440f, def.rotatable ? 560f : 330f);
+            new Vector2(440f, def.rotatable ? 596f : 366f);
 
         public Window_ABArtTuner(ThingDef def)
         {
@@ -305,6 +342,18 @@ namespace AsAboveSoBelow
             }
 
             listing.GapLine(6f);
+            Rect copyRow = listing.GetRect(30f);
+            float cw = (copyRow.width - 8f) / 2f;
+            if (Widgets.ButtonText(new Rect(copyRow.x, copyRow.y, cw, 30f), "Copy"))
+            {
+                ABArtTuner.CopyFrom(def);
+            }
+            if (Widgets.ButtonText(new Rect(copyRow.x + cw + 8f, copyRow.y, cw, 30f),
+                ABArtTuner.CanPaste ? "Paste" : "Paste (empty)"))
+            {
+                ABArtTuner.PasteTo(def);
+            }
+            listing.Gap(6f);
             Rect buttons = listing.GetRect(30f);
             float w = (buttons.width - 16f) / 3f;
             if (Widgets.ButtonText(new Rect(buttons.x, buttons.y, w, 30f), "Reset def"))
