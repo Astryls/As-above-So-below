@@ -40,7 +40,7 @@ routing or NoJob.
 | Corpse burial in cross-level graves | FIXED-TODAY | Push side searched store CELLS only; now TryFindBestBetterStorageFor — graves, caskets, and modded container storage (Deep Storage style) count |
 | Trade beacon aggregation | DONE (2026-07-23) | Column-wide AllLaunchableThingsForTrade (reentrancy-guarded) + LaunchThingsOfType fulfills debt across the column. Caravan (physical) trading and pawn selling stay per-level by design |
 | Transport pod / shuttle loading | DONE (2026-07-23) | Load manifests register shortfall demand; local load giver takes over once goods land |
-| Refueling + turret rearm + growth vats | DONE (2026-07-23) | Auto-refuel shortfall to target level registers demand (supplyFuel toggle); covers vat nutrition |
+| Refueling + turret rearm + growth vats | DONE (2026-07-23) | Auto-refuel shortfall registers demand (supplyFuel toggle); covers vat nutrition. PLUS forced "Bring {fuel} and refuel {thing}" right-click order when the target level has none of the accepted fuels (vanilla float menu said "need wood" forever) |
 | Deterioration/forbid/home area | DONE | Per-map vanilla, correct as-is |
 
 ## Needs and daily life
