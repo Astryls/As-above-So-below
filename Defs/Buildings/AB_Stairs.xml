@@ -7,7 +7,9 @@
     <passability>PassThroughOnly</passability>
     <pathCost>42</pathCost>
     <fillPercent>0.40</fillPercent>
-    <rotatable>false</rotatable>
+    <!-- Rotatable: the flight faces the direction pawns descend/ascend.
+         Counterpart spawning copies Rotation, so the pair stays aligned. -->
+    <rotatable>true</rotatable>
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
@@ -43,8 +45,8 @@
     <label>stairs down</label>
     <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. The basement starts as solid rock, so bring miners.</description>
     <graphicData>
-      <texPath>Things/Building/AB_StairsDown_AB_StairsDown</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <texPath>Things/Building/AB_StairsDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
@@ -76,8 +78,8 @@
     <label>grand staircase down</label>
     <description>A wide, stately staircase leading down. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the basement level below and creates a matching staircase there.</description>
     <graphicData>
-      <texPath>Things/Building/AB_GrandStairsDown_AB_GrandStairsDown</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <texPath>Things/Building/AB_GrandStairsDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
     <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
@@ -95,8 +97,8 @@
     <label>grand staircase up</label>
     <description>A wide, stately staircase leading up. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the sky level above and creates a matching staircase there.</description>
     <graphicData>
-      <texPath>Things/Building/AB_GrandStairsUp_AB_GrandStairsUp</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <texPath>Things/Building/AB_GrandStairsUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
     <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
@@ -114,6 +116,9 @@
     <label>elevator</label>
     <description>An elevator car. Use its controls to extend the shaft up or down, opening that level and placing a linked car there. A car on the ground level can hold links in both directions, letting pawns ride straight between the sky level and the basement in one trip. Rides are much faster than stairs, and the shaft carries a power link.</description>
     <thingClass>AsAboveSoBelow.Building_ABElevator</thingClass>
+    <!-- The car is a symmetric cage; rotation is meaningless. Overrides the
+         rotatable stairs base. -->
+    <rotatable>false</rotatable>
     <stuffCategories Inherit="False">
       <li>Metallic</li>
     </stuffCategories>
@@ -124,7 +129,7 @@
       <Mass>70</Mass>
     </statBases>
     <graphicData>
-      <texPath>Things/Building/AB_Elevator_AB_Elevator</texPath>
+      <texPath>Things/Building/AB_Elevator</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
@@ -223,8 +228,8 @@
     <label>stairs up</label>
     <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Up there you can only walk and build above roofed parts of your base.</description>
     <graphicData>
-      <texPath>Things/Building/AB_StairsUp_AB_StairsUp</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <texPath>Things/Building/AB_StairsUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>

@@ -30,10 +30,19 @@
             <WorkToBuild>800</WorkToBuild>
           </statBases>
           <tickerType>Never</tickerType>
+          <!-- Invisible riser: draws as VEF's generic PipeSystem transmitter
+               segment. Link flags stay None because the duct bridges EVERY
+               PipeSystem resource - adopting one resource's flags would
+               visually weld it to that net only, so it draws the standalone
+               segment instead. Keeps the AB menu icon: VEF ships no duct
+               menu icon, and up/down need distinct build buttons. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalDuctDown</texPath>
+            <texPath>Special/PSTransmitterAtlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>None</li>
+            </linkFlags>
           </graphicData>
           <uiIconPath>Things/Building/AB_VerticalDuctDown</uiIconPath>
           <modExtensions>
@@ -58,10 +67,14 @@
             <WorkToBuild>800</WorkToBuild>
           </statBases>
           <tickerType>Never</tickerType>
+          <!-- Invisible riser: see the down variant. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalDuctUp</texPath>
+            <texPath>Special/PSTransmitterAtlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>None</li>
+            </linkFlags>
           </graphicData>
           <uiIconPath>Things/Building/AB_VerticalDuctUp</uiIconPath>
           <modExtensions>

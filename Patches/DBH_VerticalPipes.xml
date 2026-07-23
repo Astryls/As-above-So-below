@@ -41,12 +41,17 @@
           <researchPrerequisites>
             <li MayRequire="dbhlitemode">Plumbing</li>
           </researchPrerequisites>
+          <!-- Invisible riser: draws as a DBH pipe segment (their atlas +
+               link flags) and merges into adjacent pipe runs. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalWaterPipeDown</texPath>
+            <texPath>DBH/Things/Building/SewagePipe_Atlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>Custom5</li>
+            </linkFlags>
           </graphicData>
-          <uiIconPath>Things/Building/AB_VerticalWaterPipeDown</uiIconPath>
+          <uiIconPath>DBH/UI/Plumbing</uiIconPath>
           <modExtensions>
             <li Class="AsAboveSoBelow.ABStairsExtension">
               <deltaLevel>-1</deltaLevel>
@@ -82,12 +87,16 @@
           <researchPrerequisites>
             <li MayRequire="dbhlitemode">Plumbing</li>
           </researchPrerequisites>
+          <!-- Invisible riser: see the down variant. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalWaterPipeUp</texPath>
+            <texPath>DBH/Things/Building/SewagePipe_Atlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>Custom5</li>
+            </linkFlags>
           </graphicData>
-          <uiIconPath>Things/Building/AB_VerticalWaterPipeUp</uiIconPath>
+          <uiIconPath>DBH/UI/Plumbing</uiIconPath>
           <modExtensions>
             <li Class="AsAboveSoBelow.ABStairsExtension">
               <deltaLevel>1</deltaLevel>

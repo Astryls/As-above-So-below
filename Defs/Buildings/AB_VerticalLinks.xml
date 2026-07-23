@@ -3,7 +3,9 @@
 
   <ThingDef ParentName="BuildingBase" Name="AB_VerticalLinkBase" Abstract="True">
     <thingClass>AsAboveSoBelow.Building_ABUtilityLink</thingClass>
-    <altitudeLayer>Building</altitudeLayer>
+    <!-- Conduits layer: risers draw like the utility lines they extend and
+         disappear into the run instead of reading as furniture. -->
+    <altitudeLayer>Conduits</altitudeLayer>
     <passability>PassThroughOnly</passability>
     <pathCost>10</pathCost>
     <fillPercent>0.15</fillPercent>
@@ -27,6 +29,19 @@
 
   <ThingDef ParentName="AB_VerticalLinkBase" Name="AB_VerticalConduitBase" Abstract="True">
     <designationCategory>Power</designationCategory>
+    <!-- Invisible riser: draws as a plain vanilla conduit segment and links
+         into adjacent conduit runs, so the shaft reads as just another
+         stretch of cable. Vanilla atlas + menu icon; no custom art. -->
+    <graphicData>
+      <texPath>Things/Building/Linked/PowerConduit_Atlas</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <linkType>Transmitter</linkType>
+      <linkFlags>
+        <li>PowerConduit</li>
+      </linkFlags>
+    </graphicData>
+    <uiIconPath>Things/Building/Linked/PowerConduit_MenuIcon</uiIconPath>
+    <uiIconScale>0.7</uiIconScale>
     <costList>
       <Steel>20</Steel>
     </costList>
@@ -51,12 +66,6 @@
     <defName>AB_VerticalConduitDown</defName>
     <label>vertical conduit (down)</label>
     <description>A sealed cable shaft carrying power to the level below. Connects the power networks touching it on both levels; nothing can climb through it, and it does not leak temperature. Completing it opens the basement level below if none exists yet. Uninstalling either end removes both.</description>
-    <graphicData>
-      <texPath>Things/Building/AB_VerticalConduitDown</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
-      <drawSize>(1,1)</drawSize>
-    </graphicData>
-    <uiIconPath>Things/Building/AB_VerticalConduitDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -70,12 +79,6 @@
     <defName>AB_VerticalConduitUp</defName>
     <label>vertical conduit (up)</label>
     <description>A sealed cable shaft carrying power to the level above. Connects the power networks touching it on both levels; nothing can climb through it, and it does not leak temperature. Completing it opens the sky level above if none exists yet. Uninstalling either end removes both.</description>
-    <graphicData>
-      <texPath>Things/Building/AB_VerticalConduitUp</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
-      <drawSize>(1,1)</drawSize>
-    </graphicData>
-    <uiIconPath>Things/Building/AB_VerticalConduitUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>

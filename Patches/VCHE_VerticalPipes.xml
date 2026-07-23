@@ -45,12 +45,17 @@
               <addTransferGizmo>false</addTransferGizmo>
             </li>
           </comps>
+          <!-- Invisible riser: draws as a VCHE chemfuel pipe segment (their
+               atlas + link flags) and merges into adjacent pipe runs. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalChemfuelPipeDown</texPath>
+            <texPath>Things/Building/Linked/ChemfuelPipes_Atlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>Custom7</li>
+            </linkFlags>
           </graphicData>
-          <uiIconPath>Things/Building/AB_VerticalChemfuelPipeDown</uiIconPath>
+          <uiIconPath>Things/Building/Linked/ChemfuelPipes_MenuIcon</uiIconPath>
           <modExtensions>
             <li Class="AsAboveSoBelow.ABStairsExtension">
               <deltaLevel>-1</deltaLevel>
@@ -88,12 +93,16 @@
               <addTransferGizmo>false</addTransferGizmo>
             </li>
           </comps>
+          <!-- Invisible riser: see the down variant. -->
           <graphicData>
-            <texPath>Things/Building/AB_VerticalChemfuelPipeUp</texPath>
+            <texPath>Things/Building/Linked/ChemfuelPipes_Atlas</texPath>
             <graphicClass>Graphic_Single</graphicClass>
-            <drawSize>(1,1)</drawSize>
+            <linkType>Basic</linkType>
+            <linkFlags>
+              <li>Custom7</li>
+            </linkFlags>
           </graphicData>
-          <uiIconPath>Things/Building/AB_VerticalChemfuelPipeUp</uiIconPath>
+          <uiIconPath>Things/Building/Linked/ChemfuelPipes_MenuIcon</uiIconPath>
           <modExtensions>
             <li Class="AsAboveSoBelow.ABStairsExtension">
               <deltaLevel>1</deltaLevel>

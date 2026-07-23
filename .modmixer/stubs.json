@@ -1,4 +1,77 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsDown_east.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.726Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsDown_north.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.727Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsDown_south.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.728Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsUp_east.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.729Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsUp_north.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.730Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_GrandStairsUp_south.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.731Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsDown_east.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.732Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsDown_north.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.734Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsDown_south.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.735Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsUp_east.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.736Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsUp_north.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.737Z"
+    },
+    {
+      "path": "Textures/Things/Building/AB_StairsUp_south.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-07-23T02:45:56.739Z"
+    }
+  ]
 }
