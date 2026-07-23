@@ -224,4 +224,29 @@
   <AB_ClimbAnimations>Climb animations on stairs and ladders</AB_ClimbAnimations>
   <AB_ClimbAnimationsTip>While climbing stairs or a ladder, pawns visibly step onto the flight and sink into it going down, or rise out of it going up, with a short emerging flourish on the other level. Elevators are unaffected. Purely cosmetic.</AB_ClimbAnimationsTip>
 
+  <AB_TabJobs>Job scanning</AB_TabJobs>
+  <AB_JobsNote>How eagerly pawns look for cross-level work. Faster scanning feels more responsive but costs a little performance in big colonies. Defaults match the tuned built-in cadence.</AB_JobsNote>
+  <AB_JobsPresets>Scan aggressiveness preset</AB_JobsPresets>
+  <AB_JobsPresetsTip>One-click cadence profiles. Relaxed halves the scanning effort, Eager doubles it, Frantic is for small colonies that want near-instant cross-level reactions. The sliders below show what each preset sets.</AB_JobsPresetsTip>
+  <AB_JobsPresetRelaxed>Relaxed</AB_JobsPresetRelaxed>
+  <AB_JobsPresetDefault>Default</AB_JobsPresetDefault>
+  <AB_JobsPresetEager>Eager</AB_JobsPresetEager>
+  <AB_JobsPresetFrantic>Frantic</AB_JobsPresetFrantic>
+  <AB_JobProbeBudget>Work probes per tick</AB_JobProbeBudget>
+  <AB_JobProbeBudgetTip>How many cross-level work checks the whole colony may run per game tick. Higher means pawns notice work on other levels sooner; each probe is a bounded virtual scan.</AB_JobProbeBudgetTip>
+  <AB_JobEmptyScanCooldown>Rescan delay after finding nothing</AB_JobEmptyScanCooldown>
+  <AB_JobEmptyScanCooldownTip>How long a pawn waits before checking other levels again after a fruitless cross-level scan. Lower means quicker reactions to new work appearing elsewhere.</AB_JobEmptyScanCooldownTip>
+  <AB_JobMigrationCooldown>Delay between level moves</AB_JobMigrationCooldown>
+  <AB_JobMigrationCooldownTip>Minimum time a pawn stays put after migrating to another level for work, so pawns do not ping-pong up and down the stairs. Fresh player designations bypass this.</AB_JobMigrationCooldownTip>
+  <AB_JobCacheTtl>Work cache lifetime</AB_JobCacheTtl>
+  <AB_JobCacheTtlTip>How long per-level summaries of available work and needed materials stay cached before a rebuild. New blueprints and designations refresh these instantly regardless.</AB_JobCacheTtlTip>
+  <AB_SupplyConstruction>Builders carry materials to other levels</AB_SupplyConstruction>
+  <AB_SupplyConstructionTip>Pawns doing construction work ferry needed building materials through the stairs to blueprints and frames on linked levels, then build there.</AB_SupplyConstructionTip>
+  <AB_SupplyBills>Pull bill ingredients across levels</AB_SupplyBills>
+  <AB_SupplyBillsTip>Workbenches with active bills register ingredient shortfalls so haulers top the level up from linked levels.</AB_SupplyBillsTip>
+  <AB_SupplyMeals>Pull meals for patients and prisoners</AB_SupplyMeals>
+  <AB_SupplyMealsTip>Levels with bedridden patients or prisoners keep a small buffer of meals pulled from linked levels, so doctors and wardens feed locally.</AB_SupplyMealsTip>
+  <AB_FetchFromOtherLevels>Haulers fetch from other levels</AB_FetchFromOtherLevels>
+  <AB_FetchFromOtherLevelsTip>Idle haulers check directly linked levels for haul work and go get it, instead of waiting for the slower idle-migration drift.</AB_FetchFromOtherLevelsTip>
+
 </LanguageData>

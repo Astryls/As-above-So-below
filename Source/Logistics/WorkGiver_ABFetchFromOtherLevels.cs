@@ -22,7 +22,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public class WorkGiver_ABFetchFromOtherLevels : WorkGiver
     {
-        private const int EmptyScanCooldownTicks = 450;
+        private static int EmptyScanCooldownTicks => ABMod.Settings?.jobEmptyScanCooldown ?? 450;
 
         private const int MaxItemsPerScan = 25;
 
@@ -37,7 +37,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             ABSettings settings = ABMod.Settings;
-            if (settings == null || !settings.crossLevelHauling)
+            if (settings == null || !settings.crossLevelHauling || !settings.fetchFromOtherLevels)
             {
                 return null;
             }

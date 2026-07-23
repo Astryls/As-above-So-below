@@ -23,7 +23,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class LevelWorkSummary
     {
-        private const int TtlTicks = 600;
+        private static int TtlTicks => ABMod.Settings?.jobCacheTtl ?? 600;
 
         private sealed class Entry
         {
@@ -359,6 +359,31 @@ namespace AsAboveSoBelow
         private static void Postfix(DesignationManager __instance)
         {
             LevelWorkSummary.Notify_WorkChanged(__instance.map);
+        }
+    }
+
+    /// <summary>Fresh blueprints should pull builders and materials from other
+    /// levels immediately, not after the work summary and demand caches wind
+    /// down. Blueprint declares its own SpawnSetup, so this never touches the
+    /// base Thing method.</summary>
+    [HarmonyPatch(typeof(Blueprint), nameof(Blueprint.SpawnSetup))]
+    internal static class Patch_BlueprintSpawn_WorkChanged
+    {
+        private static void Postfix(Blueprint __instance)
+        {
+            try
+            {
+                Map map = __instance?.Map;
+                if (map != null)
+                {
+                    LevelWorkSummary.Notify_WorkChanged(map);
+                    CrossLevelDemand.Invalidate(map);
+                }
+            }
+            catch
+            {
+                // Cache freshness only; never let it break spawning.
+            }
         }
     }
 }

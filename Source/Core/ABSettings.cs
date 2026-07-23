@@ -51,6 +51,17 @@ namespace AsAboveSoBelow
         public bool crossLevelHauling = true;
         public bool crossLevelSupply = true;
         public bool crossLevelNeeds = true;
+        // Job-scan cadence (2026-07-23): how hard the cross-level flows look
+        // for work. Defaults mirror the old hardcoded constants; presets on
+        // the jobs tab set these in one click.
+        public int jobProbeBudget = 2;
+        public int jobEmptyScanCooldown = 450;
+        public int jobMigrationCooldown = 1200;
+        public int jobCacheTtl = 600;
+        public bool supplyConstruction = true;
+        public bool supplyBills = true;
+        public bool supplyMeals = true;
+        public bool fetchFromOtherLevels = true;
         public bool crossLevelPrisoners = true;
         public bool crossLevelAnimalWander = true;
         public bool crossLevelRituals = true;
@@ -97,12 +108,12 @@ namespace AsAboveSoBelow
         private int curTab;
         private bool landmarksExpanded;
         private bool? landmarksExpandedPending;
-        private readonly Vector2[] tabScroll = new Vector2[5];
-        private readonly float[] tabHeight = new float[5];
+        private readonly Vector2[] tabScroll = new Vector2[6];
+        private readonly float[] tabHeight = new float[6];
 
         private static readonly string[] TabKeys =
         {
-            "AB_TabGeneration", "AB_TabView", "AB_TabWork", "AB_TabCombat", "AB_TabAdvanced"
+            "AB_TabGeneration", "AB_TabView", "AB_TabWork", "AB_TabJobs", "AB_TabCombat", "AB_TabAdvanced"
         };
 
         private static readonly Color OkGreen = new Color(0.4f, 0.85f, 0.4f);
@@ -157,6 +168,9 @@ namespace AsAboveSoBelow
                     DoWorkTab(listing);
                     break;
                 case 3:
+                    DoJobsTab(listing);
+                    break;
+                case 4:
                     DoCombatTab(listing);
                     break;
                 default:
@@ -460,6 +474,80 @@ namespace AsAboveSoBelow
         // ------------------------------------------------------------------
         // Tab 3: Combat and threats
         // ------------------------------------------------------------------
+        // ------------------------------------------------------------------
+        // Tab 3: Job scanning
+        // ------------------------------------------------------------------
+        private void DoJobsTab(Listing_Standard listing)
+        {
+            GUI.color = NoteDim;
+            listing.Label("AB_JobsNote".Translate());
+            GUI.color = Color.white;
+            listing.Gap(4f);
+
+            listing.Label("AB_JobsPresets".Translate(), tooltip: "AB_JobsPresetsTip".Translate());
+            Rect presetRow = listing.GetRect(30f);
+            float bw = (presetRow.width - 18f) / 4f;
+            if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, bw, 30f), "AB_JobsPresetRelaxed".Translate()))
+            {
+                ApplyJobPreset(1, 900, 2400, 900);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + bw + 6f, presetRow.y, bw, 30f), "AB_JobsPresetDefault".Translate()))
+            {
+                ApplyJobPreset(2, 450, 1200, 600);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 2f, presetRow.y, bw, 30f), "AB_JobsPresetEager".Translate()))
+            {
+                ApplyJobPreset(4, 250, 600, 300);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 3f, presetRow.y, bw, 30f), "AB_JobsPresetFrantic".Translate()))
+            {
+                ApplyJobPreset(8, 120, 300, 150);
+            }
+            listing.GapLine(10f);
+
+            listing.Label("AB_JobProbeBudget".Translate() + ": " + jobProbeBudget, tooltip: "AB_JobProbeBudgetTip".Translate());
+            jobProbeBudget = Mathf.RoundToInt(listing.Slider(jobProbeBudget, 1f, 8f));
+            listing.Label("AB_JobEmptyScanCooldown".Translate() + ": " + TicksLabel(jobEmptyScanCooldown), tooltip: "AB_JobEmptyScanCooldownTip".Translate());
+            jobEmptyScanCooldown = RoundTicks(listing.Slider(jobEmptyScanCooldown, 100f, 1500f));
+            listing.Label("AB_JobMigrationCooldown".Translate() + ": " + TicksLabel(jobMigrationCooldown), tooltip: "AB_JobMigrationCooldownTip".Translate());
+            jobMigrationCooldown = RoundTicks(listing.Slider(jobMigrationCooldown, 300f, 3600f));
+            listing.Label("AB_JobCacheTtl".Translate() + ": " + TicksLabel(jobCacheTtl), tooltip: "AB_JobCacheTtlTip".Translate());
+            jobCacheTtl = RoundTicks(listing.Slider(jobCacheTtl, 150f, 1500f));
+            listing.GapLine(10f);
+
+            listing.CheckboxLabeled("AB_SupplyConstruction".Translate(), ref supplyConstruction, "AB_SupplyConstructionTip".Translate());
+            listing.CheckboxLabeled("AB_SupplyBills".Translate(), ref supplyBills, "AB_SupplyBillsTip".Translate());
+            listing.CheckboxLabeled("AB_SupplyMeals".Translate(), ref supplyMeals, "AB_SupplyMealsTip".Translate());
+            listing.CheckboxLabeled("AB_FetchFromOtherLevels".Translate(), ref fetchFromOtherLevels, "AB_FetchFromOtherLevelsTip".Translate());
+        }
+
+        private void ApplyJobPreset(int budget, int emptyScan, int migration, int ttl)
+        {
+            jobProbeBudget = budget;
+            jobEmptyScanCooldown = emptyScan;
+            jobMigrationCooldown = migration;
+            jobCacheTtl = ttl;
+        }
+
+        private void ResetJobs()
+        {
+            ApplyJobPreset(2, 450, 1200, 600);
+            supplyConstruction = true;
+            supplyBills = true;
+            supplyMeals = true;
+            fetchFromOtherLevels = true;
+        }
+
+        private static string TicksLabel(int ticks)
+        {
+            return ticks + " (" + (ticks / 60f).ToString("0.0") + "s)";
+        }
+
+        private static int RoundTicks(float v)
+        {
+            return Mathf.RoundToInt(v / 10f) * 10;
+        }
+
         private void DoCombatTab(Listing_Standard listing)
         {
             bool showAutoEngage = crossLevelCombat;
@@ -561,6 +649,9 @@ namespace AsAboveSoBelow
                     ResetWork();
                     break;
                 case 3:
+                    ResetJobs();
+                    break;
+                case 4:
                     ResetCombat();
                     break;
                 default:
@@ -652,6 +743,7 @@ namespace AsAboveSoBelow
             ResetGeneration();
             ResetView();
             ResetWork();
+            ResetJobs();
             ResetCombat();
             ResetAdvanced();
         }
@@ -702,6 +794,14 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref crossLevelHauling, "crossLevelHauling", true);
             Scribe_Values.Look(ref crossLevelSupply, "crossLevelSupply", true);
             Scribe_Values.Look(ref crossLevelNeeds, "crossLevelNeeds", true);
+            Scribe_Values.Look(ref jobProbeBudget, "jobProbeBudget", 2);
+            Scribe_Values.Look(ref jobEmptyScanCooldown, "jobEmptyScanCooldown", 450);
+            Scribe_Values.Look(ref jobMigrationCooldown, "jobMigrationCooldown", 1200);
+            Scribe_Values.Look(ref jobCacheTtl, "jobCacheTtl", 600);
+            Scribe_Values.Look(ref supplyConstruction, "supplyConstruction", true);
+            Scribe_Values.Look(ref supplyBills, "supplyBills", true);
+            Scribe_Values.Look(ref supplyMeals, "supplyMeals", true);
+            Scribe_Values.Look(ref fetchFromOtherLevels, "fetchFromOtherLevels", true);
             Scribe_Values.Look(ref crossLevelPrisoners, "crossLevelPrisoners", true);
             Scribe_Values.Look(ref crossLevelAnimalWander, "crossLevelAnimalWander", true);
             Scribe_Values.Look(ref crossLevelRituals, "crossLevelRituals", true);

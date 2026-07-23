@@ -23,7 +23,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class CrossLevelDemand
     {
-        private const int CacheTtlTicks = 600;
+        private static int CacheTtlTicks => ABMod.Settings?.jobCacheTtl ?? 600;
 
         private const int MaxBillsPerMap = 30;
 
@@ -40,6 +40,16 @@ namespace AsAboveSoBelow
             /// without also adopting bill and meal logistics.</summary>
             public readonly Dictionary<ThingDef, int> constructionNeed = new Dictionary<ThingDef, int>();
             public readonly Dictionary<ThingDef, int> available = new Dictionary<ThingDef, int>();
+        }
+
+        /// <summary>Drop a map's cached entry so the next query rebuilds it
+        /// (event-driven wakeup, e.g. a freshly placed blueprint).</summary>
+        public static void Invalidate(Map map)
+        {
+            if (map != null)
+            {
+                cache.Remove(map.uniqueID);
+            }
         }
 
         public static bool Demands(Map map, ThingDef def)
@@ -164,6 +174,10 @@ namespace AsAboveSoBelow
 
         private static void AddBillNeeds(Map map, CacheEntry entry)
         {
+            if (!(ABMod.Settings?.supplyBills ?? true))
+            {
+                return;
+            }
             List<Building> buildings = map.listerBuildings.allBuildingsColonist;
             int billsSeen = 0;
             for (int i = 0; i < buildings.Count; i++)
@@ -264,6 +278,10 @@ namespace AsAboveSoBelow
         /// hand counts.</summary>
         private static void AddMealNeeds(Map map, CacheEntry entry)
         {
+            if (!(ABMod.Settings?.supplyMeals ?? true))
+            {
+                return;
+            }
             int mouths = 0;
             IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count; i++)

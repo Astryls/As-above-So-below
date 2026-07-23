@@ -18,19 +18,20 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class CrossLevelWork
     {
-        private const int MigrationCooldownTicks = 1200;
+        private static int MigrationCooldownTicks => ABMod.Settings?.jobMigrationCooldown ?? 1200;
 
         /// <summary>Retry cadence for the priority-aware probe (a local job
         /// exists but a linked level might hold strictly better-ranked work).
         /// Bypassed instantly when the global work version changes (fresh
         /// designations), so new orders never wait this out.</summary>
-        private const int BetterWorkCooldownTicks = 900;
+        // Keeps the historical 900:1200 ratio against the migration slider.
+        private static int BetterWorkCooldownTicks => (MigrationCooldownTicks * 3) / 4;
 
         /// <summary>Colony-wide cap on priority probes per tick. Smooths the
         /// stampede after mass job-end moments (morning wake-ups, version
         /// bumps); a denied pawn simply keeps its local job and retries on a
         /// later think cycle.</summary>
-        private const int MaxProbesPerTick = 2;
+        private static int MaxProbesPerTick => ABMod.Settings?.jobProbeBudget ?? 2;
 
         /// <summary>Cap on HasJobOnCell evaluations per cell-scanning giver
         /// during a probe (grow zones can be huge). A capped miss is caught

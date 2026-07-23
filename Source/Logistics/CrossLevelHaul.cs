@@ -14,7 +14,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class CrossLevelHaul
     {
-        private const int VerdictTtlTicks = 600;
+        private static int VerdictTtlTicks => ABMod.Settings?.jobCacheTtl ?? 600;
 
         private static readonly Dictionary<int, VerdictEntry> verdictCache = new Dictionary<int, VerdictEntry>();
 

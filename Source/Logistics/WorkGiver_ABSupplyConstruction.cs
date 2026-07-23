@@ -28,7 +28,7 @@ namespace AsAboveSoBelow
     /// </summary>
     public class WorkGiver_ABSupplyConstruction : WorkGiver
     {
-        private const int EmptyScanCooldownTicks = 450;
+        private static int EmptyScanCooldownTicks => ABMod.Settings?.jobEmptyScanCooldown ?? 450;
 
         private static readonly ABPawnCooldown emptyScanCooldown = new ABPawnCooldown();
 
@@ -39,7 +39,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             ABSettings settings = ABMod.Settings;
-            if (settings == null || !settings.crossLevelSupply)
+            if (settings == null || !settings.crossLevelSupply || !settings.supplyConstruction)
             {
                 return null;
             }
