@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Procedural climb/emerge visuals for stairs and ladders. The workers
+       ignore the keyframe data entirely (duration and easing come from the
+       per-pawn snapshot in ClimbAnimation); the single identity keyframe just
+       satisfies the part shape. Loop mode keeps AnimationTick alive for the
+       whole climb regardless of durationTicks. -->
+
+  <AnimationDef>
+    <defName>AB_Climb</defName>
+    <durationTicks>120</durationTicks>
+    <keyframeParts>
+      <li>
+        <key>Root</key>
+        <value>
+          <workerType>AsAboveSoBelow.AnimationWorker_ABClimb</workerType>
+          <keyframes>
+            <li>
+              <tick>0</tick>
+            </li>
+          </keyframes>
+        </value>
+      </li>
+    </keyframeParts>
+  </AnimationDef>
+
+  <AnimationDef>
+    <defName>AB_Emerge</defName>
+    <durationTicks>120</durationTicks>
+    <keyframeParts>
+      <li>
+        <key>Root</key>
+        <value>
+          <workerType>AsAboveSoBelow.AnimationWorker_ABEmerge</workerType>
+          <keyframes>
+            <li>
+              <tick>0</tick>
+            </li>
+          </keyframes>
+        </value>
+      </li>
+    </keyframeParts>
+  </AnimationDef>
+
+</Defs>

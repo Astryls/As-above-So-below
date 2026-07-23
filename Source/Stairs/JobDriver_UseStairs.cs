@@ -34,6 +34,8 @@ namespace AsAboveSoBelow
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.Touch);
             Toil climb = Toils_General.Wait(Stairs?.ClimbTicksFor(pawn) ?? ClimbTicks, TargetIndex.A);
             climb.WithProgressBarToilDelay(TargetIndex.A);
+            climb.AddPreInitAction(delegate { ClimbAnimation.StartClimb(pawn, Stairs); });
+            climb.AddFinishAction(delegate { ClimbAnimation.Stop(pawn); });
             yield return climb;
             Toil transfer = ToilMaker.MakeToil("AB_Transfer");
             transfer.initAction = DoTransfer;
@@ -226,6 +228,8 @@ namespace AsAboveSoBelow
                 HostileDescend.NoteArrived(p, targetMap);
                 // Wild animals start a fresh linger window on the new level.
                 CrossLevelAnimals.NoteArrived(p);
+                // Arrival flourish: ease out of the stairwell (no-op for elevators).
+                ClimbAnimation.StartEmerge(p, dest, Math.Sign(targetMap.Level() - sourceMap.Level()));
                 ABApi.NotifyPawnTransferred(p, sourceMap, targetMap);
                 if (followCam && p.Spawned && !p.Dead)
                 {

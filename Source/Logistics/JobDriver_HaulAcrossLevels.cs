@@ -36,6 +36,8 @@ namespace AsAboveSoBelow
             yield return Toils_Goto.GotoThing(TargetIndex.B, PathEndMode.Touch);
             Toil climb = Toils_General.Wait(Stairs?.ClimbTicksFor(pawn) ?? ClimbTicks, TargetIndex.B);
             climb.WithProgressBarToilDelay(TargetIndex.B);
+            climb.AddPreInitAction(delegate { ClimbAnimation.StartClimb(pawn, Stairs); });
+            climb.AddFinishAction(delegate { ClimbAnimation.Stop(pawn); });
             yield return climb;
             Toil transfer = ToilMaker.MakeToil("AB_HaulTransfer");
             transfer.initAction = delegate

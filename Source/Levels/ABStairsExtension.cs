@@ -15,6 +15,10 @@ namespace AsAboveSoBelow
         /// when the building has a quality comp, and by the settings slider.</summary>
         public float climbFactor = 1f;
 
+        /// <summary>Rung-climb visuals: the climb animation uses a vertical
+        /// rung bob with no sway instead of the stair-step bounce.</summary>
+        public bool ladder;
+
         /// <summary>Utility-only links (vertical conduit, vertical water pipe)
         /// carry networks but never pawns: excluded from every pawn transport
         /// path and from stairwell heat exchange (a sealed shaft).</summary>

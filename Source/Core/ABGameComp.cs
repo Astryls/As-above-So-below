@@ -34,6 +34,8 @@ namespace AsAboveSoBelow
             base.GameComponentTick();
             // Single static count read when no cross-level ritual gather is pending.
             ABRitualAttendance.Tick();
+            // No-op unless an emerge animation is waiting to be cleared.
+            ClimbAnimation.Tick();
         }
 
         public override void GameComponentOnGUI()

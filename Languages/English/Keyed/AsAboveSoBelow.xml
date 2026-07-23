@@ -221,4 +221,7 @@
   <AB_PeakVegetation>Plateau vegetation</AB_PeakVegetation>
   <AB_PeakVegetationTip>Density of wild plants and trees seeded on the plateau at generation, relative to the surface biome's normal density. Regrowth afterwards is natural.</AB_PeakVegetationTip>
 
+  <AB_ClimbAnimations>Climb animations on stairs and ladders</AB_ClimbAnimations>
+  <AB_ClimbAnimationsTip>While climbing stairs or a ladder, pawns visibly step onto the flight and sink into it going down, or rise out of it going up, with a short emerging flourish on the other level. Elevators are unaffected. Purely cosmetic.</AB_ClimbAnimationsTip>
+
 </LanguageData>

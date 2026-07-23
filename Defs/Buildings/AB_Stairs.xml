@@ -196,6 +196,7 @@
         <deltaLevel>-1</deltaLevel>
         <counterpartDef>AB_LadderUp</counterpartDef>
         <climbFactor>1.6</climbFactor>
+        <ladder>true</ladder>
       </li>
     </modExtensions>
   </ThingDef>
@@ -219,6 +220,7 @@
         <deltaLevel>1</deltaLevel>
         <counterpartDef>AB_LadderDown</counterpartDef>
         <climbFactor>1.6</climbFactor>
+        <ladder>true</ladder>
       </li>
     </modExtensions>
   </ThingDef>
@@ -237,6 +239,60 @@
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
         <counterpartDef>AB_StairsDown</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <!-- Wide stairs: a two-tile flight reusing the normal stairs art at double
+       width (user-directed; the square textures stretch 2:1). Mid-tier climb
+       speed between normal and grand stairs, no quality comp. -->
+
+  <ThingDef ParentName="AB_StairsBase">
+    <defName>AB_WideStairsDown</defName>
+    <label>wide stairs down</label>
+    <description>A broad two-tile stairwell leading down, quicker to climb than a normal stairwell. Completing it opens the basement level below and creates a matching stairwell there. The basement starts as solid rock, so bring miners.</description>
+    <size>(2,1)</size>
+    <costStuffCount>150</costStuffCount>
+    <statBases>
+      <WorkToBuild>6400</WorkToBuild>
+      <Mass>70</Mass>
+    </statBases>
+    <graphicData>
+      <texPath>Things/Building/AB_StairsDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(2,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>-1</deltaLevel>
+        <counterpartDef>AB_WideStairsUp</counterpartDef>
+        <climbFactor>0.8</climbFactor>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_StairsBase">
+    <defName>AB_WideStairsUp</defName>
+    <label>wide stairs up</label>
+    <description>A broad two-tile stairwell leading up, quicker to climb than a normal stairwell. Completing it opens the sky level above and creates a matching stairwell there. Up there you can only walk and build above roofed parts of your base.</description>
+    <size>(2,1)</size>
+    <costStuffCount>150</costStuffCount>
+    <statBases>
+      <WorkToBuild>6400</WorkToBuild>
+      <Mass>70</Mass>
+    </statBases>
+    <graphicData>
+      <texPath>Things/Building/AB_StairsUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(2,1)</drawSize>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABStairsExtension">
+        <deltaLevel>1</deltaLevel>
+        <counterpartDef>AB_WideStairsDown</counterpartDef>
+        <climbFactor>0.8</climbFactor>
       </li>
     </modExtensions>
   </ThingDef>
