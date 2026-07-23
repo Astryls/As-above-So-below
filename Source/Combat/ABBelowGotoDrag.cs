@@ -16,6 +16,7 @@ namespace AsAboveSoBelow
     /// Single pawn only (cross-level orders are single-pawn by design). Fails open:
     /// any invalid state cancels the drag and the pawn simply receives no order.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class ABBelowGotoDrag
     {
         private static Pawn pawn;

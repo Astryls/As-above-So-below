@@ -13,6 +13,7 @@ namespace AsAboveSoBelow
     /// coordinates there. Auto-spawned counterparts skip generation because their
     /// link is set before spawning. Destroying either end removes both.
     /// </summary>
+    [StaticConstructorOnStartup]
     public class Building_ABStairs : Building
     {
         /// <summary>Base climb duration in ticks before the per-type factor,

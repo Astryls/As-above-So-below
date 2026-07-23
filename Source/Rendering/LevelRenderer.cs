@@ -35,6 +35,7 @@ namespace AsAboveSoBelow
     /// therefore over - the view below.
     /// Every entry point is kill-switched via ABGuard.Rendering.
     /// </summary>
+    [StaticConstructorOnStartup]
     public static class LevelRenderer
     {
         /// <summary>Altitude shift for below content. Keeps it under the sky map's

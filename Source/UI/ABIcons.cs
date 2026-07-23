@@ -5,6 +5,7 @@ namespace AsAboveSoBelow
 {
     /// <summary>Shared lazy icon lookups; previously duplicated between the play
     /// settings buttons and the pawn gizmos.</summary>
+    [StaticConstructorOnStartup]
     internal static class ABIcons
     {
         private static Texture2D up;

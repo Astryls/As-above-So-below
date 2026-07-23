@@ -70,6 +70,7 @@ namespace AsAboveSoBelow
     /// footnote is honest that this is an illustrative sample, not the
     /// player's actual next map.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class ABGenPreview
     {
         private const int W = 130;

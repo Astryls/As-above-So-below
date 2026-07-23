@@ -42,6 +42,7 @@ namespace AsAboveSoBelow
     /// vanilla filler geometry (run-24).
     /// Kill switch: Rendering; regenerates on terrain and building changes.
     /// </summary>
+    [StaticConstructorOnStartup]
     public class SectionLayer_ABMountainCap : SectionLayer
     {
         private static int lowQueue;
