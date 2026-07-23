@@ -1,0 +1,17 @@
+<!-- As above, So below: baked art tuning 2026-07-23 19:44 -->
+<ArtTuning>
+  <AB_LadderDown>
+    <drawSize>(1,1)</drawSize>
+    <drawOffsetNorth>(0,0,0)</drawOffsetNorth>
+    <drawOffsetEast>(0,0,0)</drawOffsetEast>
+    <drawOffsetSouth>(0,0,0)</drawOffsetSouth>
+    <drawOffsetWest>(0,0,0)</drawOffsetWest>
+  </AB_LadderDown>
+  <AB_StairsUp>
+    <drawSize>(1.85,1.85)</drawSize>
+    <drawOffsetNorth>(0,0,0.27)</drawOffsetNorth>
+    <drawOffsetEast>(-0.1,0,0.3)</drawOffsetEast>
+    <drawOffsetSouth>(0,0,0.4)</drawOffsetSouth>
+    <drawOffsetWest>(0.1,0,0.2)</drawOffsetWest>
+  </AB_StairsUp>
+</ArtTuning>

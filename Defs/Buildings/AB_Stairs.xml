@@ -49,7 +49,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -82,7 +81,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -101,7 +99,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
@@ -133,7 +130,6 @@
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_Elevator</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>0</deltaLevel>
@@ -190,7 +186,6 @@
       <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
       <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
     </graphicData>
-    <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -214,7 +209,6 @@
       <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
       <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
     </graphicData>
-    <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
@@ -234,7 +228,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
@@ -262,7 +255,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,1)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -287,7 +279,6 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,1)</drawSize>
     </graphicData>
-    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
