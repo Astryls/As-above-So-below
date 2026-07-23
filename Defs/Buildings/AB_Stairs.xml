@@ -43,7 +43,7 @@
     <label>stairs down</label>
     <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. The basement starts as solid rock, so bring miners.</description>
     <graphicData>
-      <texPath>Things/Building/AB_StairsDown</texPath>
+      <texPath>Things/Building/AB_StairsDown_AB_StairsDown</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
@@ -223,7 +223,7 @@
     <label>stairs up</label>
     <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Up there you can only walk and build above roofed parts of your base.</description>
     <graphicData>
-      <texPath>Things/Building/AB_StairsUp</texPath>
+      <texPath>Things/Building/AB_StairsUp_AB_StairsUp</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
