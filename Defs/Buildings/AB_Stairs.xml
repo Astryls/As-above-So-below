@@ -76,7 +76,7 @@
     <label>grand staircase down</label>
     <description>A wide, stately staircase leading down. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the basement level below and creates a matching staircase there.</description>
     <graphicData>
-      <texPath>Things/Building/AB_GrandStairsDown</texPath>
+      <texPath>Things/Building/AB_GrandStairsDown_AB_GrandStairsDown</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
@@ -95,7 +95,7 @@
     <label>grand staircase up</label>
     <description>A wide, stately staircase leading up. Faster to climb than normal stairs, and better craftsmanship makes it faster still. Completing it opens the sky level above and creates a matching staircase there.</description>
     <graphicData>
-      <texPath>Things/Building/AB_GrandStairsUp</texPath>
+      <texPath>Things/Building/AB_GrandStairsUp_AB_GrandStairsUp</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(2,2)</drawSize>
     </graphicData>
@@ -124,7 +124,7 @@
       <Mass>70</Mass>
     </statBases>
     <graphicData>
-      <texPath>Things/Building/AB_Elevator</texPath>
+      <texPath>Things/Building/AB_Elevator_AB_Elevator</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
