@@ -9,6 +9,11 @@ namespace AsAboveSoBelow
     /// Runs after vanilla hauling (lower priorityInType): picks up items whose
     /// better storage lives on a linked level and carries them through the stairs.
     /// Vanilla's carried-thing handling stores the item after the transfer.
+    ///
+    /// This is the single-item FALLBACK. When Pick Up And Haul or Hauler's
+    /// Dream is present and the pawn carries their inventory comp, the bulk
+    /// giver (WorkGiver_ABBulkHaulAcrossLevels) takes over instead - so this one
+    /// stands down for those pawns to avoid two givers racing the same stacks.
     /// </summary>
     public class WorkGiver_ABHaulAcrossLevels : WorkGiver_Scanner
     {
@@ -21,6 +26,8 @@ namespace AsAboveSoBelow
             return !ABGuard.On(ABGuard.Logistics)
                 || ABMod.Settings == null || !ABMod.Settings.crossLevelHauling
                 || !pawn.Map.ConnectedToOtherLevel()
+                // Bulk inventory hauler takes this pawn instead.
+                || (ABInventoryHaulBridge.AnyActive && ABInventoryHaulBridge.HasComp(pawn))
                 // Battery-driven workers (Misc. Robots, mechs) stay near home
                 // when low; their recharge AI will want them shortly.
                 || CrossLevelWork.LowPowerWorker(pawn);

@@ -14,6 +14,40 @@
     </requiredCapacities>
   </WorkGiverDef>
 
+  <!-- Bulk variant: inert unless Pick Up And Haul / Hauler's Dream is present
+       and the pawn carries their inventory comp (runtime-gated in ShouldSkip).
+       Same priorityInType as the single-item giver, which stands down for
+       those pawns so exactly one fires. -->
+  <WorkGiverDef>
+    <defName>AB_BulkHaulAcrossLevels</defName>
+    <label>bulk haul things to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABBulkHaulAcrossLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>haul</verb>
+    <gerund>hauling</gerund>
+    <priorityInType>10</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <!-- Allow Tool priority hauling across levels: urgently-designated stacks
+       whose better storage is on a linked level cross FIRST. High
+       priorityInType puts it ahead of ordinary hauling. Inert unless Allow
+       Tool is installed (runtime-gated in ShouldSkip). -->
+  <WorkGiverDef>
+    <defName>AB_HaulUrgentlyAcrossLevels</defName>
+    <label>haul things urgently to other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABHaulUrgentlyAcrossLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>haul urgently</verb>
+    <gerund>hauling urgently</gerund>
+    <priorityInType>100</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
   <WorkGiverDef>
     <defName>AB_RescueAcrossLevels</defName>
     <label>rescue to other levels</label>

@@ -34,6 +34,8 @@ routing or NoJob.
 | Mechanic | Status | Notes |
 |---|---|---|
 | Storage-priority hauling across levels | DONE-V | Virtual StoreUtility verdicts, 600t cache |
+| Bulk inventory hauling across levels (PUAH / Hauler's Dream) | DONE (2026-07-23) | When a bulk mod + its per-pawn comp are present, cross-level haul scoops a whole same-destination load into inventory, rides the stairs, and the host mod's own unloader stores it on arrival (ABInventoryHaulBridge, reflection, fail-open). Single-item carryTracker haul is the fallback |
+| Allow Tool "Haul Urgently" across levels | DONE (2026-07-23) | High-priorityInType urgent giver carries urgently-designated stacks whose storage is cross-level FIRST (bulk when a bridge is active). Migration already covers urgent items already on other levels |
 | Idle fetch from linked levels | DONE-V | Fetch giver + demand haul back |
 | Bill ingredient pull | DONE-V | Shortfall demand (toggleable) |
 | Patient/prisoner meal pull | DONE-V | Buffer demand (toggleable) |
@@ -100,6 +102,7 @@ routing or NoJob.
 |---|---|---|
 | Misc. Robots haul + return/dock | DONE-V | |
 | Robots++ work migration | FIXED-TODAY (v2) | Run #71 bounce: summary-only gate lured bots to undoable work; now probe-gated with the robot's own giver list (colonist discipline) |
+| PUAH / Hauler's Dream bulk haulers cross-level | DONE (2026-07-23) | Bridge reuses the host mod's inventory comp + unloader; robots/mechs lack the comp so keep single carry. HD runs on pocket levels via IsPlayerHome-column identity |
 | Cross-map dock-job intercept | DONE | Run #70 fix |
 
 ## Priority queue
@@ -120,6 +123,8 @@ Every module must be inert when its host mod is absent, and every order it adds 
 | ABWindowsCompat / ABDeclutterCompat / ABAnimalTabCompat / ColonistBarKFCompat | resp. mods | ABDetect + try/catch | rendering/UI only | fail-open, no order surface |
 | ABPipeCompat + VEF/DBH/Rimefeller bridges | pipe mods | ABPipeCompat detect-gated; bridges only called from it | none (network welding) | bridges inert unless caller fires |
 | BiomesCavernsCompat | Biomes! Caverns | ABDetect | gen only | fail-open |
+| ABInventoryHaulBridge | PUAH / Hauler's Dream | ABDetect + reflection (comp type + RegisterHauledItem + PawnUnloadChecker) | bulk giver + driver, native Hauling work | inert without host (AnyActive false -> single-item carry); broken-flag per system falls back on any throw |
+| ABAllowToolCompat | Allow Tool | ABDetect + DesignationDef by name | urgent cross-level haul giver | inert without host (Active false -> giver ShouldSkip true); designation cleared by Allow Tool's own patch |
 
 **Native float-menu compliance (per the locked policy):** medical rescue/capture/take-to-bed use DecoratePrioritizedTask + RescueOrCapture priority (native). Haul option: DecoratePrioritizedTask, priority High->Default (fixed 2026-07-23). Bring-and-build/install/refuel: AddNative (replace disabled vanilla row, inherit slot + icon). Cross-gap attack: custom "Attack" label by design (no vanilla equivalent across the gap). Stairs/elevator float menus: mod-native buildings, no vanilla row to match.
 
