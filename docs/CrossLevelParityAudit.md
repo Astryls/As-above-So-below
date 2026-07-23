@@ -24,7 +24,7 @@ routing or NoJob.
 | Reinstall built building across levels | BY DESIGN (two-step) | Uninstall migrates workers to it; resulting mini then ferries |
 | Uninstall/deconstruct/smooth/remove floor | DONE-V | Designation detector |
 | Repair | DONE | RepairableBuildings detector |
-| Build/remove roof areas | GAP-P2 | Construction detector ignores areaBuildRoof/NoRoof — add area check |
+| Build/remove roof areas | DONE (2026-07-23) | Roof areas light the construction detector |
 | Mining | DONE-V | Designation detector |
 | Growing (zones + planters) | DONE | Zone/planter detector |
 | Research | VERIFIED (code) | Detector: bench present + active project |
@@ -38,9 +38,9 @@ routing or NoJob.
 | Bill ingredient pull | DONE-V | Shortfall demand (toggleable) |
 | Patient/prisoner meal pull | DONE-V | Buffer demand (toggleable) |
 | Corpse burial in cross-level graves | FIXED-TODAY | Push side searched store CELLS only; now TryFindBestBetterStorageFor — graves, caskets, and modded container storage (Deep Storage style) count |
-| Trade beacon aggregation | GAP-P1 | Selling only sees current map's beacons. Patch TradeUtility.AllLaunchableThingsForTrade (+LaunchThingsOfType) to append linked levels' beacon-covered things |
-| Transport pod / shuttle loading | GAP-P1 | LoadTransporters haul is map-scoped; register transporter contents as demand |
-| Refueling + turret rearm + growth vats | GAP-P1 | Register refuelable shortfall in CrossLevelDemand (bills pattern) |
+| Trade beacon aggregation | DONE (2026-07-23) | Column-wide AllLaunchableThingsForTrade (reentrancy-guarded) + LaunchThingsOfType fulfills debt across the column. Caravan (physical) trading and pawn selling stay per-level by design |
+| Transport pod / shuttle loading | DONE (2026-07-23) | Load manifests register shortfall demand; local load giver takes over once goods land |
+| Refueling + turret rearm + growth vats | DONE (2026-07-23) | Auto-refuel shortfall to target level registers demand (supplyFuel toggle); covers vat nutrition |
 | Deterioration/forbid/home area | DONE | Per-map vanilla, correct as-is |
 
 ## Needs and daily life
@@ -50,9 +50,9 @@ routing or NoJob.
 | Recreation | DONE-V | JoyAcrossLevels |
 | Meditation (assigned spot/throne) | DONE | Built 2026-07-23 |
 | Anima tree / natural focus travel | BY DESIGN (for now) | Only ASSIGNED spots pull pawns across levels |
-| Apparel optimization | GAP-P1 | JobGiver_OptimizeApparel never sees wardrobe on another level — idle-time virtual probe w/ cooldown |
-| Weapon pickup (opportunistic/policy) | GAP-P2 | Same shape as apparel |
-| Drug policy inventory refill | GAP-P2 | Map-scoped stack search |
+| Apparel optimization | DONE (2026-07-23) | Virtual probe of the vanilla giver on linked levels (shared 2000t gear cooldown; optimize window reset on route) |
+| Weapon pickup (opportunistic) | DONE (2026-07-23) | Probe pattern; unarmed pawns only |
+| Drug policy inventory refill | DONE (2026-07-23) | JobGiver_MoveDrugsToInventory probe pattern |
 
 ## Medical, warden, animals
 | Mechanic | Status | Notes |
@@ -77,12 +77,12 @@ routing or NoJob.
 |---|---|---|
 | Social interactions cross-level | DONE-V | |
 | Ritual attendance | DONE-V | Ideology rituals (incl. weddings/funerals as precepts) |
-| Non-Ideology gatherings (parties/marriages via GatheringWorker) | GAP-P2 | Separate system from RitualBehaviorWorker; attendance hook needed |
+| Non-Ideology gatherings (parties/marriages/speeches) | DONE (2026-07-23) | Join-node postfix routes to joinable lords on linked levels (rituals excluded — own module) |
 | Mech escort follow / command range | DONE / DONE-V | Escort awaiting verification |
-| Mech recharge (Biotech) | GAP-P1 | JobGiver_GetEnergy binds charger map-scoped — bots shut down instead of routing; intercept-and-route |
-| Mechanitor repair of downed mech | GAP-P2 | |
-| Childcare (feeding, carry to crib) | GAP-P2 | Biotech, map-scoped |
-| Hemogen transfusion packs | GAP-P2 | Meals-pattern demand |
+| Mech recharge (Biotech) | DONE (2026-07-23) | Charger giver postfix routes to usable chargers on linked levels (usability checked under virtual swap) |
+| Mechanitor repair of damaged mechs | DONE (2026-07-23) | RepairMech work type lights up on levels with damaged player mechs (migration handles the trip) |
+| Childcare (feeding, carry to crib) | DONE (2026-07-23) | Childcare detector (babies present) + baby food buffer demand |
+| Surgery ingredients incl. hemogen packs | DONE (2026-07-23) | Surgery bills on pawns register ingredient shortfalls (medicine, packs, body parts flow to the patient's level) |
 | Anomaly containment/study cross-level | GAP-P3 | Document "keep platforms on the entity's level" until built |
 | Royalty throne/meditation | DONE | 2026-07-23 |
 
@@ -103,10 +103,10 @@ routing or NoJob.
 | Cross-map dock-job intercept | DONE | Run #70 fix |
 
 ## Priority queue
-1. **P1**: trade beacon aggregation; refuel/vat demand; Biotech mech recharge routing; apparel optimization; transporter loading.
-2. **P2**: roof areas detector; weapon pickup; drug refill; childcare; mechanitor repair; transfusion.
-3. **P3**: Anomaly containment; anima travel; turret gap targeting.
-4. ~~VERIFY sweep~~ — completed 2026-07-23 (code-level): research, fire, hunting verified; corpse/container push FIXED; gatherings split out as P2.
+1. ~~P1~~ / ~~P2~~ — ALL BUILT 2026-07-23 (batch build), in-game verification pending.
+2. **P3 (excluded by design until a dedicated pass)**: Anomaly containment (entity-holder cross-map semantics); anima travel (assigned spots only for now); turret gap targeting (conflicts with the sky<->surface manual-combat rule).
+3. ~~VERIFY sweep~~ — completed 2026-07-23 (code-level): research, fire, hunting verified; corpse/container push FIXED; gatherings built.
 
 ## Changelog
 - 2026-07-23: audit created; install/uninstall P0 fixed; verify sweep completed; robot bounce fix (probe-gated migration); container-storage push fix.
+- 2026-07-23 (batch build): trade beacons, refuel/vat demand, transporter loading, mech recharge, apparel/weapon/drug probes, roof areas, gatherings, childcare, mech repair detector, surgery ingredient demand — all P1+P2 built; compile green.

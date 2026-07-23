@@ -149,7 +149,10 @@ namespace AsAboveSoBelow
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry);
             AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry);
             AddBillNeeds(map, entry);
+            AddSurgeryNeeds(map, entry);
             AddMealNeeds(map, entry);
+            AddRefuelNeeds(map, entry);
+            AddTransporterNeeds(map, entry);
             foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
             {
                 if (!entry.available.ContainsKey(kvp.Key))
@@ -201,67 +204,203 @@ namespace AsAboveSoBelow
                     {
                         return;
                     }
-                    List<IngredientCount> ings = bill.recipe.ingredients;
-                    for (int k = 0; k < ings.Count; k++)
+                    AddRecipeIngredientNeeds(map, entry, bill);
+                }
+            }
+        }
+
+        /// <summary>Shared ingredient-shortfall registration for one bill:
+        /// fixed ingredients directly, alternatives aggregated across the
+        /// allowed defs first so any of them can satisfy the pull. Used by
+        /// workbench production bills AND pawn surgery bills (medicine,
+        /// hemogen packs, body parts flow to the patient's level).</summary>
+        private static void AddRecipeIngredientNeeds(Map map, CacheEntry entry, Bill bill)
+        {
+            List<IngredientCount> ings = bill.recipe.ingredients;
+            for (int k = 0; k < ings.Count; k++)
+            {
+                IngredientCount ing = ings[k];
+                if (ing.IsFixedIngredient)
+                {
+                    ThingDef def = ing.FixedIngredient;
+                    if (def == null)
                     {
-                        IngredientCount ing = ings[k];
-                        if (ing.IsFixedIngredient)
-                        {
-                            ThingDef def = ing.FixedIngredient;
-                            if (def == null)
-                            {
-                                continue;
-                            }
-                            int required = ing.CountRequiredOfFor(def, bill.recipe, bill);
-                            int shortfall = required - Available(map, entry, def);
-                            if (shortfall > 0)
-                            {
-                                entry.need.TryGetValue(def, out int cur);
-                                entry.need[def] = cur + shortfall;
-                            }
-                            continue;
-                        }
-                        // Alternatives: aggregate availability across the allowed
-                        // defs first, then register the shortfall on each so any
-                        // of them can satisfy the pull.
-                        int fan = 0;
-                        int totalAvailable = 0;
-                        int anyRequired = 0;
-                        foreach (ThingDef def in ing.filter.AllowedThingDefs)
-                        {
-                            if (!bill.ingredientFilter.Allows(def))
-                            {
-                                continue;
-                            }
-                            if (++fan > MaxDefsPerBill)
-                            {
-                                break;
-                            }
-                            totalAvailable += Available(map, entry, def);
-                            if (anyRequired == 0)
-                            {
-                                anyRequired = ing.CountRequiredOfFor(def, bill.recipe, bill);
-                            }
-                        }
-                        int aggShortfall = anyRequired - totalAvailable;
-                        if (aggShortfall <= 0)
-                        {
-                            continue;
-                        }
-                        fan = 0;
-                        foreach (ThingDef def in ing.filter.AllowedThingDefs)
-                        {
-                            if (!bill.ingredientFilter.Allows(def))
-                            {
-                                continue;
-                            }
-                            if (++fan > MaxDefsPerBill)
-                            {
-                                break;
-                            }
-                            entry.need.TryGetValue(def, out int cur);
-                            entry.need[def] = cur + aggShortfall;
-                        }
+                        continue;
+                    }
+                    int required = ing.CountRequiredOfFor(def, bill.recipe, bill);
+                    int shortfall = required - Available(map, entry, def);
+                    if (shortfall > 0)
+                    {
+                        entry.need.TryGetValue(def, out int cur);
+                        entry.need[def] = cur + shortfall;
+                    }
+                    continue;
+                }
+                int fan = 0;
+                int totalAvailable = 0;
+                int anyRequired = 0;
+                foreach (ThingDef def in ing.filter.AllowedThingDefs)
+                {
+                    if (!bill.ingredientFilter.Allows(def))
+                    {
+                        continue;
+                    }
+                    if (++fan > MaxDefsPerBill)
+                    {
+                        break;
+                    }
+                    totalAvailable += Available(map, entry, def);
+                    if (anyRequired == 0)
+                    {
+                        anyRequired = ing.CountRequiredOfFor(def, bill.recipe, bill);
+                    }
+                }
+                int aggShortfall = anyRequired - totalAvailable;
+                if (aggShortfall <= 0)
+                {
+                    continue;
+                }
+                fan = 0;
+                foreach (ThingDef def in ing.filter.AllowedThingDefs)
+                {
+                    if (!bill.ingredientFilter.Allows(def))
+                    {
+                        continue;
+                    }
+                    if (++fan > MaxDefsPerBill)
+                    {
+                        break;
+                    }
+                    entry.need.TryGetValue(def, out int cur);
+                    entry.need[def] = cur + aggShortfall;
+                }
+            }
+        }
+
+        /// <summary>Surgery bills live on PAWNS, not workbenches (parity audit
+        /// P2): a patient scheduled for surgery on a level with no medicine
+        /// registers the ingredient shortfall so medicine, hemogen packs, and
+        /// body parts flow to them and the doctor operates locally.</summary>
+        private static void AddSurgeryNeeds(Map map, CacheEntry entry)
+        {
+            if (!(ABMod.Settings?.supplyBills ?? true))
+            {
+                return;
+            }
+            IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
+            int billsSeen = 0;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                Pawn p = pawns[i];
+                if (p.health?.surgeryBills == null
+                    || (p.Faction != Faction.OfPlayer && !p.IsPrisonerOfColony))
+                {
+                    continue;
+                }
+                BillStack stack = p.health.surgeryBills;
+                for (int b = 0; b < stack.Count; b++)
+                {
+                    Bill bill = stack[b];
+                    // ShouldDoNow already accounts for suspension.
+                    if (bill == null || !bill.ShouldDoNow())
+                    {
+                        continue;
+                    }
+                    if (++billsSeen > MaxBillsPerMap)
+                    {
+                        return;
+                    }
+                    AddRecipeIngredientNeeds(map, entry, bill);
+                }
+            }
+        }
+
+        private const int MaxRefuelablesPerMap = 40;
+
+        /// <summary>Refuelables (parity audit P1): generators, turrets, growth
+        /// vats and anything else with an auto-refuel comp register the
+        /// shortfall to their target fuel level, so wood, chemfuel, and vat
+        /// nutrition flow toward the level that burns them.</summary>
+        private static void AddRefuelNeeds(Map map, CacheEntry entry)
+        {
+            if (!(ABMod.Settings?.supplyFuel ?? true))
+            {
+                return;
+            }
+            List<Building> buildings = map.listerBuildings.allBuildingsColonist;
+            int seen = 0;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                CompRefuelable comp = buildings[i].TryGetComp<CompRefuelable>();
+                if (comp == null || !comp.ShouldAutoRefuelNow)
+                {
+                    continue;
+                }
+                if (++seen > MaxRefuelablesPerMap)
+                {
+                    return;
+                }
+                int required = UnityEngine.Mathf.CeilToInt(comp.TargetFuelLevel - comp.Fuel);
+                if (required <= 0)
+                {
+                    continue;
+                }
+                int fan = 0;
+                int totalAvailable = 0;
+                foreach (ThingDef def in comp.Props.fuelFilter.AllowedThingDefs)
+                {
+                    if (++fan > MaxDefsPerBill)
+                    {
+                        break;
+                    }
+                    totalAvailable += Available(map, entry, def);
+                }
+                int shortfall = required - totalAvailable;
+                if (shortfall <= 0)
+                {
+                    continue;
+                }
+                fan = 0;
+                foreach (ThingDef def in comp.Props.fuelFilter.AllowedThingDefs)
+                {
+                    if (++fan > MaxDefsPerBill)
+                    {
+                        break;
+                    }
+                    entry.need.TryGetValue(def, out int cur);
+                    entry.need[def] = cur + shortfall;
+                }
+            }
+        }
+
+        /// <summary>Transport pods and shuttles being loaded (parity audit P1):
+        /// whatever the load manifest still wants that this level lacks pulls
+        /// from linked levels; the local load-transporters giver takes over
+        /// once the goods land.</summary>
+        private static void AddTransporterNeeds(Map map, CacheEntry entry)
+        {
+            List<Thing> transporters = map.listerThings.ThingsInGroup(ThingRequestGroup.Transporter);
+            for (int i = 0; i < transporters.Count; i++)
+            {
+                CompTransporter comp = transporters[i].TryGetComp<CompTransporter>();
+                List<TransferableOneWay> load = comp?.leftToLoad;
+                if (load == null)
+                {
+                    continue;
+                }
+                for (int j = 0; j < load.Count; j++)
+                {
+                    TransferableOneWay tr = load[j];
+                    ThingDef def = tr?.ThingDef;
+                    if (def == null || tr.CountToTransfer <= 0)
+                    {
+                        continue;
+                    }
+                    int shortfall = tr.CountToTransfer - Available(map, entry, def);
+                    if (shortfall > 0)
+                    {
+                        entry.need.TryGetValue(def, out int cur);
+                        entry.need[def] = cur + shortfall;
                     }
                 }
             }
@@ -283,6 +422,7 @@ namespace AsAboveSoBelow
                 return;
             }
             int mouths = 0;
+            int babies = 0;
             IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count; i++)
             {
@@ -291,6 +431,26 @@ namespace AsAboveSoBelow
                     || (p.Faction == Faction.OfPlayer && p.InBed() && HealthAIUtility.ShouldSeekMedicalRest(p)))
                 {
                     mouths++;
+                }
+                if (ModsConfig.BiotechActive && p.Faction == Faction.OfPlayer
+                    && p.DevelopmentalStage.Baby())
+                {
+                    babies++;
+                }
+            }
+            // Babies (Biotech, parity audit P2): keep a buffer of baby food
+            // where the babies are, so carers feed locally.
+            if (babies > 0)
+            {
+                ThingDef babyFood = DefDatabase<ThingDef>.GetNamedSilentFail("BabyFood");
+                if (babyFood != null)
+                {
+                    int shortfallB = babies * MealsPerMouth - Available(map, entry, babyFood);
+                    if (shortfallB > 0)
+                    {
+                        entry.need.TryGetValue(babyFood, out int curB);
+                        entry.need[babyFood] = curB + shortfallB;
+                    }
                 }
             }
             if (mouths == 0)

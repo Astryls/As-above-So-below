@@ -61,6 +61,7 @@ namespace AsAboveSoBelow
         public bool supplyConstruction = true;
         public bool supplyBills = true;
         public bool supplyMeals = true;
+        public bool supplyFuel = true;
         public bool fetchFromOtherLevels = true;
         public bool crossLevelPrisoners = true;
         public bool crossLevelAnimalWander = true;
@@ -518,6 +519,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_SupplyConstruction".Translate(), ref supplyConstruction, "AB_SupplyConstructionTip".Translate());
             listing.CheckboxLabeled("AB_SupplyBills".Translate(), ref supplyBills, "AB_SupplyBillsTip".Translate());
             listing.CheckboxLabeled("AB_SupplyMeals".Translate(), ref supplyMeals, "AB_SupplyMealsTip".Translate());
+            listing.CheckboxLabeled("AB_SupplyFuel".Translate(), ref supplyFuel, "AB_SupplyFuelTip".Translate());
             listing.CheckboxLabeled("AB_FetchFromOtherLevels".Translate(), ref fetchFromOtherLevels, "AB_FetchFromOtherLevelsTip".Translate());
         }
 
@@ -535,6 +537,7 @@ namespace AsAboveSoBelow
             supplyConstruction = true;
             supplyBills = true;
             supplyMeals = true;
+            supplyFuel = true;
             fetchFromOtherLevels = true;
         }
 
@@ -801,6 +804,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref supplyConstruction, "supplyConstruction", true);
             Scribe_Values.Look(ref supplyBills, "supplyBills", true);
             Scribe_Values.Look(ref supplyMeals, "supplyMeals", true);
+            Scribe_Values.Look(ref supplyFuel, "supplyFuel", true);
             Scribe_Values.Look(ref fetchFromOtherLevels, "fetchFromOtherLevels", true);
             Scribe_Values.Look(ref crossLevelPrisoners, "crossLevelPrisoners", true);
             Scribe_Values.Look(ref crossLevelAnimalWander, "crossLevelAnimalWander", true);

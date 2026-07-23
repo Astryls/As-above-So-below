@@ -246,6 +246,8 @@
   <AB_SupplyBillsTip>Workbenches with active bills register ingredient shortfalls so haulers top the level up from linked levels.</AB_SupplyBillsTip>
   <AB_SupplyMeals>Pull meals for patients and prisoners</AB_SupplyMeals>
   <AB_SupplyMealsTip>Levels with bedridden patients or prisoners keep a small buffer of meals pulled from linked levels, so doctors and wardens feed locally.</AB_SupplyMealsTip>
+  <AB_SupplyFuel>Pull fuel and vat nutrition across levels</AB_SupplyFuel>
+  <AB_SupplyFuelTip>Generators, turrets, growth vats, and anything else set to auto-refuel register their fuel shortfall, so wood, chemfuel, and nutrition flow toward the level that burns them.</AB_SupplyFuelTip>
   <AB_FetchFromOtherLevels>Haulers fetch from other levels</AB_FetchFromOtherLevels>
   <AB_FetchFromOtherLevelsTip>Idle haulers check directly linked levels for haul work and go get it, instead of waiting for the slower idle-migration drift.</AB_FetchFromOtherLevelsTip>
 

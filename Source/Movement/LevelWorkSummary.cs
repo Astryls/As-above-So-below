@@ -98,7 +98,8 @@ namespace AsAboveSoBelow
 
         private static WorkTypeDef wtFirefighter, wtDoctor, wtWarden, wtHandling, wtCooking,
             wtHunting, wtConstruction, wtGrowing, wtMining, wtPlantCutting, wtHauling,
-            wtCleaning, wtResearch, wtSmithing, wtTailoring, wtCrafting, wtArt;
+            wtCleaning, wtResearch, wtSmithing, wtTailoring, wtCrafting, wtArt,
+            wtChildcare, wtMechRepair;
 
         private static DesignationDef[] miningDesigs, plantDesigs, constructionDesigs, huntDesigs, tameDesigs;
 
@@ -125,6 +126,9 @@ namespace AsAboveSoBelow
             wtTailoring = W("Tailoring");
             wtCrafting = W("Crafting");
             wtArt = W("Art");
+            // Biotech (null without the DLC; Set() ignores null work types).
+            wtChildcare = W("Childcare");
+            wtMechRepair = DefDatabase<WorkGiverDef>.GetNamedSilentFail("RepairMech")?.workType;
             DesignationDef D(string name) => DefDatabase<DesignationDef>.GetNamedSilentFail(name);
             miningDesigs = Compact(D("Mine"), D("MineVein"));
             plantDesigs = Compact(D("CutPlant"), D("HarvestPlant"), D("ExtractTree"));
@@ -246,13 +250,44 @@ namespace AsAboveSoBelow
             Set(p, wtDoctor, patients);
             Set(p, wtWarden, prisoners);
             Set(p, wtHandling, animals || AnyDesig(map, tameDesigs));
+            // Biotech: babies pull carers; damaged player mechs pull the
+            // mechanitor's repair work type (both null-safe without the DLC).
+            if (wtChildcare != null || wtMechRepair != null)
+            {
+                bool babies = false;
+                bool damagedMech = false;
+                List<Pawn> colonyPawns = map.mapPawns.SpawnedPawnsInFaction(Faction.OfPlayer);
+                for (int i = 0; i < colonyPawns.Count; i++)
+                {
+                    Pawn q = colonyPawns[i];
+                    if (!babies && q.DevelopmentalStage.Baby())
+                    {
+                        babies = true;
+                    }
+                    if (!damagedMech && q.RaceProps.IsMechanoid
+                        && q.health?.summaryHealth != null
+                        && q.health.summaryHealth.SummaryHealthPercent < 1f)
+                    {
+                        damagedMech = true;
+                    }
+                    if (babies && damagedMech)
+                    {
+                        break;
+                    }
+                }
+                Set(p, wtChildcare, babies);
+                Set(p, wtMechRepair, damagedMech);
+            }
 
             // Construction: blueprints, frames, repairables, rework designations.
             bool construction =
                 map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint).Count > 0
                 || map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame).Count > 0
                 || map.listerBuildingsRepairable.RepairableBuildings(Faction.OfPlayer).Count > 0
-                || AnyDesig(map, constructionDesigs);
+                || AnyDesig(map, constructionDesigs)
+                // Roof areas never show up as designations (parity audit P2).
+                || map.areaManager.BuildRoof.TrueCount > 0
+                || map.areaManager.NoRoof.TrueCount > 0;
             Set(p, wtConstruction, construction);
 
             // Growing: any grow zone or plant grower building.
