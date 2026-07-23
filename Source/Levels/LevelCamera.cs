@@ -18,11 +18,47 @@ namespace AsAboveSoBelow
     public static class LevelCamera
     {
         /// <summary>Camera level lock (End by default): while on, AUTOMATIC
-        /// level switches - the camera riding along when a selected pawn takes
-        /// the stairs - are suppressed. Manual switches (level widget, view
-        /// up/down hotkeys, gizmos) always work: explicit intent wins. Session
-        /// state, deliberately not scribed.</summary>
+        /// level switches are suppressed - the camera riding along when a
+        /// selected pawn takes the stairs, AND the view being yanked to another
+        /// level when you select/jump to a pawn there (colonist bar, alerts,
+        /// letters; user report 2026-07-23). The pawn still selects, the view
+        /// stays put. Manual switches (level widget, view up/down hotkeys,
+        /// gizmos) always work: explicit intent wins. Session state, not scribed.</summary>
         public static bool LevelLocked;
+
+        /// <summary>Set true around our own explicit level switches so the
+        /// lock's map-switch suppression lets them through. JumpPreservingView
+        /// is the single choke for every manual switch (widget/hotkey/gizmo).</summary>
+        public static bool ManualSwitch;
+
+        /// <summary>True when a pending Game.CurrentMap change should be blocked
+        /// by the level lock: locked, not one of our manual switches, in-game,
+        /// and the target is a DIFFERENT level of the SAME column (jumping to
+        /// another colony's map is not a "level change" and always works).
+        /// Fails open - any doubt allows the switch.</summary>
+        public static bool ShouldSuppressJump(Map target)
+        {
+            try
+            {
+                if (!LevelLocked || ManualSwitch || target == null
+                    || Current.ProgramState != ProgramState.Playing)
+                {
+                    return false;
+                }
+                Map cur = Find.CurrentMap;
+                if (cur == null || target == cur)
+                {
+                    return false;
+                }
+                Map g1 = target.GroundMap();
+                Map g2 = cur.GroundMap();
+                return g1 != null && g1 == g2;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public static void ToggleLevelLock()
         {
@@ -56,11 +92,20 @@ namespace AsAboveSoBelow
             // change so looking at another level does not drop your colonist. Restored
             // directly (not via Select, which would jump the camera back to the pawn's map).
             List<object> savedSelection = new List<object>(Find.Selector.SelectedObjects);
-            ABArchitectPreserve.Around(delegate
+            // Manual, explicit switch: bypass the lock's suppression.
+            ManualSwitch = true;
+            try
             {
-                CameraJumper.TryJump(cell, target);
-                driver.SetRootPosAndSize(root, zoom);
-            });
+                ABArchitectPreserve.Around(delegate
+                {
+                    CameraJumper.TryJump(cell, target);
+                    driver.SetRootPosAndSize(root, zoom);
+                });
+            }
+            finally
+            {
+                ManualSwitch = false;
+            }
             RestoreSelection(savedSelection);
         }
 

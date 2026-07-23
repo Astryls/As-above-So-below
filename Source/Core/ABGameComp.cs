@@ -38,6 +38,9 @@ namespace AsAboveSoBelow
             ClimbAnimation.Tick();
             // No-op unless a bring-and-X arrival continuation queued a retry.
             ABConstructSupply.Tick();
+            // No-op unless a routed order (right-click / Reverse Commands /
+            // caravan) armed a self-heal retry on arrival.
+            ABPendingOrders.Tick();
         }
 
         public override void GameComponentOnGUI()

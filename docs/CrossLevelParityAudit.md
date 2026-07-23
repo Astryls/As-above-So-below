@@ -107,6 +107,25 @@ routing or NoJob.
 2. **P3 (excluded by design until a dedicated pass)**: Anomaly containment (entity-holder cross-map semantics); anima travel (assigned spots only for now); turret gap targeting (conflicts with the sky<->surface manual-combat rule).
 3. ~~VERIFY sweep~~ — completed 2026-07-23 (code-level): research, fire, hunting verified; corpse/container push FIXED; gatherings built.
 
+## Compat modules — "vanilla when alone" + seamless scan (2026-07-23)
+Every module must be inert when its host mod is absent, and every order it adds must read + behave as base game.
+
+| Module | Host | Gating | Order/UI surface | Seamless status |
+|---|---|---|---|---|
+| ABReverseCompat | Reverse Commands | ABDetect + reflection target | routes column colonists via CrossLevelOrders.BuildOptions | DONE — options come from the shared wrap path; NOW self-heal via ABPendingOrders retry |
+| ABMiscRobotsCompat | Misc Robots / Robots++ | ABDetect + by-name, DeclaredMethod | return/recharge + work think nodes | DONE — probe-gated migration + StationElsewhere rule; no float menu |
+| ABAchtungCompat | Achtung! | ABDetect + reflection | Colonist.OrderTo prefix | DONE — drafted slot replay on arrival |
+| ABGiddyUpCompat | Giddy-up | reflection helper (cached) | none (mount guards) | inert helper; blocks stair use for mounted riders |
+| ABVehicleCompat | Vehicle Framework | ABDetect flag | none (excludes vehicles from routing) | inert flag |
+| ABWindowsCompat / ABDeclutterCompat / ABAnimalTabCompat / ColonistBarKFCompat | resp. mods | ABDetect + try/catch | rendering/UI only | fail-open, no order surface |
+| ABPipeCompat + VEF/DBH/Rimefeller bridges | pipe mods | ABPipeCompat detect-gated; bridges only called from it | none (network welding) | bridges inert unless caller fires |
+| BiomesCavernsCompat | Biomes! Caverns | ABDetect | gen only | fail-open |
+
+**Native float-menu compliance (per the locked policy):** medical rescue/capture/take-to-bed use DecoratePrioritizedTask + RescueOrCapture priority (native). Haul option: DecoratePrioritizedTask, priority High->Default (fixed 2026-07-23). Bring-and-build/install/refuel: AddNative (replace disabled vanilla row, inherit slot + icon). Cross-gap attack: custom "Attack" label by design (no vanilla equivalent across the gap). Stairs/elevator float menus: mod-native buildings, no vanilla row to match.
+
+**Seamless-continuation compliance:** ALL routed orders now self-heal — bring-and-X via FinishOnSite payload-fallback + retry; every ABPendingOrders replay (right-click prioritize, Reverse Commands, caravan meetup) via the generic idle-gated retry (18t); think-node routers (robots, mech escort) self-heal natively (tree re-runs each tick); JobDriver-based orders (haul/rescue/capture/take-prisoner/medical) are self-contained drivers.
+
 ## Changelog
 - 2026-07-23: audit created; install/uninstall P0 fixed; verify sweep completed; robot bounce fix (probe-gated migration); container-storage push fix.
 - 2026-07-23 (batch build): trade beacons, refuel/vat demand, transporter loading, mech recharge, apparel/weapon/drug probes, roof areas, gatherings, childcare, mech repair detector, surgery ingredient demand — all P1+P2 built; compile green.
+- 2026-07-23 (seamless/native pass): art tuner copy/paste; refuel continuation self-heal; NATIVE FLOAT MENU POLICY (locked, lored); generic ABPendingOrders idle-gated retry (every routed order continues after stairs); haul option priority High->Default; full compat-module vanilla-when-alone scan (all inert without host, all order surfaces native or self-contained).

@@ -63,7 +63,7 @@ namespace AsAboveSoBelow
                     job.count = Mathf.Min(clickedThing.stackCount, pawn.carryTracker.MaxStackSpaceEver(clickedThing.def));
                     job.playerForced = true;
                     pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
-                }, MenuOptionPriority.High);
+                }, MenuOptionPriority.Default);
                 return FloatMenuUtility.DecoratePrioritizedTask(option, pawn, clickedThing);
             }
             catch (Exception e)

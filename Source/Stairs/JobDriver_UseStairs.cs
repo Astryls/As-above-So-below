@@ -66,6 +66,14 @@ namespace AsAboveSoBelow
     {
         private const int ExpiryTicks = 5000;
 
+        // Self-heal: an arrival continuation runs INSIDE the transfer toil,
+        // where job resolution can null (mid-cleanup reservations, fresh-spawn
+        // region state - the same class of glitch the refuel chain hit). A
+        // single delayed re-run, ONLY when the pawn is still idle, makes every
+        // routed order continue seamlessly without ever double-issuing (a
+        // successful first run leaves the pawn busy -> the retry skips).
+        private const int RetryDelayTicks = 18;
+
         private struct Entry
         {
             public int tick;
@@ -74,6 +82,9 @@ namespace AsAboveSoBelow
         }
 
         private static readonly Dictionary<int, Entry> pending = new Dictionary<int, Entry>();
+
+        private static readonly List<(Pawn pawn, Action action, int tick)> retries =
+            new List<(Pawn pawn, Action action, int tick)>();
 
         public static void Set(Pawn pawn, Map targetMap, Action action)
         {
@@ -113,11 +124,75 @@ namespace AsAboveSoBelow
             try
             {
                 entry.action();
+                // Arm one idle-gated retry so a transfer-time null still lands.
+                if (retries.Count > 32)
+                {
+                    retries.Clear();
+                }
+                retries.Add((pawn, entry.action, Find.TickManager.TicksGame + RetryDelayTicks));
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "pending order replay");
             }
+        }
+
+        /// <summary>Called from ABGameComp; no-op unless a retry is queued.
+        /// Re-runs a replayed order once, but only if the pawn is still idle
+        /// on the arrival map - so a first run that succeeded is never
+        /// clobbered and an order that nulled at transfer time still fires.</summary>
+        public static void Tick()
+        {
+            if (retries.Count == 0)
+            {
+                return;
+            }
+            int now = Find.TickManager.TicksGame;
+            for (int i = retries.Count - 1; i >= 0; i--)
+            {
+                (Pawn pawn, Action action, int tick) r = retries[i];
+                if (now < r.tick)
+                {
+                    continue;
+                }
+                retries.RemoveAt(i);
+                if (!LooksIdle(r.pawn))
+                {
+                    continue;
+                }
+                try
+                {
+                    r.action();
+                }
+                catch (Exception e)
+                {
+                    ABGuard.Disable(ABGuard.Movement, e, "pending order retry");
+                }
+            }
+        }
+
+        /// <summary>Conservative idle test: no queued jobs and either no
+        /// current job or a passive wait/wander. A pawn that took up the
+        /// replayed order is busy and reads as not-idle, so the retry skips.</summary>
+        private static bool LooksIdle(Pawn p)
+        {
+            if (p == null || !p.Spawned || p.Dead || p.jobs == null)
+            {
+                return false;
+            }
+            if (p.jobs.jobQueue != null && p.jobs.jobQueue.Count > 0)
+            {
+                return false;
+            }
+            Job cur = p.jobs.curJob;
+            if (cur == null)
+            {
+                return true;
+            }
+            JobDef d = cur.def;
+            return d == JobDefOf.Wait || d == JobDefOf.Wait_MaintainPosture
+                || d == JobDefOf.Wait_Wander || d == JobDefOf.GotoWander
+                || (d == JobDefOf.Goto && !cur.playerForced);
         }
     }
 
