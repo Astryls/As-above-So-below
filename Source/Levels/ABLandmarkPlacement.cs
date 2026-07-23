@@ -84,13 +84,18 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(GenSpawn), nameof(GenSpawn.CanSpawnAt))]
     internal static class Patch_ABFence_CanSpawnAt
     {
-        private static bool Prefix(ThingDef def, IntVec3 loc, Map map, ref bool __result)
+        // Parameter names MUST match the vanilla signature (thingDef, c, rot):
+        // Harmony binds injected arguments by name, and the old def/loc names
+        // threw a patching exception at startup that silently disabled this
+        // patch (run #70).
+        private static bool Prefix(ThingDef thingDef, IntVec3 c, Map map, Rot4? rot, ref bool __result)
         {
             if (!ABLandmarkPlacement.Fenced(map))
             {
                 return true;
             }
-            if (!ABLandmarkPlacement.RectOk(loc, Rot4.North, def?.size ?? IntVec2.One))
+            Rot4 useRot = rot ?? thingDef?.defaultPlacingRot ?? Rot4.North;
+            if (!ABLandmarkPlacement.RectOk(c, useRot, thingDef?.size ?? IntVec2.One))
             {
                 __result = false;
                 return false;

@@ -18,8 +18,10 @@ namespace AsAboveSoBelow
     /// false across maps - so TryGiveJob returns null forever and the robot
     /// strands until its battery bricks it.
     ///
-    /// Fix: postfix each return/recharge giver's TryGiveJob. When it produced
-    /// no job and the robot's bound rechargeStation sits on a linked level,
+    /// Fix: postfix each return/recharge giver (TryGiveJob for JobGiver-shaped
+    /// ones, TryIssueJobPackage for ThinkNode-shaped ones). When it produced
+    /// no job - or an unstartable job targeting a station on another map -
+    /// and the robot's bound rechargeStation sits on a linked level,
     /// issue our destination-aware stairs job toward the station's level; on
     /// arrival their own giver finds the station locally and docks normally.
     /// Two-hop cases (sky robot, basement station) chain naturally - each
@@ -78,17 +80,33 @@ namespace AsAboveSoBelow
                     "AIRobot.X2_JobGiver_Return2BaseRoom"
                 };
                 HarmonyMethod postfix = new HarmonyMethod(typeof(ABMiscRobotsCompat), nameof(ReturnJobPostfix));
+                HarmonyMethod thinkPostfix = new HarmonyMethod(typeof(ABMiscRobotsCompat), nameof(ReturnThinkPostfix));
                 int patched = 0;
                 for (int i = 0; i < giverTypeNames.Length; i++)
                 {
                     Type giver = AccessTools.TypeByName(giverTypeNames[i]);
+                    if (giver == null)
+                    {
+                        continue;
+                    }
                     // Declared only: subclasses inheriting TryGiveJob (e.g.
                     // Return2BaseAndWait overriding RechargeEnergy's) must not
                     // double-patch the base implementation.
-                    MethodInfo method = giver != null ? AccessTools.DeclaredMethod(giver, "TryGiveJob") : null;
+                    MethodInfo method = AccessTools.DeclaredMethod(giver, "TryGiveJob");
                     if (method != null)
                     {
                         HarmonyBoot.Harmony.Patch(method, postfix: postfix);
+                        patched++;
+                        continue;
+                    }
+                    // Some of these "givers" are ThinkNodes overriding
+                    // TryIssueJobPackage instead (RechargeEnergyIdle) - run #70
+                    // showed DeclaredMethod("TryGiveJob") resolving null and the
+                    // type going entirely unpatched.
+                    MethodInfo think = AccessTools.DeclaredMethod(giver, "TryIssueJobPackage");
+                    if (think != null)
+                    {
+                        HarmonyBoot.Harmony.Patch(think, postfix: thinkPostfix);
                         patched++;
                     }
                 }
@@ -134,63 +152,113 @@ namespace AsAboveSoBelow
             }
             try
             {
-                if (pawn == null || !pawn.Spawned || pawn.Dead || pawn.Downed || pawn.Map == null
-                    || pawn.GetLord() != null)
-                {
-                    return;
-                }
-                if (!(rechargeStationField.GetValue(pawn) is Thing station)
-                    || station.Destroyed || !station.Spawned)
-                {
-                    return;
-                }
-                Map stationMap = station.Map;
-                if (stationMap == null || stationMap == pawn.Map)
-                {
-                    return;
-                }
-                if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
-                {
-                    return;
-                }
-                // Next hop toward the station's level; two hops max (cap 3).
-                Map next;
-                if (comp.upperMap == stationMap || comp.lowerMap == stationMap)
-                {
-                    next = stationMap;
-                }
-                else if (comp.upperMap != null && comp.upperMap.Levels()?.upperMap == stationMap)
-                {
-                    next = comp.upperMap;
-                }
-                else if (comp.lowerMap != null && comp.lowerMap.Levels()?.lowerMap == stationMap)
-                {
-                    next = comp.lowerMap;
-                }
-                else
-                {
-                    // Different map stack entirely (another colony): not ours.
-                    return;
-                }
-                int now = Find.TickManager.TicksGame;
-                if (!routeCooldown.Ready(pawn, now))
-                {
-                    return;
-                }
-                routeCooldown.ChargeUntil(pawn, now + RouteCooldownTicks);
-                IntVec3 dest = next == stationMap ? station.Position : IntVec3.Invalid;
-                if (!CrossLevelWork.TryStairsJobToward(pawn, next, dest, out Job job))
-                {
-                    return;
-                }
-                ABLog.Dev("Routing robot " + pawn.LabelShort + " home toward its recharge station on level "
-                    + stationMap.Level() + ".");
-                __result = job;
+                __result = RouteHome(pawn);
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "robot return routing");
             }
+        }
+
+        /// <summary>ThinkNode-shaped return/recharge givers (RechargeEnergyIdle)
+        /// override TryIssueJobPackage and emit dock jobs with NO map check -
+        /// harmless in base Misc Robots where bots never leave their map, but an
+        /// error loop once our stairs move them (run #70: cross-map reservation
+        /// always fails, job dies, node re-runs). Empty result -> route home
+        /// like the TryGiveJob path. A job targeting a thing on ANOTHER map is
+        /// unstartable: replace it with the stairs trip home, or clean NoJob
+        /// when no stairs are available.</summary>
+        private static void ReturnThinkPostfix(Pawn pawn, ThinkNode __instance, ref ThinkResult __result)
+        {
+            if (!active || !ABGuard.On(ABGuard.Movement))
+            {
+                return;
+            }
+            try
+            {
+                Job cur = __result.Job;
+                if (cur != null)
+                {
+                    Thing target = cur.targetA.Thing;
+                    if (target == null || !target.Spawned || target.Map == pawn?.Map)
+                    {
+                        // Startable local job: theirs to keep.
+                        return;
+                    }
+                }
+                Job route = RouteHome(pawn);
+                if (route != null)
+                {
+                    __result = new ThinkResult(route, __instance, JobTag.Misc);
+                }
+                else if (cur != null)
+                {
+                    __result = ThinkResult.NoJob;
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "robot return think routing");
+            }
+        }
+
+        /// <summary>Shared routing core: the stairs job toward the robot's bound
+        /// recharge station when it sits on a linked level, or null (wrong
+        /// column, no stairs, cooldown, or nothing to do).</summary>
+        private static Job RouteHome(Pawn pawn)
+        {
+            if (pawn == null || !pawn.Spawned || pawn.Dead || pawn.Downed || pawn.Map == null
+                || pawn.GetLord() != null)
+            {
+                return null;
+            }
+            if (!(rechargeStationField.GetValue(pawn) is Thing station)
+                || station.Destroyed || !station.Spawned)
+            {
+                return null;
+            }
+            Map stationMap = station.Map;
+            if (stationMap == null || stationMap == pawn.Map)
+            {
+                return null;
+            }
+            if (!pawn.Map.TryLinkedLevels(out LevelComp comp))
+            {
+                return null;
+            }
+            // Next hop toward the station's level; two hops max (cap 3).
+            Map next;
+            if (comp.upperMap == stationMap || comp.lowerMap == stationMap)
+            {
+                next = stationMap;
+            }
+            else if (comp.upperMap != null && comp.upperMap.Levels()?.upperMap == stationMap)
+            {
+                next = comp.upperMap;
+            }
+            else if (comp.lowerMap != null && comp.lowerMap.Levels()?.lowerMap == stationMap)
+            {
+                next = comp.lowerMap;
+            }
+            else
+            {
+                // Different map stack entirely (another colony): not ours.
+                return null;
+            }
+            int now = Find.TickManager.TicksGame;
+            if (!routeCooldown.Ready(pawn, now))
+            {
+                return null;
+            }
+            routeCooldown.ChargeUntil(pawn, now + RouteCooldownTicks);
+            IntVec3 dest = next == stationMap ? station.Position : IntVec3.Invalid;
+            if (!CrossLevelWork.TryStairsJobToward(pawn, next, dest, out Job job))
+            {
+                return null;
+            }
+            ABLog.Dev("Routing robot " + pawn.LabelShort + " home toward its recharge station on level "
+                + stationMap.Level() + ".");
+            return job;
         }
 
         /// <summary>Robots++ cross-level work: when a robot's own map scan
