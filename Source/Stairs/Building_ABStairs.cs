@@ -386,6 +386,18 @@ namespace AsAboveSoBelow
         protected virtual List<Gizmo> BuildGizmos()
         {
             List<Gizmo> list = new List<Gizmo>();
+            // Dev-only art placement tuner: live draw size / offset editing
+            // for this def, baked to Tools/ArtTuning.xml. Plain English like
+            // every vanilla dev gizmo.
+            if (DebugSettings.ShowDevGizmos)
+            {
+                list.Add(new Command_Action
+                {
+                    defaultLabel = "DEV: Adjust art",
+                    defaultDesc = "Tune this def's draw size and per-facing draw offsets live, then bake the values to Tools/ArtTuning.xml in the mod folder.",
+                    action = delegate { ABArtTuner.Open(def); }
+                });
+            }
             // Links are immortal (no hit points), so removal always routes
             // through deconstruction; surface it right on the building with the
             // vanilla deconstruct icon.
