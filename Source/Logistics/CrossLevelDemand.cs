@@ -35,6 +35,10 @@ namespace AsAboveSoBelow
         {
             public int tick;
             public readonly Dictionary<ThingDef, int> need = new Dictionary<ThingDef, int>();
+            /// <summary>Blueprint/frame need only (a subset of need): lets the
+            /// construction-work-type supply giver ship building materials
+            /// without also adopting bill and meal logistics.</summary>
+            public readonly Dictionary<ThingDef, int> constructionNeed = new Dictionary<ThingDef, int>();
             public readonly Dictionary<ThingDef, int> available = new Dictionary<ThingDef, int>();
         }
 
@@ -56,7 +60,8 @@ namespace AsAboveSoBelow
         /// gap the pure push side could not cover. Reachability is only meaningful
         /// with the pawn virtually placed on sourceMap, so pass requireReachable
         /// true only from inside such a swap.</summary>
-        public static Thing FindFetchableDemand(Map demandMap, Map sourceMap, Pawn pawn, bool requireReachable)
+        public static Thing FindFetchableDemand(Map demandMap, Map sourceMap, Pawn pawn, bool requireReachable,
+            bool constructionOnly = false)
         {
             if (demandMap == null || demandMap.Disposed || sourceMap == null || sourceMap.Disposed
                 || pawn == null)
@@ -64,7 +69,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             CacheEntry entry = GetEntry(demandMap);
-            foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
+            foreach (KeyValuePair<ThingDef, int> kvp in constructionOnly ? entry.constructionNeed : entry.need)
             {
                 if (kvp.Value <= 0)
                 {
@@ -131,8 +136,8 @@ namespace AsAboveSoBelow
                 cache.Clear();
             }
             entry = new CacheEntry { tick = now };
-            AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry.need);
-            AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry.need);
+            AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint), entry);
+            AddFrom(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame), entry);
             AddBillNeeds(map, entry);
             AddMealNeeds(map, entry);
             foreach (KeyValuePair<ThingDef, int> kvp in entry.need)
@@ -314,7 +319,7 @@ namespace AsAboveSoBelow
             return a;
         }
 
-        private static void AddFrom(List<Thing> things, Dictionary<ThingDef, int> need)
+        private static void AddFrom(List<Thing> things, CacheEntry entry)
         {
             for (int i = 0; i < things.Count; i++)
             {
@@ -336,8 +341,10 @@ namespace AsAboveSoBelow
                     int remaining = constructible.ThingCountNeeded(def);
                     if (remaining > 0)
                     {
-                        need.TryGetValue(def, out int cur);
-                        need[def] = cur + remaining;
+                        entry.need.TryGetValue(def, out int cur);
+                        entry.need[def] = cur + remaining;
+                        entry.constructionNeed.TryGetValue(def, out int curC);
+                        entry.constructionNeed[def] = curC + remaining;
                     }
                 }
             }

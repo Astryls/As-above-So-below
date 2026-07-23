@@ -42,6 +42,19 @@
   </WorkGiverDef>
 
   <WorkGiverDef>
+    <defName>AB_SupplyConstructionAcrossLevels</defName>
+    <label>supply construction on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABSupplyConstruction</giverClass>
+    <workType>Construction</workType>
+    <verb>supply</verb>
+    <gerund>supplying</gerund>
+    <priorityInType>5</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
     <defName>AB_FetchFromOtherLevels</defName>
     <label>fetch things from other levels</label>
     <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>
