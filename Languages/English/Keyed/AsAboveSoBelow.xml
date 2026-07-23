@@ -20,8 +20,10 @@
   <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
   <AB_ShowLiveBelow>Show live movement on the level below</AB_ShowLiveBelow>
   <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
-  <AB_SelectBelowInPlace>Select pawns on the level below</AB_SelectBelowInPlace>
-  <AB_SelectBelowInPlaceTip>Click a pawn visible through open air on the level below to select it without leaving the sky view. Requires showing live movement on the level below.</AB_SelectBelowInPlaceTip>
+  <AB_SelectBelowInPlace>Select things on the level below</AB_SelectBelowInPlace>
+  <AB_SelectBelowInPlaceTip>Click a pawn, item, or building visible through open air on the level below to select it without leaving the sky view. Double-click an item to select every nearby item of the same type, just like on the surface. Requires showing live movement on the level below.</AB_SelectBelowInPlaceTip>
+  <AB_BelowItemOverlays>Show item counts on the level below</AB_BelowItemOverlays>
+  <AB_BelowItemOverlaysTip>Draw stack counts and quality letters over items on the level below, so a glance from the sky reads the surface stockpiles. Like on the surface, the numbers appear when you zoom all the way in.</AB_BelowItemOverlaysTip>
   <AB_BelowDim>Darken the level below</AB_BelowDim>
   <AB_BelowDimTip>How much the view of the level below is darkened when seen from above. Kept low by default: the ground below staying bright and visible is part of what makes the upper level read as raised rather than the gap reading as a pit.</AB_BelowDimTip>
   <AB_SlabEdge>Draw slab edge outlines</AB_SlabEdge>

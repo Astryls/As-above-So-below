@@ -26,6 +26,7 @@ namespace AsAboveSoBelow
         public bool verboseLogging;
         public bool showLiveBelow = true;
         public bool selectBelowInPlace = true;
+        public bool belowItemOverlays = true;
         public bool showCeilingHint = true;
         public bool showLevelWidget = true;
         public bool oneColonistBar = true;
@@ -429,6 +430,7 @@ namespace AsAboveSoBelow
             belowThingScale = newBelowScale;
             listing.GapLine(10f);
             listing.CheckboxLabeled("AB_SelectBelowInPlace".Translate(), ref selectBelowInPlace, "AB_SelectBelowInPlaceTip".Translate());
+            listing.CheckboxLabeled("AB_BelowItemOverlays".Translate(), ref belowItemOverlays, "AB_BelowItemOverlaysTip".Translate());
             listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
             listing.CheckboxLabeled("AB_ShowLevelWidget".Translate(), ref showLevelWidget, "AB_ShowLevelWidgetTip".Translate());
             listing.CheckboxLabeled("AB_OneColonistBar".Translate(), ref oneColonistBar, "AB_OneColonistBarTip".Translate());
@@ -692,6 +694,7 @@ namespace AsAboveSoBelow
         private void ResetView()
         {
             showLiveBelow = true;
+            belowItemOverlays = true;
             belowDim = 0.06f;
             drawSlabEdge = true;
             drawWallReveal = true;
@@ -774,6 +777,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
             Scribe_Values.Look(ref selectBelowInPlace, "selectBelowInPlace", true);
+            Scribe_Values.Look(ref belowItemOverlays, "belowItemOverlays", true);
             Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
             Scribe_Values.Look(ref showLevelWidget, "showLevelWidget", true);
             Scribe_Values.Look(ref oneColonistBar, "oneColonistBar", true);

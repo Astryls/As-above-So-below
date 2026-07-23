@@ -75,6 +75,39 @@ namespace AsAboveSoBelow
             return true;
         }
 
+        /// <summary>Lighter gate for read-only overlays (item counts): needs only
+        /// the below RENDER toggle, not the selection toggle. Hands back the
+        /// sky/lower maps whenever the surface is drawn live under the sky
+        /// level.</summary>
+        internal static bool TryGetLiveBelowView(out Map sky, out Map lower)
+        {
+            sky = null;
+            lower = null;
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.showLiveBelow)
+            {
+                return false;
+            }
+            Map cur = Find.CurrentMap;
+            if (cur == null)
+            {
+                return false;
+            }
+            LevelComp comp = cur.Levels();
+            if (comp == null || comp.level <= 0)
+            {
+                return false;
+            }
+            Map below = comp.lowerMap;
+            if (below == null || below.Disposed)
+            {
+                return false;
+            }
+            sky = cur;
+            lower = below;
+            return true;
+        }
+
         /// <summary>The one-way-mirror visibility rule, mirroring the renderer's
         /// TryDrawFilteredDynamic: a below thing is visible from above only where its
         /// cell is unroofed, under open air on the sky level, and unfogged.</summary>
@@ -293,6 +326,102 @@ namespace AsAboveSoBelow
                 AddInPlace(selector, target);
             }
         }
+
+        /// <summary>Double-click parity: from a below thing under the cursor, pick
+        /// the match "type" the way vanilla does - a player pawn first, then any
+        /// pawn, then any thing that is not neverMultiSelect. Null when nothing
+        /// under the cursor can seed a multi-select.</summary>
+        internal static Thing PickMultiSelectSeed(List<Thing> hits)
+        {
+            for (int i = 0; i < hits.Count; i++)
+            {
+                if (hits[i] is Pawn p && p.Faction == Faction.OfPlayer && !p.IsPrisoner)
+                {
+                    return p;
+                }
+            }
+            for (int i = 0; i < hits.Count; i++)
+            {
+                if (hits[i] is Pawn && hits[i].Spawned)
+                {
+                    return hits[i];
+                }
+            }
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Thing t = hits[i];
+                if (t != null && !t.GetInnerIfMinified().def.neverMultiSelect)
+                {
+                    return t;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Adds every below thing of the seed's type that is visible from
+        /// above and on screen, in place (no map switch). Mirrors vanilla's
+        /// SelectAllMatchingObjectUnderMouseOnScreen validator: same faction and
+        /// def (race-equivalence for pawns), skipping neverMultiSelect defs. The
+        /// seed is already selected from the preceding single click; adding it
+        /// again is a no-op.</summary>
+        internal static void SelectAllMatchingBelow(Selector selector, Map sky, Map lower, Thing seed)
+        {
+            DropOtherMapSelection(selector, lower);
+            if (!selector.IsSelected(seed))
+            {
+                AddInPlace(selector, seed);
+            }
+            CellRect view = Find.CameraDriver.CurrentViewRect;
+            view = view.ClipInsideMap(lower);
+            foreach (IntVec3 c in view)
+            {
+                if (!CellVisibleFromAbove(c, sky, lower))
+                {
+                    continue;
+                }
+                List<Thing> things = lower.thingGrid.ThingsListAtFast(c);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    Thing t = things[i];
+                    if (t == seed || selector.IsSelected(t) || !MatchesForMultiSelect(t, seed))
+                    {
+                        continue;
+                    }
+                    AddInPlace(selector, t);
+                }
+            }
+        }
+
+        /// <summary>Vanilla's multi-select validator, applied to a below thing:
+        /// same faction and def, skipping neverMultiSelect; for pawns also the
+        /// host-faction, mutant and equivalent-race checks. Hidden pawns and
+        /// non-selectable things never match.</summary>
+        private static bool MatchesForMultiSelect(Thing t, Thing seed)
+        {
+            if (t == null || !t.Spawned || !t.def.selectable)
+            {
+                return false;
+            }
+            if (t is Pawn hp && hp.IsHiddenFromPlayer())
+            {
+                return false;
+            }
+            Thing ti = t.GetInnerIfMinified();
+            Thing si = seed.GetInnerIfMinified();
+            if (ti.def.neverMultiSelect || ti.Faction != si.Faction)
+            {
+                return false;
+            }
+            if (si is Pawn sp && ti is Pawn tp)
+            {
+                if (tp.HostFaction != sp.HostFaction || tp.mutant?.Def != sp.mutant?.Def)
+                {
+                    return false;
+                }
+                return SelectorUtility.IsEquivalentRace(tp, sp);
+            }
+            return ti.def == si.def;
+        }
     }
 
     /// <summary>
@@ -335,6 +464,58 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Ui, e, "below select under mouse");
+                return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Double-click parity for the see-below view: vanilla's clickCount == 2 path
+    /// (SelectAllMatchingObjectUnderMouseOnScreen) only scans the current (sky)
+    /// map, so double-clicking a surface item below never selected the rest. When
+    /// the cursor is over open air with a below thing under it, we select every
+    /// matching below thing on screen in place. Sky double-clicks fall through.
+    /// </summary>
+    [HarmonyPatch(typeof(Selector), "SelectAllMatchingObjectUnderMouseOnScreen")]
+    internal static class Patch_Selector_SelectAllMatchingBelow
+    {
+        private static bool Prefix(Selector __instance)
+        {
+            if (!ABGuard.On(ABGuard.Ui))
+            {
+                return true;
+            }
+            try
+            {
+                if (!BelowSelection.TryGetBelowView(out Map sky, out Map lower))
+                {
+                    return true;
+                }
+                if (!UI.MouseCell().InBounds(sky))
+                {
+                    return true;
+                }
+                Vector3 clickPos = UI.MouseMapPosition();
+                if (BelowSelection.SkyBlocksSelection(sky, clickPos))
+                {
+                    return true;
+                }
+                List<Thing> hits = BelowSelection.SelectablesUnderMouse(sky, lower, clickPos);
+                if (hits.Count == 0)
+                {
+                    return true;
+                }
+                Thing seed = BelowSelection.PickMultiSelectSeed(hits);
+                if (seed == null)
+                {
+                    return true;
+                }
+                BelowSelection.SelectAllMatchingBelow(__instance, sky, lower, seed);
+                return false;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Ui, e, "below select all matching");
                 return true;
             }
         }
