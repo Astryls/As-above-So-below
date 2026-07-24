@@ -47,7 +47,11 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
+      <drawSize>(2.12,1.51)</drawSize>
+      <drawOffsetNorth>(0,0,0.14)</drawOffsetNorth>
+      <drawOffsetEast>(0.07,0,-0.3)</drawOffsetEast>
+      <drawOffsetSouth>(0.04,0,0)</drawOffsetSouth>
+      <drawOffsetWest>(-0.04,0,-0.3)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
@@ -97,7 +101,11 @@
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2,2)</drawSize>
+      <drawSize>(2.75,2.75)</drawSize>
+      <drawOffsetNorth>(0,0,0.4)</drawOffsetNorth>
+      <drawOffsetEast>(0,0,0.4)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,0.35)</drawOffsetSouth>
+      <drawOffsetWest>(0,0,0.4)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
@@ -181,10 +189,6 @@
       <texPath>Things/Building/AB_LadderDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
-      <drawOffsetNorth>(0,0,0.33)</drawOffsetNorth>
-      <drawOffsetEast>(0.33,0,0)</drawOffsetEast>
-      <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
-      <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
@@ -226,7 +230,11 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
+      <drawSize>(1.85,1.85)</drawSize>
+      <drawOffsetNorth>(0,0,0.27)</drawOffsetNorth>
+      <drawOffsetEast>(-0.1,0,0.3)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,0.4)</drawOffsetSouth>
+      <drawOffsetWest>(0.1,0,0.2)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
@@ -253,7 +261,11 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2,1)</drawSize>
+      <drawSize>(3.42,3)</drawSize>
+      <drawOffsetNorth>(0,0,-0.1)</drawOffsetNorth>
+      <drawOffsetEast>(0.6,0,-0.7)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,0.3)</drawOffsetSouth>
+      <drawOffsetWest>(-0.7,0,-0.7)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
@@ -277,7 +289,11 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2,1)</drawSize>
+      <drawSize>(3.42,3)</drawSize>
+      <drawOffsetNorth>(0,0,0.3)</drawOffsetNorth>
+      <drawOffsetEast>(0.2,0,0.3)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,0.5)</drawOffsetSouth>
+      <drawOffsetWest>(-0.1,0,0.2)</drawOffsetWest>
     </graphicData>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
