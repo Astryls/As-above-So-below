@@ -104,6 +104,25 @@ namespace AsAboveSoBelow
                 return;
             }
 
+            // The river MOVES to the mountain top - it does not duplicate
+            // (live report 2026-07-24: "rivers on each level"). The tunneled
+            // stretch below the carved channel dries to the local rock's
+            // natural floor, exactly what vanilla generates under a mountain
+            // absent a river; the falls then feed the still-wet surface river
+            // beyond the mass edge, so the watercourse is hydrologically
+            // continuous: over the top, off the ledge, onward at ground level.
+            int dried = DryTunnelStretch(ground, carved);
+
+            // Cut the channel like a vanilla river, not a slit: a walkable
+            // bank of the rock's rough floor on every mass-rock neighbor
+            // (ore veins stay standing - an exposed seam by the stream), and
+            // an unfogged rim ring so no gray fog skirt creeps over the banks
+            // (live report 2026-07-24: "gray fog of war shadow on its banks").
+            List<IntVec3> banks = new List<IntVec3>();
+            CarveBanks(map, carved, banks);
+            UnfogSolidNeighbors(map, carved);
+            UnfogSolidNeighbors(map, banks);
+
             // Flow data: clone the graph, copy the per-cell flow list.
             WaterInfo skyWater = map.waterInfo;
             skyWater.riverGraph = new List<RiverNode>();
@@ -149,9 +168,111 @@ namespace AsAboveSoBelow
                     }
                 }
             }
-            ABLog.Dev("Sky rivers: carved " + carved.Count + " cells, "
+            ABLog.Dev("Sky rivers: carved " + carved.Count + " water cells, "
+                + banks.Count + " bank cells, dried " + dried + " tunnel cells below, "
                 + map.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " waterfall lips, "
                 + basesPlaced.Count + " bases.");
+        }
+
+        /// <summary>Replaces the ground map's river cells under the carved sky
+        /// channel with the local rock's natural rough floor. Cells built or
+        /// bridged over (TerrainAt != BaseTerrainAt) are left untouched.
+        /// Returns the number of cells dried. KNOWN GAP: 1.6 water-body
+        /// (fishing) data for the dried stretch may keep stale cells until the
+        /// tracker's own refresh; cosmetic, noted in the schematic.</summary>
+        private static int DryTunnelStretch(Map ground, List<IntVec3> carved)
+        {
+            TerrainGrid gt = ground.terrainGrid;
+            int dried = 0;
+            for (int i = 0; i < carved.Count; i++)
+            {
+                IntVec3 c = carved[i];
+                TerrainDef baseT = gt.BaseTerrainAt(c);
+                if (baseT == null || !baseT.IsRiver || gt.TerrainAt(c) != baseT)
+                {
+                    continue;
+                }
+                gt.SetTerrain(c, DryBedTerrain(ground, c));
+                dried++;
+            }
+            return dried;
+        }
+
+        /// <summary>The natural rough floor of the rock flanking the tunnel;
+        /// falls back to the tile's dominant rock, then gravel.</summary>
+        private static TerrainDef DryBedTerrain(Map ground, IntVec3 c)
+        {
+            for (int d = 0; d < 8; d++)
+            {
+                IntVec3 n = c + GenAdj.AdjacentCells[d];
+                if (!n.InBounds(ground))
+                {
+                    continue;
+                }
+                ThingDef rock = n.GetEdifice(ground)?.def;
+                if (rock?.building != null && rock.building.isNaturalRock
+                    && rock.building.naturalTerrain != null)
+                {
+                    return rock.building.naturalTerrain;
+                }
+            }
+            foreach (ThingDef worldRock in Find.World.NaturalRockTypesIn(ground.Tile))
+            {
+                if (worldRock?.building?.naturalTerrain != null)
+                {
+                    return worldRock.building.naturalTerrain;
+                }
+            }
+            return TerrainDefOf.Gravel;
+        }
+
+        /// <summary>One walkable bank cell for every plain-rock neighbor of the
+        /// water: wall down, roof off, fog off, the rock's rough floor laid.
+        /// Ore veins are NOT consumed - they stand as exposed seams and the
+        /// rim unfog makes them visible.</summary>
+        private static void CarveBanks(Map map, List<IntVec3> water, List<IntVec3> banks)
+        {
+            TerrainGrid skyTerrain = map.terrainGrid;
+            for (int i = 0; i < water.Count; i++)
+            {
+                for (int d = 0; d < 8; d++)
+                {
+                    IntVec3 n = water[i] + GenAdj.AdjacentCells[d];
+                    if (!n.InBounds(map))
+                    {
+                        continue;
+                    }
+                    Building ed = n.GetEdifice(map);
+                    if (ed == null || ed.def.building == null || !ed.def.building.isNaturalRock)
+                    {
+                        continue;
+                    }
+                    TerrainDef bank = ed.def.building.naturalTerrain ?? TerrainDefOf.Gravel;
+                    ed.Destroy();
+                    map.roofGrid.SetRoof(n, null);
+                    map.fogGrid.Unfog(n);
+                    skyTerrain.SetTerrain(n, bank);
+                    banks.Add(n);
+                }
+            }
+        }
+
+        /// <summary>Reveals the ring of still-solid cells around the carved
+        /// corridor so walls and seams render instead of a fog skirt - the
+        /// same one-ring reveal vanilla map gen gives open areas.</summary>
+        private static void UnfogSolidNeighbors(Map map, List<IntVec3> cells)
+        {
+            for (int i = 0; i < cells.Count; i++)
+            {
+                for (int d = 0; d < 8; d++)
+                {
+                    IntVec3 n = cells[i] + GenAdj.AdjacentCells[d];
+                    if (n.InBounds(map) && map.fogGrid.IsFogged(n))
+                    {
+                        map.fogGrid.Unfog(n);
+                    }
+                }
+            }
         }
 
         private static Vector3 FallbackFlowDir(WaterInfo water)

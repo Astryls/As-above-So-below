@@ -249,6 +249,26 @@ namespace AsAboveSoBelow
             return sky.planManager.PlanAt(cell) != null;
         }
 
+        /// <summary>Quiet in-place selection restore for the column view-switch
+        /// preservation: no designator deselect, no sound, no camera jump - the
+        /// player only changed which level they are LOOKING at, and vanilla's
+        /// Select would yank the view to the thing's map.</summary>
+        internal static void RestoreSelected(Selector selector, Thing thing)
+        {
+            if (selector == null || thing == null || thing.Destroyed || thing.MapHeld == null)
+            {
+                return;
+            }
+            List<object> selected = SelectedRef(selector);
+            if (selected.Count >= 200 || selected.Contains(thing))
+            {
+                return;
+            }
+            selected.Add(thing);
+            thing.Notify_ThingSelected();
+            SelectionDrawer.Notify_Selected(thing);
+        }
+
         private static void AddInPlace(Selector selector, Thing thing)
         {
             Find.DesignatorManager?.Deselect();
