@@ -375,10 +375,37 @@ namespace AsAboveSoBelow
             if (below != null && !below.Disposed)
             {
                 EnsureShaft(below, c);
+                RevealBelow(below, c);
                 // A new pane can open the chain for a shaft two levels down
                 // (sky pane over an existing surface pane): nudge it now
                 // instead of waiting for its rare tick.
                 RefreshShaftAt(below.LowerMap(), c);
+            }
+        }
+
+        /// <summary>A pane is a WINDOW: the space it looks onto becomes
+        /// explored. Without this, glass over a sealed room drew the fog
+        /// mask's opaque black - "installing skylights does not create a
+        /// window" (live report 2026-07-24). Walkable fogged cells flood-unfog
+        /// the whole connected room (the same reveal mining into a room
+        /// gives); a pane over solid rock reveals just that rock cell.</summary>
+        internal static void RevealBelow(Map litMap, IntVec3 c)
+        {
+            if (litMap == null || litMap.Disposed || !c.InBounds(litMap))
+            {
+                return;
+            }
+            if (!litMap.fogGrid.IsFogged(c))
+            {
+                return;
+            }
+            if (c.Walkable(litMap))
+            {
+                FloodFillerFog.FloodUnfog(c, litMap);
+            }
+            else
+            {
+                litMap.fogGrid.Unfog(c);
             }
         }
 
@@ -498,6 +525,9 @@ namespace AsAboveSoBelow
                 foreach (IntVec3 c in aboveComp.PaneCellsSnapshot())
                 {
                     EnsureShaft(map, c);
+                    // Pre-fix saves: panes installed before the window-reveal
+                    // rule existed get their view opened on load.
+                    RevealBelow(map, c);
                 }
             }
         }

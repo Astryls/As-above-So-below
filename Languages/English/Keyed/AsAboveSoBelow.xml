@@ -290,6 +290,9 @@
   <AB_MountainRivers>Rivers flow over mountain tops</AB_MountainRivers>
   <AB_MountainRiversTip>When the map tile's river tunnels under a mountain, the sky level's mountain top carries the same watercourse, ending in waterfalls where it pours off the edges. Applies to sky levels generated after this is turned on.</AB_MountainRiversTip>
 
+  <AB_GoUpVia>go up via {0}</AB_GoUpVia>
+  <AB_GoDownVia>go down via {0}</AB_GoDownVia>
+
   <AB_BelowLighting>Show lighting on levels below</AB_BelowLighting>
   <AB_BelowLightingTip>The see-below view draws the lower level's own lighting: lamp pools, daylight through skylights, and the shading of roofed rooms, updating live as lights switch and roofs change. Turning this off renders the view below with flat ambient light only.</AB_BelowLightingTip>
 

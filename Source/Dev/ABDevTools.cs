@@ -1545,6 +1545,61 @@ namespace AsAboveSoBelow
                 + " - compare the dash artifacts.", MessageTypeDefOf.NeutralEvent, false);
         }
 
+        /// <summary>One-click ground truth for "right click does not work":
+        /// runs the exact redirect pipeline for the current selection against
+        /// the clicked cell and reports every decision as ONE warning (warnings
+        /// cross the bridge). Use: select the pawn(s), pick this tool, click
+        /// the cell you would have right-clicked.</summary>
+        [DebugAction("As above", "AB: RMB diagnostic", actionType = DebugActionType.ToolMap, allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void RmbDiagnostic()
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            try
+            {
+                Vector3 clickPos = UI.MouseMapPosition();
+                List<Pawn> sel = Find.Selector.SelectedPawns;
+                Map cur = Find.CurrentMap;
+                sb.Append("[AB RMB diagnostic] cur=L").Append(cur.Level())
+                    .Append(" cell=").Append(clickPos.ToIntVec3().ToString())
+                    .Append(" selected=").Append(sel.Count);
+                for (int i = 0; i < sel.Count; i++)
+                {
+                    Pawn p = sel[i];
+                    sb.Append(" | ").Append(p.LabelShort)
+                        .Append(" L").Append(p.Map?.Level() ?? -99)
+                        .Append(p.Drafted ? " drafted" : " undrafted")
+                        .Append(p.IsColonistPlayerControlled ? "" : " NOT-player-controlled");
+                }
+                sb.Append(" | guardMovement=").Append(ABGuard.On(ABGuard.Movement))
+                    .Append(" setting=").Append(ABMod.Settings?.crossLevelOrders ?? false);
+                Map target = CrossLevelOrders.ResolveTargetMap(cur, clickPos, out Map below);
+                sb.Append(" | targetMap=L").Append(target.Level())
+                    .Append(" below=").Append(below != null ? ("L" + below.Level()) : "none");
+                bool single = CrossLevelOrders.ShouldRedirect(sel, clickPos, out Map c1, out Map t1, out Pawn one);
+                sb.Append(" | ShouldRedirect=").Append(single);
+                if (single)
+                {
+                    List<FloatMenuOption> opts = CrossLevelOrders.BuildOptions(one, clickPos, c1, t1, out _);
+                    sb.Append(" options=").Append(opts.Count);
+                    int shown = 0;
+                    for (int i = 0; i < opts.Count && shown < 10; i++, shown++)
+                    {
+                        sb.Append(" [").Append(opts[i].Disabled ? "X " : "").Append(opts[i].Label).Append("]");
+                    }
+                }
+                else
+                {
+                    sb.Append(" (falls through to vanilla: same-level click or ineligible selection)");
+                }
+            }
+            catch (Exception e)
+            {
+                sb.Append(" EXCEPTION: ").Append(e);
+            }
+            Log.Warning(sb.ToString());
+            Messages.Message("AB RMB diagnostic written to log.", MessageTypeDefOf.NeutralEvent, historical: false);
+        }
+
         [DebugAction("As above", "AB: probe ledge cell", actionType = DebugActionType.ToolMap, allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void ProbeLedgeCell()
         {

@@ -564,6 +564,83 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Right-clicking a stairwell with a colonist selected offers
+        /// "Go up/down via X" directly - no view switching needed. Single
+        /// selection, pawn on the same map as the stairs, counterpart usable;
+        /// forbidden stairs are skipped exactly like a held door.</summary>
+        internal static void AddStairsTravelOption(List<Pawn> selectedPawns, Vector3 clickPos,
+            List<FloatMenuOption> options)
+        {
+            if (selectedPawns == null || selectedPawns.Count != 1)
+            {
+                return;
+            }
+            Pawn pawn = selectedPawns[0];
+            Map cur = Find.CurrentMap;
+            if (pawn == null || !pawn.Spawned || !pawn.IsColonistPlayerControlled
+                || cur == null || pawn.Map != cur)
+            {
+                return;
+            }
+            IntVec3 c = clickPos.ToIntVec3();
+            if (!c.InBounds(cur))
+            {
+                return;
+            }
+            Building_ABStairs stairs = c.GetEdifice(cur) as Building_ABStairs;
+            if (stairs == null)
+            {
+                List<Thing> things = c.GetThingList(cur);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] is Building_ABStairs s)
+                    {
+                        stairs = s;
+                        break;
+                    }
+                }
+            }
+            if (stairs == null || !stairs.Spawned || stairs.Map != pawn.Map)
+            {
+                return;
+            }
+            Building_ABStairs exit = stairs.Counterpart;
+            Map dest = exit?.Map;
+            if (exit == null || !exit.Spawned || dest == null || dest.Disposed || dest == pawn.Map)
+            {
+                return;
+            }
+            if (stairs.EndForbiddenFor(pawn) || exit.EndForbiddenFor(pawn))
+            {
+                return; // door parity: a forbidden link offers nothing.
+            }
+            string label = (dest.Level() > pawn.Map.Level()
+                ? "AB_GoUpVia".Translate(stairs.LabelShort)
+                : "AB_GoDownVia".Translate(stairs.LabelShort)).CapitalizeFirst();
+            // Duplicate guard: revalidation regenerates the list each frame.
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i] != null && options[i].Label == label)
+                {
+                    return;
+                }
+            }
+            Building_ABStairs entry = stairs;
+            Pawn p = pawn;
+            options.Add(new FloatMenuOption(label, delegate
+            {
+                Job job = CrossLevelWork.MakeStairsJob(entry, entry.Counterpart);
+                if (job != null)
+                {
+                    job.playerForced = true;
+                    p.jobs?.TryTakeOrderedJob(job, JobTag.Misc);
+                }
+            }, MenuOptionPriority.High)
+            {
+                iconThing = stairs
+            });
+        }
+
         private static List<FloatMenuOption> NoStairsOptions(Map targetMap, Map cur)
         {
             string dir = (targetMap.Level() > cur.Level()) ? "AB_LevelAbove".Translate() : "AB_LevelBelow".Translate();
@@ -940,6 +1017,34 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Movement, e, "cross level float menu");
                 return true;
+            }
+        }
+
+        /// <summary>Same-level clicks fall through to vanilla (prefix returns
+        /// true) - this postfix then appends the stairs travel option when the
+        /// click landed on a stairwell: the natural "send them through" order
+        /// that testers reach for FIRST, before discovering view switching
+        /// (live report 2026-07-24). Skips our own nested regeneration calls.</summary>
+        private static void Postfix(List<Pawn> selectedPawns, Vector3 clickPos,
+            ref List<FloatMenuOption> __result)
+        {
+            if (CrossLevelOrders.Redirecting || __result == null
+                || !ABGuard.On(ABGuard.Movement))
+            {
+                return;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelOrders)
+            {
+                return;
+            }
+            try
+            {
+                CrossLevelOrders.AddStairsTravelOption(selectedPawns, clickPos, __result);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "stairs travel option");
             }
         }
     }
