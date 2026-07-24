@@ -258,6 +258,50 @@ namespace AsAboveSoBelow
             return null;
         }
 
+        /// <summary>Nearest blueprint or frame on the map still needing the
+        /// def - the automatic supply giver's direct-to-site leg resolves its
+        /// delivery target with this at scan time. Distance measured from the
+        /// stairwell exit the load will arrive at; capped scan.</summary>
+        internal static Thing FindSiteNeeding(Map map, ThingDef def, IntVec3 near)
+        {
+            if (map == null || def == null)
+            {
+                return null;
+            }
+            Thing best = null;
+            float bestDist = float.MaxValue;
+            int examined = 0;
+            ScanSites(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint),
+                def, near, ref best, ref bestDist, ref examined);
+            ScanSites(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame),
+                def, near, ref best, ref bestDist, ref examined);
+            return best;
+        }
+
+        private static void ScanSites(List<Thing> list, ThingDef def, IntVec3 near,
+            ref Thing best, ref float bestDist, ref int examined)
+        {
+            for (int i = 0; i < list.Count && examined < 80; i++)
+            {
+                Thing t = list[i];
+                if (t.Faction != Faction.OfPlayer || !t.Spawned || !(t is IConstructible ic))
+                {
+                    continue;
+                }
+                examined++;
+                if (ic.ThingCountNeeded(def) <= 0)
+                {
+                    continue;
+                }
+                float d = (t.Position - near).LengthHorizontalSquared;
+                if (d < bestDist)
+                {
+                    best = t;
+                    bestDist = d;
+                }
+            }
+        }
+
         private static bool TargetLevelHas(Map map, ThingDef def)
         {
             List<Thing> things = map.listerThings.ThingsOfDef(def);
@@ -365,7 +409,7 @@ namespace AsAboveSoBelow
             retries.Add((pawn, target, Find.TickManager.TicksGame + 15));
         }
 
-        private static void FinishOnSite(Pawn pawn, Thing constructible, bool allowRetry)
+        internal static void FinishOnSite(Pawn pawn, Thing constructible, bool allowRetry)
         {
             try
             {

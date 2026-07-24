@@ -164,6 +164,9 @@ namespace AsAboveSoBelow
             BelowThingScale = Mathf.Clamp(settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
         }
 
+        /// <summary>Below-level lighting toggle (Rendering tab, default on).</summary>
+        private static bool BelowLightingOn => ABMod.Settings?.belowLighting ?? true;
+
         private static readonly AccessTools.FieldRef<Section, List<SectionLayer>> LayersRef =
             AccessTools.FieldRefAccess<Section, List<SectionLayer>>("layers");
 
@@ -259,7 +262,11 @@ namespace AsAboveSoBelow
                 { typeof(SectionLayer_EdgeShadows), 260 },
                 { typeof(SectionLayer_Snow), 90 },
                 { typeof(SectionLayer_Gas), 85 },
-                { typeof(SectionLayer_PollutionCloud), 80 }
+                { typeof(SectionLayer_PollutionCloud), 80 },
+                // Lowest offset = drawn last inside the band: the lower map's
+                // glow-and-darkness mesh paints over every content clone, under
+                // the mask and every sky-side material.
+                { typeof(SectionLayer_LightingOverlay), 75 }
             };
 
             AddOffsetByName(map, "Verse.SectionLayer_Sand", 285);
@@ -605,9 +612,30 @@ namespace AsAboveSoBelow
                         SectionLayer layer = layers[i];
                         Type layerType = layer.GetType();
                         bool belowThingsLayer = layerType == typeof(SectionLayer_ABBelowThings);
+                        bool lightingLayer = layerType == typeof(SectionLayer_LightingOverlay);
                         if (belowThingsLayer)
                         {
                             if (!includeBelowThings || !layer.Visible)
+                            {
+                                continue;
+                            }
+                        }
+                        else if (lightingLayer)
+                        {
+                            // Below-level lighting (2026-07-24): the lower map's
+                            // own glow mesh - lamp pools, skylight shafts, and
+                            // the roofed-room darkness encoded in vertex alpha -
+                            // drawn into the band through a queue clone. Same
+                            // vertex data + same LightOverlay shader as vanilla
+                            // same-map rendering, so the composition is exactly
+                            // one-big-map (the historical double-darkening came
+                            // from the MASK adding its own light-derived dim;
+                            // nothing here touches the mask). Updates are free:
+                            // GroundGlow/Roofs dirty flags regenerate the mesh
+                            // through the MapMeshDrawerUpdate_First pump the
+                            // band already runs per frame, and the clone
+                            // material is cached like every other layer's.
+                            if (!BelowLightingOn || !layer.Visible)
                             {
                                 continue;
                             }
@@ -634,7 +662,11 @@ namespace AsAboveSoBelow
                         {
                             LayerSubMesh sub = subs[j];
                             float subY = sub.mesh.bounds.center.y;
-                            if (!sub.finalized || sub.disabled || subY > MaxSubMeshAltitude)
+                            // The lighting overlay legitimately sits above the
+                            // overlay boundary; it is included BY TYPE, not by
+                            // altitude, so it is exempt from the cutoff.
+                            if (!sub.finalized || sub.disabled
+                                || (!lightingLayer && subY > MaxSubMeshAltitude))
                             {
                                 continue;
                             }

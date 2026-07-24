@@ -290,6 +290,9 @@
   <AB_MountainRivers>Rivers flow over mountain tops</AB_MountainRivers>
   <AB_MountainRiversTip>When the map tile's river tunnels under a mountain, the sky level's mountain top carries the same watercourse, ending in waterfalls where it pours off the edges. Applies to sky levels generated after this is turned on.</AB_MountainRiversTip>
 
+  <AB_BelowLighting>Show lighting on levels below</AB_BelowLighting>
+  <AB_BelowLightingTip>The see-below view draws the lower level's own lighting: lamp pools, daylight through skylights, and the shading of roofed rooms, updating live as lights switch and roofs change. Turning this off renders the view below with flat ambient light only.</AB_BelowLightingTip>
+
   <AB_HospitalityRoaming>Hospitality guests roam all levels</AB_HospitalityRoaming>
   <AB_HospitalityRoamingTip>Requires the Hospitality mod. During a visit, idle guests occasionally tour linked levels that have guest beds or vending machines, and walk back when their group leaves. Full guest services (shopping, bed claims) stay on the level their group arrived on.</AB_HospitalityRoamingTip>
 

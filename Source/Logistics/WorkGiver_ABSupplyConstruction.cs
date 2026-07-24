@@ -96,13 +96,14 @@ namespace AsAboveSoBelow
                 requireReachable: true, constructionOnly: true,
                 out Building_ABStairs stairs, out Building_ABStairs exit);
             int fixedCount = 0;
+            Thing site = null;
             if (t == null)
             {
                 // Install blueprints over there whose minified thing sits on
                 // this level: ferry it across; the local install giver takes
                 // it from the drop (run #71 "No path" fix, automatic flow).
                 // Same strictness: route toward the install site itself.
-                t = FindInstallMini(pawn, target, out stairs, out exit);
+                t = FindInstallMini(pawn, target, out site, out stairs, out exit);
                 fixedCount = 1;
             }
             if (t == null || stairs == null || exit == null)
@@ -114,6 +115,26 @@ namespace AsAboveSoBelow
             job.count = fixedCount > 0
                 ? fixedCount
                 : Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+            // DIRECT-TO-BLUEPRINT LEG (user request 2026-07-24): resolve the
+            // needing site now and carry the load ALL THE WAY there, reusing
+            // the manual bring-and-build order's arrival continuation (drop at
+            // the site + forced deliver giver + idle retry). Previously the
+            // load was dropped at the stairwell for the store-cargo fallback,
+            // which walked it to a stockpile first and left the final leg to a
+            // second haul - the indirection users reported. When no site
+            // resolves (built or destroyed mid-scan) the old drop-at-stairs
+            // behavior stands and the local scan takes over.
+            if (site == null)
+            {
+                site = ABConstructSupply.FindSiteNeeding(target, t.def, exit.Position);
+            }
+            if (site != null)
+            {
+                Pawn carrier = pawn;
+                Thing deliverTo = site;
+                ABPendingOrders.Set(pawn, target,
+                    delegate { ABConstructSupply.FinishOnSite(carrier, deliverTo, allowRetry: true); });
+            }
             return job;
         }
 
@@ -124,9 +145,10 @@ namespace AsAboveSoBelow
         /// moment the cross-level blueprint spawns, vanilla uninstalls them on
         /// their own level (the designation migrates a constructor there), and
         /// the resulting mini flows through this ferry.</summary>
-        private static Thing FindInstallMini(Pawn pawn, Map target,
+        private static Thing FindInstallMini(Pawn pawn, Map target, out Thing site,
             out Building_ABStairs stairs, out Building_ABStairs exit)
         {
+            site = null;
             stairs = null;
             exit = null;
             List<Thing> blueprints = target.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint);
@@ -144,6 +166,8 @@ namespace AsAboveSoBelow
                     && CrossLevelWork.TryResolveStairsStrict(pawn, target, install.Position,
                         out stairs, out exit))
                 {
+                    // The install blueprint IS the direct-delivery site.
+                    site = install;
                     return mini;
                 }
             }

@@ -60,7 +60,14 @@ namespace AsAboveSoBelow
             {
                 return cur;
             }
-            return cur.terrainGrid.TerrainAt(c) == ABDefOf.AB_OpenAir ? below : cur;
+            TerrainDef t = cur.terrainGrid.TerrainAt(c);
+            // Glass panes pass clicks exactly like open air: selection and
+            // overlays already treat them as visible (one-way mirror), and an
+            // order is the natural next step of seeing something. Without this
+            // a right-click through a skylight hit the empty glass cell and
+            // produced nothing (part of the "cross level right click does not
+            // function" reports, 2026-07-24).
+            return t == ABDefOf.AB_OpenAir || t == ABDefOf.AB_Skylight ? below : cur;
         }
 
         /// <summary>True when a single player pawn is selected and the (pawn level,
@@ -83,8 +90,14 @@ namespace AsAboveSoBelow
                 return false;
             }
             targetMap = ResolveTargetMap(cur, clickPos, out Map below);
-            // Pawn and target must both be within this column's viewed/below pair.
-            if (p.Map != cur && p.Map != below)
+            // Any pawn in this COLUMN qualifies - not just the viewed/below
+            // pair. A sky pawn selected while viewing the surface (colonist
+            // bar keeps selections across level switches) previously fell
+            // through to vanilla, which rejects off-map pawns outright and
+            // showed NOTHING (user reports 2026-07-24: "cross level right
+            // click construction does not function"). Routing handles any
+            // hop count via the chain.
+            if (p.Map != cur && p.Map != below && !p.Map.SameColumn(cur))
             {
                 return false;
             }
@@ -227,30 +240,57 @@ namespace AsAboveSoBelow
                 }
             }
 
+            // The click IS the destination: inverse-map it when it aims through
+            // open air or glass at the level below (same transform item
+            // selection uses). Identity today; funneled for a future transform.
+            Vector3 destPos = crossMap && cur.Levels()?.lowerMap == targetMap
+                ? LevelRenderer.ScreenToBelowPos(clickPos)
+                : clickPos;
+            IntVec3 destCell = destPos.ToIntVec3();
             Building_ABStairs entry = null;
             ABVirtualPosition.Token posToken = default;
             bool swappedPos = false;
             if (!pawnOnTarget)
             {
-                entry = CrossLevelWork.NearestUsableStairsCached(pawn, targetMap);
-                Building_ABStairs exit = entry?.CounterpartTowards(targetMap);
-                if (entry == null || exit == null)
+                bool adjacent = Math.Abs(targetMap.Level() - pawn.Map.Level()) == 1;
+                IntVec3 virtualCell;
+                if (adjacent)
                 {
-                    context = new FloatMenuContext(single, clickPos, cur);
-                    return NoStairsOptions(targetMap, cur);
+                    entry = CrossLevelWork.NearestUsableStairsCached(pawn, targetMap);
+                    Building_ABStairs exit = entry?.CounterpartTowards(targetMap);
+                    if (entry == null || exit == null)
+                    {
+                        context = new FloatMenuContext(single, clickPos, cur);
+                        return NoStairsOptions(targetMap, cur);
+                    }
+                    // Prefer the stairwell landing nearest the destination.
+                    if (destCell.InBounds(targetMap))
+                    {
+                        StairRouter.Reroute(pawn, targetMap, destCell, ref entry, ref exit);
+                    }
+                    virtualCell = exit.Position;
                 }
-                // The click IS the destination: prefer the stairwell landing
-                // nearest it. Inverse-map the click when it aims through open
-                // air at the level below (same transform item selection uses).
-                Vector3 destPos = crossMap && cur.Levels()?.lowerMap == targetMap
-                    ? LevelRenderer.ScreenToBelowPos(clickPos)
-                    : clickPos;
-                IntVec3 destCell = destPos.ToIntVec3();
-                if (destCell.InBounds(targetMap))
+                else
                 {
-                    StairRouter.Reroute(pawn, targetMap, destCell, ref entry, ref exit);
+                    // TWO HOPS (basement pawn ordered onto the sky or the
+                    // reverse): generate the options from the clicked cell
+                    // itself - close enough for job resolution, and the chain
+                    // re-validates everything hop by hop with the pawn really
+                    // there. A missing FIRST hop shows the no-stairs row;
+                    // later hops resolve live at travel time.
+                    if (!TryNextHop(pawn, targetMap, destCell, out _, out _, out _))
+                    {
+                        context = new FloatMenuContext(single, clickPos, cur);
+                        return NoStairsOptions(targetMap, cur);
+                    }
+                    if (!destCell.InBounds(targetMap))
+                    {
+                        context = new FloatMenuContext(single, clickPos, cur);
+                        return new List<FloatMenuOption>();
+                    }
+                    virtualCell = destCell;
                 }
-                if (!ABVirtualPosition.TrySwap(pawn, targetMap, exit.Position, out posToken))
+                if (!ABVirtualPosition.TrySwap(pawn, targetMap, virtualCell, out posToken))
                 {
                     context = new FloatMenuContext(single, clickPos, cur);
                     return new List<FloatMenuOption>();
@@ -269,7 +309,9 @@ namespace AsAboveSoBelow
             Redirecting = true;
             try
             {
-                options = FloatMenuMakerMap.GetOptions(single, clickPos, out context);
+                // The below-transformed position, so providers compute the
+                // ClickedCell on the swapped map exactly where the player aimed.
+                options = FloatMenuMakerMap.GetOptions(single, crossMap ? destPos : clickPos, out context);
             }
             finally
             {
@@ -297,7 +339,7 @@ namespace AsAboveSoBelow
                 {
                     return MakeAttackOptions(pawn, targetMap, attackTarget);
                 }
-                WrapOptions(options, pawn, targetMap, entry);
+                WrapOptions(options, pawn, targetMap, destCell, destPos);
                 // Forced construction with materials in hand: when the clicked
                 // blueprint/frame lacks a material the pawn's own level can
                 // supply, add the carry-and-build order (the wrapped vanilla
@@ -450,7 +492,11 @@ namespace AsAboveSoBelow
         /// (via ABPendingOrders replay).</summary>
         private static void RouteThenEngage(Pawn pawn, Map targetMap, Building_ABStairs entry, Thing target)
         {
-            RouteThenRun(pawn, targetMap, entry, delegate { IssueEngageJob(pawn, target, AttackMode.Auto); });
+            // entry is only a hint from callers now: the chain re-resolves
+            // stairs live per hop and handles pawns any number of hops away
+            // (a basement pawn ordered to attack something on the sky).
+            RouteChainThenRun(pawn, targetMap, target.PositionHeld,
+                delegate { IssueEngageJob(pawn, target, AttackMode.Auto); });
         }
 
         /// <summary>Same-level combat once the pawn has arrived on the target level: a
@@ -528,7 +574,7 @@ namespace AsAboveSoBelow
         }
 
         private static void WrapOptions(List<FloatMenuOption> options, Pawn pawn, Map targetMap,
-            Building_ABStairs entry)
+            IntVec3 destHint, Vector3 destPos)
         {
             if (options == null)
             {
@@ -544,7 +590,197 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 Action original = opt.action;
-                opt.action = delegate { RouteThenRun(pawn, targetMap, entry, original); };
+                string label = opt.Label;
+                opt.action = delegate
+                {
+                    RouteChainThenRun(pawn, targetMap, destHint,
+                        delegate { ReplayFresh(pawn, targetMap, destPos, label, original); });
+                };
+            }
+        }
+
+        /// <summary>Arrival execution for a wrapped option: regenerate the REAL
+        /// float menu with the pawn genuinely standing on the target level and
+        /// invoke the fresh option matching the clicked label.
+        ///
+        /// This replaces replaying the menu-time action (root cause of the
+        /// "cross level right click construction does not function" reports):
+        /// vanilla's work options capture a Job OBJECT built during our virtual
+        /// scan, and by arrival that object is minutes stale - Job instances
+        /// are single-use, its chosen material stack may be hauled or reserved
+        /// away, and closure state points at menu-time context. Regenerating
+        /// runs every provider and every RMB-modifying mod's patches again in a
+        /// fully real context (fresh jobs, fresh reservations, fresh counts),
+        /// so whatever a mod would offer a pawn standing there is exactly what
+        /// executes - 1:1 by construction, the same label-matching idiom
+        /// vanilla's own FloatMenuMap revalidation uses. Labels with live
+        /// numbers ("deliver 75 steel") match digit-insensitively; if the
+        /// option no longer exists at all, the captured menu-time action runs
+        /// as a last resort (better a stale attempt than a silent no-op).</summary>
+        internal static void ReplayFresh(Pawn pawn, Map targetMap, Vector3 destPos, string label,
+            Action original)
+        {
+            try
+            {
+                if (pawn == null || !pawn.Spawned || pawn.Dead || pawn.Map != targetMap)
+                {
+                    return;
+                }
+                List<FloatMenuOption> fresh = null;
+                ABCurrentMapSwap.Token mapToken = default;
+                // The player may still be VIEWING another level; the generator
+                // builds against Find.CurrentMap, so point it at the pawn's
+                // real map for the regeneration. Position needs no swap - the
+                // pawn is genuinely here now.
+                bool swapped = Find.CurrentMap != targetMap && ABCurrentMapSwap.Swap(targetMap, out mapToken);
+                Redirecting = true;
+                try
+                {
+                    fresh = FloatMenuMakerMap.GetOptions(new List<Pawn> { pawn }, destPos, out _);
+                }
+                finally
+                {
+                    Redirecting = false;
+                    if (swapped)
+                    {
+                        ABCurrentMapSwap.Restore(mapToken);
+                    }
+                }
+                FloatMenuOption match = FindByLabel(fresh, label);
+                if (match != null)
+                {
+                    match.action();
+                    return;
+                }
+                original?.Invoke();
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "cross level order replay");
+            }
+        }
+
+        private static FloatMenuOption FindByLabel(List<FloatMenuOption> options, string label)
+        {
+            if (options == null || label == null)
+            {
+                return null;
+            }
+            for (int i = 0; i < options.Count; i++)
+            {
+                FloatMenuOption o = options[i];
+                if (o != null && !o.Disabled && o.action != null && o.Label == label)
+                {
+                    return o;
+                }
+            }
+            string target = StripDigits(label);
+            for (int i = 0; i < options.Count; i++)
+            {
+                FloatMenuOption o = options[i];
+                if (o != null && !o.Disabled && o.action != null && StripDigits(o.Label) == target)
+                {
+                    return o;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Digit-insensitive form for labels carrying live counts
+        /// ("Prioritize delivering 75 steel" vs 60 after a partial haul).</summary>
+        private static string StripDigits(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+            {
+                return s;
+            }
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!char.IsDigit(s[i]))
+                {
+                    sb.Append(s[i]);
+                }
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Next stairs hop from the pawn's CURRENT map strictly toward
+        /// targetMap. destHint reroutes the final hop toward the destination
+        /// cell so the pawn lands near its order, exactly like the single-hop
+        /// path always did.</summary>
+        internal static bool TryNextHop(Pawn pawn, Map targetMap, IntVec3 destHint,
+            out Building_ABStairs entry, out Building_ABStairs exit, out Map next)
+        {
+            entry = null;
+            exit = null;
+            next = null;
+            LevelComp comp = pawn.Map.Levels();
+            if (comp == null)
+            {
+                return false;
+            }
+            int dir = Math.Sign(targetMap.Level() - pawn.Map.Level());
+            next = dir > 0 ? comp.upperMap : dir < 0 ? comp.lowerMap : null;
+            if (next == null || next.Disposed)
+            {
+                return false;
+            }
+            entry = CrossLevelWork.NearestUsableStairsCached(pawn, next);
+            exit = entry?.CounterpartTowards(next);
+            if (entry == null || exit == null)
+            {
+                entry = null;
+                exit = null;
+                return false;
+            }
+            if (next == targetMap && destHint.IsValid && destHint.InBounds(next))
+            {
+                StairRouter.Reroute(pawn, next, destHint, ref entry, ref exit);
+            }
+            return true;
+        }
+
+        /// <summary>Routes the pawn hop by hop to the target level and runs the
+        /// order on final arrival. Each hop re-resolves its stairs LIVE at
+        /// travel time - fresher than a menu-open-time pick (stairs forbidden
+        /// or destroyed between click and arrival re-route instead of dead-
+        /// ending) - re-arming the pending order per hop; ABPendingOrders'
+        /// idle retry self-heals every leg. Recursion is bounded by the
+        /// three-level cap.</summary>
+        internal static void RouteChainThenRun(Pawn pawn, Map targetMap, IntVec3 destHint, Action original)
+        {
+            try
+            {
+                if (pawn == null || original == null || !pawn.Spawned || pawn.Dead)
+                {
+                    return;
+                }
+                if (pawn.Map == targetMap)
+                {
+                    original();
+                    return;
+                }
+                if (!TryNextHop(pawn, targetMap, destHint, out Building_ABStairs entry,
+                        out Building_ABStairs exit, out Map next))
+                {
+                    Messages.Message("AB_NoStairsToLevel".Translate(
+                        targetMap.Level() > pawn.Map.Level()
+                            ? "AB_LevelAbove".Translate()
+                            : "AB_LevelBelow".Translate()),
+                        pawn, MessageTypeDefOf.RejectInput, historical: false);
+                    return;
+                }
+                Job job = JobMaker.MakeJob(ABDefOf.AB_UseStairs, entry);
+                job.targetC = exit;
+                job.playerForced = true;
+                ABPendingOrders.Set(pawn, next,
+                    delegate { RouteChainThenRun(pawn, targetMap, destHint, original); });
+                pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "cross level order chain");
             }
         }
 
