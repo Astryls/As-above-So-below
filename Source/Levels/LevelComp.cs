@@ -218,6 +218,16 @@ namespace AsAboveSoBelow
         /// scribed): see the visibility block in MapComponentTick.</summary>
         private bool belowPrintsHealed;
 
+        /// <summary>One-shot fog-mesh heal (per session): pocket levels can
+        /// carry a STALE all-fogged fog bake from map birth - gen clears the
+        /// fog GRID after the drawer's initial bake without dirtying sections.
+        /// Invisible for rounds because the fog rendered multiplied by the
+        /// near-black underground sky; disableSkyLighting (2026-07-24)
+        /// restored fog's true gray and unveiled it ("basement appears as all
+        /// fog of war", diagnostic: fog DATA 0%). One whole-map fog regen on
+        /// first view per session heals every such case, old saves included.</summary>
+        private bool fogMeshHealed;
+
         private static int Stagger(Map map, int interval) => map.uniqueID % interval;
 
         /// <summary>Lazy-init + elapsed-time due check with a per-map stagger.</summary>
@@ -286,6 +296,19 @@ namespace AsAboveSoBelow
             bool visible = map == Find.CurrentMap;
             if (visible && !wasVisible)
             {
+                if (level != 0 && !fogMeshHealed && ABGuard.On(ABGuard.Rendering)
+                    && LevelRenderer.DrawerReady(map))
+                {
+                    fogMeshHealed = true;
+                    try
+                    {
+                        map.mapDrawer.WholeMapChanged((ulong)MapMeshFlagDefOf.FogOfWar);
+                    }
+                    catch (Exception e)
+                    {
+                        ABGuard.Disable(ABGuard.Rendering, e, "fog mesh heal");
+                    }
+                }
                 // The player just switched here: sync the visual mirrors now
                 // instead of waiting out a stretched hidden-cadence window.
                 if (level == 1)

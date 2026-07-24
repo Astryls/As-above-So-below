@@ -40,7 +40,54 @@ namespace AsAboveSoBelow
             {
                 LevelMapGen.GetOrGenerate(ground, -1, ABDefOf.AB_Basement, out _);
             }
-            Messages.Message("AB dev: ensured sky + basement for this column.", MessageTypeDefOf.TaskCompletion, false);
+            // Starter stairwells (round-6 friction fix: a fresh test column had
+            // no stairs at all until the player built them - "no stairs
+            // appears"). Spawning the surface side runs the production pairing
+            // path, which spawns and links the far end itself.
+            int spawned = 0;
+            spawned += EnsureStarterStairs(ground, ground.Levels()?.lowerMap, "AB_StairsDown");
+            spawned += EnsureStarterStairs(ground, ground.Levels()?.upperMap, "AB_StairsUp");
+            Messages.Message("AB dev: ensured sky + basement"
+                + (spawned > 0 ? " (+" + spawned + " starter stairs)" : "") + ".",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        /// <summary>Spawns one surface-side stairwell toward the target level
+        /// when no link exists yet. Returns 1 when spawned.</summary>
+        private static int EnsureStarterStairs(Map ground, Map target, string defName)
+        {
+            if (ground == null || target == null || target.Disposed)
+            {
+                return 0;
+            }
+            List<Thing> things = ground.listerThings.AllThings;
+            for (int i = 0; i < things.Count; i++)
+            {
+                if (things[i] is Building_ABStairs s && s.Counterpart?.Map == target)
+                {
+                    return 0; // already linked
+                }
+            }
+            ThingDef def = DefDatabase<ThingDef>.GetNamedSilentFail(defName);
+            if (def == null)
+            {
+                return 0;
+            }
+            IntVec3 spot;
+            bool found = CellFinderLoose.TryFindRandomNotEdgeCellWith(
+                20,
+                c => c.Standable(ground) && c.GetEdifice(ground) == null
+                    && !ground.terrainGrid.TerrainAt(c).IsWater
+                    && (c.GetZone(ground) == null),
+                ground, out spot);
+            if (!found)
+            {
+                spot = ground.Center;
+            }
+            Thing stairs = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+            GenSpawn.Spawn(stairs, spot, ground);
+            stairs.SetFaction(Faction.OfPlayer);
+            return 1;
         }
 
         [DebugAction("As above", "AB: cross-gap combat self-test", allowedGameStates = AllowedGameStates.PlayingOnMap)]
@@ -1543,6 +1590,80 @@ namespace AsAboveSoBelow
             Messages.Message("AB dev: cap corner fillers "
                 + (SectionLayer_ABMountainCap.CornerFillersEnabled ? "ON" : "OFF")
                 + " - compare the dash artifacts.", MessageTypeDefOf.NeutralEvent, false);
+        }
+
+        /// <summary>Basement ground truth after the round-5 all-fog report:
+        /// biome identity (def-load probe - a fallback name here means our
+        /// biome XML died at startup), stairs counts on both ends (generation
+        /// probe - zero means never spawned, nonzero + invisible means
+        /// rendering), fog data percentage (a cleared grid that still LOOKS
+        /// fogged means stale section meshes), links, and drawer readiness.</summary>
+        [DebugAction("As above", "AB: basement diagnostic", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void BasementDiagnostic()
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            try
+            {
+                Map cur = Find.CurrentMap;
+                Map ground = cur.GroundMap() ?? cur.LowerMap()?.GroundMap() ?? cur.UpperMap()?.GroundMap();
+                Map basement = ground?.Levels()?.lowerMap;
+                sb.Append("[AB basement diagnostic] cur=L").Append(cur.Level())
+                    .Append(" ground=").Append(ground != null ? ("map" + ground.uniqueID) : "null");
+                if (basement == null || basement.Disposed)
+                {
+                    sb.Append(" | NO BASEMENT LINKED");
+                }
+                else
+                {
+                    sb.Append(" | basement=map").Append(basement.uniqueID)
+                        .Append(" biome=").Append(basement.Biome?.defName ?? "NULL")
+                        .Append(" gen=").Append(basement.generatorDef?.defName ?? "NULL")
+                        .Append(" linkUp=").Append(basement.Levels()?.upperMap == ground)
+                        .Append(" drawerReady=").Append(LevelRenderer.DrawerReady(basement));
+                    int stairsBasement = 0;
+                    int stairsGround = 0;
+                    List<Thing> bThings = basement.listerThings.AllThings;
+                    for (int i = 0; i < bThings.Count; i++)
+                    {
+                        if (bThings[i] is Building_ABStairs)
+                        {
+                            stairsBasement++;
+                        }
+                    }
+                    List<Thing> gThings = ground.listerThings.AllThings;
+                    for (int i = 0; i < gThings.Count; i++)
+                    {
+                        if (gThings[i] is Building_ABStairs s && s.Counterpart?.Map == basement)
+                        {
+                            stairsGround++;
+                        }
+                    }
+                    sb.Append(" | stairs: basementSide=").Append(stairsBasement)
+                        .Append(" groundSideTowardBasement=").Append(stairsGround);
+                    int fogged = 0;
+                    int total = 0;
+                    foreach (IntVec3 c in basement.AllCells)
+                    {
+                        total++;
+                        if (basement.fogGrid.IsFogged(c))
+                        {
+                            fogged++;
+                        }
+                    }
+                    sb.Append(" | fog: ").Append(fogged).Append("/").Append(total)
+                        .Append(" (").Append((100f * fogged / Mathf.Max(1, total)).ToString("F0")).Append("%)");
+                    IntVec3 center = basement.Center;
+                    sb.Append(" | center: terrain=").Append(basement.terrainGrid.TerrainAt(center)?.defName ?? "null")
+                        .Append(" edifice=").Append(center.GetEdifice(basement)?.def.defName ?? "none")
+                        .Append(" fogged=").Append(basement.fogGrid.IsFogged(center));
+                }
+            }
+            catch (Exception e)
+            {
+                sb.Append(" EXCEPTION: ").Append(e);
+            }
+            Log.Warning(sb.ToString());
+            Messages.Message("AB basement diagnostic written to log.", MessageTypeDefOf.NeutralEvent, historical: false);
         }
 
         /// <summary>River generation ground truth: prints the genstep's own
