@@ -15,8 +15,11 @@
     </pocketMapProperties>
     <genSteps>
       <li>AB_SolidRock</li>
-      <!-- No-op unless Biomes! Caverns is loaded and the setting is on. -->
+      <!-- Both no-op unless the matching basement-environment setting is chosen;
+           mutually exclusive by settings. CavernCarve = Biomes! Caverns or a
+           curated foreign biome; UrbanRuins = an Ancient urban ruins facility. -->
       <li>AB_CavernCarve</li>
+      <li>AB_UrbanRuins</li>
     </genSteps>
   </MapGeneratorDef>
 
@@ -60,6 +63,12 @@
     <defName>AB_CavernCarve</defName>
     <order>210</order>
     <genStep Class="AsAboveSoBelow.GenStep_ABCavernCarve" />
+  </GenStepDef>
+
+  <GenStepDef>
+    <defName>AB_UrbanRuins</defName>
+    <order>215</order>
+    <genStep Class="AsAboveSoBelow.GenStep_ABUrbanRuins" />
   </GenStepDef>
 
 </Defs>

@@ -18,9 +18,14 @@ namespace AsAboveSoBelow
     /// vanilla, so plant regrowth, wildlife, ambience and biome extensions all
     /// follow it for the life of the save.
     ///
-    /// Runs directly after AB_SolidRock and only when Biomes! Caverns is
-    /// loaded and the setting is on; otherwise the basement stays vanilla
-    /// solid rock. Everything is wrapped by the LevelGen kill switch.
+    /// Runs directly after AB_SolidRock. Generalized 2026-07-23: drives ANY
+    /// carve-type basement environment (BasementEnv.IsCarveType) - a Biomes!
+    /// Caverns cavern OR a curated foreign biome (Alpha Biomes mycotic jungle,
+    /// gelatinous superorganism, forsaken crags, tar pits). The biome swap +
+    /// terrain + flora + fauna are all generic BiomeDef reads; only the
+    /// stalagmite/crystal dressing is Biomes! Caverns specific and is gated to
+    /// the Caverns type. Otherwise the basement stays vanilla solid rock.
+    /// Everything is wrapped by the LevelGen kill switch.
     /// </summary>
     public class GenStep_ABCavernCarve : GenStep
     {
@@ -37,7 +42,7 @@ namespace AsAboveSoBelow
                 return;
             }
             ABSettings settings = ABMod.Settings;
-            if (settings == null || !settings.cavernBasements || !BiomesCavernsCompat.Active)
+            if (settings == null || !BasementEnv.IsCarveType(settings.basementType))
             {
                 return;
             }
@@ -48,14 +53,17 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            BiomeDef biome = BiomesCavernsCompat.Resolve(settings.cavernBiome);
+            BiomeDef biome = BasementEnv.ResolveCarveBiome(settings);
             if (biome == null)
             {
                 return;
             }
+            // BC-only dressing (stalagmite/crystal scatterers) applies to the
+            // Caverns type; foreign biomes get their own flora/terrain instead.
+            bool bcDressing = settings.basementType == BasementEnv.Caverns && BiomesCavernsCompat.Active;
             try
             {
-                Carve(map, biome, Mathf.Clamp(settings.cavernOpenness, 0.1f, 0.6f));
+                Carve(map, biome, Mathf.Clamp(settings.cavernOpenness, 0.1f, 0.6f), bcDressing);
             }
             catch (Exception e)
             {
@@ -63,7 +71,7 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void Carve(Map map, BiomeDef biome, float openness)
+        private static void Carve(Map map, BiomeDef biome, float openness, bool bcDressing)
         {
             // 1. The biome swap. The pocket tile is created by MapGenerator with
             // our AB_Underground default and deep-scribed with the map, so this
@@ -206,24 +214,28 @@ namespace AsAboveSoBelow
                 ABLog.Dev("Cavern carve: " + pillars + " support pillars added.");
             }
 
-            // 5. Their own dressing: stalagmites everywhere, crystals in the
-            // crystal biome. Both are self-contained scatterers with their own
-            // placement validators.
-            // Formation density (settings): run BC's scatterer 0..2 times,
-            // fractional part as a chance for one more pass.
-            float formations = Mathf.Clamp(ABMod.Settings?.cavernFormations ?? 1f, 0f, 2f);
-            int formationRuns = Mathf.FloorToInt(formations);
-            if (Rand.Chance(formations - formationRuns))
+            // 5. Biomes! Caverns dressing (Caverns type only): stalagmites
+            // everywhere, crystals in the crystal biome. Both are self-contained
+            // scatterers with their own placement validators. Foreign carve
+            // biomes rely on their own flora/terrain for character instead.
+            if (bcDressing)
             {
-                formationRuns++;
-            }
-            for (int fi = 0; fi < formationRuns; fi++)
-            {
-                BiomesCavernsCompat.RunForeignGenStep("BMT_ScatterStalagmiteGenerator", map);
-            }
-            if (biome.defName == "BMT_CrystalCaverns")
-            {
-                BiomesCavernsCompat.RunForeignGenStep("BMT_CrystalsGenerator", map);
+                // Formation density (settings): run BC's scatterer 0..2 times,
+                // fractional part as a chance for one more pass.
+                float formations = Mathf.Clamp(ABMod.Settings?.cavernFormations ?? 1f, 0f, 2f);
+                int formationRuns = Mathf.FloorToInt(formations);
+                if (Rand.Chance(formations - formationRuns))
+                {
+                    formationRuns++;
+                }
+                for (int fi = 0; fi < formationRuns; fi++)
+                {
+                    BiomesCavernsCompat.RunForeignGenStep("BMT_ScatterStalagmiteGenerator", map);
+                }
+                if (biome.defName == "BMT_CrystalCaverns")
+                {
+                    BiomesCavernsCompat.RunForeignGenStep("BMT_CrystalsGenerator", map);
+                }
             }
 
             // 6. Starting flora from the biome's own cave plant list, weighted

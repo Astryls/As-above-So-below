@@ -104,6 +104,13 @@ namespace AsAboveSoBelow
         public float basementOreDensity = 6f;    // ore lumps per 10k basement cells
         public float cavernChamberFreq = 0.02f;  // cavern chamber chance per worm step
         public float cavernFormations = 1f;      // BC stalagmite scatter multiplier
+        // Basement environment (2026-07-23): unified selector replacing the old
+        // cavernBasements toggle. One of BasementEnv.SolidRock / Caverns /
+        // UrbanRuins, or a curated foreign biome defName. Legacy cavernBasements
+        // (above) is now read only for the one-time migration in ExposeData.
+        public string basementType = BasementEnv.SolidRock;
+        public bool urbanRuinsOccupants = true;   // AUR facility: spawn scavengers
+        private bool basementMigrated;
         // Landmarks on sky levels (Odyssey landmark system; see ABSkyLandmarks).
         public bool skyLandmarks = true;
         public float skyLandmarkChance = 0.30f;
@@ -204,7 +211,12 @@ namespace AsAboveSoBelow
         private void DoGenerationTab(Listing_Standard listing)
         {
             bool showPeaks = naturalPeaks;
-            bool showCaverns = BiomesCavernsCompat.Active && cavernBasements;
+            // Basement-environment visibility snapshot (constant across the
+            // frame's passes, IMGUI discipline). bt drives which sub-options show.
+            string bt = BasementEnv.Sanitize(basementType);
+            bool showCaverns = bt == BasementEnv.Caverns;
+            bool showCarve = BasementEnv.IsCarveType(bt);
+            bool showUrban = bt == BasementEnv.UrbanRuins;
 
             GUI.color = NoteDim;
             listing.Label("AB_GenNote".Translate());
@@ -265,45 +277,78 @@ namespace AsAboveSoBelow
 
             listing.Label("AB_BasementOre".Translate() + ": " + basementOreDensity.ToString("0.0"), tooltip: "AB_BasementOreTip".Translate());
             basementOreDensity = listing.Slider(basementOreDensity, 0f, 12f);
-            if (BiomesCavernsCompat.Active)
+            // Basement environment selector. Options depend on which mods are
+            // loaded (see BasementEnv): solid rock always, Biomes! Caverns,
+            // Ancient urban ruins facility, and curated foreign biomes.
+            if (listing.ButtonTextLabeled("AB_BasementEnv".Translate(), BasementEnv.LabelFor(bt), tooltip: "AB_BasementEnvTip".Translate()))
             {
-                listing.CheckboxLabeled("AB_CavernBasements".Translate(), ref cavernBasements, "AB_CavernBasementsTip".Translate());
+                List<FloatMenuOption> envOptions = new List<FloatMenuOption>();
+                List<BasementEnv.Option> avail = BasementEnv.AvailableOptions();
+                for (int i = 0; i < avail.Count; i++)
+                {
+                    string id = avail[i].id;
+                    envOptions.Add(new FloatMenuOption(avail[i].label, delegate
+                    {
+                        basementType = id;
+                    }));
+                }
+                Find.WindowStack.Add(new FloatMenu(envOptions));
+            }
+            if (showCaverns)
+            {
+                listing.Indent(16f);
+                listing.ColumnWidth -= 16f;
+                string current = cavernBiome == BiomesCavernsCompat.RandomChoice
+                    ? "AB_CavernBiomeRandom".Translate().ToString()
+                    : (DefDatabase<BiomeDef>.GetNamedSilentFail(cavernBiome)?.LabelCap.ToString() ?? cavernBiome);
+                if (listing.ButtonTextLabeled("AB_CavernBiome".Translate(), current, tooltip: "AB_CavernBiomeTip".Translate()))
+                {
+                    List<FloatMenuOption> options = new List<FloatMenuOption>
+                    {
+                        new FloatMenuOption("AB_CavernBiomeRandom".Translate(), delegate
+                        {
+                            cavernBiome = BiomesCavernsCompat.RandomChoice;
+                        })
+                    };
+                    List<BiomeDef> pool = BiomesCavernsCompat.CavernBiomes();
+                    for (int i = 0; i < pool.Count; i++)
+                    {
+                        BiomeDef b = pool[i];
+                        options.Add(new FloatMenuOption(b.LabelCap, delegate
+                        {
+                            cavernBiome = b.defName;
+                        }));
+                    }
+                    Find.WindowStack.Add(new FloatMenu(options));
+                }
+                listing.ColumnWidth += 16f;
+                listing.Outdent(16f);
+            }
+            if (showCarve)
+            {
+                // Openness + chamber frequency drive the worm carve for every
+                // carve-type basement (Caverns and foreign biomes alike).
+                listing.Indent(16f);
+                listing.ColumnWidth -= 16f;
+                listing.Label("AB_CavernOpenness".Translate() + ": " + cavernOpenness.ToStringPercent(), tooltip: "AB_CavernOpennessTip".Translate());
+                cavernOpenness = listing.Slider(cavernOpenness, 0.1f, 0.6f);
+                listing.Label("AB_ChamberFreq".Translate() + ": " + (cavernChamberFreq * 100f).ToString("0.0"), tooltip: "AB_ChamberFreqTip".Translate());
+                cavernChamberFreq = listing.Slider(cavernChamberFreq, 0.01f, 0.05f);
                 if (showCaverns)
                 {
-                    listing.Indent(16f);
-                    listing.ColumnWidth -= 16f;
-                    string current = cavernBiome == BiomesCavernsCompat.RandomChoice
-                        ? "AB_CavernBiomeRandom".Translate().ToString()
-                        : (DefDatabase<BiomeDef>.GetNamedSilentFail(cavernBiome)?.LabelCap.ToString() ?? cavernBiome);
-                    if (listing.ButtonTextLabeled("AB_CavernBiome".Translate(), current, tooltip: "AB_CavernBiomeTip".Translate()))
-                    {
-                        List<FloatMenuOption> options = new List<FloatMenuOption>
-                        {
-                            new FloatMenuOption("AB_CavernBiomeRandom".Translate(), delegate
-                            {
-                                cavernBiome = BiomesCavernsCompat.RandomChoice;
-                            })
-                        };
-                        List<BiomeDef> pool = BiomesCavernsCompat.CavernBiomes();
-                        for (int i = 0; i < pool.Count; i++)
-                        {
-                            BiomeDef b = pool[i];
-                            options.Add(new FloatMenuOption(b.LabelCap, delegate
-                            {
-                                cavernBiome = b.defName;
-                            }));
-                        }
-                        Find.WindowStack.Add(new FloatMenu(options));
-                    }
-                    listing.Label("AB_CavernOpenness".Translate() + ": " + cavernOpenness.ToStringPercent(), tooltip: "AB_CavernOpennessTip".Translate());
-                    cavernOpenness = listing.Slider(cavernOpenness, 0.1f, 0.6f);
-                    listing.Label("AB_ChamberFreq".Translate() + ": " + (cavernChamberFreq * 100f).ToString("0.0"), tooltip: "AB_ChamberFreqTip".Translate());
-                    cavernChamberFreq = listing.Slider(cavernChamberFreq, 0.01f, 0.05f);
                     listing.Label("AB_CavernFormations".Translate() + ": " + cavernFormations.ToStringPercent(), tooltip: "AB_CavernFormationsTip".Translate());
                     cavernFormations = listing.Slider(cavernFormations, 0f, 2f);
-                    listing.ColumnWidth += 16f;
-                    listing.Outdent(16f);
                 }
+                listing.ColumnWidth += 16f;
+                listing.Outdent(16f);
+            }
+            if (showUrban)
+            {
+                listing.Indent(16f);
+                listing.ColumnWidth -= 16f;
+                listing.CheckboxLabeled("AB_UrbanRuinsOccupants".Translate(), ref urbanRuinsOccupants, "AB_UrbanRuinsOccupantsTip".Translate());
+                listing.ColumnWidth += 16f;
+                listing.Outdent(16f);
             }
             listing.GapLine(10f);
             DoLandmarkSection(listing);
@@ -727,7 +772,8 @@ namespace AsAboveSoBelow
             peakVegetation = 1f;
             skyOreDensity = 6f;
             basementOreDensity = 6f;
-            cavernBasements = true;
+            basementType = BasementEnv.SolidRock;
+            urbanRuinsOccupants = true;
             cavernBiome = BiomesCavernsCompat.RandomChoice;
             cavernOpenness = 0.35f;
             cavernChamberFreq = 0.02f;
@@ -889,6 +935,18 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
+            Scribe_Values.Look(ref basementType, "basementType", BasementEnv.SolidRock);
+            Scribe_Values.Look(ref urbanRuinsOccupants, "urbanRuinsOccupants", true);
+            Scribe_Values.Look(ref basementMigrated, "basementMigrated", false);
+            // One-time migration from the old cavernBasements bool: a config
+            // predating basementType had caverns on by default, so carry that
+            // choice forward (else solid rock). New configs save basementMigrated
+            // = true and skip this.
+            if (Scribe.mode == LoadSaveMode.LoadingVars && !basementMigrated)
+            {
+                basementType = cavernBasements ? BasementEnv.Caverns : BasementEnv.SolidRock;
+                basementMigrated = true;
+            }
             Scribe_Values.Look(ref skyLandmarks, "skyLandmarks", true);
             Scribe_Values.Look(ref skyLandmarkChance, "skyLandmarkChance", 0.30f);
             Scribe_Values.Look(ref skyLandmarkMax, "skyLandmarkMax", 1);

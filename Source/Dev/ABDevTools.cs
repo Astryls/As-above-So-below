@@ -695,7 +695,7 @@ namespace AsAboveSoBelow
                     Report("cavern-basement self-test", sb, pass, fail);
                     return;
                 }
-                Check("setting on", ABMod.Settings != null && ABMod.Settings.cavernBasements);
+                Check("basement type is Caverns", ABMod.Settings != null && ABMod.Settings.basementType == BasementEnv.Caverns);
                 Map surface = Find.CurrentMap?.GroundMap();
                 if (surface == null)
                 {
