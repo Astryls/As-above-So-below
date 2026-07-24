@@ -1270,6 +1270,172 @@ namespace AsAboveSoBelow
             Report("pod transit self-test", sb, pass, fail);
         }
 
+        [DebugAction("As above", "AB: sky drop-grouping self-test", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void SelfTestSkyDropGrouping()
+        {
+            StringBuilder sb = new StringBuilder();
+            int pass = 0;
+            int fail = 0;
+
+            void Check(string name, bool cond, string detail = "")
+            {
+                if (cond)
+                {
+                    pass++;
+                    sb.AppendLine("  PASS  " + name);
+                }
+                else
+                {
+                    fail++;
+                    sb.AppendLine("  FAIL  " + name + (string.IsNullOrEmpty(detail) ? "" : "   [" + detail + "]"));
+                }
+            }
+
+            try
+            {
+                Map surface = Find.CurrentMap?.GroundMap();
+                if (surface == null)
+                {
+                    Check("ground/surface map exists", false, "no ground map");
+                    Report("sky drop-grouping self-test", sb, pass, fail);
+                    return;
+                }
+                Map sky = surface.Levels()?.upperMap ?? LevelMapGen.GetOrGenerate(surface, 1, ABDefOf.AB_Sky, out _);
+                Check("sky level exists", sky != null);
+                if (sky == null)
+                {
+                    Report("sky drop-grouping self-test", sb, pass, fail);
+                    return;
+                }
+
+                // Carve a wide open-air region on the sky and punch a small plateau
+                // block in its middle - the only landable ground for the whole drop.
+                IntVec3 baseCell = FindOpenBaseCell(surface);
+                const int Half = 9;
+                for (int dx = -Half; dx <= Half; dx++)
+                {
+                    for (int dz = -Half; dz <= Half; dz++)
+                    {
+                        IntVec3 c = baseCell + new IntVec3(dx, 0, dz);
+                        if (!c.InBounds(sky) || !c.InBounds(surface))
+                        {
+                            continue;
+                        }
+                        ClearCell(sky, c);
+                        ClearCell(surface, c);
+                        if (surface.roofGrid.Roofed(c))
+                        {
+                            surface.roofGrid.SetRoof(c, null);
+                        }
+                        sky.terrainGrid.SetTerrain(c, ABDefOf.AB_OpenAir);
+                        if (sky.roofGrid.Roofed(c))
+                        {
+                            sky.roofGrid.SetRoof(c, null);
+                        }
+                    }
+                }
+                const int PlateauHalf = 2;
+                int plateauCells = 0;
+                for (int dx = -PlateauHalf; dx <= PlateauHalf; dx++)
+                {
+                    for (int dz = -PlateauHalf; dz <= PlateauHalf; dz++)
+                    {
+                        IntVec3 c = baseCell + new IntVec3(dx, 0, dz);
+                        if (!c.InBounds(sky))
+                        {
+                            continue;
+                        }
+                        MakePlatform(sky, surface, c);
+                        plateauCells++;
+                    }
+                }
+                sky.regionAndRoomUpdater?.TryRebuildDirtyRegionsAndRooms();
+                Check("plateau block built on the sky",
+                    plateauCells > 0 && sky.terrainGrid.TerrainAt(baseCell) != ABDefOf.AB_OpenAir);
+
+                // Stress the fix: drop CENTER deep in open air, off the plateau.
+                IntVec3 openCenter = baseCell + new IntVec3(Half - 1, 0, 0);
+                Check("stress drop center is open air",
+                    openCenter.InBounds(sky) && sky.terrainGrid.TerrainAt(openCenter) == ABDefOf.AB_OpenAir);
+
+                const int Groups = 6;
+                HashSet<int> before = new HashSet<int>();
+                foreach (Thing t in surface.listerThings.ThingsOfDef(ThingDefOf.DropPodIncoming))
+                {
+                    before.Add(t.thingIDNumber);
+                }
+                foreach (Thing t in sky.listerThings.ThingsOfDef(ThingDefOf.DropPodIncoming))
+                {
+                    before.Add(t.thingIDNumber);
+                }
+
+                List<List<Thing>> thingsGroups = new List<List<Thing>>();
+                for (int i = 0; i < Groups; i++)
+                {
+                    Thing steel = ThingMaker.MakeThing(ThingDefOf.Steel);
+                    steel.stackCount = 20;
+                    thingsGroups.Add(new List<Thing> { steel });
+                }
+                DropPodUtility.DropThingGroupsNear(openCenter, sky, thingsGroups, forbid: false);
+
+                List<Thing> pods = new List<Thing>();
+                foreach (Thing t in sky.listerThings.ThingsOfDef(ThingDefOf.DropPodIncoming))
+                {
+                    if (!before.Contains(t.thingIDNumber))
+                    {
+                        pods.Add(t);
+                    }
+                }
+                int onSurface = 0;
+                foreach (Thing t in surface.listerThings.ThingsOfDef(ThingDefOf.DropPodIncoming))
+                {
+                    if (!before.Contains(t.thingIDNumber))
+                    {
+                        onSurface++;
+                    }
+                }
+
+                Check("pods spawned", pods.Count > 0, "pods=" + pods.Count);
+                Check("no pod scattered to the surface (fell through open air)", onSurface == 0,
+                    "onSurface=" + onSurface);
+
+                int onAir = 0;
+                int maxDistSq = 0;
+                foreach (Thing t in pods)
+                {
+                    if (sky.terrainGrid.TerrainAt(t.Position) == ABDefOf.AB_OpenAir)
+                    {
+                        onAir++;
+                    }
+                    int d = (t.Position - baseCell).LengthHorizontalSquared;
+                    if (d > maxDistSq)
+                    {
+                        maxDistSq = d;
+                    }
+                }
+                Check("every pod landed on a plateau cell (never open air)", onAir == 0,
+                    "onAir=" + onAir + " of " + pods.Count);
+                Check("pods grouped near the plateau (not spread map-wide)",
+                    pods.Count == 0 || maxDistSq <= 12 * 12, "maxDist=" + Mathf.Sqrt(maxDistSq).ToString("0.0"));
+
+                // Clean up the incoming pods so the test leaves no falling debris.
+                foreach (Thing t in pods)
+                {
+                    if (!t.Destroyed)
+                    {
+                        t.Destroy();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                fail++;
+                sb.AppendLine("  EXCEPTION during self-test:\n" + e);
+            }
+
+            Report("sky drop-grouping self-test", sb, pass, fail);
+        }
+
         [DebugAction("As above", "AB: toggle cap corner fillers", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void ToggleCapCornerFillers()
         {
