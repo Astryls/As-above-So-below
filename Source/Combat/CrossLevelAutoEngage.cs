@@ -94,8 +94,9 @@ namespace AsAboveSoBelow
         {
             // No player pawns on the target level means nothing to shoot at: skip the
             // whole direction before touching any hostile (the common case - nobody
-            // lives on the sky level of most columns).
-            if (targetMap.mapPawns.SpawnedPawnsInFaction(Faction.OfPlayer).Count == 0)
+            // lives on the sky level of most columns). ANY pawn may be a victim, not
+            // just the player's - a hostile fires on a rival faction across the gap too.
+            if (targetMap.mapPawns.AllPawnsSpawned.Count == 0)
             {
                 return;
             }
@@ -316,25 +317,20 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            bool shooterHostile = shooter.HostileTo(Faction.OfPlayer);
             tmpTargets.Clear();
             IReadOnlyList<Pawn> candidates = targetMap.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < candidates.Count; i++)
             {
                 Pawn t = candidates[i];
-                if (t == null || t.Dead || !t.Spawned)
+                if (t == null || t.Dead || !t.Spawned || t.Downed)
                 {
                     continue;
                 }
-                // Hostiles shoot the player's pawns; colonists shoot hostiles.
-                if (shooterHostile)
-                {
-                    if (t.Faction != Faction.OfPlayer || t.Downed)
-                    {
-                        continue;
-                    }
-                }
-                else if (!t.HostileTo(Faction.OfPlayer) || t.Downed)
+                // ONE-MAP faction combat: target anything hostile to the SHOOTER, not
+                // just the player - a raider fires on a closer rival faction, mechs, or
+                // hostile animals across the gap exactly as it would same-map. (Turrets
+                // already do this via HostileTo(turret); this brings pawns in line.)
+                if (!t.HostileTo(shooter))
                 {
                     continue;
                 }
