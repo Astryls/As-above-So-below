@@ -222,6 +222,8 @@
   <AB_BasementUrbanRuins>Buried facility (Ancient urban ruins)</AB_BasementUrbanRuins>
   <AB_UrbanRuinsOccupants>Include ancient occupants</AB_UrbanRuinsOccupants>
   <AB_UrbanRuinsOccupantsTip>Spawn the facility's original scavengers when the basement is created: loot and a real fight down in the dark. Turn off for a quiet, abandoned ruin. The facility's own entrances and exits are always removed, so your stairs are the only way in.</AB_UrbanRuinsOccupantsTip>
+  <AB_RevealBasement>Reveal basements on load</AB_RevealBasement>
+  <AB_RevealBasementTip>Clear all fog on a basement the moment it is created or loaded, so the whole level is visible without mining to discover it. Applies to every basement type. Turn off to explore basements the normal way, breaking into the dark cell by cell.</AB_RevealBasementTip>
   <AB_CavernBasements>Basements generate as living caverns (Biomes! Caverns)</AB_CavernBasements>
   <AB_CavernBasementsTip>Newly generated basements come out as one of Biomes! Caverns' cave biomes: a connected tunnel network with cave terrain, flora, wildlife, stalagmites and crystals, sealed inside the rock until you break into it. Existing basements are unchanged. Note: the earthen depths biome is constantly hot.</AB_CavernBasementsTip>
   <AB_CavernBiome>Cavern biome</AB_CavernBiome>

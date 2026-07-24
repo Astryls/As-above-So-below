@@ -110,6 +110,7 @@ namespace AsAboveSoBelow
         // (above) is now read only for the one-time migration in ExposeData.
         public string basementType = BasementEnv.SolidRock;
         public bool urbanRuinsOccupants = true;   // AUR facility: spawn scavengers
+        public bool basementRevealed = true;      // clear all fog on basement load
         private bool basementMigrated;
         // Landmarks on sky levels (Odyssey landmark system; see ABSkyLandmarks).
         public bool skyLandmarks = true;
@@ -350,6 +351,7 @@ namespace AsAboveSoBelow
                 listing.ColumnWidth += 16f;
                 listing.Outdent(16f);
             }
+            listing.CheckboxLabeled("AB_RevealBasement".Translate(), ref basementRevealed, "AB_RevealBasementTip".Translate());
             listing.GapLine(10f);
             DoLandmarkSection(listing);
         }
@@ -774,6 +776,7 @@ namespace AsAboveSoBelow
             basementOreDensity = 6f;
             basementType = BasementEnv.SolidRock;
             urbanRuinsOccupants = true;
+            basementRevealed = true;
             cavernBiome = BiomesCavernsCompat.RandomChoice;
             cavernOpenness = 0.35f;
             cavernChamberFreq = 0.02f;
@@ -937,6 +940,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
             Scribe_Values.Look(ref basementType, "basementType", BasementEnv.SolidRock);
             Scribe_Values.Look(ref urbanRuinsOccupants, "urbanRuinsOccupants", true);
+            Scribe_Values.Look(ref basementRevealed, "basementRevealed", true);
             Scribe_Values.Look(ref basementMigrated, "basementMigrated", false);
             // One-time migration from the old cavernBasements bool: a config
             // predating basementType had caverns on by default, so carry that

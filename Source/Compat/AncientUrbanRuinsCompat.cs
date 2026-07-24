@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
@@ -132,7 +133,10 @@ namespace AsAboveSoBelow
         private static Type dataDefType;
         private static Type entranceType;
         private static Type exitType;
+        private static Type mapPortalType;
         private static FieldInfo sizeField;
+        private static FieldInfo thingDatasField;
+        private static FieldInfo thingDataDefField;
         private static MethodInfo mPretreat;
         private static MethodInfo mSetRoofAndTerrain;
         private static MethodInfo mSpawnThings;
@@ -164,7 +168,14 @@ namespace AsAboveSoBelow
                 if (dataDefType != null)
                 {
                     sizeField = AccessTools.Field(dataDefType, "size");
+                    thingDatasField = AccessTools.Field(dataDefType, "thingDatas");
                 }
+                Type thingDataType = AccessTools.TypeByName("AncientMarket_Libraray.ThingData");
+                if (thingDataType != null)
+                {
+                    thingDataDefField = AccessTools.Field(thingDataType, "def");
+                }
+                mapPortalType = AccessTools.TypeByName("RimWorld.MapPortal");
             }
             catch (Exception e)
             {
@@ -198,7 +209,7 @@ namespace AsAboveSoBelow
 
                 InvokeSafe(mPretreat, core, "Pretreat");
                 InvokeSafe(mSetRoofAndTerrain, new object[] { map, def, center, false }, "SetRoofAndTerrain");
-                InvokeSafe(mSpawnThings, core, "SpawnThings");
+                SpawnThingsNoPortals(def, map, center);
                 if (includeOccupants && mSpawnPawns != null)
                 {
                     InvokeSafe(mSpawnPawns, core, "SpawnPawns");
@@ -211,6 +222,84 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABLog.Dev("AUR facility stamp failed (basement stays solid rock): " + e.Message);
+                return false;
+            }
+        }
+
+        /// <summary>Run AUR's SpawnThings with the facility's map-portal
+        /// buildings (MapEntrance/MapExit and any vanilla MapPortal) filtered
+        /// out of thingDatas first, so they never spawn - and never let their
+        /// PocketMapExit.SpawnSetup log "could not find map portal to connect
+        /// to" against our portal-less basement. The def's list is swapped for
+        /// a filtered copy only for the duration of the call and restored in a
+        /// finally. If filtering can't be set up we fall back to the unfiltered
+        /// spawn (StripPortals still cleans up afterward).</summary>
+        private static void SpawnThingsNoPortals(object def, Map map, IntVec3 center)
+        {
+            object[] core = { map, def, center };
+            IList orig = thingDatasField?.GetValue(def) as IList;
+            if (orig == null || thingDataDefField == null)
+            {
+                InvokeSafe(mSpawnThings, core, "SpawnThings");
+                return;
+            }
+            IList filtered;
+            try
+            {
+                filtered = (IList)Activator.CreateInstance(orig.GetType());
+            }
+            catch
+            {
+                InvokeSafe(mSpawnThings, core, "SpawnThings");
+                return;
+            }
+            int removed = 0;
+            foreach (object td in orig)
+            {
+                if (IsPortalEntry(td))
+                {
+                    removed++;
+                    continue;
+                }
+                filtered.Add(td);
+            }
+            if (removed == 0)
+            {
+                InvokeSafe(mSpawnThings, core, "SpawnThings");
+                return;
+            }
+            thingDatasField.SetValue(def, filtered);
+            try
+            {
+                InvokeSafe(mSpawnThings, core, "SpawnThings");
+            }
+            finally
+            {
+                thingDatasField.SetValue(def, orig);
+            }
+            ABLog.Dev("Filtered " + removed + " portal buildings from AUR facility before spawn.");
+        }
+
+        private static bool IsPortalEntry(object thingData)
+        {
+            try
+            {
+                string dn = thingDataDefField.GetValue(thingData) as string;
+                if (string.IsNullOrEmpty(dn))
+                {
+                    return false;
+                }
+                Type tc = DefDatabase<ThingDef>.GetNamedSilentFail(dn)?.thingClass;
+                if (tc == null)
+                {
+                    return false;
+                }
+                return (mapPortalType != null && mapPortalType.IsAssignableFrom(tc))
+                    || (entranceType != null && entranceType.IsAssignableFrom(tc))
+                    || (exitType != null && exitType.IsAssignableFrom(tc));
+            }
+            catch
+            {
                 return false;
             }
         }

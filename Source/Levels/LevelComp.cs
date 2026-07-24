@@ -125,6 +125,21 @@ namespace AsAboveSoBelow
                 // a no-op when the event path kept everything in sync.
                 LevelSync.ReconcileRooftops(map);
             }
+            if (level == -1 && ABMod.Settings != null && ABMod.Settings.basementRevealed)
+            {
+                // Reveal-on-load: clear all fog so the whole basement is
+                // visible without mining to discover it. Runs on generation
+                // AND after a save load (FinalizeInit fires for both). Unfog
+                // sends no area-revealed letters, so no spam.
+                try
+                {
+                    map.fogGrid.ClearAllFog();
+                }
+                catch (Exception e)
+                {
+                    ABLog.Dev("Basement reveal-on-load unfog failed (ignored): " + e.Message);
+                }
+            }
         }
 
         private const int WeatherSyncInterval = 150;
