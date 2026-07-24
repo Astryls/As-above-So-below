@@ -1723,7 +1723,7 @@ namespace AsAboveSoBelow
                         }
                     }
                     sb.Append(" | LIVE: groundRiver=").Append(groundRiver)
-                        .Append(" stillUnderSkyMass(wet,should be 0 after fix)=").Append(underMassWet)
+                        .Append(" wetUnderMass(through-tunnels stay wet BY DESIGN; lifted source stretches read 0)=").Append(underMassWet)
                         .Append(" skyWaterCells=").Append(skyWater)
                         .Append(" skyLips=").Append(sky.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count)
                         .Append(" groundBases=").Append(ground.listerThings.ThingsOfDef(ABDefOf.AB_WaterfallBase).Count);

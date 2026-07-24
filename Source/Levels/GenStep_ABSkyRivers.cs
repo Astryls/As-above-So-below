@@ -88,44 +88,64 @@ namespace AsAboveSoBelow
             TerrainGrid groundTerrain = ground.terrainGrid;
             TerrainGrid skyTerrain = map.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
-            List<IntVec3> carved = new List<IntVec3>();
 
-            foreach (IntVec3 c in map.AllCells)
+            // HYDROLOGY SPEC (user directive 2026-07-24): classify every
+            // contiguous under-mountain river stretch by its boundary
+            // crossings. Water flowing INTO the mass anywhere -> the stretch
+            // is a vanilla tunnel, untouched ("flows through the rock as
+            // normal"). A stretch whose crossings are ALL outflow - the river
+            // ORIGINATES under the mountain and only flows away - LIFTS: the
+            // mountain closes to solid rock at ground level and the river
+            // head lives on the sky level instead, pouring off the mass edge
+            // as a real waterfall into the still-wet surface river below.
+            bool IsMassRiver(IntVec3 mc)
             {
-                TerrainDef below = groundTerrain.BaseTerrainAt(c);
-                if (below == null || !below.IsRiver)
+                TerrainDef b = groundTerrain.BaseTerrainAt(mc);
+                if (b == null || !b.IsRiver)
                 {
-                    continue;
+                    return false;
                 }
-                TerrainDef top = skyTerrain.TerrainAt(c);
-                if (top == null || top == air || top == ABDefOf.AB_RoofSurface)
-                {
-                    // Open air already shows the surface river below; built
-                    // rooftops are never flooded.
-                    continue;
-                }
-                // Carve the channel through the mass: drop the rock wall, the
-                // roof, and the fog, then lay the same water the surface has.
-                c.GetEdifice(map)?.Destroy();
-                map.roofGrid.SetRoof(c, null);
-                map.fogGrid.Unfog(c);
-                skyTerrain.SetTerrain(c, below);
-                carved.Add(c);
+                TerrainDef t = skyTerrain.TerrainAt(mc);
+                return t != null && t != air && t != ABDefOf.AB_RoofSurface && !t.IsRiver;
             }
-
-            if (carved.Count == 0)
+            List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
+            if (stretches.Count == 0)
             {
                 return;
             }
-
-            // The river MOVES to the mountain top - it does not duplicate
-            // (live report 2026-07-24: "rivers on each level"). The tunneled
-            // stretch below the carved channel dries to the local rock's
-            // natural floor, exactly what vanilla generates under a mountain
-            // absent a river; the falls then feed the still-wet surface river
-            // beyond the mass edge, so the watercourse is hydrologically
-            // continuous: over the top, off the ledge, onward at ground level.
-            int dried = DryTunnelStretch(ground, carved);
+            int lifted = 0;
+            int keptVanilla = 0;
+            List<IntVec3> carved = new List<IntVec3>();
+            for (int s = 0; s < stretches.Count; s++)
+            {
+                List<IntVec3> stretch = stretches[s];
+                if (!ShouldLift(ground, groundWater, hasFlowData, stretch, IsMassRiver))
+                {
+                    keptVanilla++;
+                    continue;
+                }
+                lifted++;
+                for (int i = 0; i < stretch.Count; i++)
+                {
+                    IntVec3 c = stretch[i];
+                    TerrainDef below = groundTerrain.BaseTerrainAt(c);
+                    // Carve the sky channel: drop the rock wall, the roof,
+                    // and the fog, then lay the same water the surface had.
+                    c.GetEdifice(map)?.Destroy();
+                    map.roofGrid.SetRoof(c, null);
+                    map.fogGrid.Unfog(c);
+                    skyTerrain.SetTerrain(c, below);
+                    carved.Add(c);
+                    // Close the mountain below: solid rock to its boundary.
+                    SealGroundCell(ground, c);
+                }
+            }
+            if (carved.Count == 0)
+            {
+                LastSummary = "ran: " + stretches.Count + " tunnel stretch(es), all kept vanilla"
+                    + " (water flows into the rock)";
+                return;
+            }
 
             // Cut the channel like a vanilla river, not a slit: a walkable
             // bank of the rock's rough floor on every mass-rock neighbor
@@ -200,41 +220,139 @@ namespace AsAboveSoBelow
                     }
                 }
             }
-            LastSummary = "carved " + carved.Count + " water cells, " + banks.Count
-                + " bank cells, dried " + dried + " tunnel cells below, "
+            LastSummary = "lifted " + lifted + " mountain-source stretch(es): " + carved.Count
+                + " water cells + " + banks.Count + " banks on the sky, ground sealed solid below; kept "
+                + keptVanilla + " through-tunnel(s) vanilla; "
                 + map.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " waterfall lips, "
                 + basesPlaced.Count + " bases (sky map " + map.uniqueID
-                + (hasFlowData ? ", full flow data" : ", carve-only mode: no ground flow data") + ")";
+                + (hasFlowData ? ", full flow data" : ", no ground flow data") + ")";
             ABLog.Dev("Sky rivers: " + LastSummary);
         }
 
-        /// <summary>Replaces the ground map's river cells under the carved sky
-        /// channel with the local rock's natural rough floor. Cells built or
-        /// bridged over (TerrainAt != BaseTerrainAt) are left untouched.
-        /// Returns the number of cells dried. KNOWN GAP: 1.6 water-body
-        /// (fishing) data for the dried stretch may keep stale cells until the
-        /// tracker's own refresh; cosmetic, noted in the schematic.</summary>
-        private static int DryTunnelStretch(Map ground, List<IntVec3> carved)
+        /// <summary>Contiguous (4-way) groups of under-mass river cells.</summary>
+        internal static List<List<IntVec3>> CollectStretches(Map ground, Func<IntVec3, bool> isMassRiver)
         {
-            TerrainGrid gt = ground.terrainGrid;
-            int dried = 0;
-            for (int i = 0; i < carved.Count; i++)
+            List<List<IntVec3>> stretches = new List<List<IntVec3>>();
+            HashSet<IntVec3> visited = new HashSet<IntVec3>();
+            Queue<IntVec3> open = new Queue<IntVec3>();
+            foreach (IntVec3 seed in ground.AllCells)
             {
-                IntVec3 c = carved[i];
-                TerrainDef baseT = gt.BaseTerrainAt(c);
-                if (baseT == null || !baseT.IsRiver || gt.TerrainAt(c) != baseT)
+                if (visited.Contains(seed) || !isMassRiver(seed))
                 {
                     continue;
                 }
-                gt.SetTerrain(c, DryBedTerrain(ground, c));
-                dried++;
+                List<IntVec3> stretch = new List<IntVec3>();
+                open.Clear();
+                open.Enqueue(seed);
+                visited.Add(seed);
+                while (open.Count > 0)
+                {
+                    IntVec3 c = open.Dequeue();
+                    stretch.Add(c);
+                    for (int d = 0; d < 4; d++)
+                    {
+                        IntVec3 n = c + GenAdj.CardinalDirections[d];
+                        if (n.InBounds(ground) && !visited.Contains(n) && isMassRiver(n))
+                        {
+                            visited.Add(n);
+                            open.Enqueue(n);
+                        }
+                    }
+                }
+                stretches.Add(stretch);
             }
-            return dried;
+            return stretches;
         }
 
-        /// <summary>The natural rough floor of the rock flanking the tunnel;
-        /// falls back to the tile's dominant rock, then gravel.</summary>
-        private static TerrainDef DryBedTerrain(Map ground, IntVec3 c)
+        /// <summary>The hydrology verdict for one stretch. Crossings are
+        /// stretch cells cardinally adjacent to OPEN river (river outside the
+        /// mass); each is classified by the flow vector dotted with the
+        /// outward direction. Any inflow -> vanilla tunnel. All outflow ->
+        /// lift (mountain-source river). No flow data: a single crossing is a
+        /// terminal stretch, assumed source (lift); multiple crossings assume
+        /// a through-river (vanilla, the safe default).</summary>
+        internal static bool ShouldLift(Map ground, WaterInfo water, bool hasFlowData,
+            List<IntVec3> stretch, Func<IntVec3, bool> isMassRiver)
+        {
+            TerrainGrid gt = ground.terrainGrid;
+            int crossings = 0;
+            int inflow = 0;
+            int outflow = 0;
+            for (int i = 0; i < stretch.Count; i++)
+            {
+                IntVec3 c = stretch[i];
+                for (int d = 0; d < 4; d++)
+                {
+                    IntVec3 dir = GenAdj.CardinalDirections[d];
+                    IntVec3 n = c + dir;
+                    if (!n.InBounds(ground) || isMassRiver(n))
+                    {
+                        continue;
+                    }
+                    TerrainDef nt = gt.BaseTerrainAt(n);
+                    if (nt == null || !nt.IsRiver)
+                    {
+                        continue;
+                    }
+                    crossings++;
+                    if (!hasFlowData || water == null)
+                    {
+                        continue;
+                    }
+                    Vector3 flow = water.GetWaterMovement(c.ToVector3Shifted());
+                    if (flow.sqrMagnitude < 0.0001f)
+                    {
+                        continue;
+                    }
+                    float dot = Vector3.Dot(flow.normalized, dir.ToVector3());
+                    if (dot > 0.2f)
+                    {
+                        outflow++;
+                    }
+                    else if (dot < -0.2f)
+                    {
+                        inflow++;
+                    }
+                }
+            }
+            if (crossings == 0)
+            {
+                return false; // enclosed water with no open connection: leave it
+            }
+            if (inflow > 0)
+            {
+                return false; // water flows INTO the rock: vanilla tunnel
+            }
+            if (outflow > 0)
+            {
+                return true; // every known crossing flows away: mountain source
+            }
+            return crossings == 1; // no flow data: terminal stretch = source
+        }
+
+        /// <summary>Closes the mountain at ground level: the river cell
+        /// becomes solid rock (rough floor + rock wall + thick roof), matching
+        /// the flanking stone. Bridged or built-over cells are left alone.</summary>
+        private static void SealGroundCell(Map ground, IntVec3 c)
+        {
+            TerrainGrid gt = ground.terrainGrid;
+            TerrainDef baseT = gt.BaseTerrainAt(c);
+            if (baseT == null || !baseT.IsRiver || gt.TerrainAt(c) != baseT)
+            {
+                return;
+            }
+            ThingDef rock = NeighborRockDef(ground, c);
+            gt.SetTerrain(c, rock?.building?.naturalTerrain ?? TerrainDefOf.Gravel);
+            if (rock != null && c.GetEdifice(ground) == null)
+            {
+                GenSpawn.Spawn(rock, c, ground);
+            }
+            ground.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
+        }
+
+        /// <summary>The rock species flanking the cell; falls back to the
+        /// tile's dominant rock, then granite.</summary>
+        private static ThingDef NeighborRockDef(Map ground, IntVec3 c)
         {
             for (int d = 0; d < 8; d++)
             {
@@ -244,20 +362,53 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 ThingDef rock = n.GetEdifice(ground)?.def;
-                if (rock?.building != null && rock.building.isNaturalRock
-                    && rock.building.naturalTerrain != null)
+                if (rock?.building != null && rock.building.isNaturalRock)
                 {
-                    return rock.building.naturalTerrain;
+                    return rock;
                 }
             }
             foreach (ThingDef worldRock in Find.World.NaturalRockTypesIn(ground.Tile))
             {
-                if (worldRock?.building?.naturalTerrain != null)
+                if (worldRock?.building != null && worldRock.building.isNaturalRock)
                 {
-                    return worldRock.building.naturalTerrain;
+                    return worldRock;
                 }
             }
-            return TerrainDefOf.Gravel;
+            return ThingDefOf.Granite;
+        }
+
+        /// <summary>Roof-based qualification for AUTO sky generation, runnable
+        /// BEFORE any sky level exists: the mass footprint is the thick-rock
+        /// roof, and the same classifier decides whether any stretch lifts.</summary>
+        internal static bool GroundQualifiesForAutoSky(Map ground)
+        {
+            if (ground == null || ground.Disposed)
+            {
+                return false;
+            }
+            WaterInfo water = ground.waterInfo;
+            bool hasFlowData = water?.riverFlowMap != null && water.riverFlowMap.Count > 0;
+            TerrainGrid gt = ground.terrainGrid;
+            RoofGrid roofs = ground.roofGrid;
+            bool IsMassRiver(IntVec3 c)
+            {
+                TerrainDef b = gt.BaseTerrainAt(c);
+                if (b == null || !b.IsRiver)
+                {
+                    return false;
+                }
+                RoofDef roof = roofs.RoofAt(c);
+                return roof != null && roof.isThickRoof;
+            }
+            List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
+            for (int i = 0; i < stretches.Count; i++)
+            {
+                if (ShouldLift(ground, water, hasFlowData, stretches[i], IsMassRiver))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>One walkable bank cell for every plain-rock neighbor of the
