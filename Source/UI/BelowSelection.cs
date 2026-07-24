@@ -124,11 +124,15 @@ namespace AsAboveSoBelow
         /// only when it is unroofed, under open air on the sky level, and unfogged.</summary>
         internal static bool CellVisibleFromAbove(IntVec3 pos, Map sky, Map lower)
         {
-            if (!pos.InBounds(lower) || lower.roofGrid.Roofed(pos))
+            if (!pos.InBounds(lower) || !pos.InBounds(sky))
             {
                 return false;
             }
-            if (!pos.InBounds(sky) || sky.terrainGrid.TerrainAt(pos) != ABDefOf.AB_OpenAir)
+            TerrainDef top = sky.terrainGrid.TerrainAt(pos);
+            // Glass panes ignore the roof beneath them: a room under a glass
+            // rooftop is exactly what the pane is for.
+            if (top != ABDefOf.AB_Skylight
+                && (top != ABDefOf.AB_OpenAir || lower.roofGrid.Roofed(pos)))
             {
                 return false;
             }

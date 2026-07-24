@@ -1,4 +1,9 @@
 {
-  "textures": [],
+  "textures": [
+    "UI/Designators/AB_SkylightExpand",
+    "UI/Designators/AB_SkylightClear",
+    "Things/AB_WaterfallFoamA",
+    "Things/AB_WaterfallFoamB"
+  ],
   "audio": []
 }

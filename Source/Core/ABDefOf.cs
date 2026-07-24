@@ -25,6 +25,16 @@ namespace AsAboveSoBelow
         public static TerrainDef AB_OpenAir;
         public static TerrainDef AB_RoofSurface;
         public static TerrainDef AB_MountainTop;
+        public static TerrainDef AB_Skylight;
+
+        public static ThingDef AB_SkylightShaft;
+        public static ThingDef AB_Waterfall;
+        public static ThingDef AB_WaterfallBase;
+
+        public static JobDef AB_BuildSkylight;
+        public static JobDef AB_RemoveSkylight;
+
+        public static SoundDef AB_WaterfallLoop;
 
         public static MapMeshFlagDef AB_BelowThings;
 

@@ -277,6 +277,19 @@
 
   <AB_SkyVisitors>Visitors may arrive on sky plateaus</AB_SkyVisitors>
   <AB_SkyVisitorsTip>When the sky level has player buildings, a standable map-edge opening, and working stairs, about half of visitor and traveler groups walk in up there instead of on the surface. Trade caravans always arrive on the surface.</AB_SkyVisitorsTip>
+  <AB_SkylightExpandLabel>Skylight zone</AB_SkylightExpandLabel>
+  <AB_SkylightExpandDesc>Mark floor or rooftop cells to be fitted with tough glass skylights. Builders replace the marked slab with glass: the level below shows through, and daylight reaches the space underneath - bright enough to grow plants. Sealed against rain, cold, and gunfire. Paint on the level you are viewing; the slab under your feet is replaced.</AB_SkylightExpandDesc>
+  <AB_SkylightClearLabel>Clear skylight zone</AB_SkylightClearLabel>
+  <AB_SkylightClearDesc>Unmark skylight cells. Builders remove any glass already fitted there and restore the original surface.</AB_SkylightClearDesc>
+  <AB_SkylightNoLevelBelow>There is no level below here.</AB_SkylightNoLevelBelow>
+  <AB_SkylightNeedsRooftop>On the sky level, skylights can only replace rooftop.</AB_SkylightNeedsRooftop>
+  <AB_SkylightBlocked>Blocked by a building.</AB_SkylightBlocked>
+  <AB_SkylightBadFloor>This surface cannot hold a skylight.</AB_SkylightBadFloor>
+  <AB_Skylights>Skylight zones</AB_Skylights>
+  <AB_SkylightsTip>Adds the skylight painting tools to the Zone architect menu. Builders fit tough glass into painted floors and rooftops: the level below shows through, and real daylight - full plant-growing sun - reaches the space underneath. Turning this off hides the tools and stops new skylight work; existing glass stays.</AB_SkylightsTip>
+  <AB_MountainRivers>Rivers flow over mountain tops</AB_MountainRivers>
+  <AB_MountainRiversTip>When the map tile's river tunnels under a mountain, the sky level's mountain top carries the same watercourse, ending in waterfalls where it pours off the edges. Applies to sky levels generated after this is turned on.</AB_MountainRiversTip>
+
   <AB_HospitalityRoaming>Hospitality guests roam all levels</AB_HospitalityRoaming>
   <AB_HospitalityRoamingTip>Requires the Hospitality mod. During a visit, idle guests occasionally tour linked levels that have guest beds or vending machines, and walk back when their group leaves. Full guest services (shopping, bed claims) stay on the level their group arrived on.</AB_HospitalityRoamingTip>
 

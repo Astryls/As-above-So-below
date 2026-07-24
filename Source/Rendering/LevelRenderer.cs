@@ -42,6 +42,11 @@ namespace AsAboveSoBelow
         /// terrain (y=0) but above the camera far plane at any zoom.</summary>
         public const float BelowOffset = -2.5f;
 
+        /// <summary>Extra render-queue drop for the two-deep band (basement
+        /// seen from the sky through stacked glass panes). Keeps the whole
+        /// basement band strictly under every surface-band clone.</summary>
+        private const int StackedDrop = 420;
+
         /// <summary>Submeshes whose bounds sit above this are skipped (fog of war,
         /// lighting, silhouettes, overlays); the mask mesh replaces them. 1.6 real
         /// altitudes: content prints span 0..7 (LowPlant 4.02, Building 5.49, Item
@@ -362,6 +367,7 @@ namespace AsAboveSoBelow
         private static int maskLastFrame = -999;
         private static CellRect maskLastRect;
         private static int maskLastLowerId = -1;
+        private static int maskLastDeepId = -1;
         private static readonly List<Vector3> maskVerts = new List<Vector3>();
         private static readonly List<int> maskTris = new List<int>();
         private static readonly List<Color32> maskColors = new List<Color32>();
@@ -392,6 +398,7 @@ namespace AsAboveSoBelow
         private static Exception maskJobError;
         private static CellRect maskJobRect;
         private static int maskJobLowerId;
+        private static int maskJobDeepId;
         private static readonly List<Vector3> jobVerts = new List<Vector3>();
         private static readonly List<int> jobTris = new List<int>();
         private static readonly List<Color32> jobColors = new List<Color32>();
@@ -510,12 +517,17 @@ namespace AsAboveSoBelow
                 return;
             }
             LevelComp comp = map.Levels();
-            if (comp == null || comp.level <= 0)
+            if (comp == null || comp.level < 0)
             {
                 return;
             }
             Map lower = comp.lowerMap;
             if (lower == null || lower.Disposed)
+            {
+                return;
+            }
+            // Ground level draws its basement only through glass panes.
+            if (comp.level == 0 && !SkylightSystem.AnyPanes(map))
             {
                 return;
             }
@@ -535,12 +547,34 @@ namespace AsAboveSoBelow
                 // and lakes render exactly like vanilla. Harmless for the sky
                 // map: it has no water shader in view of its own. Globals are
                 // read at render time, so the last setter this frame wins.
+                // Two-deep stack: the sky view sees the basement through
+                // surface glass panes. The basement band draws FIRST at even
+                // deeper queues; the surface's glass cells are dontRender, so
+                // the basement shows exactly there and nowhere else.
+                Map deep = null;
+                if (comp.level == 1)
+                {
+                    deep = lower.Levels()?.lowerMap;
+                    if (deep != null && (deep.Disposed || !SkylightSystem.AnyPanes(lower)))
+                    {
+                        deep = null;
+                    }
+                }
+                if (deep != null)
+                {
+                    deep.waterInfo?.SetTextures();
+                    deep.mapDrawer.MapMeshDrawerUpdate_First();
+                }
                 lower.waterInfo?.SetTextures();
                 // Process the lower map's dirty sections so the view below stays live.
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
-                DrawSections(lower, view);
-                DrawBelowMask(map, lower, view);
+                if (deep != null)
+                {
+                    DrawSections(deep, view.ClipInsideMap(deep), StackedDrop, includeBelowThings: false);
+                }
+                DrawSections(lower, view, 0, includeBelowThings: deep != null);
+                DrawBelowMask(map, lower, deep, view);
             }
             catch (Exception e)
             {
@@ -548,7 +582,11 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void DrawSections(Map lower, CellRect view)
+        /// <summary>extraOffset shifts the whole band deeper (the stacked
+        /// basement pass); includeBelowThings additionally draws the lower
+        /// map's own SectionLayer_ABBelowThings submeshes - the basement
+        /// content it printed at its glass cells - into the deep band.</summary>
+        private static void DrawSections(Map lower, CellRect view, int extraOffset, bool includeBelowThings)
         {
             Section[,] sections = SectionsRef(lower.mapDrawer);
             int maxSX = sections.GetUpperBound(0);
@@ -566,15 +604,30 @@ namespace AsAboveSoBelow
                     {
                         SectionLayer layer = layers[i];
                         Type layerType = layer.GetType();
-                        if (!ContentLayerTypes.Contains(layerType) || !layer.Visible)
+                        bool belowThingsLayer = layerType == typeof(SectionLayer_ABBelowThings);
+                        if (belowThingsLayer)
+                        {
+                            if (!includeBelowThings || !layer.Visible)
+                            {
+                                continue;
+                            }
+                        }
+                        else if (!ContentLayerTypes.Contains(layerType) || !layer.Visible)
                         {
                             continue;
                         }
-                        if (!BelowLayerOffsets.TryGetValue(layerType, out int offset))
+                        int offset;
+                        if (belowThingsLayer)
+                        {
+                            // Basement content printed by the surface's own
+                            // below-things layer belongs one full band deeper.
+                            offset = StackedDrop + BelowThingsOffset;
+                        }
+                        else if (!BelowLayerOffsets.TryGetValue(layerType, out offset))
                         {
                             offset = BelowDefaultOffset;
                         }
-                        int baseQueue = Mathf.Max(BelowQueueCeiling - offset, 1);
+                        int baseQueue = Mathf.Max(BelowQueueCeiling - offset - extraOffset, 1);
                         bool terrainLayer = layerType == typeof(SectionLayer_Terrain);
                         List<LayerSubMesh> subs = layer.subMeshes;
                         for (int j = 0; j < subs.Count; j++)
@@ -586,7 +639,11 @@ namespace AsAboveSoBelow
                                 continue;
                             }
                             int queue = baseQueue;
-                            if (terrainLayer && sub.material != null)
+                            if (belowThingsLayer)
+                            {
+                                queue += Mathf.Clamp((int)(subY * 14f), 0, 99);
+                            }
+                            else if (terrainLayer && sub.material != null)
                             {
                                 // Vanilla terrain materials carry 2000 + renderPrecedence
                                 // and rely on that queue spread for who paints over whom
@@ -625,7 +682,7 @@ namespace AsAboveSoBelow
         /// no draw-order or depth trick separates them; a clean fix needs a
         /// subcamera composite of the entire below view, out of scope for polish.
         /// Cosmetic, most visible at night, accepted and documented.</summary>
-        private static void DrawBelowMask(Map sky, Map lower, CellRect view)
+        private static void DrawBelowMask(Map sky, Map lower, Map deep, CellRect view)
         {
             if (maskMat == null)
             {
@@ -649,23 +706,25 @@ namespace AsAboveSoBelow
             bool viewContained = maskMesh != null
                 && maskLastRect.Contains(new IntVec3(view.minX, 0, view.minZ))
                 && maskLastRect.Contains(new IntVec3(view.maxX, 0, view.maxZ));
+            int deepId = deep?.uniqueID ?? -1;
             if (!viewContained || frame - maskLastFrame >= MaskRebuildIntervalFrames
-                || lower.uniqueID != maskLastLowerId)
+                || lower.uniqueID != maskLastLowerId || deepId != maskLastDeepId)
             {
                 CellRect buildRect = view.ExpandedBy(MaskPadCells).ClipInsideMap(sky);
                 if (ABGuard.On(ABGuard.Async))
                 {
-                    StartMaskJob(sky, lower, buildRect);
+                    StartMaskJob(sky, lower, deep, buildRect);
                     // The stale mesh keeps drawing until the worker delivers;
                     // the pad absorbs the pan in the meantime.
                     maskLastFrame = frame;
                 }
                 else
                 {
-                    RebuildMask(sky, lower, buildRect);
+                    RebuildMask(sky, lower, deep, buildRect);
                     maskLastFrame = frame;
                     maskLastRect = buildRect;
                     maskLastLowerId = lower.uniqueID;
+                    maskLastDeepId = deepId;
                 }
             }
             if (maskMesh != null && maskMesh.vertexCount > 0)
@@ -678,7 +737,7 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static void StartMaskJob(Map sky, Map lower, CellRect rect)
+        private static void StartMaskJob(Map sky, Map lower, Map deep, CellRect rect)
         {
             if (maskJobRunning)
             {
@@ -689,10 +748,13 @@ namespace AsAboveSoBelow
             maskJobError = null;
             maskJobRect = rect;
             maskJobLowerId = lower.uniqueID;
+            maskJobDeepId = deep?.uniqueID ?? -1;
             // Captured on the main thread; the worker touches only these locals
             // and the job buffers.
             TerrainGrid skyTerrain = sky.terrainGrid;
             FogGrid lowerFog = lower.fogGrid;
+            TerrainGrid lowerTerrain = deep != null ? lower.terrainGrid : null;
+            FogGrid deepFog = deep?.fogGrid;
             int sizeX = sky.Size.x;
             int sizeZ = sky.Size.z;
             float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
@@ -702,7 +764,8 @@ namespace AsAboveSoBelow
             {
                 try
                 {
-                    BuildMaskBuffers(skyTerrain, lowerFog, sizeX, sizeZ, maskJobRect, step,
+                    BuildMaskBuffers(skyTerrain, lowerFog, lowerTerrain, deepFog,
+                        sizeX, sizeZ, maskJobRect, step,
                         (byte)(255f * baseDim), jobVerts, jobTris, jobColors);
                     BuildSkirtBuffers(skyTerrain, sizeX, sizeZ, maskJobRect, maskJobSkirtOn,
                         jobSkirtVerts, jobSkirtTris, jobSkirtColors);
@@ -744,6 +807,7 @@ namespace AsAboveSoBelow
             UploadSkirt(jobSkirtVerts, jobSkirtTris, jobSkirtColors);
             maskLastRect = maskJobRect;
             maskLastLowerId = maskJobLowerId;
+            maskLastDeepId = maskJobDeepId;
         }
 
         private static int maskLastStep = 1;
@@ -779,11 +843,13 @@ namespace AsAboveSoBelow
 
         /// <summary>Synchronous rebuild: build into the shared buffers and
         /// upload immediately. Fallback path when the async lane is off.</summary>
-        private static void RebuildMask(Map sky, Map lower, CellRect rect)
+        private static void RebuildMask(Map sky, Map lower, Map deep, CellRect rect)
         {
             EnsureMaskMesh();
             float baseDim = Mathf.Clamp(ABMod.Settings?.belowDim ?? 0.12f, 0f, 0.6f);
-            BuildMaskBuffers(sky.terrainGrid, lower.fogGrid, sky.Size.x, sky.Size.z, rect,
+            BuildMaskBuffers(sky.terrainGrid, lower.fogGrid,
+                deep != null ? lower.terrainGrid : null, deep?.fogGrid,
+                sky.Size.x, sky.Size.z, rect,
                 NextMaskStep(rect), (byte)(255f * baseDim), maskVerts, maskTris, maskColors);
             maskMesh.Clear();
             if (maskVerts.Count > 0)
@@ -802,6 +868,7 @@ namespace AsAboveSoBelow
         /// the async lane (worker). Touches nothing but the passed grids and
         /// output lists; must stay free of Unity API calls.</summary>
         private static void BuildMaskBuffers(TerrainGrid skyTerrain, FogGrid lowerFog,
+            TerrainGrid lowerTerrain, FogGrid deepFog,
             int sizeX, int sizeZ, CellRect rect, int step, byte dimAlpha,
             List<Vector3> verts, List<int> tris, List<Color32> colors)
         {
@@ -809,6 +876,8 @@ namespace AsAboveSoBelow
             tris.Clear();
             colors.Clear();
             TerrainDef air = ABDefOf.AB_OpenAir;
+            TerrainDef glass = ABDefOf.AB_Skylight;
+            bool stacked = lowerTerrain != null && deepFog != null;
             // Anchor the sampling grid to world coordinates so blocks stay put
             // while the camera pans; a view-anchored grid shifts a cell whenever
             // the view edge parity flips, which reads as jitter.
@@ -821,14 +890,34 @@ namespace AsAboveSoBelow
                     int cx = Mathf.Clamp(x, 0, sizeX - 1);
                     int cz = Mathf.Clamp(z, 0, sizeZ - 1);
                     IntVec3 c = new IntVec3(cx, 0, cz);
-                    if (skyTerrain.TerrainAt(c) != air)
+                    TerrainDef top = skyTerrain.TerrainAt(c);
+                    bool isGlass = top == glass;
+                    if (top != air && !isGlass)
                     {
                         continue;
                     }
-                    // Unexplored surface stays hidden; explored cells get only
+                    // Two-deep: a surface glass pane under this cell means the
+                    // basement is what shows; its fog joins the check and an
+                    // extra depth dim stacks on.
+                    bool deepVisible = stacked && lowerTerrain.TerrainAt(c) == glass;
+                    bool fogged = lowerFog.IsFogged(c) || (deepVisible && deepFog.IsFogged(c));
+                    // Unexplored levels stay hidden; explored cells get only
                     // the constant depth dim. Natural day-night shading arrives
-                    // for free through the shared shader globals.
-                    byte a = lowerFog.IsFogged(c) ? (byte)255 : dimAlpha;
+                    // for free through the shared shader globals. Glass cells
+                    // add a pale tint so the pane reads as a pane.
+                    Color32 col;
+                    if (fogged)
+                    {
+                        col = new Color32(0, 0, 0, 255);
+                    }
+                    else
+                    {
+                        int aInt = dimAlpha + (deepVisible ? 26 : 0) + (isGlass ? 30 : 0);
+                        byte a2 = (byte)Mathf.Clamp(aInt, 0, 255);
+                        col = isGlass || deepVisible
+                            ? new Color32(96, 132, 148, a2)
+                            : new Color32(0, 0, 0, a2);
+                    }
                     int vi = verts.Count;
                     float x0 = Mathf.Max(x, 0);
                     float z0 = Mathf.Max(z, 0);
@@ -842,7 +931,6 @@ namespace AsAboveSoBelow
                     verts.Add(new Vector3(x0, MaskAltitude, z1));
                     verts.Add(new Vector3(x1, MaskAltitude, z1));
                     verts.Add(new Vector3(x1, MaskAltitude, z0));
-                    Color32 col = new Color32(0, 0, 0, a);
                     colors.Add(col);
                     colors.Add(col);
                     colors.Add(col);
@@ -919,7 +1007,13 @@ namespace AsAboveSoBelow
             {
                 for (int z = minZ; z <= maxZ; z++)
                 {
-                    if (skyTerrain.TerrainAt(new IntVec3(x, 0, z)) != air)
+                    TerrainDef here = skyTerrain.TerrainAt(new IntVec3(x, 0, z));
+                    if (here == ABDefOf.AB_Skylight)
+                    {
+                        AddGlassFrame(skyTerrain, sizeX, sizeZ, x, z, verts, tris, colors);
+                        continue;
+                    }
+                    if (here != air)
                     {
                         continue;
                     }
@@ -951,6 +1045,42 @@ namespace AsAboveSoBelow
         {
             TerrainDef t = grid.TerrainAt(new IntVec3(x, 0, z));
             return t != null && t != air && t != cap;
+        }
+
+        private static readonly Color32 GlassFrame = new Color32(18, 26, 30, 165);
+
+        /// <summary>Thin dark frame inside a glass cell along every edge that
+        /// borders non-glass, so panes read as fitted panels instead of raw
+        /// holes; interior edges between adjacent panes stay clean.</summary>
+        private static void AddGlassFrame(TerrainGrid grid, int sizeX, int sizeZ, int x, int z,
+            List<Vector3> verts, List<int> tris, List<Color32> colors)
+        {
+            TerrainDef glass = ABDefOf.AB_Skylight;
+            const float w = 0.07f;
+            bool north = z + 1 >= sizeZ || grid.TerrainAt(new IntVec3(x, 0, z + 1)) != glass;
+            bool south = z - 1 < 0 || grid.TerrainAt(new IntVec3(x, 0, z - 1)) != glass;
+            bool east = x + 1 >= sizeX || grid.TerrainAt(new IntVec3(x + 1, 0, z)) != glass;
+            bool west = x - 1 < 0 || grid.TerrainAt(new IntVec3(x - 1, 0, z)) != glass;
+            if (north)
+            {
+                AddSkirtQuad(verts, tris, colors, x, x + 1f, z + 1f - w, z + 1f,
+                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
+            }
+            if (south)
+            {
+                AddSkirtQuad(verts, tris, colors, x, x + 1f, z, z + w,
+                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
+            }
+            if (east)
+            {
+                AddSkirtQuad(verts, tris, colors, x + 1f - w, x + 1f, z, z + 1f,
+                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
+            }
+            if (west)
+            {
+                AddSkirtQuad(verts, tris, colors, x, x + w, z, z + 1f,
+                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
+            }
         }
 
         /// <summary>Vertex order (x0,z0), (x0,z1), (x1,z1), (x1,z0); colors
@@ -988,12 +1118,16 @@ namespace AsAboveSoBelow
                 return;
             }
             LevelComp comp = map.Levels();
-            if (comp == null || comp.level <= 0)
+            if (comp == null || comp.level < 0)
             {
                 return;
             }
             Map lower = comp.lowerMap;
             if (lower == null || lower.Disposed)
+            {
+                return;
+            }
+            if (comp.level == 0 && !SkylightSystem.AnyPanes(map))
             {
                 return;
             }
@@ -1121,6 +1255,7 @@ namespace AsAboveSoBelow
             FogGrid fog = lower.fogGrid;
             TerrainGrid skyTerrain = sky.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
+            TerrainDef glass = ABDefOf.AB_Skylight;
             for (int i = 0; i < things.Count; i++)
             {
                 Thing t = things[i];
@@ -1129,11 +1264,14 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 IntVec3 pos = t.Position;
-                if (!pos.InBounds(lower) || roofs.Roofed(pos))
+                if (!pos.InBounds(lower) || !pos.InBounds(sky))
                 {
                     continue;
                 }
-                if (!pos.InBounds(sky) || skyTerrain.TerrainAt(pos) != air)
+                // Glass panes ignore the roof beneath them - a lit room under
+                // a glass rooftop shows its people.
+                TerrainDef top = skyTerrain.TerrainAt(pos);
+                if (top != glass && (top != air || roofs.Roofed(pos)))
                 {
                     continue;
                 }
