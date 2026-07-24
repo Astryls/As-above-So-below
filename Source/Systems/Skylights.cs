@@ -268,7 +268,12 @@ namespace AsAboveSoBelow
         /// (DrawBelowStatic), per-SetTerrain, and per-mesh-dirty paths. Every
         /// map constructs its comp with the map itself, so a resolved comp is
         /// stable for the map's lifetime; the CWT drops entries when a map is
-        /// collected and is thread safe for the render-adjacent callers.</summary>
+        /// collected and is thread safe for the render-adjacent callers.
+        /// PERF-MOD COMPLIANCE (verified 2026-07-24): Performance Optimizer's
+        /// FasterGetCompReplacement transpiles the GetComponent call below
+        /// into its own Dictionary&lt;Map, T&gt; cache. Both caches key on the map
+        /// OBJECT, so runtime-created pocket maps can never be served a wrong
+        /// comp by either layer; the CWT stays for the no-PO majority.</summary>
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Map, SkylightMapComp> compCache =
             new System.Runtime.CompilerServices.ConditionalWeakTable<Map, SkylightMapComp>();
 
@@ -554,6 +559,10 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // Performance Optimizer caches CurCelestialSunGlow per map for up
+            // to ~60 ticks. Harmless against this wide 0.4 threshold at our
+            // 250-tick rare cadence - do not tighten this into an exact
+            // sunrise-tick comparison.
             if (GenCelestial.CurCelestialSunGlow(Map) < 0.4f)
             {
                 return false;

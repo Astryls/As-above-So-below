@@ -703,7 +703,13 @@ namespace AsAboveSoBelow
 
     /// <summary>Vanilla-cadence hook: the moment an idle, ready turret finds nothing
     /// on its own map (every 15 ticks), probe the paired level. This is what makes
-    /// turret cross-fire react like vanilla instead of on the slow scan.</summary>
+    /// turret cross-fire react like vanilla instead of on the slow scan.
+    /// PERF-MOD COMPLIANCE (Turret Performance Tweaks, verified 2026-07-24):
+    /// TPT prefix-skips TryFindNewTarget with a synthetic Invalid during its
+    /// 60-tick scan throttle, so this postfix can see invalids at the idle
+    /// call rate regardless of real scans. TryAutoAcquire's own per-turret
+    /// cooldown (nextAutoTry) is what bounds our probe cadence - keep it even
+    /// if the postfix cadence looks vanilla-limited.</summary>
     [HarmonyPatch(typeof(Building_TurretGun), nameof(Building_TurretGun.TryFindNewTarget))]
     internal static class Patch_TurretGun_TryFindNewTarget
     {

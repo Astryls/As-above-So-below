@@ -118,6 +118,20 @@ namespace AsAboveSoBelow
             ABLog.Dev("Patched DrawPos on " + patched + " types for below-level rendering.");
         }
 
+        // PERF-MOD COMPLIANCE (Performance Optimizer, verified 2026-07-24):
+        // PO's Optimization_Pawn_DrawPos caches Pawn.DrawPos in a tick-stamped
+        // per-pawn cache, but ONLY inside two scopes (Designation.Draw and
+        // Dubs Mint minimap's DrawAllPawns) via an EnableCache/DisableCache
+        // sandwich; outside them its prefix passes through and its
+        // store-postfix gets a null state. Two invariants keep us compatible:
+        //   1. OffsetActive is never true inside those scopes (we set it only
+        //      around our nested lower-map dynamic draw and bracket draw), so
+        //      PO can never cache a shifted position.
+        //   2. This postfix stays priority Last and a strict no-op when
+        //      OffsetActive is false.
+        // If below-view designation drawing is ever added (OffsetActive around
+        // a Designation.Draw call), PO would cache the SHIFTED DrawPos for its
+        // refresh window - re-verify before widening the OffsetActive window.
         private static void OffsetPostfix(ref Vector3 __result)
         {
             if (LevelRenderer.OffsetActive)
