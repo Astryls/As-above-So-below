@@ -431,7 +431,14 @@ namespace AsAboveSoBelow
                 {
                     case Phase.Warmup:
                         e.phase = Phase.Burst;
-                        e.burstShotsLeft = Mathf.Max(1, LauncherVerb(turret)?.verbProps.burstShotCount ?? 1);
+                        Verb_LaunchProjectile warmVerb = LauncherVerb(turret);
+                        e.burstShotsLeft = Mathf.Max(1, warmVerb?.verbProps.burstShotCount ?? 1);
+                        // Aim complete: once-per-burst combat-log entry (turrets get no
+                        // Shooting XP - the caster is the building, not a pawn).
+                        if (warmVerb != null)
+                        {
+                            ABShotEffects.OnBurstWarmupComplete(turret, warmVerb, e.target, warmVerb.Projectile);
+                        }
                         e.nextEventTick = now;
                         goto case Phase.Burst;
                     case Phase.Burst:
@@ -602,7 +609,8 @@ namespace AsAboveSoBelow
                 {
                     return FireResult.Dead;
                 }
-                verb.EquipmentSource?.TryGetComp<CompChangeableProjectile>()?.Notify_ProjectileLaunched();
+                // The changeable-projectile unload is now handled inside FireArcShot's
+                // shared per-shot side effects (ABShotEffects.OnShotFired).
                 return CrossLevelCombat.FireArcShot(turret, manner, verb, e.target, e.targetMap, shot.distance)
                     ? FireResult.Fired
                     : FireResult.Dead;
@@ -611,7 +619,6 @@ namespace AsAboveSoBelow
             {
                 return FireResult.Dead;
             }
-            verb.EquipmentSource?.TryGetComp<CompChangeableProjectile>()?.Notify_ProjectileLaunched();
             return CrossLevelCombat.Fire(turret, verb, e.target.Thing)
                 ? FireResult.Fired
                 : FireResult.Dead;

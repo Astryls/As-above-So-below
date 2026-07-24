@@ -381,6 +381,7 @@ namespace AsAboveSoBelow
                 Vector3 origin = spawnCell.ToVector3Shifted();
 
                 Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, targetMap);
+                ABShotEffects.ApplyWeaponTraits(proj, verb);
                 Thing equip = verb.EquipmentSource;
 
                 // Vanilla forced-miss scatter (Verb_LaunchProjectile.TryCastShot's
@@ -410,7 +411,7 @@ namespace AsAboveSoBelow
                 {
                     proj.Launch(shooter, origin, dest, target, flags, preventFriendlyFire: false, equip);
                 }
-                verb.verbProps.soundCast?.PlayOneShot(SoundInfo.InMap(new TargetInfo(shooter.Position, shooter.Map, false)));
+                ABShotEffects.OnShotFired(shooter, verb, target);
                 return true;
             }
             catch (Exception e)
@@ -532,6 +533,7 @@ namespace AsAboveSoBelow
                 }
 
                 Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, map);
+                ABShotEffects.ApplyWeaponTraits(proj, verb);
                 float aim = ComputeAimChance(shooter, verb, target, shot.distance);
                 bool hit = Rand.Chance(aim);
                 Thing equip = verb.EquipmentSource;
@@ -554,8 +556,9 @@ namespace AsAboveSoBelow
                     proj.Launch(shooter, originGround, line.Dest, target, flags, preventFriendlyFire: false, equip);
                 }
 
-                // The gunshot report at the shooter, so the cast reads as combat.
-                verb.verbProps.soundCast?.PlayOneShot(SoundInfo.InMap(new TargetInfo(shooter.Position, shooter.Map, false)));
+                // The full vanilla per-shot side effects at the shooter (sound + tail,
+                // muzzle flash, records, notifies, changeable/charged, fuel).
+                ABShotEffects.OnShotFired(shooter, verb, target);
                 return true;
             }
             catch (Exception e)

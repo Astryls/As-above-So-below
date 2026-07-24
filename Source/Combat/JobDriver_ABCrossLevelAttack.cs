@@ -182,6 +182,9 @@ namespace AsAboveSoBelow
                     return;
                 }
                 warmedUp = true;
+                // Aim complete: the once-per-burst vanilla side effects (combat log +
+                // Shooting XP), mirroring Verb_Shoot.WarmupComplete.
+                ABShotEffects.OnBurstWarmupComplete(pawn, verb, target, verb.Projectile);
             }
             if (burstShotsLeft <= 0)
             {
