@@ -60,14 +60,7 @@ namespace AsAboveSoBelow
             {
                 return cur;
             }
-            TerrainDef t = cur.terrainGrid.TerrainAt(c);
-            // Glass panes pass clicks exactly like open air: selection and
-            // overlays already treat them as visible (one-way mirror), and an
-            // order is the natural next step of seeing something. Without this
-            // a right-click through a skylight hit the empty glass cell and
-            // produced nothing (part of the "cross level right click does not
-            // function" reports, 2026-07-24).
-            return t == ABDefOf.AB_OpenAir || t == ABDefOf.AB_Skylight ? below : cur;
+            return cur.terrainGrid.TerrainAt(c) == ABDefOf.AB_OpenAir ? below : cur;
         }
 
         /// <summary>True when a single player pawn is selected and the (pawn level,

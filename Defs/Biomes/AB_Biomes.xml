@@ -3,17 +3,12 @@
 
   <BiomeDef ParentName="Biome_Underground">
     <defName>AB_Underground</defName>
-    <!-- THE BLACK-BASEMENT FIX (live test 2026-07-24): without this, the
-         basement used standard sky lighting, and the lighting overlay's
-         thick-roof darkness rendered regenerated sections pitch black - the
-         overlay only regenerates on glow/roof changes, so the first skylight
-         shaft (or any lamp) appeared to "break" basement rendering when it
-         merely triggered the regen. disableSkyLighting is the engine's
-         underground mode (SkyManager zeroes the LightOverlay darkness
-         channel): unlit areas render dim-neutral instead of void black, and
-         lamp and skylight glow pools show exactly like vanilla's underground
-         maps. The vanilla Biome_Underground parent does NOT carry it. -->
-    <disableSkyLighting>true</disableSkyLighting>
+    <!-- disableSkyLighting was trialed here 2026-07-24 (engine underground
+         lighting mode) and REVERTED by user directive with the skylight
+         removal: prior basement behavior restored. If underground lighting
+         is revisited, see the schematic's black-basement postmortem - the
+         flag also unveils stale fog-mesh bakes (now self-healed in
+         LevelComp), which is what framed it last time. -->
     <label>deep underground</label>
     <description>Solid rock beneath the surface, untouched by sun or wind.</description>
     <plantDensity>0</plantDensity>

@@ -88,15 +88,14 @@ namespace AsAboveSoBelow
                     DiagNoLower++;
                     return;
                 }
-                // Ground-level instance: prints the basement, but only when
-                // glass panes exist (the only transparent cells a surface has).
-                if (comp.level == 0 && !SkylightSystem.AnyPanes(map))
+                // Sky-view feature only (skylights removed 2026-07-24): the
+                // ground level prints no below content.
+                if (comp.level == 0)
                 {
                     return;
                 }
                 TerrainGrid skyTerrain = map.terrainGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
-                TerrainDef glass = ABDefOf.AB_Skylight;
                 FogGrid lowerFog = lower.fogGrid;
                 float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
                 bool doScale = scale < 0.999f;
@@ -116,7 +115,7 @@ namespace AsAboveSoBelow
                     // instead - exactly a vanilla rock group sitting on ground.
                     // Fogged below content stays behind the opaque air mask.
                     TerrainDef top = skyTerrain.TerrainAt(c);
-                    if (top != air && top != glass)
+                    if (top != air)
                     {
                         continue;
                     }
@@ -143,7 +142,7 @@ namespace AsAboveSoBelow
                         IntVec3 pos = t.Position;
                         if (t.def.size.x != 1 || t.def.size.z != 1)
                         {
-                            if (!IsBelowPrintAnchor(t, c, map, skyTerrain, air, glass))
+                            if (!IsBelowPrintAnchor(t, c, map, skyTerrain, air))
                             {
                                 continue;
                             }
@@ -202,7 +201,7 @@ namespace AsAboveSoBelow
         /// the sky level; the print anchors there. Cells outside the sky map
         /// bounds cannot anchor (nothing would ever iterate them).</summary>
         private static bool IsBelowPrintAnchor(Thing t, IntVec3 c, Map sky,
-            TerrainGrid skyTerrain, TerrainDef air, TerrainDef glass)
+            TerrainGrid skyTerrain, TerrainDef air)
         {
             CellRect rect = t.OccupiedRect();
             for (int z = rect.minZ; z <= rect.maxZ; z++)
@@ -213,7 +212,7 @@ namespace AsAboveSoBelow
                     if (q.InBounds(sky))
                     {
                         TerrainDef qt = skyTerrain.TerrainAt(q);
-                        if (qt == air || qt == glass)
+                        if (qt == air)
                         {
                             return q.x == c.x && q.z == c.z;
                         }

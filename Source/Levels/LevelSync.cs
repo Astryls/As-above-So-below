@@ -136,8 +136,7 @@ namespace AsAboveSoBelow
 
         public static void OnLowerMeshDirty(Map map, IntVec3 c, ulong flags)
         {
-            if ((!LevelComp.AnySkyLevels && SkylightSystem.GlobalPaneCount <= 0)
-                || !ABGuard.On(ABGuard.Rendering))
+            if (!LevelComp.AnySkyLevels || !ABGuard.On(ABGuard.Rendering))
             {
                 return;
             }
@@ -161,7 +160,7 @@ namespace AsAboveSoBelow
                 }
                 LevelComp skyComp = sky.Levels();
                 if (skyComp == null || skyComp.level < 0
-                    || (skyComp.level == 0 && !SkylightSystem.AnyPanes(sky)))
+                    || skyComp.level == 0)
                 {
                     return;
                 }
@@ -355,17 +354,6 @@ namespace AsAboveSoBelow
             }
             if (top == ABDefOf.AB_RoofSurface)
             {
-                if (!IsStairsPlatform(sky, c))
-                {
-                    grid.SetTerrain(c, ABDefOf.AB_OpenAir);
-                }
-                return;
-            }
-            if (top == ABDefOf.AB_Skylight)
-            {
-                // Roof gone under a glass rooftop: the pane has nothing to sit
-                // in. Revert to air; the skylight terrain watch drops the pane
-                // record and its light shaft.
                 if (!IsStairsPlatform(sky, c))
                 {
                     grid.SetTerrain(c, ABDefOf.AB_OpenAir);

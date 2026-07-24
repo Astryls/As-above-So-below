@@ -129,10 +129,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             TerrainDef top = sky.terrainGrid.TerrainAt(pos);
-            // Glass panes ignore the roof beneath them: a room under a glass
-            // rooftop is exactly what the pane is for.
-            if (top != ABDefOf.AB_Skylight
-                && (top != ABDefOf.AB_OpenAir || lower.roofGrid.Roofed(pos)))
+            if (top != ABDefOf.AB_OpenAir || lower.roofGrid.Roofed(pos))
             {
                 return false;
             }

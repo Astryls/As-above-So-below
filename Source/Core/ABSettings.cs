@@ -74,7 +74,6 @@ namespace AsAboveSoBelow
         public bool crossLevelSocial = true;
         public bool crossLevelPipes = true;
         public bool crossLevelTemperature = true;
-        public bool skylights = true;
         public bool mountainRivers = true;
         public bool podTransit = true;
 
@@ -524,7 +523,6 @@ namespace AsAboveSoBelow
                 listing.Outdent(16f);
             }
             listing.CheckboxLabeled("AB_CrossLevelOrders".Translate(), ref crossLevelOrders, "AB_CrossLevelOrdersTip".Translate());
-            listing.CheckboxLabeled("AB_Skylights".Translate(), ref skylights, "AB_SkylightsTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelSupply".Translate(), ref crossLevelSupply, "AB_CrossLevelSupplyTip".Translate());
             listing.CheckboxLabeled("AB_CrossLevelNeeds".Translate(), ref crossLevelNeeds, "AB_CrossLevelNeedsTip".Translate());
@@ -933,7 +931,6 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref podTransit, "podTransit", true);
             Scribe_Values.Look(ref skyVisitorArrivals, "skyVisitorArrivals", true);
             Scribe_Values.Look(ref hospitalityRoaming, "hospitalityRoaming", true);
-            Scribe_Values.Look(ref skylights, "skylights", true);
             Scribe_Values.Look(ref mountainRivers, "mountainRivers", true);
             Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
             Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);

@@ -1715,7 +1715,7 @@ namespace AsAboveSoBelow
                         groundRiver++;
                         TerrainDef top = st.TerrainAt(c);
                         bool mass = top != null && top != air && top != ABDefOf.AB_RoofSurface
-                            && top != ABDefOf.AB_Skylight && !top.IsRiver;
+                            && !top.IsRiver;
                         if (mass)
                         {
                             underMass++;
@@ -1767,23 +1767,11 @@ namespace AsAboveSoBelow
                     }
                     sb.Append(" | ").Append(t.def.defName)
                         .Append(" glowerLit=").Append(glower.Glows);
-                    if (t is Thing_ABSkylightShaft shaft)
-                    {
-                        sb.Append(" shaft: featureOn=").Append(SkylightSystem.FeatureOn)
-                            .Append(" shouldBeLit=").Append(shaft.ShouldBeLitNow())
-                            .Append(" chainOpen=").Append(SkylightSystem.CellSkyOpenThroughPanes(map, c));
-                    }
                     CompPowerTrader power = t.TryGetComp<CompPowerTrader>();
                     if (power != null)
                     {
                         sb.Append(" powered=").Append(power.PowerOn);
                     }
-                }
-                Map above = map.UpperMap();
-                if (above != null && !above.Disposed)
-                {
-                    SkylightMapComp aboveComp = SkylightSystem.CompFor(above);
-                    sb.Append(" | paneAbove=").Append(aboveComp != null && aboveComp.IsPane(c));
                 }
             }
             catch (Exception e)

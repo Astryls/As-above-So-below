@@ -533,8 +533,9 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            // Ground level draws its basement only through glass panes.
-            if (comp.level == 0 && !SkylightSystem.AnyPanes(map))
+            // The below band is a SKY-view feature; the ground level draws no
+            // band of its own (skylights removed by user directive 2026-07-24).
+            if (comp.level == 0)
             {
                 return;
             }
@@ -554,34 +555,12 @@ namespace AsAboveSoBelow
                 // and lakes render exactly like vanilla. Harmless for the sky
                 // map: it has no water shader in view of its own. Globals are
                 // read at render time, so the last setter this frame wins.
-                // Two-deep stack: the sky view sees the basement through
-                // surface glass panes. The basement band draws FIRST at even
-                // deeper queues; the surface's glass cells are dontRender, so
-                // the basement shows exactly there and nowhere else.
-                Map deep = null;
-                if (comp.level == 1)
-                {
-                    deep = lower.Levels()?.lowerMap;
-                    if (deep != null && (deep.Disposed || !SkylightSystem.AnyPanes(lower)))
-                    {
-                        deep = null;
-                    }
-                }
-                if (deep != null)
-                {
-                    deep.waterInfo?.SetTextures();
-                    deep.mapDrawer.MapMeshDrawerUpdate_First();
-                }
                 lower.waterInfo?.SetTextures();
                 // Process the lower map's dirty sections so the view below stays live.
                 lower.mapDrawer.MapMeshDrawerUpdate_First();
                 CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
-                if (deep != null)
-                {
-                    DrawSections(deep, view.ClipInsideMap(deep), StackedDrop, includeBelowThings: false);
-                }
-                DrawSections(lower, view, 0, includeBelowThings: deep != null);
-                DrawBelowMask(map, lower, deep, view);
+                DrawSections(lower, view, 0, includeBelowThings: false);
+                DrawBelowMask(map, lower, null, view);
             }
             catch (Exception e)
             {
@@ -908,8 +887,6 @@ namespace AsAboveSoBelow
             tris.Clear();
             colors.Clear();
             TerrainDef air = ABDefOf.AB_OpenAir;
-            TerrainDef glass = ABDefOf.AB_Skylight;
-            bool stacked = lowerTerrain != null && deepFog != null;
             // Anchor the sampling grid to world coordinates so blocks stay put
             // while the camera pans; a view-anchored grid shifts a cell whenever
             // the view edge parity flips, which reads as jitter.
@@ -923,33 +900,17 @@ namespace AsAboveSoBelow
                     int cz = Mathf.Clamp(z, 0, sizeZ - 1);
                     IntVec3 c = new IntVec3(cx, 0, cz);
                     TerrainDef top = skyTerrain.TerrainAt(c);
-                    bool isGlass = top == glass;
-                    if (top != air && !isGlass)
+                    if (top != air)
                     {
                         continue;
                     }
-                    // Two-deep: a surface glass pane under this cell means the
-                    // basement is what shows; its fog joins the check and an
-                    // extra depth dim stacks on.
-                    bool deepVisible = stacked && lowerTerrain.TerrainAt(c) == glass;
-                    bool fogged = lowerFog.IsFogged(c) || (deepVisible && deepFog.IsFogged(c));
+                    bool fogged = lowerFog.IsFogged(c);
                     // Unexplored levels stay hidden; explored cells get only
                     // the constant depth dim. Natural day-night shading arrives
-                    // for free through the shared shader globals. Glass cells
-                    // add a pale tint so the pane reads as a pane.
-                    Color32 col;
-                    if (fogged)
-                    {
-                        col = new Color32(0, 0, 0, 255);
-                    }
-                    else
-                    {
-                        int aInt = dimAlpha + (deepVisible ? 26 : 0) + (isGlass ? 30 : 0);
-                        byte a2 = (byte)Mathf.Clamp(aInt, 0, 255);
-                        col = isGlass || deepVisible
-                            ? new Color32(96, 132, 148, a2)
-                            : new Color32(0, 0, 0, a2);
-                    }
+                    // for free through the shared shader globals.
+                    Color32 col = fogged
+                        ? new Color32(0, 0, 0, 255)
+                        : new Color32(0, 0, 0, dimAlpha);
                     int vi = verts.Count;
                     float x0 = Mathf.Max(x, 0);
                     float z0 = Mathf.Max(z, 0);
@@ -1040,11 +1001,6 @@ namespace AsAboveSoBelow
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     TerrainDef here = skyTerrain.TerrainAt(new IntVec3(x, 0, z));
-                    if (here == ABDefOf.AB_Skylight)
-                    {
-                        AddGlassFrame(skyTerrain, sizeX, sizeZ, x, z, verts, tris, colors);
-                        continue;
-                    }
                     if (here != air)
                     {
                         continue;
@@ -1077,42 +1033,6 @@ namespace AsAboveSoBelow
         {
             TerrainDef t = grid.TerrainAt(new IntVec3(x, 0, z));
             return t != null && t != air && t != cap;
-        }
-
-        private static readonly Color32 GlassFrame = new Color32(18, 26, 30, 165);
-
-        /// <summary>Thin dark frame inside a glass cell along every edge that
-        /// borders non-glass, so panes read as fitted panels instead of raw
-        /// holes; interior edges between adjacent panes stay clean.</summary>
-        private static void AddGlassFrame(TerrainGrid grid, int sizeX, int sizeZ, int x, int z,
-            List<Vector3> verts, List<int> tris, List<Color32> colors)
-        {
-            TerrainDef glass = ABDefOf.AB_Skylight;
-            const float w = 0.07f;
-            bool north = z + 1 >= sizeZ || grid.TerrainAt(new IntVec3(x, 0, z + 1)) != glass;
-            bool south = z - 1 < 0 || grid.TerrainAt(new IntVec3(x, 0, z - 1)) != glass;
-            bool east = x + 1 >= sizeX || grid.TerrainAt(new IntVec3(x + 1, 0, z)) != glass;
-            bool west = x - 1 < 0 || grid.TerrainAt(new IntVec3(x - 1, 0, z)) != glass;
-            if (north)
-            {
-                AddSkirtQuad(verts, tris, colors, x, x + 1f, z + 1f - w, z + 1f,
-                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
-            }
-            if (south)
-            {
-                AddSkirtQuad(verts, tris, colors, x, x + 1f, z, z + w,
-                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
-            }
-            if (east)
-            {
-                AddSkirtQuad(verts, tris, colors, x + 1f - w, x + 1f, z, z + 1f,
-                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
-            }
-            if (west)
-            {
-                AddSkirtQuad(verts, tris, colors, x, x + w, z, z + 1f,
-                    GlassFrame, GlassFrame, GlassFrame, GlassFrame);
-            }
         }
 
         /// <summary>Vertex order (x0,z0), (x0,z1), (x1,z1), (x1,z0); colors
@@ -1159,7 +1079,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (comp.level == 0 && !SkylightSystem.AnyPanes(map))
+            if (comp.level == 0)
             {
                 return;
             }
@@ -1287,7 +1207,6 @@ namespace AsAboveSoBelow
             FogGrid fog = lower.fogGrid;
             TerrainGrid skyTerrain = sky.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
-            TerrainDef glass = ABDefOf.AB_Skylight;
             for (int i = 0; i < things.Count; i++)
             {
                 Thing t = things[i];
@@ -1300,10 +1219,8 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                // Glass panes ignore the roof beneath them - a lit room under
-                // a glass rooftop shows its people.
                 TerrainDef top = skyTerrain.TerrainAt(pos);
-                if (top != glass && (top != air || roofs.Roofed(pos)))
+                if (top != air || roofs.Roofed(pos))
                 {
                     continue;
                 }

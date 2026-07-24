@@ -98,8 +98,7 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 TerrainDef top = skyTerrain.TerrainAt(c);
-                if (top == null || top == air || top == ABDefOf.AB_RoofSurface
-                    || top == ABDefOf.AB_Skylight)
+                if (top == null || top == air || top == ABDefOf.AB_RoofSurface)
                 {
                     // Open air already shows the surface river below; built
                     // rooftops are never flooded.
