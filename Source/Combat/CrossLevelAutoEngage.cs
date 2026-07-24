@@ -127,20 +127,19 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                // Vanilla owns any hostile that can still reach a same-map target;
-                // only the stuck ones (bashing the stairs, wandering under the hole)
-                // pick up cross-gap fire. One reachability walk, capped, same as the
-                // descend scan uses.
-                if (!HostileDescend.IsIdle(p) && HostileDescend.HasReachableTarget(p))
-                {
-                    continue;
-                }
                 if (CrossLevelCombat.GetRangedVerb(p) == null)
                 {
                     cooldown.ChargeUntil(p, now + FailCooldownTicks * 2);
                     continue;
                 }
-                if (TryEngageAcross(p, targetMap, allowReposition: true))
+                // ONE-MAP acquisition: a hostile fights whoever is nearest across BOTH
+                // levels. Engage across the gap only when the paired-level target is
+                // closer than the hostile's nearest same-map enemy - so a raider is
+                // never yanked off a closer same-map fight, but it WILL shoot up/down
+                // the instant the cross-level target is the nearest thing it can hit,
+                // even with (farther) same-map targets available.
+                float sameMapNearSq = NearestSameMapEnemyDistSq(p);
+                if (TryEngageAcross(p, targetMap, allowReposition: true, sameMapNearSq))
                 {
                     engaged++;
                     ABLog.Dev("Hostile " + p.LabelShort + " auto-engaging across the gap.");
@@ -213,6 +212,56 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Squared horizontal distance to the nearest live same-map enemy of
+        /// <paramref name="p"/>, or float.MaxValue if it has none. Used as the one-map
+        /// tie-breaker: a cross-level target is only taken when it is closer than this.
+        /// Both levels share plumb coordinates, so a straight horizontal compare is a
+        /// fair "which threat is nearest" across the gap.</summary>
+        private static float NearestSameMapEnemyDistSq(Pawn p)
+        {
+            float best = float.MaxValue;
+            IntVec3 pos = p.Position;
+            if (p.Faction == null)
+            {
+                // Factionless (manhunters): no cache bucket; the live player pawns are
+                // the threat set that matters to them.
+                List<Pawn> colony = p.Map.mapPawns.SpawnedPawnsInFaction(Faction.OfPlayer);
+                for (int i = 0; i < colony.Count; i++)
+                {
+                    Pawn q = colony[i];
+                    if (q == null || q.Dead || q.Downed)
+                    {
+                        continue;
+                    }
+                    float d = (q.Position - pos).LengthHorizontalSquared;
+                    if (d < best)
+                    {
+                        best = d;
+                    }
+                }
+                return best;
+            }
+            int checks = 0;
+            foreach (IAttackTarget tgt in p.Map.attackTargetsCache.TargetsHostileToFaction(p.Faction))
+            {
+                if (++checks > 128)
+                {
+                    break;
+                }
+                Thing thing = tgt.Thing;
+                if (thing == null || thing.Destroyed || !thing.Spawned || tgt.ThreatDisabled(p))
+                {
+                    continue;
+                }
+                float d = (thing.Position - pos).LengthHorizontalSquared;
+                if (d < best)
+                {
+                    best = d;
+                }
+            }
+            return best;
+        }
+
         /// <summary>Any live hostile on the pawn's own map within overwatch range
         /// (capped walk over the attack-targets cache; a couple of field reads per
         /// entry, no pathfinding).</summary>
@@ -259,7 +308,8 @@ namespace AsAboveSoBelow
 
         /// <summary>Nearest-first probe of enemy targets on the other level; hands the
         /// shooter to the shared attack job on the first target with a clear gap line.</summary>
-        internal static bool TryEngageAcross(Pawn shooter, Map targetMap, bool allowReposition)
+        internal static bool TryEngageAcross(Pawn shooter, Map targetMap, bool allowReposition,
+            float maxDistSq = float.MaxValue)
         {
             Verb_LaunchProjectile verb = CrossLevelCombat.GetRangedVerb(shooter);
             if (verb == null || targetMap == null || targetMap.Disposed)
@@ -301,6 +351,12 @@ namespace AsAboveSoBelow
             for (int i = 0; i < probes; i++)
             {
                 Pawn t = tmpTargets[i];
+                // One-map distance gate (candidates are sorted nearest-first, so once
+                // one is farther than the same-map rival, all the rest are too).
+                if ((t.Position - origin).LengthHorizontalSquared >= maxDistSq)
+                {
+                    break;
+                }
                 if (!allowReposition
                     && !CrossLevelCombat.CanFireFrom(shooter.Map, shooter.Position, t, verb, out _))
                 {

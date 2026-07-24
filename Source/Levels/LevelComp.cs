@@ -157,8 +157,11 @@ namespace AsAboveSoBelow
 
         /// <summary>Cadence of the cross-gap auto-engage scan (sky comp only, covers
         /// the whole sky/surface pair both directions). Simulation: never
-        /// visibility-throttled.</summary>
-        private const int AutoEngageInterval = 250;
+        /// visibility-throttled. Tightened to ~1s (one-map reaction): a hostile picks
+        /// up a cross-level target almost as fast as a same-map one. The scan is
+        /// bounded (capped engages/probes + per-pawn failure cooldowns) so it stays
+        /// cheap at this cadence.</summary>
+        private const int AutoEngageInterval = 60;
 
         /// <summary>Low-frequency safety net over the event-driven rooftop sync:
         /// a time-sliced whole-map sweep that converges the air/rooftop state
@@ -242,6 +245,7 @@ namespace AsAboveSoBelow
             {
                 CrossLevelCombatUI.DrawEngagementVisuals(map);
                 CrossLevelTurret.DrawVisuals(map);
+                ABCrossLevelTracers.Draw(map);
                 ABBelowGotoDrag.FrameUpdate(map);
             }
             catch (Exception e)

@@ -559,6 +559,9 @@ namespace AsAboveSoBelow
                 // The full vanilla per-shot side effects at the shooter (sound + tail,
                 // muzzle flash, records, notifies, changeable/charged, fuel).
                 ABShotEffects.OnShotFired(shooter, verb, target);
+                // A cross-level tracer bolt so the shot reads through the gap even when
+                // the single-column hole hides the real projectile from above.
+                ABCrossLevelTracers.Add(shooter, target, shot.distance);
                 return true;
             }
             catch (Exception e)
