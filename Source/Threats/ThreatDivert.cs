@@ -113,6 +113,30 @@ namespace AsAboveSoBelow
             return best.IsValid;
         }
 
+        /// <summary>True when this incident is a pod-drop raid whose landing should be
+        /// honored on the sky rather than bounced to the surface: either an explicit
+        /// drop location the user/quest already pinned on a plateau, or a resolved
+        /// pod-drop arrival mode. Walk-in raids, non-raid incidents, and anything with
+        /// no drop signal return false and are left to redirect.</summary>
+        internal static bool IsSkyPodDrop(IncidentParms parms, Map sky)
+        {
+            if (parms == null || sky == null)
+            {
+                return false;
+            }
+            if (parms.spawnCenter.IsValid && parms.spawnCenter.InBounds(sky)
+                && sky.terrainGrid.TerrainAt(parms.spawnCenter) != ABDefOf.AB_OpenAir)
+            {
+                return true;
+            }
+            PawnsArrivalModeWorker w = parms.raidArrivalMode?.Worker;
+            return w is PawnsArrivalModeWorker_EdgeDrop
+                || w is PawnsArrivalModeWorker_CenterDrop
+                || w is PawnsArrivalModeWorker_RandomDrop
+                || w is PawnsArrivalModeWorker_EdgeDropGroups
+                || w is PawnsArrivalModeWorker_SpecificLocationDrop;
+        }
+
         /// <summary>The sky level to divert a hostile drop-pod raid onto, or
         /// null. Called from inside the drop arrival workers, so the arrival
         /// mode is drop by construction.</summary>
@@ -213,6 +237,18 @@ namespace AsAboveSoBelow
                 Map ground = comp.groundMap;
                 if (ground == null || ground.Disposed || ground == map)
                 {
+                    return;
+                }
+                // A pod-drop raid aimed at the SKY is a supported landing now - it groups
+                // on the plateaus via ABSkyDropCells. Don't bounce it to the surface: the
+                // bounce keeps the sky spawn center, so the drop runs at nonsensical
+                // surface coords (under the mountain) and scatters via vanilla's
+                // random-walkable fallback (the "pods spread across the lower level"
+                // report). Basement drops and every non-drop incident still redirect.
+                if (comp.level >= 1 && ThreatDivert.IsSkyPodDrop(parms, map))
+                {
+                    ABLog.Dev("Allowed pod-drop raid " + (__instance.def?.defName ?? "unknown")
+                        + " to land on the sky level instead of redirecting to the surface.");
                     return;
                 }
                 parms.target = ground;

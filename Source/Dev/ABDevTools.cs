@@ -1418,6 +1418,17 @@ namespace AsAboveSoBelow
                 Check("pods grouped near the plateau (not spread map-wide)",
                     pods.Count == 0 || maxDistSq <= 12 * 12, "maxDist=" + Mathf.Sqrt(maxDistSq).ToString("0.0"));
 
+                // --- Redirect exemption: a pod-drop pinned on a sky plateau must NOT be
+                // bounced to the surface. The bounce keeps the sky spawn center, so the
+                // drop then runs at nonsensical surface coords and scatters - the actual
+                // "pods spread across the lower level" cause.
+                IncidentParms plateauParms = new IncidentParms { target = sky, spawnCenter = baseCell };
+                Check("a drop pinned on a sky plateau is exempt from the surface redirect",
+                    ThreatDivert.IsSkyPodDrop(plateauParms, sky));
+                IncidentParms airParms = new IncidentParms { target = sky, spawnCenter = openCenter };
+                Check("a non-drop incident over open air is NOT exempt (still redirects)",
+                    !ThreatDivert.IsSkyPodDrop(airParms, sky));
+
                 // Clean up the incoming pods so the test leaves no falling debris.
                 foreach (Thing t in pods)
                 {
