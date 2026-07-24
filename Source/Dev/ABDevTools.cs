@@ -1703,12 +1703,12 @@ namespace AsAboveSoBelow
                     foreach (IntVec3 c in ground.AllCells)
                     {
                         TerrainDef g = gt.BaseTerrainAt(c);
-                        bool skyIsWater = st.TerrainAt(c) != null && st.TerrainAt(c).IsRiver;
+                        bool skyIsWater = st.TerrainAt(c) != null && st.TerrainAt(c).IsWater;
                         if (skyIsWater)
                         {
                             skyWater++;
                         }
-                        if (g == null || !g.IsRiver)
+                        if (g == null || !g.IsWater)
                         {
                             continue;
                         }

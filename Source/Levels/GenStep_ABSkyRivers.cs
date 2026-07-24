@@ -40,6 +40,56 @@ namespace AsAboveSoBelow
         /// behavior is inspectable in-session without verbose logging.</summary>
         internal static string LastSummary = "never ran";
 
+        /// <summary>How far (cells) to look for mountain mass on each side of
+        /// a river when testing whether it crosses the massif as an open
+        /// CANYON. Vanilla strips the rock roof over rivers wider than ~20
+        /// cells (live finding 2026-07-24, round 8: the user's rivers are wide
+        /// canyons, so the roofed-tunnel predicate never engaged) - a canyon
+        /// cell has no roof and no sky mass above it, only walls flanking it.
+        /// Must exceed half the widest expected canyon.</summary>
+        private const int CanyonFlankScan = 16;
+
+        /// <summary>Mountain mass within CanyonFlankScan cells on BOTH sides
+        /// of any of the four axes: the cell sits in a cut through the massif.
+        /// isMass tests one cell for mountain mass (sky terrain in the
+        /// genstep, thick roof in the pre-sky qualifier).</summary>
+        private static bool FlankedByMass(Map map, IntVec3 c, Func<IntVec3, bool> isMass)
+        {
+            for (int axis = 0; axis < 4; axis++)
+            {
+                IntVec3 dir = axis switch
+                {
+                    0 => IntVec3.North,
+                    1 => IntVec3.East,
+                    2 => new IntVec3(1, 0, 1),
+                    _ => new IntVec3(1, 0, -1)
+                };
+                if (ScanForMass(map, c, dir, isMass) && ScanForMass(map, c, new IntVec3(-dir.x, 0, -dir.z), isMass))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool ScanForMass(Map map, IntVec3 from, IntVec3 dir, Func<IntVec3, bool> isMass)
+        {
+            IntVec3 c = from;
+            for (int i = 0; i < CanyonFlankScan; i++)
+            {
+                c += dir;
+                if (!c.InBounds(map))
+                {
+                    return false;
+                }
+                if (isMass(c))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public override void Generate(Map map, GenStepParams parms)
         {
             ABSettings settings = ABMod.Settings;
@@ -98,15 +148,27 @@ namespace AsAboveSoBelow
             // mountain closes to solid rock at ground level and the river
             // head lives on the sky level instead, pouring off the mass edge
             // as a real waterfall into the still-wet surface river below.
+            bool IsSkyMass(IntVec3 mc)
+            {
+                TerrainDef t = skyTerrain.TerrainAt(mc);
+                return t != null && t != air && t != ABDefOf.AB_RoofSurface && !t.IsWater;
+            }
+            // ANY water terrain, not just IsRiver (round-9 finding: wide 1.6
+            // rivers are composites - a moving-water core fringed with still
+            // water pools; keying on IsRiver lifted the core and left the
+            // fringe wet = "two rivers"). Enclosed mountain lakes stay vanilla
+            // through the zero-crossings rule.
             bool IsMassRiver(IntVec3 mc)
             {
                 TerrainDef b = groundTerrain.BaseTerrainAt(mc);
-                if (b == null || !b.IsRiver)
+                if (b == null || !b.IsWater)
                 {
                     return false;
                 }
-                TerrainDef t = skyTerrain.TerrainAt(mc);
-                return t != null && t != air && t != ABDefOf.AB_RoofSurface && !t.IsRiver;
+                // TUNNEL: sky mass directly above (narrow roofed river), OR
+                // CANYON: open cut with the massif flanking both sides (wide
+                // rivers - vanilla strips their roof; round-8 finding).
+                return IsSkyMass(mc) || FlankedByMass(map, mc, IsSkyMass);
             }
             List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
             if (stretches.Count == 0)
@@ -290,7 +352,7 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     TerrainDef nt = gt.BaseTerrainAt(n);
-                    if (nt == null || !nt.IsRiver)
+                    if (nt == null || !nt.IsWater)
                     {
                         continue;
                     }
@@ -337,7 +399,7 @@ namespace AsAboveSoBelow
         {
             TerrainGrid gt = ground.terrainGrid;
             TerrainDef baseT = gt.BaseTerrainAt(c);
-            if (baseT == null || !baseT.IsRiver || gt.TerrainAt(c) != baseT)
+            if (baseT == null || !baseT.IsWater || gt.TerrainAt(c) != baseT)
             {
                 return;
             }
@@ -390,15 +452,21 @@ namespace AsAboveSoBelow
             bool hasFlowData = water?.riverFlowMap != null && water.riverFlowMap.Count > 0;
             TerrainGrid gt = ground.terrainGrid;
             RoofGrid roofs = ground.roofGrid;
+            bool IsThickRoofMass(IntVec3 c)
+            {
+                RoofDef roof = roofs.RoofAt(c);
+                return roof != null && roof.isThickRoof;
+            }
             bool IsMassRiver(IntVec3 c)
             {
                 TerrainDef b = gt.BaseTerrainAt(c);
-                if (b == null || !b.IsRiver)
+                if (b == null || !b.IsWater)
                 {
                     return false;
                 }
-                RoofDef roof = roofs.RoofAt(c);
-                return roof != null && roof.isThickRoof;
+                // Tunnel (thick roof over the water) or canyon (massif
+                // flanking both sides) - same union the genstep uses.
+                return IsThickRoofMass(c) || FlankedByMass(ground, c, IsThickRoofMass);
             }
             List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
             for (int i = 0; i < stretches.Count; i++)
@@ -488,7 +556,7 @@ namespace AsAboveSoBelow
         /// water lands. Thinned to one per fall cluster.</summary>
         private static void TrySpawnBase(Map ground, IntVec3 c, List<IntVec3> placed)
         {
-            if (!c.InBounds(ground) || !ground.terrainGrid.BaseTerrainAt(c).IsRiver)
+            if (!c.InBounds(ground) || !ground.terrainGrid.BaseTerrainAt(c).IsWater)
             {
                 return;
             }
