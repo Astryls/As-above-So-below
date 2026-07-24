@@ -4,6 +4,7 @@ using HarmonyLib;
 using RimWorld;
 using Verse;
 using Verse.AI;
+using Verse.AI.Group;
 
 namespace AsAboveSoBelow
 {
@@ -211,7 +212,7 @@ namespace AsAboveSoBelow
                     float reach = verb.EffectiveRange + 12f;
                     acted = TryEngageAcross(p, targetMap, allowReposition: true, reach * reach);
                 }
-                if (!acted)
+                if (!acted && MayRouteToEngage(p))
                 {
                     acted = TryRouteToEngage(p, targetMap);
                 }
@@ -250,8 +251,30 @@ namespace AsAboveSoBelow
                 }
                 return !p.WorkTagIsDisabled(WorkTags.Violent);
             }
-            return p.Faction != null && !p.HostileTo(Faction.OfPlayer)
-                && p.Faction.RelationKindWith(Faction.OfPlayer) == FactionRelationKind.Ally;
+            // ANY non-hostile NPC fights its own enemies across the gap (BUG1 root
+            // cause: Empire military aid is NEUTRAL, not Ally - the Ally-only gate
+            // left them idle at the hole with 16 raiders below). Safe because the
+            // target filter is HostileTo(SHOOTER): a neutral trader can only ever
+            // fire at raiders/manhunters, never at the player.
+            return p.Faction != null && !p.IsPrisoner && !p.HostileTo(Faction.OfPlayer);
+        }
+
+        /// <summary>Who may ROUTE across the stairs to reach the fight (the melee /
+        /// no-line-of-fire fallback): the player's Attack colonists, ALLY factions, and
+        /// NPCs under an assist-colony lord (military aid - here to fight). Plain
+        /// neutral visitors and traders fire across when they can but never march off
+        /// to another level.</summary>
+        private static bool MayRouteToEngage(Pawn p)
+        {
+            if (p.Faction == Faction.OfPlayer)
+            {
+                return true; // Attack-response colonists (IsFriendlyCombatant gated).
+            }
+            if (p.Faction.RelationKindWith(Faction.OfPlayer) == FactionRelationKind.Ally)
+            {
+                return true;
+            }
+            return p.GetLord()?.LordJob is LordJob_AssistColony;
         }
 
         /// <summary>Weapon-aware fallback: send a combatant that cannot shoot across the

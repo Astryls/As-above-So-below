@@ -1469,7 +1469,7 @@ namespace AsAboveSoBelow
             if (p.Faction != null && p.Faction != Faction.OfPlayer)
             {
                 sb.AppendLine("relation to player: " + p.Faction.RelationKindWith(Faction.OfPlayer)
-                    + " (friendly scan engages ALLY only; hostile scan engages hostiles)");
+                    + " (any non-hostile NPC cross-fires; routing needs ally/assist-lord)");
             }
             Thing eqPrimary = p.equipment?.Primary;
             Verb primaryVerb = p.equipment?.PrimaryEq?.PrimaryVerb;
