@@ -589,11 +589,18 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            // Performance Optimizer caches CurCelestialSunGlow per map for up
-            // to ~60 ticks. Harmless against this wide 0.4 threshold at our
-            // 250-tick rare cadence - do not tighten this into an exact
-            // sunrise-tick comparison.
-            if (GenCelestial.CurCelestialSunGlow(Map) < 0.4f)
+            // THE COLUMN'S GROUND MAP tells the sun (live fix 2026-07-24:
+            // "skylights do not generate light on the level below"). The lit
+            // map here is usually the BASEMENT - a pocket map with no real
+            // celestial data, so asking it directly never reached the 0.4
+            // threshold and shafts stayed dark forever. Same pocket-map
+            // constant-environment class of bug ClimatePatches documents for
+            // temperature. Performance Optimizer caches CurCelestialSunGlow
+            // per map (keyed on the map we pass - the ground map, consistent)
+            // for ~60 ticks; harmless against this wide threshold at our
+            // 250-tick rare cadence - do not tighten to a tick-exact check.
+            Map sunMap = Map.GroundMap() ?? Map;
+            if (GenCelestial.CurCelestialSunGlow(sunMap) < 0.4f)
             {
                 return false;
             }

@@ -35,6 +35,11 @@ namespace AsAboveSoBelow
 
         private const float LipFlowDot = 0.35f;
 
+        /// <summary>Every run records its outcome (or the reason it bailed)
+        /// here; the "AB: river diagnostic" dev tool prints it, so generation
+        /// behavior is inspectable in-session without verbose logging.</summary>
+        internal static string LastSummary = "never ran";
+
         public override void Generate(Map map, GenStepParams parms)
         {
             ABSettings settings = ABMod.Settings;
@@ -58,17 +63,20 @@ namespace AsAboveSoBelow
 
         private static void GenerateInt(Map map)
         {
+            LastSummary = "ran, bailed: no linked ground map";
             Map ground = map.GroundMap();
             if (ground == null || ground.Disposed || ground.Size != map.Size)
             {
                 return;
             }
+            LastSummary = "ran, bailed: ground map has no river flow data";
             WaterInfo groundWater = ground.waterInfo;
             if (groundWater == null || groundWater.riverFlowMap == null
                 || groundWater.riverFlowMap.Count == 0 || groundWater.riverGraph.NullOrEmpty())
             {
                 return;
             }
+            LastSummary = "ran, bailed: no river cells under sky mass (river may not tunnel here)";
 
             TerrainGrid groundTerrain = ground.terrainGrid;
             TerrainGrid skyTerrain = map.terrainGrid;
@@ -168,10 +176,11 @@ namespace AsAboveSoBelow
                     }
                 }
             }
-            ABLog.Dev("Sky rivers: carved " + carved.Count + " water cells, "
-                + banks.Count + " bank cells, dried " + dried + " tunnel cells below, "
+            LastSummary = "carved " + carved.Count + " water cells, " + banks.Count
+                + " bank cells, dried " + dried + " tunnel cells below, "
                 + map.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " waterfall lips, "
-                + basesPlaced.Count + " bases.");
+                + basesPlaced.Count + " bases (sky map " + map.uniqueID + ")";
+            ABLog.Dev("Sky rivers: " + LastSummary);
         }
 
         /// <summary>Replaces the ground map's river cells under the carved sky

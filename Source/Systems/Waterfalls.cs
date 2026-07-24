@@ -15,6 +15,7 @@ namespace AsAboveSoBelow
     /// fall is one voice, not six. Upstream lips (inflow: the stream arrives
     /// over the void) render foam only and stay quiet.
     /// </summary>
+    [StaticConstructorOnStartup]
     public class Thing_ABWaterfall : ThingWithComps
     {
         public bool inflow;

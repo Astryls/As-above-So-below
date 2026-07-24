@@ -1545,6 +1545,127 @@ namespace AsAboveSoBelow
                 + " - compare the dash artifacts.", MessageTypeDefOf.NeutralEvent, false);
         }
 
+        /// <summary>River generation ground truth: prints the genstep's own
+        /// last-run summary (or bail reason) plus a LIVE recount of the
+        /// column's river state, as one warning that crosses the bridge.</summary>
+        [DebugAction("As above", "AB: river diagnostic", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void RiverDiagnostic()
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            try
+            {
+                sb.Append("[AB river diagnostic] genstep last run: ")
+                    .Append(GenStep_ABSkyRivers.LastSummary);
+                Map cur = Find.CurrentMap;
+                Map ground = cur.GroundMap();
+                Map sky = ground?.UpperMap();
+                if (ground == null || sky == null || sky.Disposed)
+                {
+                    sb.Append(" | no sky level linked from here");
+                }
+                else
+                {
+                    int groundRiver = 0;
+                    int underMass = 0;
+                    int underMassWet = 0;
+                    int skyWater = 0;
+                    TerrainGrid gt = ground.terrainGrid;
+                    TerrainGrid st = sky.terrainGrid;
+                    TerrainDef air = ABDefOf.AB_OpenAir;
+                    foreach (IntVec3 c in ground.AllCells)
+                    {
+                        TerrainDef g = gt.BaseTerrainAt(c);
+                        bool skyIsWater = st.TerrainAt(c) != null && st.TerrainAt(c).IsRiver;
+                        if (skyIsWater)
+                        {
+                            skyWater++;
+                        }
+                        if (g == null || !g.IsRiver)
+                        {
+                            continue;
+                        }
+                        groundRiver++;
+                        TerrainDef top = st.TerrainAt(c);
+                        bool mass = top != null && top != air && top != ABDefOf.AB_RoofSurface
+                            && top != ABDefOf.AB_Skylight && !top.IsRiver;
+                        if (mass)
+                        {
+                            underMass++;
+                            underMassWet++;
+                        }
+                    }
+                    sb.Append(" | LIVE: groundRiver=").Append(groundRiver)
+                        .Append(" stillUnderSkyMass(wet,should be 0 after fix)=").Append(underMassWet)
+                        .Append(" skyWaterCells=").Append(skyWater)
+                        .Append(" skyLips=").Append(sky.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count)
+                        .Append(" groundBases=").Append(ground.listerThings.ThingsOfDef(ABDefOf.AB_WaterfallBase).Count);
+                }
+            }
+            catch (Exception e)
+            {
+                sb.Append(" EXCEPTION: ").Append(e);
+            }
+            Log.Warning(sb.ToString());
+            Messages.Message("AB river diagnostic written to log.", MessageTypeDefOf.NeutralEvent, historical: false);
+        }
+
+        /// <summary>Light-chain ground truth for one cell: glow grid value,
+        /// any glower/shaft found there, and the shaft's full gate chain
+        /// (feature, sun on the ground map, pane chain). One warning.</summary>
+        [DebugAction("As above", "AB: light diagnostic", actionType = DebugActionType.ToolMap, allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void LightDiagnostic()
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            try
+            {
+                Map map = Find.CurrentMap;
+                IntVec3 c = UI.MouseCell();
+                sb.Append("[AB light diagnostic] map=L").Append(map.Level())
+                    .Append(" cell=").Append(c.ToString())
+                    .Append(" glow=").Append(map.glowGrid.GroundGlowAt(c).ToString("F2"))
+                    .Append(" roofed=").Append(map.roofGrid.Roofed(c))
+                    .Append(" fogged=").Append(map.fogGrid.IsFogged(c));
+                Map groundMap = map.GroundMap() ?? map;
+                sb.Append(" | sun(groundMap)=").Append(GenCelestial.CurCelestialSunGlow(groundMap).ToString("F2"))
+                    .Append(" sun(thisMap)=").Append(GenCelestial.CurCelestialSunGlow(map).ToString("F2"));
+                List<Thing> things = map.thingGrid.ThingsListAtFast(c);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    Thing t = things[i];
+                    CompGlower glower = t.TryGetComp<CompGlower>();
+                    if (glower == null)
+                    {
+                        continue;
+                    }
+                    sb.Append(" | ").Append(t.def.defName)
+                        .Append(" glowerLit=").Append(glower.Glows);
+                    if (t is Thing_ABSkylightShaft shaft)
+                    {
+                        sb.Append(" shaft: featureOn=").Append(SkylightSystem.FeatureOn)
+                            .Append(" shouldBeLit=").Append(shaft.ShouldBeLitNow())
+                            .Append(" chainOpen=").Append(SkylightSystem.CellSkyOpenThroughPanes(map, c));
+                    }
+                    CompPowerTrader power = t.TryGetComp<CompPowerTrader>();
+                    if (power != null)
+                    {
+                        sb.Append(" powered=").Append(power.PowerOn);
+                    }
+                }
+                Map above = map.UpperMap();
+                if (above != null && !above.Disposed)
+                {
+                    SkylightMapComp aboveComp = SkylightSystem.CompFor(above);
+                    sb.Append(" | paneAbove=").Append(aboveComp != null && aboveComp.IsPane(c));
+                }
+            }
+            catch (Exception e)
+            {
+                sb.Append(" EXCEPTION: ").Append(e);
+            }
+            Log.Warning(sb.ToString());
+            Messages.Message("AB light diagnostic written to log.", MessageTypeDefOf.NeutralEvent, historical: false);
+        }
+
         /// <summary>One-click ground truth for "right click does not work":
         /// runs the exact redirect pipeline for the current selection against
         /// the clicked cell and reports every decision as ONE warning (warnings
