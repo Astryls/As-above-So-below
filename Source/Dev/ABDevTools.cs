@@ -115,7 +115,7 @@ namespace AsAboveSoBelow
                     return;
                 }
 
-                Verb_LaunchProjectile verb = CrossLevelCombat.GetRangedVerb(colonist);
+                Verb verb = CrossLevelCombat.GetRangedVerb(colonist);
                 Check("colonist has a ranged projectile verb", verb != null);
                 Check("maps are a sky<->surface pair", CrossLevelCombat.AreCrossGapPaired(sky, surface, out _, out _));
 
@@ -1966,7 +1966,7 @@ namespace AsAboveSoBelow
                 // A dummy: a real thing to line-of-fire test against.
                 Thing dummy = ThingMaker.MakeThing(ThingDefOf.Wall, ThingDefOf.WoodLog);
                 GenSpawn.Spawn(dummy, solid, sky, WipeMode.Vanish);
-                Verb_LaunchProjectile verb = null;
+                Verb verb = null;
                 Pawn probe = null;
                 try
                 {

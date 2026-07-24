@@ -56,6 +56,8 @@ namespace AsAboveSoBelow
             }
             ScanHostiles(surface, sky);
             ScanHostiles(sky, surface);
+            ScanFriendlies(surface, sky);
+            ScanFriendlies(sky, surface);
             CrossLevelTurret.AcquireAuto(sky, surface);
         }
 
@@ -150,6 +152,143 @@ namespace AsAboveSoBelow
                     cooldown.ChargeUntil(p, now + FailCooldownTicks);
                 }
             }
+        }
+
+        /// <summary>Friendly-side mirror of ScanHostiles: undrafted "Attack"-response
+        /// colonists and pawns of an ALLIED faction who came to help fire across the gap
+        /// at exposed enemies on the paired level, instead of ignoring them until they
+        /// use the stairs. Drafted colonists ride the faster overwatch event hook; a
+        /// nearby same-map enemy always takes precedence (their own AI / hostility
+        /// response owns that). Bounded exactly like the hostile scan.</summary>
+        private static void ScanFriendlies(Map shooterMap, Map targetMap)
+        {
+            if (targetMap.mapPawns.AllPawnsSpawned.Count == 0)
+            {
+                return;
+            }
+            IReadOnlyList<Pawn> pawns = shooterMap.mapPawns.AllPawnsSpawned;
+            int engaged = 0;
+            int now = Find.TickManager.TicksGame;
+            for (int i = pawns.Count - 1; i >= 0 && engaged < MaxEngagesPerScan; i--)
+            {
+                if (i >= pawns.Count)
+                {
+                    continue;
+                }
+                Pawn p = pawns[i];
+                if (p == null || p.Dead || p.Downed || !p.Spawned || p.InMentalState)
+                {
+                    continue;
+                }
+                if (!IsFriendlyCombatant(p))
+                {
+                    continue;
+                }
+                JobDef cur = p.CurJobDef;
+                if (cur == ABDefOf.AB_CrossLevelAttack || cur == ABDefOf.AB_UseStairs)
+                {
+                    continue;
+                }
+                if (!cooldown.Ready(p, now))
+                {
+                    continue;
+                }
+                // A nearby same-map enemy is their own AI's / hostility response's job.
+                if (HasNearbySameMapThreat(p))
+                {
+                    cooldown.ChargeUntil(p, now + OverwatchRetryTicks);
+                    continue;
+                }
+                // WEAPON-AWARE engagement. A ranged combatant with a clear cross-gap shot
+                // fires across (bounded to approach + weapon range so it never sprints the
+                // whole map at a lone sniper). A MELEE combatant - or a ranged one with no
+                // line of fire - instead ROUTES across the stairs to reach the fight,
+                // rather than milling on its own level.
+                bool acted = false;
+                Verb verb = CrossLevelCombat.GetRangedVerb(p);
+                if (verb != null)
+                {
+                    float reach = verb.EffectiveRange + 12f;
+                    acted = TryEngageAcross(p, targetMap, allowReposition: true, reach * reach);
+                }
+                if (!acted)
+                {
+                    acted = TryRouteToEngage(p, targetMap);
+                }
+                if (acted)
+                {
+                    engaged++;
+                    ABLog.Dev((p.Faction == Faction.OfPlayer ? "Colonist " : "Ally ")
+                        + p.LabelShort + " engaging across the gap.");
+                }
+                else
+                {
+                    cooldown.ChargeUntil(p, now + FailCooldownTicks);
+                }
+            }
+        }
+
+        /// <summary>Who ScanFriendlies auto-engages across the gap: undrafted player
+        /// colonists whose hostility response is Attack (drafted ones use the overwatch
+        /// hook) and pawns of an ALLIED faction (never neutral visitors or traders). The
+        /// ranged-weapon and cross-target checks are done by the scan itself.</summary>
+        private static bool IsFriendlyCombatant(Pawn p)
+        {
+            if (ABVehicleCompat.IsVehicle(p))
+            {
+                return false;
+            }
+            if (p.Faction == Faction.OfPlayer)
+            {
+                if (!p.RaceProps.Humanlike || p.Drafted || PawnUtility.PlayerForcedJobNowOrSoon(p))
+                {
+                    return false;
+                }
+                if (p.playerSettings?.hostilityResponse != HostilityResponseMode.Attack)
+                {
+                    return false;
+                }
+                return !p.WorkTagIsDisabled(WorkTags.Violent);
+            }
+            return p.Faction != null && !p.HostileTo(Faction.OfPlayer)
+                && p.Faction.RelationKindWith(Faction.OfPlayer) == FactionRelationKind.Ally;
+        }
+
+        /// <summary>Weapon-aware fallback: send a combatant that cannot shoot across the
+        /// gap (melee, or a ranged pawn with no line of fire) toward the fight on the
+        /// paired level via the stairs, so it engages there instead of milling. Only when
+        /// that level actually holds an enemy it is hostile to AND a usable stairwell
+        /// exists. Force-started so it interrupts idle/work like any combat reaction.</summary>
+        private static bool TryRouteToEngage(Pawn p, Map targetMap)
+        {
+            if (p?.jobs == null || targetMap == null || targetMap.Disposed || !HasHostileTo(p, targetMap))
+            {
+                return false;
+            }
+            Building_ABStairs stairs = CrossLevelWork.NearestUsableStairs(p, targetMap, checkReachability: true);
+            Building_ABStairs exit = stairs?.CounterpartTowards(targetMap);
+            if (exit == null)
+            {
+                return false;
+            }
+            p.jobs.StartJob(CrossLevelWork.MakeStairsJob(stairs, exit), JobCondition.InterruptForced);
+            return true;
+        }
+
+        /// <summary>Any live pawn on <paramref name="map"/> hostile to <paramref name="p"/>
+        /// - i.e. is there actually a fight to route toward.</summary>
+        private static bool HasHostileTo(Pawn p, Map map)
+        {
+            IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                Pawn t = pawns[i];
+                if (t != null && !t.Dead && !t.Downed && t.Spawned && t.HostileTo(p))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Event-path cadence gate for the drafted-overwatch hook: vanilla's
@@ -249,8 +388,13 @@ namespace AsAboveSoBelow
                 {
                     break;
                 }
+                // PAWNS only: a nearby colony BUILDING (a wall, the stairs, a turret)
+                // is not a "closer fight" that should suppress cross-level engagement.
+                // Counting buildings here pinned maxDistSq near zero for any hostile
+                // standing beside a structure, so it never cross-fired and milled /
+                // bashed / descended instead. Compare against real pawn threats only.
                 Thing thing = tgt.Thing;
-                if (thing == null || thing.Destroyed || !thing.Spawned || tgt.ThreatDisabled(p))
+                if (!(thing is Pawn) || thing.Destroyed || !thing.Spawned || tgt.ThreatDisabled(p))
                 {
                     continue;
                 }
@@ -312,11 +456,12 @@ namespace AsAboveSoBelow
         internal static bool TryEngageAcross(Pawn shooter, Map targetMap, bool allowReposition,
             float maxDistSq = float.MaxValue)
         {
-            Verb_LaunchProjectile verb = CrossLevelCombat.GetRangedVerb(shooter);
+            Verb verb = CrossLevelCombat.GetRangedVerb(shooter);
             if (verb == null || targetMap == null || targetMap.Disposed)
             {
                 return false;
             }
+            IntVec3 origin = shooter.Position;
             tmpTargets.Clear();
             IReadOnlyList<Pawn> candidates = targetMap.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < candidates.Count; i++)
@@ -334,13 +479,19 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                // One-map prune: a cross-level target only matters if it is closer than
+                // the shooter's nearest same-map enemy. Dropping the rest here keeps the
+                // sort + probe cheap even when the paired level is crowded.
+                if ((t.Position - origin).LengthHorizontalSquared >= maxDistSq)
+                {
+                    continue;
+                }
                 tmpTargets.Add(t);
             }
             if (tmpTargets.Count == 0)
             {
                 return false;
             }
-            IntVec3 origin = shooter.Position;
             tmpTargets.Sort((a, b) =>
                 (a.Position - origin).LengthHorizontalSquared.CompareTo((b.Position - origin).LengthHorizontalSquared));
             int probes = Math.Min(tmpTargets.Count, MaxTargetProbes);

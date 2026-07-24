@@ -271,7 +271,11 @@ namespace AsAboveSoBelow
             foreach (IAttackTarget target in targets)
             {
                 Thing t = target.Thing;
-                if (t == null || t.Destroyed || !t.Spawned || target.ThreatDisabled(p))
+                // The stairs are immortal - a hostile whose ONLY reachable "target" is a
+                // stairwell must not be pinned here bashing it; treating them as no target
+                // frees it to route across the levels (melee reach, or no line of fire).
+                if (t == null || t.Destroyed || !t.Spawned || target.ThreatDisabled(p)
+                    || t is Building_ABStairs)
                 {
                     continue;
                 }

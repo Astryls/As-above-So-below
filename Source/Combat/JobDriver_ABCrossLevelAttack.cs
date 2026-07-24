@@ -68,11 +68,11 @@ namespace AsAboveSoBelow
         /// shooters that is a per-tick cost worth caching. Re-resolved on the same
         /// 15-tick cadence as the line-of-fire revalidation, and dropped immediately
         /// when the equipment it came from is gone.</summary>
-        private Verb_LaunchProjectile cachedVerb;
+        private Verb cachedVerb;
 
         private int verbStaleAt;
 
-        private Verb_LaunchProjectile ResolvedVerb()
+        private Verb ResolvedVerb()
         {
             int now = Find.TickManager.TicksGame;
             if (cachedVerb != null && now < verbStaleAt)
@@ -102,9 +102,11 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            // Player pawns need the draft to keep shooting (undrafting cancels the
-            // order, like any drafted attack); AI shooters have no draft at all.
-            if (pawn.IsColonistPlayerControlled && !pawn.Drafted)
+            // Player-FORCED orders (issued via the targeter) end when the pawn is
+            // undrafted, like any drafted command. Auto-defense cross-fire - an
+            // undrafted "Attack"-response colonist or an allied helper - is NOT
+            // player-forced and keeps shooting while the shot holds.
+            if (pawn.IsColonistPlayerControlled && job.playerForced && !pawn.Drafted)
             {
                 return false;
             }
@@ -137,7 +139,7 @@ namespace AsAboveSoBelow
 
         private void FireTick()
         {
-            Verb_LaunchProjectile verb = ResolvedVerb();
+            Verb verb = ResolvedVerb();
             if (verb == null)
             {
                 EndJobWith(JobCondition.Incompletable);
@@ -184,7 +186,7 @@ namespace AsAboveSoBelow
                 warmedUp = true;
                 // Aim complete: the once-per-burst vanilla side effects (combat log +
                 // Shooting XP), mirroring Verb_Shoot.WarmupComplete.
-                ABShotEffects.OnBurstWarmupComplete(pawn, verb, target, verb.Projectile);
+                ABShotEffects.OnBurstWarmupComplete(pawn, verb, target, ABVerb.ProjectileOf(verb));
             }
             if (burstShotsLeft <= 0)
             {

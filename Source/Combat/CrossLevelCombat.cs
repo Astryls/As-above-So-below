@@ -146,29 +146,10 @@ namespace AsAboveSoBelow
 
         /// <summary>The best ranged projectile verb for a pawn, or null (melee-only,
         /// or a non-projectile ranged verb we do not simulate across the gap).</summary>
-        internal static Verb_LaunchProjectile GetRangedVerb(Pawn p)
+        internal static Verb GetRangedVerb(Pawn p)
         {
-            if (p == null)
-            {
-                return null;
-            }
-            Verb eq = p.equipment?.PrimaryEq?.PrimaryVerb;
-            if (eq is Verb_LaunchProjectile lpEq && !eq.verbProps.IsMeleeAttack)
-            {
-                return lpEq;
-            }
-            List<Verb> all = p.verbTracker?.AllVerbs;
-            if (all != null)
-            {
-                for (int i = 0; i < all.Count; i++)
-                {
-                    if (all[i] is Verb_LaunchProjectile lp && !all[i].verbProps.IsMeleeAttack)
-                    {
-                        return lp;
-                    }
-                }
-            }
-            return null;
+            // Vanilla Verb_LaunchProjectile OR, when CE is loaded, a CE projectile verb.
+            return ABVerb.GetRangedVerb(p);
         }
 
         /// <summary>Shared classifier for "this targeting source is the caster's own
@@ -176,11 +157,11 @@ namespace AsAboveSoBelow
         /// dispatcher and the hover cursor can never diverge. Ability verbs (including
         /// ability-shoot hybrids, which are not the equipped weapon's verb), melee, and
         /// arcing launchers are excluded.</summary>
-        internal static bool IsEquippedGunVerb(ITargetingSource source, Pawn caster, out Verb_LaunchProjectile gunVerb)
+        internal static bool IsEquippedGunVerb(ITargetingSource source, Pawn caster, out Verb gunVerb)
         {
             gunVerb = null;
             if (caster == null || !(source is Verb v) || v is Verb_CastAbility
-                || !(v is Verb_LaunchProjectile lp) || v.verbProps.IsMeleeAttack)
+                || !ABVerb.IsProjectileVerb(v))
             {
                 return false;
             }
@@ -188,11 +169,11 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (lp.Projectile?.projectile?.flyOverhead ?? false)
+            if (ABVerb.ProjectileOf(v)?.projectile?.flyOverhead ?? false)
             {
                 return false;
             }
-            gunVerb = lp;
+            gunVerb = v;
             return true;
         }
 
@@ -207,7 +188,7 @@ namespace AsAboveSoBelow
 
         /// <summary>Can the shooter (pawn or turret) fire at the cross-gap target from
         /// its current cell?</summary>
-        internal static bool CanCrossGapFire(Thing shooter, Thing target, Verb_LaunchProjectile verb, out GapShot shot)
+        internal static bool CanCrossGapFire(Thing shooter, Thing target, Verb verb, out GapShot shot)
         {
             shot = default;
             if (shooter == null || !shooter.Spawned)
@@ -230,7 +211,7 @@ namespace AsAboveSoBelow
         /// on <paramref name="shooterMap"/> and reach <paramref name="target"/> across the
         /// gap? Cheap: a couple of terrain reads, one sight line, one range compare.</summary>
         internal static bool CanFireFrom(Map shooterMap, IntVec3 sCol, Thing target,
-            Verb_LaunchProjectile verb, out GapShot shot)
+            Verb verb, out GapShot shot)
         {
             shot = default;
             if (!Enabled || shooterMap == null || verb == null || target == null)
@@ -257,16 +238,17 @@ namespace AsAboveSoBelow
             }
             if (shooterMap == skyMap)
             {
-                // Shooting DOWN. The victim must be visible through a hole (strict
-                // column - matches the see-below visibility rule), and the bullet
-                // crosses the sky plane early in its flight: an elevated muzzle's
-                // path is above the plane only for roughly its first quarter, so an
-                // open-air cell within the first HALF of the line is the real
-                // requirement - NOT shooter-adjacency. A turret or sniper in the
-                // middle of a rooftop platform fires fine as long as the roof edge
-                // is reasonably hole-ward (round-3 report: mid-platform sky turrets
-                // never engaged).
-                if (skyMap.terrainGrid.TerrainAt(tCol) != ABDefOf.AB_OpenAir)
+                // Shooting DOWN. The victim must be exposed to the gap (its column
+                // open air, or a cardinal neighbour is) - the SAME leniency the UP
+                // path uses for its target, so the two directions are reciprocal:
+                // if a surface pawn beside a hole can fire UP at a sky pawn, the sky
+                // pawn can fire DOWN at it. (A strict under-the-hole rule made sky
+                // hostiles almost never find a down-shot: "lower attacks upper but
+                // not vice versa".) The bullet crosses the sky plane early in its
+                // flight, so an open-air cell within the first HALF of the line -
+                // NOT shooter-adjacency - is the muzzle requirement (a mid-platform
+                // sniper/turret still fires as long as the roof edge is hole-ward).
+                if (!ExposedToGap(skyMap, tCol))
                 {
                     return false;
                 }
@@ -319,7 +301,7 @@ namespace AsAboveSoBelow
         /// Surface shooter -> sky target: the SHOOTER's column must be open air
         /// (the shell lobs up through the hole, then falls onto the open sky plane).</summary>
         internal static bool CanArcFireAt(Map shooterMap, IntVec3 sCol, IntVec3 tCol,
-            Map targetMap, Verb_LaunchProjectile verb, out GapShot shot)
+            Map targetMap, Verb verb, out GapShot shot)
         {
             shot = default;
             if (!Enabled || shooterMap == null || verb == null)
@@ -360,7 +342,7 @@ namespace AsAboveSoBelow
         /// scatter, shell spawned on the target's map at the shooter's column with the
         /// full-distance origin so flight time reads real. flyOverhead projectiles take
         /// no intercepts en route and do their own roof punch on impact.</summary>
-        internal static bool FireArcShot(Thing shooter, Pawn manningPawn, Verb_LaunchProjectile verb,
+        internal static bool FireArcShot(Thing shooter, Pawn manningPawn, Verb verb,
             LocalTargetInfo target, Map targetMap, float distance)
         {
             try
@@ -369,7 +351,13 @@ namespace AsAboveSoBelow
                 {
                     return false;
                 }
-                ThingDef projDef = verb.Projectile;
+                // CE arc/mortar shells use CE's own shell system and are not routed
+                // across the gap yet; leave them to route/descend normally.
+                if (ABCECompat.Active && ABCECompat.IsCEVerb(verb))
+                {
+                    return false;
+                }
+                ThingDef projDef = ABVerb.ProjectileOf(verb);
                 if (projDef == null)
                 {
                     return false;
@@ -425,7 +413,7 @@ namespace AsAboveSoBelow
         /// shooter+distance factor, weapon falloff, weather, Ideology darkness offset
         /// and target size. Cover is intentionally omitted - plunging / rising fire
         /// bypasses horizontal cover, which is physically correct.</summary>
-        internal static float ComputeAimChance(Thing shooter, Verb_LaunchProjectile verb, Thing target, float distance)
+        internal static float ComputeAimChance(Thing shooter, Verb verb, Thing target, float distance)
         {
             float num = 1f;
             if (verb.verbProps.canGoWild)
@@ -444,7 +432,26 @@ namespace AsAboveSoBelow
                 num = 0.0201f;
             }
             num *= TargetSizeFactor(target);
+            // High-ground: a subtle accuracy bonus for the upper shooter firing down.
+            if (IsHighGround(shooter, target))
+            {
+                num *= HighGroundAccuracyFactor;
+            }
             return Mathf.Clamp01(num);
+        }
+
+        /// <summary>Elevation constant: the fraction added to a same-map hit chance when
+        /// the shooter fires from the upper level (subtle, per the design).</summary>
+        private const float HighGroundAccuracyFactor = 1.10f;
+
+        /// <summary>True when the shooter fires from a higher level than the target - the
+        /// high ground. Cross-gap combat is sky (level 1) vs surface (level 0), so this is
+        /// simply the sky shooter firing down.</summary>
+        private static bool IsHighGround(Thing shooter, Thing target)
+        {
+            int s = shooter?.Map?.Levels()?.level ?? 0;
+            int t = target?.MapHeld?.Levels()?.level ?? 0;
+            return s > t;
         }
 
         private static float DarknessOffset(Thing shooter, Thing target)
@@ -498,7 +505,7 @@ namespace AsAboveSoBelow
         /// the target (angled toward the shooter, so the flight is short and mostly
         /// unobstructed - a plunging shot) and launch it. All damage is vanilla from
         /// there. Returns false and fails open on any problem.</summary>
-        internal static bool Fire(Thing shooter, Verb_LaunchProjectile verb, Thing target)
+        internal static bool Fire(Thing shooter, Verb verb, Thing target)
         {
             try
             {
@@ -510,7 +517,7 @@ namespace AsAboveSoBelow
                 {
                     return false;
                 }
-                ThingDef projDef = verb.Projectile;
+                ThingDef projDef = ABVerb.ProjectileOf(verb);
                 if (projDef == null)
                 {
                     return false;
@@ -532,11 +539,29 @@ namespace AsAboveSoBelow
                     originGround = target.DrawPos;
                 }
 
-                Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, map);
-                ABShotEffects.ApplyWeaponTraits(proj, verb);
+                Thing equip = verb.EquipmentSource;
+
+                // Combat Extended weapons launch a ProjectileCE through CE's own ballistics
+                // (option B - real CE accuracy: aim at the target, CE spread + our
+                // high-ground bonus decide the hit; CE resolves armour, penetration,
+                // suppression and ammo natively on the target map).
+                if (ABCECompat.Active && ABCECompat.IsCEVerb(verb))
+                {
+                    if (!ABCECompat.FireCE(shooter, verb, map, spawnCell, originGround,
+                            new LocalTargetInfo(target), IsHighGround(shooter, target)))
+                    {
+                        return false;
+                    }
+                    ABShotEffects.OnShotFired(shooter, verb, target);
+                    ABCrossLevelTracers.Add(shooter, target, shot.distance);
+                    return true;
+                }
+
+                // Vanilla: our aim roll decides hit/miss.
                 float aim = ComputeAimChance(shooter, verb, target, shot.distance);
                 bool hit = Rand.Chance(aim);
-                Thing equip = verb.EquipmentSource;
+                Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, map);
+                ABShotEffects.ApplyWeaponTraits(proj, verb);
 
                 if (hit)
                 {
@@ -574,7 +599,7 @@ namespace AsAboveSoBelow
         /// <summary>A cell on the shooter's map with a clear cross-gap line of fire to the
         /// target, preferring the pawn's current cell. Searches outward from the target's
         /// column projected onto the shooter's map (the edge of the hole). Bounded.</summary>
-        internal static IntVec3 FindFiringCell(Pawn shooter, Thing target, Verb_LaunchProjectile verb)
+        internal static IntVec3 FindFiringCell(Pawn shooter, Thing target, Verb verb)
         {
             if (shooter == null || !shooter.Spawned)
             {
@@ -678,7 +703,7 @@ namespace AsAboveSoBelow
 
         private static bool StartAttackJob(Pawn pawn, Thing target, bool playerForced, bool allowReposition)
         {
-            Verb_LaunchProjectile verb = GetRangedVerb(pawn);
+            Verb verb = GetRangedVerb(pawn);
             if (verb == null)
             {
                 return false;

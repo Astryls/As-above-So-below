@@ -60,5 +60,9 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\1321849735\1.6\Assemblies\Rimefeller.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="CombatExtended">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\2890901044\Assemblies\CombatExtended.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 </Project>

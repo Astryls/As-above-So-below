@@ -21,6 +21,7 @@ namespace AsAboveSoBelow
     /// the whole system early-outs to nothing when no cross-level shot is in flight.
     /// Direct fire only; arcing shells (mortars) lob and are shown via see-below.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class ABCrossLevelTracers
     {
         private struct Tracer
