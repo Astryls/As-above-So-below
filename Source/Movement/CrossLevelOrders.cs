@@ -46,6 +46,20 @@ namespace AsAboveSoBelow
         /// swapped) must run the vanilla generator, not recurse.</summary>
         internal static bool Redirecting;
 
+        /// <summary>Player-commandable pawn for cross-level RMB orders:
+        /// colonists as before, plus overseen colony mechs (parity fix
+        /// 2026-07-24 - the mechanitor command-range patch already extends the
+        /// command cylinder through the column, but this gate still refused
+        /// mechs the order menu, so drafted mechs could not be sent across
+        /// levels at all). Command range stays enforced downstream: the
+        /// vanilla goto/attack providers re-check it during the virtual
+        /// rebuild, and the formation drag filters cells per pawn.</summary>
+        internal static bool PlayerCommandable(Pawn p)
+        {
+            return p != null && p.Spawned && p.Map != null
+                && (p.IsColonistPlayerControlled || p.IsColonyMechPlayerControlled);
+        }
+
         /// <summary>The level a click is aimed at: the level below when the cursor is
         /// over open air on the viewed level, otherwise the viewed level itself.</summary>
         internal static Map ResolveTargetMap(Map cur, Vector3 clickPos, out Map below)
@@ -78,7 +92,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             Pawn p = selectedPawns[0];
-            if (p == null || !p.Spawned || !p.IsColonistPlayerControlled || p.Map == null)
+            if (!PlayerCommandable(p))
             {
                 return false;
             }
@@ -103,10 +117,11 @@ namespace AsAboveSoBelow
             return true;
         }
 
-        /// <summary>Multi-pawn variant of ShouldRedirect: two or more player colonists
-        /// selected, all within this column's viewed/below pair, and either the click
-        /// aims at the other level or at least one pawn stands on the other level.
-        /// Selections containing non-colonists (animals, mechs) fall through to vanilla.</summary>
+        /// <summary>Multi-pawn variant of ShouldRedirect: two or more player-commandable
+        /// pawns (colonists and overseen mechs) selected, all within this column's
+        /// viewed/below pair, and either the click aims at the other level or at least
+        /// one pawn stands on the other level. Selections containing anything else
+        /// (animals, guests) fall through to vanilla.</summary>
         internal static bool ShouldRedirectMulti(List<Pawn> selectedPawns, Vector3 clickPos,
             out Map cur, out Map targetMap, out List<Pawn> pawns)
         {
@@ -123,7 +138,7 @@ namespace AsAboveSoBelow
             for (int i = 0; i < selectedPawns.Count; i++)
             {
                 Pawn p = selectedPawns[i];
-                if (p == null || !p.Spawned || !p.IsColonistPlayerControlled || p.Map == null)
+                if (!PlayerCommandable(p))
                 {
                     return false;
                 }
@@ -570,8 +585,7 @@ namespace AsAboveSoBelow
             }
             Pawn pawn = selectedPawns[0];
             Map cur = Find.CurrentMap;
-            if (pawn == null || !pawn.Spawned || !pawn.IsColonistPlayerControlled
-                || cur == null || pawn.Map != cur)
+            if (!PlayerCommandable(pawn) || cur == null || pawn.Map != cur)
             {
                 return;
             }

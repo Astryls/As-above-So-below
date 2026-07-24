@@ -30,7 +30,7 @@ namespace AsAboveSoBelow
         private static readonly MethodInfo shouldAutoRecharge =
             AccessTools.Method(typeof(JobGiver_GetEnergy), "ShouldAutoRecharge");
 
-        private static void Postfix(Pawn pawn, ref Job __result)
+        private static void Postfix(JobGiver_GetEnergy_Charger __instance, Pawn pawn, ref Job __result)
         {
             if (__result != null || !ModsConfig.BiotechActive || !ABGuard.On(ABGuard.Logistics))
             {
@@ -49,7 +49,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (!WantsCharge(pawn))
+                if (!WantsCharge(__instance, pawn))
                 {
                     return;
                 }
@@ -71,11 +71,20 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static bool WantsCharge(Pawn pawn)
+        /// <summary>ShouldAutoRecharge is a protected virtual INSTANCE method
+        /// (it reads the giver's forced field). The first cut invoked it with a
+        /// null target, which throws TargetException ("Non-static method
+        /// requires a target") on the FIRST idle colony mech and tripped the
+        /// whole Logistics kill switch - the 2026-07-24 user bug wave (silent
+        /// loss of cross-level bill supply and product hauling, blamed on WVC
+        /// work modes). Invoking on the patched giver instance also dispatches
+        /// virtually, so modded overrides of the recharge policy (WVC etc.)
+        /// are respected rather than bypassed.</summary>
+        private static bool WantsCharge(JobGiver_GetEnergy_Charger giver, Pawn pawn)
         {
-            if (shouldAutoRecharge != null)
+            if (shouldAutoRecharge != null && giver != null)
             {
-                return shouldAutoRecharge.Invoke(null, new object[] { pawn }) is bool b && b;
+                return shouldAutoRecharge.Invoke(giver, new object[] { pawn }) is bool b && b;
             }
             // Fallback if the vanilla helper moves: route only when clearly low.
             return pawn.needs.energy.CurLevelPercentage < 0.35f;

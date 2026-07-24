@@ -701,9 +701,42 @@ namespace AsAboveSoBelow
             int sum = 0;
             for (int i = 0; i < things.Count; i++)
             {
-                sum += things[i].stackCount;
+                Thing t = things[i];
+                // Forbidden stacks are unusable by every consumer this cache
+                // feeds (bills, meals, fuel, transporters). Counting them as
+                // available suppressed real shortfalls: a forbidden corpse
+                // rotting on the bench's level silently blocked the ferry of
+                // the usable one from the floor below (2026-07-24 report).
+                if (t == null || t.IsForbidden(Faction.OfPlayer))
+                {
+                    continue;
+                }
+                sum += t.stackCount;
             }
             return sum;
+        }
+
+        /// <summary>The def exists as at least one spawned stack somewhere in
+        /// this map's column. Registration filter for wide alternative slots:
+        /// only defs a cross-level pull could actually fetch get demand sites,
+        /// so the per-bill def cap can never crowd out the def the player
+        /// actually stockpiled.</summary>
+        private static bool PresentInColumn(Map map, ThingDef def)
+        {
+            LevelComp controller = map.Controller();
+            if (controller == null)
+            {
+                return map.listerThings.ThingsOfDef(def).Count > 0;
+            }
+            foreach (KeyValuePair<int, Map> kvp in controller.MapByLevel)
+            {
+                Map m = kvp.Value;
+                if (m != null && !m.Disposed && m.listerThings.ThingsOfDef(def).Count > 0)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static void AddBillNeeds(Map map, CacheEntry entry)
@@ -766,7 +799,17 @@ namespace AsAboveSoBelow
                     }
                     continue;
                 }
-                int fan = 0;
+                // Alternative slots, fan-cap fix (2026-07-24): the old code
+                // walked AllowedThingDefs with a blind 40-def cap on BOTH the
+                // availability sum and the registration - on modlists with
+                // many meats, and for butchery (the corpse filter fans out to
+                // one def per race), whether the player's actual stored def
+                // made the first 40 was enumeration-order luck, so cooks
+                // "refused to acknowledge" meat or corpses one level away.
+                // Availability now sums UNCAPPED (cached dictionary lookups);
+                // registration is limited to defs actually PRESENT somewhere
+                // in the column - the only defs a pull could ever fetch - with
+                // the cap kept as a site-bookkeeping bound.
                 int totalAvailable = 0;
                 int anyRequired = 0;
                 foreach (ThingDef def in ing.filter.AllowedThingDefs)
@@ -774,10 +817,6 @@ namespace AsAboveSoBelow
                     if (!bill.ingredientFilter.Allows(def))
                     {
                         continue;
-                    }
-                    if (++fan > MaxDefsPerBill)
-                    {
-                        break;
                     }
                     totalAvailable += Available(map, entry, def);
                     if (anyRequired == 0)
@@ -790,10 +829,10 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                fan = 0;
+                int fan = 0;
                 foreach (ThingDef def in ing.filter.AllowedThingDefs)
                 {
-                    if (!bill.ingredientFilter.Allows(def))
+                    if (!bill.ingredientFilter.Allows(def) || !PresentInColumn(map, def))
                     {
                         continue;
                     }
