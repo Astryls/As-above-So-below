@@ -18,7 +18,9 @@
     <passability>Standable</passability>
     <pathCost>1</pathCost>
     <fertility>0</fertility>
-    <beauty>2</beauty>
+    <statBases>
+      <Beauty>2</Beauty>
+    </statBases>
     <affordances>
       <li>Light</li>
       <li>Medium</li>
