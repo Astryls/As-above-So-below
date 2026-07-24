@@ -13,7 +13,7 @@
 [/list]
 
 [h1]A Living View Below[/h1]
-From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood. Combat works through the gaps too: a sniper on the rim can fire down at raiders on the surface, and they can shoot right back.
+From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood. Combat works through the gaps too: a sniper on the rim can fire down at raiders on the surface, and they can shoot right back. Group orders cross the gap as well: hold right click and drag a formation, and every selected pawn shows its ghost at its own destination cell, even when the group is split across levels. Psycasts can target a pawn or a patch of ground on the level below, and the caster walks over and casts.
 
 [h1]Sky Terrain Worth Climbing[/h1]
 Where a mountain peak rises past the surface, the sky level generates real summit terrain: open plateaus, meadows, rocky outcrops, small tarns, and sometimes a hidden valley that has been sealed away since the planet cooled. With the Odyssey DLC, landmarks can appear up there as well. The mod settings include a live generation preview, so you can tune openness, water, soil, ore, and vegetation and see a sample before you ever climb.
@@ -29,7 +29,7 @@ Your basement does not have to be plain rock. One setting picks what new basemen
 New basements can reveal on load, so the whole level is visible at once, or you can leave the fog on and explore the dark the normal way.
 
 [h1]One Workforce[/h1]
-Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony. Priorities count across levels too: when a job with higher priority waits on another floor, pawns take the stairs for it instead of settling for busywork where they stand.
+Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony. Priorities count across levels too: when a job with higher priority waits on another floor, pawns take the stairs for it instead of settling for busywork where they stand. Food choice weighs the whole column exactly like one big map, so a proper meal in the upstairs fridge wins over berries by the door. Handlers lead roped animals to a pen on another level when no local pen fits, psycasters climb to the strongest meditation focus in the column, and rituals summon every participant, secure prisoners and the sacrifice animal included. Reinstalling a building on a different floor is one order: place the ghost and your colonists handle the uninstall, the ferry, and the rebuild.
 
 [h1]Stairs, Ladders, Elevators[/h1]
 [list]
@@ -37,6 +37,7 @@ Pawns cross levels on their own for work, hauling, food, rest, recreation, medic
 [*][b]Ladder[/b]: cheap and slow.
 [*][b]Grand staircase[/b]: fast, and it scales with quality.
 [*][b]Elevator[/b]: fastest, links all three levels through one shaft.
+[*]Every link can be forbidden like a door. Colonists and pets respect the toggle, raiders ignore it.
 [/list]
 
 [h1]Utilities Straight Through The Floor[/h1]
@@ -52,7 +53,7 @@ Dedicated shafts connect networks level to level as if they were one net. No bat
 Off by default: infestations can tunnel into your basement and drop pods can hit the sky level. Diverted raiders find their way down the stairs to reach you, and nothing ever wanders a pocket level forever.
 
 [h1]Part Of The World[/h1]
-Caravans form across levels, traders see the whole column's goods, storyteller wealth counts every level, and abandoning the settlement warns you about pawns left above or below.
+Caravans form across levels, traders see the whole column's goods, storyteller wealth counts every level, and abandoning the settlement warns you about pawns left above or below. Visitor and traveler groups sometimes arrive on your sky plateaus when a walkable opening touches the map edge, Hospitality guests tour any level with guest beds or a vendor and rejoin their group before it leaves, and trader airships land on a rooftop landing zone if you paint one up there.
 
 [h1]Built For Performance[/h1]
 [list]
@@ -66,7 +67,7 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
 
 [h1]Compatibility[/h1]
 [list]
-[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Biomes! Caverns, Alpha Biomes, Ancient urban ruins, Better Mountains, Medieval Overhaul, and more.
+[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Combat Extended, Vehicle Framework, Hospitality, Allow Tool, Pick Up And Haul, Hauler's Dream, Achtung, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Medieval Trader Airships, Biomes! Caverns, Alpha Biomes, Ancient urban ruins, Better Mountains, Medieval Overhaul, and more.
 [*]Modders: an open API for cross level jobs, custom vertical links, and incident policy.
 [*]Not compatible: MultiFloors, it solves the same problem its own way.
 [*]Requires Harmony. Built for RimWorld 1.6. Safe to add to an existing save; to remove it, empty and dismantle your extra levels first.
