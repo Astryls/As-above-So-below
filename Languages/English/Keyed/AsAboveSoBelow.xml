@@ -18,6 +18,7 @@
   <AB_SkyCreated>The sky level has been opened. Build floors above roofed rooms to expand upward.</AB_SkyCreated>
   <AB_OnlySurfaceForNow>Must be placed on the surface level.</AB_OnlySurfaceForNow>
   <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
+  <AB_NoLevelsUrbanRuins>Cannot add levels here: this is an Ancient urban ruins exploration map. Enable it under As above, So below settings, Compat tab, if you want to build vertical bases inside urban ruins.</AB_NoLevelsUrbanRuins>
   <AB_ShowLiveBelow>Show live movement on the level below</AB_ShowLiveBelow>
   <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
   <AB_SelectBelowInPlace>Select things on the level below</AB_SelectBelowInPlace>
@@ -38,7 +39,13 @@
   <AB_TabView>View and camera</AB_TabView>
   <AB_TabWork>Work and logistics</AB_TabWork>
   <AB_TabCombat>Combat and threats</AB_TabCombat>
+  <AB_TabCompat>Compat</AB_TabCompat>
   <AB_TabAdvanced>Advanced</AB_TabAdvanced>
+  <AB_CompatNote>Options for other mods As above, So below detected. Sections appear only when their mod is loaded.</AB_CompatNote>
+  <AB_CompatNoneDetected>No mods with configurable compat options were detected. Compatibility with other mods that need no options is handled automatically.</AB_CompatNoneDetected>
+  <AB_CompatAUR>Ancient urban ruins</AB_CompatAUR>
+  <AB_AllowUrbanRuinsLevels>Allow z-levels on urban ruins maps</AB_AllowUrbanRuinsLevels>
+  <AB_AllowUrbanRuinsLevelsTip>By default you cannot build stairs on Ancient urban ruins exploration maps, so you never accidentally stack a sky or basement on a temporary quest map. Turn this on to treat urban ruins maps as normal ground and build vertical bases inside them. Levels you build there are removed cleanly when the ruins map itself is removed.</AB_AllowUrbanRuinsLevelsTip>
   <AB_GenNote>Generation settings apply when a level is first created. Existing sky and basement levels keep the look they were generated with.</AB_GenNote>
   <AB_Presets>Peak presets</AB_Presets>
   <AB_PresetsTip>One-click looks for newly generated mountain peaks. Default restores every generation setting; the others adjust the peak sliders below and leave ore and cavern settings alone.</AB_PresetsTip>

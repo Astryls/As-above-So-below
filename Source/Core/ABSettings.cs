@@ -76,6 +76,10 @@ namespace AsAboveSoBelow
         public float threatDivertChance = 0.25f;
         public bool columnWealth = true;
         public bool worldIntegration = true;
+        // Compat opt-ins (each only meaningful, and only shown, when its host
+        // mod is loaded). Ancient urban ruins: allow z-levels on AUR's
+        // exploration submaps (excluded by default - see AncientUrbanRuinsCompat).
+        public bool allowLevelsOnUrbanRuins;
         // Biomes! Caverns basements (only meaningful when that mod is loaded).
         public bool cavernBasements = true;
         public string cavernBiome = BiomesCavernsCompat.RandomChoice;
@@ -110,12 +114,12 @@ namespace AsAboveSoBelow
         private int curTab;
         private bool landmarksExpanded;
         private bool? landmarksExpandedPending;
-        private readonly Vector2[] tabScroll = new Vector2[6];
-        private readonly float[] tabHeight = new float[6];
+        private readonly Vector2[] tabScroll = new Vector2[7];
+        private readonly float[] tabHeight = new float[7];
 
         private static readonly string[] TabKeys =
         {
-            "AB_TabGeneration", "AB_TabView", "AB_TabWork", "AB_TabJobs", "AB_TabCombat", "AB_TabAdvanced"
+            "AB_TabGeneration", "AB_TabView", "AB_TabWork", "AB_TabJobs", "AB_TabCombat", "AB_TabCompat", "AB_TabAdvanced"
         };
 
         private static readonly Color OkGreen = new Color(0.4f, 0.85f, 0.4f);
@@ -174,6 +178,9 @@ namespace AsAboveSoBelow
                     break;
                 case 4:
                     DoCombatTab(listing);
+                    break;
+                case 5:
+                    DoCompatTab(listing);
                     break;
                 default:
                     DoAdvancedTab(listing);
@@ -583,7 +590,40 @@ namespace AsAboveSoBelow
         }
 
         // ------------------------------------------------------------------
-        // Tab 4: Advanced
+        // Tab 5: Compat (per-mod integration options; sections appear only
+        // when the host mod is loaded)
+        // ------------------------------------------------------------------
+        private void DoCompatTab(Listing_Standard listing)
+        {
+            GUI.color = NoteDim;
+            listing.Label("AB_CompatNote".Translate());
+            GUI.color = Color.white;
+            listing.Gap(6f);
+
+            bool any = false;
+
+            if (AncientUrbanRuinsCompat.Active)
+            {
+                any = true;
+                listing.Label("AB_CompatAUR".Translate());
+                listing.Indent(16f);
+                listing.ColumnWidth -= 16f;
+                listing.CheckboxLabeled("AB_AllowUrbanRuinsLevels".Translate(), ref allowLevelsOnUrbanRuins, "AB_AllowUrbanRuinsLevelsTip".Translate());
+                listing.ColumnWidth += 16f;
+                listing.Outdent(16f);
+                listing.GapLine(10f);
+            }
+
+            if (!any)
+            {
+                GUI.color = NoteDim;
+                listing.Label("AB_CompatNoneDetected".Translate());
+                GUI.color = Color.white;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Tab 6: Advanced
         // ------------------------------------------------------------------
         private void DoAdvancedTab(Listing_Standard listing)
         {
@@ -658,6 +698,9 @@ namespace AsAboveSoBelow
                     break;
                 case 4:
                     ResetCombat();
+                    break;
+                case 5:
+                    ResetCompat();
                     break;
                 default:
                     ResetAdvanced();
@@ -744,6 +787,11 @@ namespace AsAboveSoBelow
             verboseLogging = false;
         }
 
+        private void ResetCompat()
+        {
+            allowLevelsOnUrbanRuins = false;
+        }
+
         private void ResetAll()
         {
             ResetGeneration();
@@ -751,6 +799,7 @@ namespace AsAboveSoBelow
             ResetWork();
             ResetJobs();
             ResetCombat();
+            ResetCompat();
             ResetAdvanced();
         }
 
@@ -822,6 +871,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref threatDivertChance, "threatDivertChance", 0.25f);
             Scribe_Values.Look(ref columnWealth, "columnWealth", true);
             Scribe_Values.Look(ref worldIntegration, "worldIntegration", true);
+            Scribe_Values.Look(ref allowLevelsOnUrbanRuins, "allowLevelsOnUrbanRuins", false);
             Scribe_Values.Look(ref cavernBasements, "cavernBasements", true);
             Scribe_Values.Look(ref cavernBiome, "cavernBiome", BiomesCavernsCompat.RandomChoice);
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.35f);

@@ -23,6 +23,13 @@ namespace AsAboveSoBelow
             {
                 return new AcceptanceReport("AB_LevelCap".Translate());
             }
+            // Foreign special maps opted out of z-levels (e.g. Ancient urban
+            // ruins exploration submaps). Building the stairs would generate a
+            // level on a map that is not part of a column; refuse up front.
+            if (AncientUrbanRuinsCompat.BlocksLevels(map))
+            {
+                return new AcceptanceReport("AB_NoLevelsUrbanRuins".Translate());
+            }
             if (target == 0 && map.Level() != 0)
             {
                 Map ground = map.GroundMap();

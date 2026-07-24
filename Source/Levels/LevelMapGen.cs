@@ -40,6 +40,15 @@ namespace AsAboveSoBelow
                 {
                     return null;
                 }
+                // Belt-and-suspenders for the PlaceWorker gate: never grow a
+                // column on a foreign special map opted out of z-levels (e.g.
+                // an Ancient urban ruins exploration submap). Covers any path
+                // that reaches generation without a placement check.
+                if (AncientUrbanRuinsCompat.BlocksLevels(ground))
+                {
+                    ABLog.Dev("Refused level generation on opted-out map " + ground.uniqueID + " (Ancient urban ruins submap).");
+                    return null;
+                }
                 if (controller.MapByLevel.TryGetValue(destLevel, out Map existing) && existing != null && !existing.Disposed)
                 {
                     return existing;
