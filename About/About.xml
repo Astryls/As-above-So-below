@@ -9,7 +9,7 @@
 [list]
 [*][b]The sky level[/b]: open air over your roofs. Build on rooftops and watch the surface through the gaps.
 [*][b]The surface[/b]: your normal map, untouched.
-[*][b]The basement[/b]: solid rock at a steady 12C. Bring miners, carve out a bunker, a fridge, or a prison.
+[*][b]The basement[/b]: dig below. Solid rock at a steady 12C by default, or a whole other environment (see below). Bring miners, carve out a bunker, a fridge, or a prison.
 [/list]
 
 [h1]A Living View Below[/h1]
@@ -17,6 +17,16 @@ From the sky level you look down through open air at the real surface: live pawn
 
 [h1]Sky Terrain Worth Climbing[/h1]
 Where a mountain peak rises past the surface, the sky level generates real summit terrain: open plateaus, meadows, rocky outcrops, small tarns, and sometimes a hidden valley that has been sealed away since the planet cooled. With the Odyssey DLC, landmarks can appear up there as well. The mod settings include a live generation preview, so you can tune openness, water, soil, ore, and vegetation and see a sample before you ever climb.
+
+[h1]Basements With Character[/h1]
+Your basement does not have to be plain rock. One setting picks what new basements generate as, and the choices grow with your mod list:
+[list]
+[*][b]Solid rock[/b]: the default. Mineable stone at a steady temperature, ready for a bunker, a deep freezer, or a prison.
+[*][b]Living cavern[/b]: with Biomes! Caverns, a connected cave system floored with cave terrain, seeded with cave flora, wildlife, stalagmites and crystals, sealed until you break in.
+[*][b]Buried facility[/b]: with Ancient urban ruins, a ruined underground complex is embedded in the rock at the center of the level. Mine your way in for the loot. Its old entrances and exits are removed, so your own stairs are the only way down, and you choose whether its original occupants are still home.
+[*][b]Alien caves[/b]: with Alpha Biomes, carve the basement as a mycotic jungle, a gelatinous superorganism, the forsaken crags, or the tar pits.
+[/list]
+New basements can reveal on load, so the whole level is visible at once, or you can leave the fog on and explore the dark the normal way.
 
 [h1]One Workforce[/h1]
 Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony. Priorities count across levels too: when a job with higher priority waits on another floor, pawns take the stairs for it instead of settling for busywork where they stand.
@@ -56,10 +66,15 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
 
 [h1]Compatibility[/h1]
 [list]
-[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Biomes! Caverns, Better Mountains, Medieval Overhaul, and more.
+[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Vehicle Framework, Hospitality, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Biomes! Caverns, Alpha Biomes, Ancient urban ruins, Better Mountains, Medieval Overhaul, and more.
 [*]Modders: an open API for cross level jobs, custom vertical links, and incident policy.
 [*]Not compatible: MultiFloors, it solves the same problem its own way.
 [*]Requires Harmony. Built for RimWorld 1.6. Safe to add to an existing save; to remove it, empty and dismantle your extra levels first.
+[/list]
+
+[h1]Incompatibilities[/h1]
+[list]
+[*]Not compatible: MultiFloors &amp; Strata, they have their own vertical stacking mechanism that can never be made compatible with AASB.
 [/list]
 
 [h3] My Quality Commitment:[/h3]
@@ -85,9 +100,13 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
     <li>Dubwise.DubsBadHygiene</li>
     <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
     <li>Dubwise.Rimefeller</li>
+    <li>BiomesTeam.BiomesCaverns</li>
+    <li>sarg.alphabiomes</li>
+    <li>XMB.AncientUrbanrUins.MO</li>
   </loadAfter>
   <incompatibleWith>
     <li>telardo.MultiFloors</li>
     <li>ZLevels1.1</li>
+    <li>AzraelGodKing.Strata</li>
   </incompatibleWith>
 </ModMetaData>
