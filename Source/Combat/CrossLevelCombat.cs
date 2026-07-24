@@ -596,6 +596,86 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Diagnostic mirror of CanFireFrom: names the FIRST failing stage (or
+        /// "OK"). Dev-tools only - keeps the hot path branch-free while letting the
+        /// cross-fire probe say exactly why a shot is rejected.</summary>
+        internal static string ExplainCanFire(Map shooterMap, IntVec3 sCol, Thing target, Verb verb)
+        {
+            if (!ABGuard.On(ABGuard.Combat))
+            {
+                return "combat kill switch OFF (ABGuard)";
+            }
+            ABSettings s = ABMod.Settings;
+            if (s == null || !s.crossLevelCombat)
+            {
+                return "crossLevelCombat setting OFF";
+            }
+            if (verb == null)
+            {
+                return "no ranged projectile verb (GetRangedVerb null)";
+            }
+            if (target == null || target.Destroyed || !target.Spawned)
+            {
+                return "target invalid";
+            }
+            Map targetMap = target.MapHeld;
+            if (!AreCrossGapPaired(shooterMap, targetMap, out Map skyMap, out _))
+            {
+                return "maps are not a sky<->surface pair";
+            }
+            if (!sCol.InBounds(shooterMap))
+            {
+                return "shooter cell out of bounds";
+            }
+            IntVec3 tCol = target.Position;
+            if (!tCol.InBounds(skyMap))
+            {
+                return "target column out of sky bounds";
+            }
+            if (shooterMap == skyMap)
+            {
+                if (!ExposedToGap(skyMap, tCol))
+                {
+                    return "DOWN: target not exposed to a gap (no open air at/beside its column)";
+                }
+                if (!HasApertureTowards(skyMap, sCol, tCol))
+                {
+                    return "DOWN: no aperture toward target (shooter too far from any hole)";
+                }
+            }
+            else
+            {
+                if (shooterMap.roofGrid.Roofed(sCol))
+                {
+                    return "UP: shooter cell roofed";
+                }
+                if (!ExposedToGap(skyMap, tCol))
+                {
+                    return "UP: target not exposed to a gap";
+                }
+            }
+            if (!GenSight.LineOfSight(sCol, tCol, skyMap, skipFirstCell: true))
+            {
+                return "sky-plane line of sight blocked";
+            }
+            float dist = Mathf.Sqrt((tCol - sCol).LengthHorizontalSquared + GapHeight * GapHeight);
+            float range = verb.EffectiveRange;
+            if (range <= 1.42f)
+            {
+                return "verb range too short (" + range.ToString("0.#") + ")";
+            }
+            if (dist > range)
+            {
+                return "out of range (dist " + dist.ToString("0.#") + " > range " + range.ToString("0.#") + ")";
+            }
+            float minRange = verb.verbProps.minRange;
+            if (minRange > 0f && dist < minRange)
+            {
+                return "inside minimum range";
+            }
+            return "OK";
+        }
+
         /// <summary>A cell on the shooter's map with a clear cross-gap line of fire to the
         /// target, preferring the pawn's current cell. Searches outward from the target's
         /// column projected onto the shooter's map (the edge of the hole). Bounded.</summary>

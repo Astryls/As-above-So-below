@@ -5,6 +5,7 @@ using RimWorld;
 using UnityEngine;
 using Verse;
 using Verse.AI;
+using Verse.Sound;
 
 namespace AsAboveSoBelow
 {
@@ -94,6 +95,200 @@ namespace AsAboveSoBelow
             }
             pawn = p;
             return true;
+        }
+
+        /// <summary>Multi-pawn variant of ShouldRedirect: two or more player colonists
+        /// selected, all within this column's viewed/below pair, and either the click
+        /// aims at the other level or at least one pawn stands on the other level.
+        /// Selections containing non-colonists (animals, mechs) fall through to vanilla.</summary>
+        internal static bool ShouldRedirectMulti(List<Pawn> selectedPawns, Vector3 clickPos,
+            out Map cur, out Map targetMap, out List<Pawn> pawns)
+        {
+            cur = Find.CurrentMap;
+            targetMap = cur;
+            pawns = null;
+            if (cur == null || selectedPawns == null || selectedPawns.Count < 2)
+            {
+                return false;
+            }
+            targetMap = ResolveTargetMap(cur, clickPos, out Map below);
+            bool anyCross = false;
+            List<Pawn> list = null;
+            for (int i = 0; i < selectedPawns.Count; i++)
+            {
+                Pawn p = selectedPawns[i];
+                if (p == null || !p.Spawned || !p.IsColonistPlayerControlled || p.Map == null)
+                {
+                    return false;
+                }
+                if (p.Map != cur && p.Map != below)
+                {
+                    return false;
+                }
+                (list ?? (list = new List<Pawn>())).Add(p);
+                if (p.Map != targetMap)
+                {
+                    anyCross = true;
+                }
+            }
+            if (!anyCross && targetMap == cur)
+            {
+                return false; // pure same-level order on the viewed level: vanilla.
+            }
+            pawns = list;
+            return true;
+        }
+
+        /// <summary>Dispatch a multi-pawn cross-level order (drafted pawns only, like
+        /// vanilla's multiselect goto). Attack click -> every drafted pawn engages
+        /// (cross-gap fire when it can, stairs route otherwise). Move click -> pawns
+        /// already on a below target level get the press-preview-release ghost drag;
+        /// otherwise immediate vanilla-style gotos with formation spread, cross pawns
+        /// routed through the stairs and replaying the goto on arrival. Returns true
+        /// when the click was consumed.</summary>
+        internal static bool HandleMultiOrder(List<Pawn> pawns, Vector3 clickPos, Map cur, Map targetMap)
+        {
+            List<Pawn> drafted = null;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                if (pawns[i].Drafted)
+                {
+                    (drafted ?? (drafted = new List<Pawn>())).Add(pawns[i]);
+                }
+            }
+            if (drafted == null)
+            {
+                return false; // undrafted multi-selection: vanilla's (mostly empty) menu.
+            }
+
+            // Attack click: everyone engages the clicked target.
+            Thing attackTarget = FindAttackTargetAt(targetMap, clickPos, drafted[0]);
+            if (attackTarget != null)
+            {
+                for (int i = 0; i < drafted.Count; i++)
+                {
+                    Pawn p = drafted[i];
+                    if (p.Map == targetMap)
+                    {
+                        IssueEngageJob(p, attackTarget, AttackMode.Auto);
+                    }
+                    else if (!CrossLevelCombat.TryStartCrossGapAttack(p, attackTarget))
+                    {
+                        if (!StairRouter.TryBestToward(p, targetMap, attackTarget.PositionHeld,
+                            out Building_ABStairs entry, out Building_ABStairs _))
+                        {
+                            entry = CrossLevelWork.NearestUsableStairsCached(p, targetMap);
+                        }
+                        RouteThenEngage(p, targetMap, entry, attackTarget);
+                    }
+                }
+                SoundDefOf.ColonistOrdered.PlayOneShotOnCamera();
+                return true;
+            }
+
+            // Pure move. All drafted pawns already on a BELOW target level: vanilla-style
+            // press-preview-release ghost drag (the multi-pawn version of BUG3's ghost).
+            bool allOnBelowTarget = targetMap != cur && cur.Levels()?.lowerMap == targetMap;
+            if (allOnBelowTarget)
+            {
+                for (int i = 0; i < drafted.Count; i++)
+                {
+                    if (drafted[i].Map != targetMap)
+                    {
+                        allOnBelowTarget = false;
+                        break;
+                    }
+                }
+            }
+            if (allOnBelowTarget)
+            {
+                ABBelowGotoDrag.Start(drafted);
+                return true;
+            }
+
+            // Mixed levels (or moving to the viewed level): immediate dispatch with a
+            // formation spread; cross pawns ride the stairs and replay the goto.
+            Vector3 destPos = targetMap != cur && cur.Levels()?.lowerMap == targetMap
+                ? LevelRenderer.ScreenToBelowPos(clickPos)
+                : clickPos;
+            IntVec3 destCenter = destPos.ToIntVec3();
+            if (!destCenter.InBounds(targetMap))
+            {
+                return false;
+            }
+            HashSet<IntVec3> taken = new HashSet<IntVec3>();
+            int spreadIdx = 0;
+            bool anyOrdered = false;
+            bool noStairsShown = false;
+            for (int i = 0; i < drafted.Count; i++)
+            {
+                Pawn p = drafted[i];
+                IntVec3 cell = NextSpreadCell(targetMap, destCenter, taken, ref spreadIdx);
+                if (!cell.IsValid)
+                {
+                    continue;
+                }
+                if (p.Map == targetMap)
+                {
+                    IntVec3 gotoLoc = RCellFinder.BestOrderedGotoDestNear(cell, p);
+                    if (gotoLoc.IsValid)
+                    {
+                        FloatMenuOptionProvider_DraftedMove.PawnGotoAction(cell, p, gotoLoc);
+                        anyOrdered = true;
+                    }
+                    continue;
+                }
+                Building_ABStairs entry = CrossLevelWork.NearestUsableStairsCached(p, targetMap);
+                Building_ABStairs exit = entry?.CounterpartTowards(targetMap);
+                if (entry == null || exit == null)
+                {
+                    if (!noStairsShown)
+                    {
+                        noStairsShown = true;
+                        string dir = (targetMap.Level() > cur.Level())
+                            ? "AB_LevelAbove".Translate() : "AB_LevelBelow".Translate();
+                        Messages.Message("AB_NoStairsToLevel".Translate(dir), p,
+                            MessageTypeDefOf.RejectInput, historical: false);
+                    }
+                    continue;
+                }
+                StairRouter.Reroute(p, targetMap, cell, ref entry, ref exit);
+                Pawn pawnCopy = p;
+                IntVec3 cellCopy = cell;
+                RouteThenRun(p, targetMap, entry, delegate
+                {
+                    IntVec3 gotoLoc = RCellFinder.BestOrderedGotoDestNear(cellCopy, pawnCopy);
+                    if (gotoLoc.IsValid)
+                    {
+                        FloatMenuOptionProvider_DraftedMove.PawnGotoAction(cellCopy, pawnCopy, gotoLoc);
+                    }
+                });
+                anyOrdered = true;
+            }
+            if (anyOrdered)
+            {
+                SoundDefOf.ColonistOrdered.PlayOneShotOnCamera();
+            }
+            return true;
+        }
+
+        /// <summary>Next free standable, unfogged cell in the radial pattern around
+        /// <paramref name="center"/> - the formation spread for group moves. Shared with
+        /// the below ghost drag so preview and dispatch agree. IntVec3.Invalid when the
+        /// area is packed solid.</summary>
+        internal static IntVec3 NextSpreadCell(Map map, IntVec3 center, HashSet<IntVec3> taken, ref int idx)
+        {
+            for (; idx < GenRadial.RadialPattern.Length && idx < 149; idx++)
+            {
+                IntVec3 c = center + GenRadial.RadialPattern[idx];
+                if (c.InBounds(map) && c.Standable(map) && !c.Fogged(map) && !taken.Contains(c))
+                {
+                    taken.Add(c);
+                    idx++;
+                    return c;
+                }
+            }
+            return IntVec3.Invalid;
         }
 
         /// <summary>Builds the target-level options for the selected pawn, routing it
@@ -553,6 +748,27 @@ namespace AsAboveSoBelow
             }
             if (!CrossLevelOrders.ShouldRedirect(selectedPawns, clickPos, out Map cur, out Map targetMap, out Pawn pawn))
             {
+                // Multi-pawn cross-level orders: group move/attack across the column.
+                if (CrossLevelOrders.ShouldRedirectMulti(selectedPawns, clickPos,
+                        out Map mCur, out Map mTarget, out List<Pawn> mPawns))
+                {
+                    try
+                    {
+                        if (CrossLevelOrders.HandleMultiOrder(mPawns, clickPos, mCur, mTarget))
+                        {
+                            // A single-pawn context so the Selector takes no further
+                            // action (its multiselect-goto fallback re-filters by
+                            // CurrentMap and would double-handle same-level pawns).
+                            context = new FloatMenuContext(new List<Pawn> { mPawns[0] }, clickPos, mCur);
+                            __result = new List<FloatMenuOption>();
+                            return false;
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        ABGuard.Disable(ABGuard.Movement, e, "multi cross level order");
+                    }
+                }
                 return true;
             }
             try

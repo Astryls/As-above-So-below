@@ -1447,6 +1447,87 @@ namespace AsAboveSoBelow
             Report("sky drop-grouping self-test", sb, pass, fail);
         }
 
+        [DebugAction("As above", "AB: cross-fire probe (selected pawn)", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void CrossFireProbe()
+        {
+            Pawn p = Find.Selector.SelectedPawns.Count > 0 ? Find.Selector.SelectedPawns[0] : null;
+            if (p == null || !p.Spawned)
+            {
+                Log.Warning(ABLog.Tag + " PROBE: select a pawn first.");
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("[As above, So below] CROSS-FIRE PROBE for " + p.LabelShort
+                + " (faction=" + (p.Faction?.Name ?? "null")
+                + ", drafted=" + p.Drafted
+                + ", response=" + (p.playerSettings?.hostilityResponse.ToString() ?? "n/a")
+                + ", map level=" + (p.Map?.Levels()?.level.ToString() ?? "?") + ")");
+            sb.AppendLine("guards: Combat=" + ABGuard.On(ABGuard.Combat)
+                + " setting crossLevelCombat=" + (ABMod.Settings?.crossLevelCombat ?? false)
+                + " autoEngage=" + (ABMod.Settings?.crossLevelAutoEngage ?? false)
+                + " CE.Active=" + ABCECompat.Active);
+            if (p.Faction != null && p.Faction != Faction.OfPlayer)
+            {
+                sb.AppendLine("relation to player: " + p.Faction.RelationKindWith(Faction.OfPlayer)
+                    + " (friendly scan engages ALLY only; hostile scan engages hostiles)");
+            }
+            Thing eqPrimary = p.equipment?.Primary;
+            Verb primaryVerb = p.equipment?.PrimaryEq?.PrimaryVerb;
+            sb.AppendLine("equipment: " + (eqPrimary?.def?.defName ?? "NONE (unarmed/melee-natural)")
+                + (primaryVerb == null
+                    ? " primaryVerb=NULL"
+                    : " primaryVerb=" + primaryVerb.GetType().Name
+                      + " isMelee=" + primaryVerb.verbProps.IsMeleeAttack
+                      + " isVanillaLP=" + (primaryVerb is Verb_LaunchProjectile)
+                      + (ABCECompat.Active ? " isCE=" + ABCECompat.IsCEVerb(primaryVerb) : "")
+                      + " recognized=" + ABVerb.IsProjectileVerb(primaryVerb)));
+            Verb verb = CrossLevelCombat.GetRangedVerb(p);
+            sb.AppendLine("verb: " + (verb == null ? "NULL" : verb.GetType().Name
+                + " range=" + verb.EffectiveRange.ToString("0.#")));
+            LevelComp comp = p.Map?.Levels();
+            Map other = comp == null ? null : (comp.level == 1 ? comp.lowerMap : comp.level == 0 ? comp.upperMap : null);
+            if (other == null || other.Disposed)
+            {
+                sb.AppendLine("paired level: NONE (level=" + (comp?.level.ToString() ?? "?") + ")");
+                Log.Warning(sb.ToString());
+                return;
+            }
+            sb.AppendLine("paired level: map " + other.uniqueID + " (level " + (other.Levels()?.level ?? -9) + ")");
+            Building_ABStairs routeStairs = CrossLevelWork.NearestUsableStairs(p, other, checkReachability: true);
+            sb.AppendLine("stairs route to paired level: " + (routeStairs != null
+                ? "available (" + routeStairs.ThingID + ")"
+                : "NONE reachable - melee/no-LoF pawns cannot route and will idle"));
+            List<Pawn> targets = new List<Pawn>();
+            IReadOnlyList<Pawn> cand = other.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < cand.Count; i++)
+            {
+                Pawn t = cand[i];
+                if (t != null && !t.Dead && !t.Downed && t.Spawned && t.HostileTo(p))
+                {
+                    targets.Add(t);
+                }
+            }
+            sb.AppendLine("hostile-to-me targets on paired level: " + targets.Count);
+            IntVec3 origin = p.Position;
+            targets.Sort((a, b) =>
+                (a.Position - origin).LengthHorizontalSquared.CompareTo((b.Position - origin).LengthHorizontalSquared));
+            int probes = Math.Min(targets.Count, 5);
+            for (int i = 0; i < probes; i++)
+            {
+                Pawn t = targets[i];
+                string why = CrossLevelCombat.ExplainCanFire(p.Map, p.Position, t, verb);
+                string cell = "";
+                if (why != "OK" && verb != null)
+                {
+                    IntVec3 fc = CrossLevelCombat.FindFiringCell(p, t, verb);
+                    cell = fc.IsValid ? "  [reposition available -> " + fc + "]" : "  [no firing cell either]";
+                }
+                sb.AppendLine("  -> " + t.LabelShort + " @" + t.Position + " dist="
+                    + (t.Position - origin).LengthHorizontal.ToString("0.#") + ": " + why + cell);
+            }
+            Log.Warning(sb.ToString());
+        }
+
         [DebugAction("As above", "AB: toggle cap corner fillers", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void ToggleCapCornerFillers()
         {
