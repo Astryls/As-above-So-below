@@ -89,6 +89,19 @@
   </WorkGiverDef>
 
   <WorkGiverDef>
+    <defName>AB_TakeToPenAcrossLevels</defName>
+    <label>take animals to pens on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABTakeToPenAcrossLevels</giverClass>
+    <workType>Handling</workType>
+    <verb>take</verb>
+    <gerund>taking</gerund>
+    <priorityInType>25</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
     <defName>AB_FetchFromOtherLevels</defName>
     <label>fetch things from other levels</label>
     <giverClass>AsAboveSoBelow.WorkGiver_ABFetchFromOtherLevels</giverClass>

@@ -36,7 +36,8 @@ namespace AsAboveSoBelow
         /// much of its carry capacity, leaving headroom for the last stack.</summary>
         private const float GatherEncumbranceCap = 0.8f;
 
-        public static Job Build(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs, Predicate<Thing> extra = null)
+        public static Job Build(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs,
+            Predicate<Thing> extra = null, bool ignorePins = false)
         {
             if (pawn == null || seed == null || target == null || stairs == null)
             {
@@ -50,7 +51,7 @@ namespace AsAboveSoBelow
 
             if (ABInventoryHaulBridge.AnyActive && ABInventoryHaulBridge.HasComp(pawn))
             {
-                return BuildBulk(pawn, seed, target, stairs, exit, extra);
+                return BuildBulk(pawn, seed, target, stairs, exit, extra, ignorePins);
             }
             return BuildSingle(pawn, seed, target, stairs, exit);
         }
@@ -63,7 +64,8 @@ namespace AsAboveSoBelow
             return job;
         }
 
-        private static Job BuildBulk(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs, Building_ABStairs exit, Predicate<Thing> extra)
+        private static Job BuildBulk(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs,
+            Building_ABStairs exit, Predicate<Thing> extra, bool ignorePins)
         {
             Job job = JobMaker.MakeJob(ABDefOf.AB_BulkHaulAcrossLevels, stairs);
             job.targetC = exit;
@@ -97,7 +99,9 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     // Same-destination only: a bulk trip goes to one level.
-                    if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != target)
+                    // Urgent trips carry the caller's pin bypass through to the
+                    // gathered extras (they pass the urgent filter too).
+                    if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _, ignorePins) != target)
                     {
                         continue;
                     }

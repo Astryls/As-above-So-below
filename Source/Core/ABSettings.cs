@@ -71,6 +71,10 @@ namespace AsAboveSoBelow
         public bool crossLevelPipes = true;
         public bool crossLevelTemperature = true;
         public bool podTransit = true;
+
+        public bool skyVisitorArrivals = true;
+
+        public bool hospitalityRoaming = true;
         public bool threatBasementInfest;
         public bool threatSkyDrops;
         public float threatDivertChance = 0.25f;
@@ -622,6 +626,8 @@ namespace AsAboveSoBelow
                 listing.Outdent(16f);
             }
             listing.CheckboxLabeled("AB_PodTransit".Translate(), ref podTransit, "AB_PodTransitTip".Translate());
+            listing.CheckboxLabeled("AB_SkyVisitors".Translate(), ref skyVisitorArrivals, "AB_SkyVisitorsTip".Translate());
+            listing.CheckboxLabeled("AB_HospitalityRoaming".Translate(), ref hospitalityRoaming, "AB_HospitalityRoamingTip".Translate());
             listing.GapLine(10f);
             listing.CheckboxLabeled("AB_ThreatBasementInfest".Translate(), ref threatBasementInfest, "AB_ThreatBasementInfestTip".Translate());
             listing.CheckboxLabeled("AB_ThreatSkyDrops".Translate(), ref threatSkyDrops, "AB_ThreatSkyDropsTip".Translate());
@@ -914,6 +920,8 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref crossLevelSocial, "crossLevelSocial", true);
             Scribe_Values.Look(ref crossLevelPipes, "crossLevelPipes", true);
             Scribe_Values.Look(ref podTransit, "podTransit", true);
+            Scribe_Values.Look(ref skyVisitorArrivals, "skyVisitorArrivals", true);
+            Scribe_Values.Look(ref hospitalityRoaming, "hospitalityRoaming", true);
             Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
             Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);
             Scribe_Values.Look(ref threatSkyDrops, "threatSkyDrops", false);

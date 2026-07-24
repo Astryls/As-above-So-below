@@ -186,28 +186,10 @@ namespace AsAboveSoBelow
                 return true;
             }
 
-            // Pure move. All drafted pawns already on a BELOW target level: vanilla-style
-            // press-preview-release ghost drag (the multi-pawn version of BUG3's ghost).
-            bool allOnBelowTarget = targetMap != cur && cur.Levels()?.lowerMap == targetMap;
-            if (allOnBelowTarget)
-            {
-                for (int i = 0; i < drafted.Count; i++)
-                {
-                    if (drafted[i].Map != targetMap)
-                    {
-                        allOnBelowTarget = false;
-                        break;
-                    }
-                }
-            }
-            if (allOnBelowTarget)
-            {
-                ABBelowGotoDrag.Start(drafted);
-                return true;
-            }
-
-            // Mixed levels (or moving to the viewed level): immediate dispatch with a
-            // formation spread; cross pawns ride the stairs and replay the goto.
+            // Pure move: the vanilla press-preview-release formation drag for every
+            // mix (all on the below level, all on the viewed level, or spanning
+            // both). Preview + spacing mirror MultiPawnGotoController exactly;
+            // cross pawns ride the stairs to their assigned cell on release.
             Vector3 destPos = targetMap != cur && cur.Levels()?.lowerMap == targetMap
                 ? LevelRenderer.ScreenToBelowPos(clickPos)
                 : clickPos;
@@ -216,79 +198,8 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            HashSet<IntVec3> taken = new HashSet<IntVec3>();
-            int spreadIdx = 0;
-            bool anyOrdered = false;
-            bool noStairsShown = false;
-            for (int i = 0; i < drafted.Count; i++)
-            {
-                Pawn p = drafted[i];
-                IntVec3 cell = NextSpreadCell(targetMap, destCenter, taken, ref spreadIdx);
-                if (!cell.IsValid)
-                {
-                    continue;
-                }
-                if (p.Map == targetMap)
-                {
-                    IntVec3 gotoLoc = RCellFinder.BestOrderedGotoDestNear(cell, p);
-                    if (gotoLoc.IsValid)
-                    {
-                        FloatMenuOptionProvider_DraftedMove.PawnGotoAction(cell, p, gotoLoc);
-                        anyOrdered = true;
-                    }
-                    continue;
-                }
-                Building_ABStairs entry = CrossLevelWork.NearestUsableStairsCached(p, targetMap);
-                Building_ABStairs exit = entry?.CounterpartTowards(targetMap);
-                if (entry == null || exit == null)
-                {
-                    if (!noStairsShown)
-                    {
-                        noStairsShown = true;
-                        string dir = (targetMap.Level() > cur.Level())
-                            ? "AB_LevelAbove".Translate() : "AB_LevelBelow".Translate();
-                        Messages.Message("AB_NoStairsToLevel".Translate(dir), p,
-                            MessageTypeDefOf.RejectInput, historical: false);
-                    }
-                    continue;
-                }
-                StairRouter.Reroute(p, targetMap, cell, ref entry, ref exit);
-                Pawn pawnCopy = p;
-                IntVec3 cellCopy = cell;
-                RouteThenRun(p, targetMap, entry, delegate
-                {
-                    IntVec3 gotoLoc = RCellFinder.BestOrderedGotoDestNear(cellCopy, pawnCopy);
-                    if (gotoLoc.IsValid)
-                    {
-                        FloatMenuOptionProvider_DraftedMove.PawnGotoAction(cellCopy, pawnCopy, gotoLoc);
-                    }
-                });
-                anyOrdered = true;
-            }
-            if (anyOrdered)
-            {
-                SoundDefOf.ColonistOrdered.PlayOneShotOnCamera();
-            }
+            ABBelowGotoDrag.Start(drafted, targetMap, destCenter);
             return true;
-        }
-
-        /// <summary>Next free standable, unfogged cell in the radial pattern around
-        /// <paramref name="center"/> - the formation spread for group moves. Shared with
-        /// the below ghost drag so preview and dispatch agree. IntVec3.Invalid when the
-        /// area is packed solid.</summary>
-        internal static IntVec3 NextSpreadCell(Map map, IntVec3 center, HashSet<IntVec3> taken, ref int idx)
-        {
-            for (; idx < GenRadial.RadialPattern.Length && idx < 149; idx++)
-            {
-                IntVec3 c = center + GenRadial.RadialPattern[idx];
-                if (c.InBounds(map) && c.Standable(map) && !c.Fogged(map) && !taken.Contains(c))
-                {
-                    taken.Add(c);
-                    idx++;
-                    return c;
-                }
-            }
-            return IntVec3.Invalid;
         }
 
         /// <summary>Builds the target-level options for the selected pawn, routing it
@@ -780,7 +691,8 @@ namespace AsAboveSoBelow
                 if (pawn.Drafted && pawn.Map == targetMap && targetMap != cur
                     && CrossLevelOrders.FindAttackTargetAt(targetMap, clickPos, pawn) == null)
                 {
-                    ABBelowGotoDrag.Start(pawn);
+                    ABBelowGotoDrag.Start(new List<Pawn> { pawn }, targetMap,
+                        LevelRenderer.ScreenToBelowPos(clickPos).ToIntVec3());
                     context = new FloatMenuContext(new List<Pawn> { pawn }, clickPos, cur);
                     __result = new List<FloatMenuOption>();
                     return false;

@@ -108,6 +108,70 @@ namespace AsAboveSoBelow
 
         public int DeltaLevel => Ext?.deltaLevel ?? 0;
 
+        private CompForbiddable forbiddableInt;
+
+        private bool forbiddableResolved;
+
+        /// <summary>Vanilla forbid comp; null on defs without it (utility links).</summary>
+        public CompForbiddable Forbiddable
+        {
+            get
+            {
+                if (!forbiddableResolved)
+                {
+                    forbiddableInt = GetComp<CompForbiddable>();
+                    forbiddableResolved = true;
+                }
+                return forbiddableInt;
+            }
+        }
+
+        /// <summary>Raw comp state of THIS end - the pawnless colony-flow check
+        /// (demand anchors, planning). Hostile flows never consult it.</summary>
+        public bool EndForbidden
+        {
+            get
+            {
+                CompForbiddable f = Forbiddable;
+                return f != null && f.Forbidden;
+            }
+        }
+
+        /// <summary>Door-passage semantics for THIS end (2026-07-24), mirroring
+        /// vanilla IsForbiddenToPass exactly: comp forbid only (never the
+        /// pawn's allowed area - stairs stay traversable as route segments),
+        /// player-faction scoped, drafted pawns respect it, mental states and
+        /// hostiles ignore it.</summary>
+        public bool EndForbiddenFor(Pawn p)
+        {
+            return p != null && EndForbidden && p.Faction == Faction.OfPlayer
+                && ForbidUtility.CaresAboutForbidden(p, cellTarget: false, bypassDraftedCheck: true);
+        }
+
+        /// <summary>A passage is forbidden when EITHER end is: forbidding the
+        /// top of a staircase seals it from below too, like a forbidden door
+        /// anywhere along a corridor.</summary>
+        public bool PassageForbiddenFor(Pawn p, Map target)
+        {
+            if (EndForbiddenFor(p))
+            {
+                return true;
+            }
+            Building_ABStairs cp = target != null ? CounterpartTowards(target) : Counterpart;
+            return cp != null && cp.EndForbiddenFor(p);
+        }
+
+        /// <summary>Pawnless variant for colony planning flows.</summary>
+        public bool PassageForbiddenForColony(Map target)
+        {
+            if (EndForbidden)
+            {
+                return true;
+            }
+            Building_ABStairs cp = target != null ? CounterpartTowards(target) : Counterpart;
+            return cp != null && cp.EndForbidden;
+        }
+
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
             base.SpawnSetup(map, respawningAfterLoad);
@@ -475,6 +539,10 @@ namespace AsAboveSoBelow
             if (cp == null)
             {
                 list.Add(new FloatMenuOption(label + " (" + "AB_NotLinkedShort".Translate() + ")", null));
+            }
+            else if (EndForbiddenFor(selPawn) || cp.EndForbiddenFor(selPawn))
+            {
+                list.Add(new FloatMenuOption(label + " (" + "ForbiddenLower".Translate() + ")", null));
             }
             else if (!selPawn.CanReach(this, PathEndMode.Touch, Danger.Deadly))
             {

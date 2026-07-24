@@ -30,8 +30,22 @@ namespace AsAboveSoBelow
 
         /// <summary>Best stairwell toward a known destination cell on the target
         /// map. Falls back to plain nearest-to-pawn when dest is invalid, so
-        /// callers can pass IntVec3.Invalid to mean "no hint".</summary>
+        /// callers can pass IntVec3.Invalid to mean "no hint". Lenient: when no
+        /// exit region-reaches the destination the best by distance still wins.
+        /// Use ONLY for player-ordered movement (get close and let the pawn
+        /// path-fail visibly); autonomous logistics and work flows must use the
+        /// strict variant so they skip unreachable goals instead of ferrying
+        /// cargo to dead-end stairwells (the two-house wood loop).</summary>
         public static bool TryBestToward(Pawn pawn, Map target, IntVec3 dest,
+            out Building_ABStairs stairs, out Building_ABStairs exit)
+        {
+            return TryBestToward(pawn, target, dest, requireReach: false, out stairs, out exit);
+        }
+
+        /// <summary>Core selector. With requireReach and a valid dest, only exits
+        /// that region-reach the destination qualify - no fallback: failure
+        /// means "this goal is not deliverable through any stairwell".</summary>
+        public static bool TryBestToward(Pawn pawn, Map target, IntVec3 dest, bool requireReach,
             out Building_ABStairs stairs, out Building_ABStairs exit)
         {
             stairs = null;
@@ -62,6 +76,10 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                if (s.EndForbiddenFor(pawn) || cp.EndForbiddenFor(pawn))
+                {
+                    continue; // door parity: forbidden ends seal the passage
+                }
                 float cost = (s.Position - pawn.Position).LengthHorizontal + ClimbCost(s, pawn);
                 if (destValid)
                 {
@@ -87,14 +105,18 @@ namespace AsAboveSoBelow
                     bestReachCost = cost;
                 }
             }
-            stairs = bestReach ?? bestAny;
+            stairs = destValid && requireReach ? bestReach : (bestReach ?? bestAny);
             exit = stairs?.CounterpartTowards(target);
             return exit != null;
         }
 
         /// <summary>Upgrade an already-resolved (stairs, exit) pair once the
-        /// actual destination is known. Keeps the original pair when nothing
-        /// resolves (defensive: the original pair already passed its checks).</summary>
+        /// actual destination is known. STRICT inside: only a pair whose exit
+        /// region-reaches the destination replaces the original, so a working
+        /// pair can never be downgraded to a closer-but-disconnected one (the
+        /// old lenient upgrade could). Keeps the original pair when nothing
+        /// strict resolves (defensive: the original already passed its checks,
+        /// typically by having discovered the work from its own exit).</summary>
         public static void Reroute(Pawn pawn, Map target, IntVec3 dest,
             ref Building_ABStairs stairs, ref Building_ABStairs exit)
         {
@@ -102,7 +124,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (TryBestToward(pawn, target, dest, out Building_ABStairs s, out Building_ABStairs e))
+            if (TryBestToward(pawn, target, dest, requireReach: true, out Building_ABStairs s, out Building_ABStairs e))
             {
                 stairs = s;
                 exit = e;

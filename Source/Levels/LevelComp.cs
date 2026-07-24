@@ -254,6 +254,20 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Hovering pawn labels for the cross-level goto preview -
+        /// vanilla draws its controller labels from Selector.SelectorOnGUI,
+        /// which never sees our drag. Idle cost: one count read.</summary>
+        public override void MapComponentOnGUI()
+        {
+            base.MapComponentOnGUI();
+            if (!ABGuard.On(ABGuard.Ui) || map != Find.CurrentMap
+                || Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
+            ABBelowGotoDrag.OnGUIUpdate(map);
+        }
+
         /// <summary>Sky comps sync weather from the ground; the ground comp drives
         /// pipe network bridging for every stairwell pair (each pair has one end
         /// on the ground map under the three-level cap). Visual mirroring

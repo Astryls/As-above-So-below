@@ -72,27 +72,25 @@ namespace AsAboveSoBelow
                     // Some other map's lister: stay strictly vanilla.
                     return local;
                 }
-                LevelComp comp = cur.Levels();
-                if (comp == null)
+                // Whole column, not just direct links (bug report 2026-07-24:
+                // viewing the sky with the steel in the basement is a two-hop
+                // lookup, and the old upper/lower walk missed it).
+                LevelComp controller = cur.Controller();
+                if (controller == null || controller.MapByLevel.Count <= 1)
                 {
                     return local;
                 }
-                Map up = comp.upperMap;
-                if (up != null && !up.Disposed)
+                foreach (KeyValuePair<int, Map> kvp in controller.MapByLevel)
                 {
-                    List<Thing> other = up.listerThings.ThingsOfDef(def);
-                    if (other.Count > 0)
+                    Map other = kvp.Value;
+                    if (other == null || other == cur || other.Disposed)
                     {
-                        return other;
+                        continue;
                     }
-                }
-                Map down = comp.lowerMap;
-                if (down != null && !down.Disposed)
-                {
-                    List<Thing> other = down.listerThings.ThingsOfDef(def);
-                    if (other.Count > 0)
+                    List<Thing> list = other.listerThings.ThingsOfDef(def);
+                    if (list.Count > 0)
                     {
-                        return other;
+                        return list;
                     }
                 }
             }

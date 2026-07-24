@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RimWorld;
 using Verse;
 
@@ -82,6 +83,27 @@ namespace AsAboveSoBelow
                 return false;
             }
             return t.MapHeld.designationManager.DesignationOn(t, urgentDef) != null;
+        }
+
+        /// <summary>Every urgently-designated spawned thing on the map -
+        /// authoritative enumeration straight from the designations (urgent
+        /// stacks already sitting in some valid-but-worse storage never appear
+        /// in the haulables lister, so the lister is the wrong source here).</summary>
+        public static IEnumerable<Thing> UrgentThings(Map map)
+        {
+            EnsureInit();
+            if (!active || map?.designationManager == null)
+            {
+                yield break;
+            }
+            foreach (Designation d in map.designationManager.SpawnedDesignationsOfDef(urgentDef))
+            {
+                Thing t = d.target.Thing;
+                if (t != null && t.Spawned)
+                {
+                    yield return t;
+                }
+            }
         }
     }
 }

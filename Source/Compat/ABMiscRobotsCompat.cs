@@ -381,12 +381,10 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs,
-                out Building_ABStairs exit))
-            {
-                return null;
-            }
-            if (!CrossLevelWork.ProbeWorkAt(pawn, target, exit.Position, order, out IntVec3 workDest))
+            // Island-aware probe (2026-07-24): every distinct stair island of
+            // the target level is tried, not just the exit nearest the robot.
+            if (!CrossLevelWork.ProbeWorkAt(pawn, target, order, out IntVec3 workDest,
+                out Building_ABStairs stairs, out Building_ABStairs exit))
             {
                 return null;
             }

@@ -98,72 +98,91 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
-            {
-                return null;
-            }
-            if (!ABVirtualPosition.TrySwap(pawn, target, exit.Position, out ABVirtualPosition.Token token))
+            // Island-aware (2026-07-24): probe from one exit per distinct island
+            // of the source level; goods behind a different staircase than the
+            // nearest are no longer invisible. Scan budget is shared across
+            // islands so the whole sweep stays bounded.
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, target);
+            if (pairs.Count == 0)
             {
                 return null;
             }
             bool found = false;
             bool demandFetch = false;
             IntVec3 fetchDest = IntVec3.Invalid;
-            CrossLevelWork.VirtualScanActive = true;
-            try
+            Building_ABStairs stairs = null;
+            Building_ABStairs exit = null;
+            for (int p = 0; p < pairs.Count && !found; p++)
             {
-                if (anyHaulables)
+                // Per-island item budget: a shared budget let the first island
+                // exhaust it on items only reachable from elsewhere and starve
+                // the later islands forever (lister order is stable).
+                int examined = 0;
+                if (!ABVirtualPosition.TrySwap(pawn, target, pairs[p].exit.Position, out ABVirtualPosition.Token token))
                 {
-                    int examined = 0;
-                    foreach (Thing t in haulables)
+                    return null;
+                }
+                CrossLevelWork.VirtualScanActive = true;
+                try
+                {
+                    if (anyHaulables)
                     {
-                        if (++examined > MaxItemsPerScan)
+                        foreach (Thing t in haulables)
                         {
-                            break;
+                            if (++examined > MaxItemsPerScan)
+                            {
+                                break;
+                            }
+                            if (t == null || !t.Spawned || t.Map != target || t.IsForbidden(pawn)
+                                || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, t, forced: false))
+                            {
+                                continue;
+                            }
+                            // Better storage on the linked level itself?
+                            if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, target,
+                                StoreUtility.CurrentStoragePriorityOf(t), pawn.Faction,
+                                out IntVec3 _, out IHaulDestination _, needAccurateResult: false))
+                            {
+                                found = true;
+                                fetchDest = t.PositionHeld;
+                                break;
+                            }
+                            // Or does it want to travel to yet another level (for example
+                            // back down to this pawn's own fridge)? Cached verdict.
+                            if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null)
+                            {
+                                found = true;
+                                fetchDest = t.PositionHeld;
+                                break;
+                            }
                         }
-                        if (t == null || !t.Spawned || t.Map != target || t.IsForbidden(pawn)
-                            || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, t, forced: false))
+                    }
+                    if (!found && wantDemand)
+                    {
+                        // Pawn is virtually on `target` now, so both the stack
+                        // reachability and the strict return route toward the
+                        // demanding island are measured there.
+                        Thing demanded = CrossLevelDemand.FindFetchableDemand(demandMap, target, pawn,
+                            requireReachable: true, constructionOnly: false,
+                            out Building_ABStairs _, out Building_ABStairs _);
+                        demandFetch = demanded != null;
+                        found = demandFetch;
+                        if (demanded != null)
                         {
-                            continue;
-                        }
-                        // Better storage on the linked level itself?
-                        if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, target,
-                            StoreUtility.CurrentStoragePriorityOf(t), pawn.Faction,
-                            out IntVec3 _, out IHaulDestination _, needAccurateResult: false))
-                        {
-                            found = true;
-                            fetchDest = t.PositionHeld;
-                            break;
-                        }
-                        // Or does it want to travel to yet another level (for example
-                        // back down to this pawn's own fridge)? Cached verdict.
-                        if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null)
-                        {
-                            found = true;
-                            fetchDest = t.PositionHeld;
-                            break;
+                            fetchDest = StairRouter.DestHint(demanded, target);
                         }
                     }
                 }
-                if (!found && wantDemand)
+                finally
                 {
-                    // Pawn is virtually on `target` now, so reachability is measured
-                    // there. A demanded stack that can actually be picked up means
-                    // the trip is worthwhile.
-                    Thing demanded = CrossLevelDemand.FindFetchableDemand(demandMap, target, pawn,
-                        requireReachable: true);
-                    demandFetch = demanded != null;
-                    found = demandFetch;
-                    if (demanded != null)
-                    {
-                        fetchDest = StairRouter.DestHint(demanded, target);
-                    }
+                    ABVirtualPosition.Restore(pawn, token);
+                    CrossLevelWork.VirtualScanActive = false;
                 }
-            }
-            finally
-            {
-                ABVirtualPosition.Restore(pawn, token);
-                CrossLevelWork.VirtualScanActive = false;
+                if (found)
+                {
+                    stairs = pairs[p].stairs;
+                    exit = pairs[p].exit;
+                }
             }
             if (!found)
             {
@@ -196,14 +215,13 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // Strictly routed toward the demanding island (2026-07-24):
+                // stairs that cannot reach the goal are never used, so the
+                // return cargo cannot strand on the wrong island.
                 Thing t = CrossLevelDemand.FindFetchableDemand(demandMap, sourceMap, pawn,
-                    requireReachable: true);
-                if (t == null)
-                {
-                    return;
-                }
-                if (!CrossLevelWork.TryResolveStairs(pawn, demandMap, out Building_ABStairs stairs,
-                    out Building_ABStairs exit))
+                    requireReachable: true, constructionOnly: false,
+                    out Building_ABStairs stairs, out Building_ABStairs exit);
+                if (t == null || stairs == null || exit == null)
                 {
                     return;
                 }

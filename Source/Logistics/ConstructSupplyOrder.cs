@@ -80,7 +80,11 @@ namespace AsAboveSoBelow
                     Thing mini = install.MiniToInstallOrBuildingToReinstall;
                     if (!(mini is MinifiedThing) || !mini.Spawned || mini.Map != pawn.Map
                         || mini.IsForbidden(pawn)
-                        || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: true))
+                        || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: true)
+                        // No stairwell exit reaches the install site: the trip
+                        // is undeliverable; leave the vanilla disabled row.
+                        || !CrossLevelWork.TryResolveStairsStrict(pawn, targetMap, install.Position,
+                            out Building_ABStairs _, out Building_ABStairs _))
                     {
                         return;
                     }
@@ -118,6 +122,14 @@ namespace AsAboveSoBelow
                     }
                 }
                 if (stack == null)
+                {
+                    return;
+                }
+                // Undeliverable sites get no option (2026-07-24): when no
+                // stairwell exit region-reaches the constructible, the vanilla
+                // disabled row stays - exactly like a walled-off blueprint.
+                if (!CrossLevelWork.TryResolveStairsStrict(pawn, targetMap, constructible.Position,
+                    out Building_ABStairs _, out Building_ABStairs _))
                 {
                     return;
                 }
@@ -186,6 +198,11 @@ namespace AsAboveSoBelow
                 }
             }
             if (stack == null)
+            {
+                return;
+            }
+            if (!CrossLevelWork.TryResolveStairsStrict(pawn, targetMap, refuelable.Position,
+                out Building_ABStairs _, out Building_ABStairs _))
             {
                 return;
             }
@@ -282,8 +299,11 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (!CrossLevelWork.TryResolveStairs(pawn, targetMap, out Building_ABStairs stairs,
-                    out Building_ABStairs exit))
+                // Strict toward the clicked site: the option was only offered
+                // when a reaching stairwell existed; if that changed since the
+                // click, silently refuse rather than strand the cargo.
+                if (!CrossLevelWork.TryResolveStairsStrict(pawn, targetMap, constructible.Position,
+                    out Building_ABStairs stairs, out Building_ABStairs exit))
                 {
                     return;
                 }

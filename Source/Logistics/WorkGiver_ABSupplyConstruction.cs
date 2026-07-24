@@ -87,24 +87,25 @@ namespace AsAboveSoBelow
             }
             // A stack on MY level that the linked level's blueprints/frames
             // still need and my level can spare. The pawn really is on the
-            // source map, so reachability needs no virtual swap.
+            // source map, so reachability needs no virtual swap. The demand
+            // query routes STRICTLY toward the demanding island (2026-07-24
+            // ferry-loop fix): stairs that cannot reach the blueprints are
+            // never chosen, and an island already holding enough loose
+            // material registers no shortfall.
             Thing t = CrossLevelDemand.FindFetchableDemand(target, pawn.Map, pawn,
-                requireReachable: true, constructionOnly: true);
+                requireReachable: true, constructionOnly: true,
+                out Building_ABStairs stairs, out Building_ABStairs exit);
             int fixedCount = 0;
             if (t == null)
             {
                 // Install blueprints over there whose minified thing sits on
                 // this level: ferry it across; the local install giver takes
                 // it from the drop (run #71 "No path" fix, automatic flow).
-                t = FindInstallMini(pawn, target);
+                // Same strictness: route toward the install site itself.
+                t = FindInstallMini(pawn, target, out stairs, out exit);
                 fixedCount = 1;
             }
-            if (t == null)
-            {
-                return null;
-            }
-            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs,
-                out Building_ABStairs exit))
+            if (t == null || stairs == null || exit == null)
             {
                 return null;
             }
@@ -117,11 +118,17 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>A loose minified thing on the pawn's level that an install
-        /// blueprint on the target level is waiting for. Built buildings
-        /// awaiting reinstall are skipped (the uninstall must happen on their
-        /// own level first; that designation migrates workers by itself).</summary>
-        private static Thing FindInstallMini(Pawn pawn, Map target)
+        /// blueprint on the target level is waiting for, plus the strict stair
+        /// route toward that blueprint. Built buildings awaiting reinstall are
+        /// skipped here: ReinstallAcrossLevels designates their uninstall the
+        /// moment the cross-level blueprint spawns, vanilla uninstalls them on
+        /// their own level (the designation migrates a constructor there), and
+        /// the resulting mini flows through this ferry.</summary>
+        private static Thing FindInstallMini(Pawn pawn, Map target,
+            out Building_ABStairs stairs, out Building_ABStairs exit)
         {
+            stairs = null;
+            exit = null;
             List<Thing> blueprints = target.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint);
             for (int i = 0; i < blueprints.Count; i++)
             {
@@ -133,11 +140,15 @@ namespace AsAboveSoBelow
                 Thing mini = install.MiniToInstallOrBuildingToReinstall;
                 if (mini is MinifiedThing && mini.Spawned && mini.Map == pawn.Map
                     && !mini.IsForbidden(pawn)
-                    && HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: false))
+                    && HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, mini, forced: false)
+                    && CrossLevelWork.TryResolveStairsStrict(pawn, target, install.Position,
+                        out stairs, out exit))
                 {
                     return mini;
                 }
             }
+            stairs = null;
+            exit = null;
             return null;
         }
     }

@@ -31,6 +31,12 @@ namespace AsAboveSoBelow
         {
             this.FailOnDespawnedOrNull(TargetIndex.A);
             this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
+            // Door parity: a forbid flip on either end aborts the climb for
+            // pawns that care about forbid (raiders ignore it, like doors).
+            this.FailOn(() => Stairs != null
+                && (Stairs.EndForbiddenFor(pawn)
+                    || (job.GetTarget(TargetIndex.C).Thing is Building_ABStairs finalExit
+                        && finalExit.EndForbiddenFor(pawn))));
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.Touch);
             Toil climb = Toils_General.Wait(Stairs?.ClimbTicksFor(pawn) ?? ClimbTicks, TargetIndex.A);
             climb.WithProgressBarToilDelay(TargetIndex.A);
@@ -211,6 +217,11 @@ namespace AsAboveSoBelow
     /// use-stairs job and the cross-level hauling, rescue, and capture jobs.</summary>
     internal static class StairTransfer
     {
+        /// <summary>The pawn currently mid-transfer (despawn->respawn window).
+        /// Lets the Hospitality lord-retention patch distinguish a stair ride
+        /// from a genuine map exit. Main thread only, cleared in finally.</summary>
+        internal static Pawn Transferring;
+
         /// <summary>The next hop's exit for a ride: toward the final destination
         /// when one is set (elevator chains), otherwise whichever single link the
         /// entry has. Null when no hop is possible.</summary>
@@ -280,19 +291,33 @@ namespace AsAboveSoBelow
                 }
                 // Hostiles must leave their map-scoped lord before despawning.
                 HostileDescend.NoteLeaving(p);
-                p.DeSpawn();
-                IntVec3 cell = landing.Standable(targetMap) ? landing : CellFinder.StandableCellNear(landing, targetMap, 4f);
-                if (!cell.IsValid)
+                Transferring = p;
+                IntVec3 cell;
+                try
                 {
-                    cell = landing;
+                    p.DeSpawn();
+                    cell = landing.Standable(targetMap) ? landing : CellFinder.StandableCellNear(landing, targetMap, 4f);
+                    if (!cell.IsValid)
+                    {
+                        cell = landing;
+                    }
+                    GenSpawn.Spawn(p, cell, targetMap);
                 }
-                GenSpawn.Spawn(p, cell, targetMap);
+                finally
+                {
+                    Transferring = null;
+                }
                 if (carried != null && !carried.Destroyed)
                 {
                     if (p.carryTracker == null || !p.carryTracker.TryStartCarry(carried))
                     {
                         GenPlace.TryPlaceThing(carried, cell, targetMap, ThingPlaceMode.Near);
                     }
+                    // Import pin + demand cache freshness (2026-07-24): cargo
+                    // that just crossed must not bounce straight back to better
+                    // storage on the level it came from, and both levels'
+                    // demand pictures changed the moment it moved.
+                    CrossLevelDemand.NoteTransferred(carried, sourceMap, targetMap);
                     carried = null;
                 }
                 if (drafted && p.drafter != null)

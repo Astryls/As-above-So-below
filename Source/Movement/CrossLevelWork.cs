@@ -222,11 +222,23 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            // Island-aware (2026-07-24): probe from one exit per distinct
+            // island so better-ranked work behind a different stairwell than
+            // the nearest is not invisible.
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, target);
+            Building_ABStairs stairs = null;
+            Building_ABStairs exit = null;
+            IntVec3 workDest = IntVec3.Invalid;
+            for (int i = 0; i < pairs.Count; i++)
             {
-                return null;
+                if (ProbeBetterWorkAt(pawn, target, pairs[i].exit.Position, order, stop, out workDest))
+                {
+                    stairs = pairs[i].stairs;
+                    exit = pairs[i].exit;
+                    break;
+                }
             }
-            if (!ProbeBetterWorkAt(pawn, target, exit.Position, order, stop, out IntVec3 workDest))
+            if (exit == null)
             {
                 return null;
             }
@@ -239,23 +251,35 @@ namespace AsAboveSoBelow
             return new ThinkResult(MakeStairsJob(stairs, exit), giver, JobTag.Misc);
         }
 
-        /// <summary>Existence probe of an ARBITRARY giver list with the pawn
-        /// virtually placed at the stairwell exit: the robot-compat variant of
-        /// the colonist probe (their think node owns its own giver order, so
-        /// rank truncation does not apply - the whole list is checked). Claims
-        /// the global probe budget. Added for the run #71 bounce fix: summary
-        /// bits alone migrate robots toward levels where nothing is actually
-        /// doable (blueprints with no local materials), and the idle go-home
-        /// node immediately routes them back.</summary>
-        internal static bool ProbeWorkAt(Pawn pawn, Map target, IntVec3 entryCell,
-            List<WorkGiver> order, out IntVec3 workDest)
+        /// <summary>Existence probe of an ARBITRARY giver list, island-aware:
+        /// the robot-compat variant of the colonist probe (their think node
+        /// owns its own giver order, so rank truncation does not apply - the
+        /// whole list is checked, from one exit per distinct island). Claims
+        /// the global probe budget once for the whole sweep. Added for the run
+        /// #71 bounce fix: summary bits alone migrate robots toward levels
+        /// where nothing is actually doable (blueprints with no local
+        /// materials), and the idle go-home node immediately routes them back.</summary>
+        internal static bool ProbeWorkAt(Pawn pawn, Map target, List<WorkGiver> order,
+            out IntVec3 workDest, out Building_ABStairs stairs, out Building_ABStairs exit)
         {
             workDest = IntVec3.Invalid;
+            stairs = null;
+            exit = null;
             if (order == null || order.Count == 0 || !TryClaimProbeBudget(Find.TickManager.TicksGame))
             {
                 return false;
             }
-            return ProbeBetterWorkAt(pawn, target, entryCell, order, order.Count, out workDest);
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, target);
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                if (ProbeBetterWorkAt(pawn, target, pairs[i].exit.Position, order, order.Count, out workDest))
+                {
+                    stairs = pairs[i].stairs;
+                    exit = pairs[i].exit;
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Runs the pawn's own giver order, truncated to ranks strictly
@@ -467,17 +491,34 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            if (!TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            // Island-aware (2026-07-24): run the vanilla scan from one exit per
+            // distinct island of the target level, so work behind a different
+            // stairwell than the nearest is found. The full JobGiver_Work scan
+            // is the expensive probe here, so islands are capped by the
+            // enumerator and the first hit wins.
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, target);
+            if (pairs.Count == 0)
             {
                 ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level()
                     + ": no reachable linked stairs on this level.");
                 return null;
             }
-            if (!WorkTargetAt(giver, pawn, target, exit.Position, out IntVec3 workDest))
+            Building_ABStairs stairs = null;
+            Building_ABStairs exit = null;
+            IntVec3 workDest = IntVec3.Invalid;
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                if (WorkTargetAt(giver, pawn, target, pairs[i].exit.Position, out workDest))
+                {
+                    stairs = pairs[i].stairs;
+                    exit = pairs[i].exit;
+                    break;
+                }
+            }
+            if (exit == null)
             {
                 ABLog.Dev("Migrate " + pawn.LabelShort + " -> level " + target.Level()
-                    + ": no work reachable from the stairwell exit at " + exit.Position
-                    + " (is the work area connected to that exit?).");
+                    + ": no work reachable from any stairwell island (" + pairs.Count + " tried).");
                 return null;
             }
             // The scan discovered where the work actually is: swap to the
@@ -497,7 +538,9 @@ namespace AsAboveSoBelow
 
         /// <summary>Destination-aware variant: when dest is a valid cell on the
         /// target map, the pair minimizing the whole trip wins; otherwise this
-        /// is the classic nearest-to-pawn pick.</summary>
+        /// is the classic nearest-to-pawn pick. Lenient about the exit actually
+        /// reaching dest - correct for player orders, wrong for autonomous
+        /// deliveries (use the Strict variant there).</summary>
         public static bool TryResolveStairs(Pawn pawn, Map target, IntVec3 dest, out Building_ABStairs stairs, out Building_ABStairs exit)
         {
             stairs = null;
@@ -509,6 +552,29 @@ namespace AsAboveSoBelow
             if (dest.IsValid && StairRouter.TryBestToward(pawn, target, dest, out stairs, out exit))
             {
                 return true;
+            }
+            stairs = NearestUsableStairs(pawn, target, checkReachability: true);
+            exit = stairs?.CounterpartTowards(target);
+            return exit != null;
+        }
+
+        /// <summary>Strict resolve for autonomous flows carrying goods to a
+        /// KNOWN destination: only exits that region-reach dest qualify, and
+        /// failure means the caller must skip this goal entirely (vanilla
+        /// parity: an unreachable site simply gets no deliveries). With an
+        /// invalid dest this degrades to the classic nearest pick, because
+        /// strictness is meaningless without a goal.</summary>
+        public static bool TryResolveStairsStrict(Pawn pawn, Map target, IntVec3 dest, out Building_ABStairs stairs, out Building_ABStairs exit)
+        {
+            stairs = null;
+            exit = null;
+            if (target == null || target.Disposed)
+            {
+                return false;
+            }
+            if (dest.IsValid)
+            {
+                return StairRouter.TryBestToward(pawn, target, dest, requireReach: true, out stairs, out exit);
             }
             stairs = NearestUsableStairs(pawn, target, checkReachability: true);
             exit = stairs?.CounterpartTowards(target);
@@ -606,6 +672,10 @@ namespace AsAboveSoBelow
                 if (cp == null)
                 {
                     continue;
+                }
+                if (s.EndForbiddenFor(pawn) || cp.EndForbiddenFor(pawn))
+                {
+                    continue; // door parity: forbidden ends seal the passage
                 }
                 float d = (s.Position - pawn.Position).LengthHorizontalSquared;
                 if (d >= bestDist)

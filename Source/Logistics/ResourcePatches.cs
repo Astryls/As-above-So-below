@@ -66,4 +66,48 @@ namespace AsAboveSoBelow
             }
         }
     }
+
+    /// <summary>Storage reconfiguration is the player's snappiest logistics
+    /// order (bug report 2026-07-24: food storage moved to a sky bridge and
+    /// haulers kept idling on stale "no better storage" verdicts for up to a
+    /// cache TTL). TryNotifyChanged fires on every filter or priority change of
+    /// any storage; clear the cross-level verdict and demand caches and bump
+    /// the work summary for the owner's map so cooled-down haulers re-probe
+    /// immediately.</summary>
+    [HarmonyPatch(typeof(StorageSettings), "TryNotifyChanged")]
+    internal static class Patch_StorageChanged_CrossLevel
+    {
+        private static void Postfix(StorageSettings __instance)
+        {
+            if (!ABGuard.On(ABGuard.Logistics) || Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
+            try
+            {
+                CrossLevelHaul.ClearVerdicts();
+                CrossLevelDemand.InvalidateAll();
+                Map map = null;
+                IStoreSettingsParent owner = __instance.owner;
+                if (owner is Zone zone)
+                {
+                    map = zone.Map;
+                }
+                else if (owner is Thing thing)
+                {
+                    map = thing.MapHeld;
+                }
+                if (map != null && map.ConnectedToOtherLevel())
+                {
+                    // Re-arms the versioned better-work cooldowns so idle
+                    // haulers on other levels react now, not in 20 seconds.
+                    LevelWorkSummary.Notify_WorkChanged(map);
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "storage change invalidation");
+            }
+        }
+    }
 }

@@ -136,6 +136,12 @@ namespace AsAboveSoBelow
                 return;
             }
             string label = (delta > 0 ? "AB_RideToSky" : "AB_RideToBasement").Translate();
+            // Door parity: a forbidden middle car seals the through ride.
+            if (midCar.EndForbiddenFor(selPawn))
+            {
+                list.Add(new FloatMenuOption(label + " (" + "ForbiddenLower".Translate() + ")", null));
+                return;
+            }
             AddRide(list, selPawn, far, label, reachable);
         }
 
@@ -143,6 +149,11 @@ namespace AsAboveSoBelow
         {
             if (destination == null)
             {
+                return;
+            }
+            if (EndForbiddenFor(selPawn) || destination.EndForbiddenFor(selPawn))
+            {
+                list.Add(new FloatMenuOption(label + " (" + "ForbiddenLower".Translate() + ")", null));
                 return;
             }
             if (!reachable)

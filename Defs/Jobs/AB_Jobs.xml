@@ -5,6 +5,13 @@
     <defName>AB_UseStairs</defName>
     <driverClass>AsAboveSoBelow.JobDriver_UseStairs</driverClass>
     <reportString>using stairs.</reportString>
+  </JobDef>
+
+  <JobDef>
+    <defName>AB_TakeToPenAcrossLevels</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_ABTakeToPenAcrossLevels</driverClass>
+    <reportString>leading TargetA to a pen on another level.</reportString>
+    <casualInterruptible>false</casualInterruptible>
     <playerInterruptible>true</playerInterruptible>
   </JobDef>
 

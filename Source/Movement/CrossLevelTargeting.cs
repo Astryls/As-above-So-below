@@ -226,7 +226,7 @@ namespace AsAboveSoBelow
             }
             if (pick == null)
             {
-                return false;
+                return TryHandleGenericCell(source, caster, sky, lower);
             }
             Map targetMap = pick.MapHeld;
             if (caster.MapHeld == targetMap)
@@ -247,6 +247,51 @@ namespace AsAboveSoBelow
             ITargetingSource src = source;
             CrossLevelOrders.RouteThenRun(caster, targetMap, entry,
                 delegate { src.OrderForceTarget(new LocalTargetInfo(target)); });
+            return true;
+        }
+
+        /// <summary>Cell-targeted casts across the gap (parity item 2026-07-24):
+        /// Skip destinations, AoE ground casts - any source whose own
+        /// targetParams accept a bare location. Same route-then-cast contract
+        /// as things: the caster rides the stairs and the source runs its
+        /// fully vanilla cast job on arrival. Direct no-travel cell casting
+        /// stays excluded (ability verbs are same-map by construction);
+        /// mortar-class arc verbs keep their own direct-bombardment path.</summary>
+        private static bool TryHandleGenericCell(ITargetingSource source, Pawn caster, Map sky, Map lower)
+        {
+            Vector3 mouse = UI.MouseMapPosition();
+            IntVec3 skyCell = mouse.ToIntVec3();
+            if (!skyCell.InBounds(sky)
+                || sky.terrainGrid.TerrainAt(skyCell) != ABDefOf.AB_OpenAir)
+            {
+                return false; // only a click through open air aims below
+            }
+            IntVec3 cell = LevelRenderer.ScreenToBelowPos(mouse).ToIntVec3();
+            if (!cell.InBounds(lower) || cell.Fogged(lower))
+            {
+                return false;
+            }
+            if (source.targetParams == null
+                || !source.targetParams.CanTarget(new TargetInfo(cell, lower), source))
+            {
+                return false;
+            }
+            if (caster.MapHeld == lower)
+            {
+                source.OrderForceTarget(new LocalTargetInfo(cell));
+                return true;
+            }
+            Building_ABStairs entry = CrossLevelWork.NearestUsableStairsCached(caster, lower);
+            if (entry == null || entry.CounterpartTowards(lower) == null)
+            {
+                Messages.Message("AB_NoStairsToLevel".Translate("AB_LevelBelow".Translate()),
+                    caster, MessageTypeDefOf.RejectInput, historical: false);
+                return true;
+            }
+            IntVec3 cellCopy = cell;
+            ITargetingSource src = source;
+            CrossLevelOrders.RouteThenRun(caster, lower, entry,
+                delegate { src.OrderForceTarget(new LocalTargetInfo(cellCopy)); });
             return true;
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RimWorld;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -52,6 +53,7 @@ namespace AsAboveSoBelow
         public static readonly ABGuardSwitch World = new ABGuardSwitch("world");
         public static readonly ABGuardSwitch Social = new ABGuardSwitch("social");
         public static readonly ABGuardSwitch Transit = new ABGuardSwitch("transit");
+        public static readonly ABGuardSwitch Areas = new ABGuardSwitch("areas");
 
         /// <summary>Background-thread compute lanes (see-below mask build).
         /// Tripping this falls back to synchronous rebuilds, never off.</summary>
@@ -60,7 +62,7 @@ namespace AsAboveSoBelow
         private static readonly ABGuardSwitch[] All =
         {
             Ui, LevelGen, Rendering, Movement, Combat, Logistics, RoofSync, Weather, Power, Pipes, Climate,
-            Threats, HostileMove, World, Social, Transit, Async
+            Threats, HostileMove, World, Social, Transit, Areas, Async
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;
@@ -73,6 +75,22 @@ namespace AsAboveSoBelow
                 subsystem.lastContext = context;
                 Log.Error(ABLog.Tag + " Subsystem '" + subsystem.name + "' hit an error in " + context
                     + " and shut itself down to protect your game. Other features keep running. Details: " + e);
+                // A tripped switch used to be invisible outside the dev log,
+                // and players read the resulting silence (no cross-level
+                // hauling, no column stuff picker) as separate bugs. One
+                // non-historical message makes the shutdown visible in-game.
+                try
+                {
+                    if (Current.ProgramState == ProgramState.Playing)
+                    {
+                        Messages.Message("AB_SubsystemDown".Translate(subsystem.name),
+                            MessageTypeDefOf.CautionInput, historical: false);
+                    }
+                }
+                catch
+                {
+                    // Messaging must never compound the original failure.
+                }
             }
         }
 

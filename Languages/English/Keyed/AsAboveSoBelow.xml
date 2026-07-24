@@ -273,4 +273,11 @@
   <AB_BringAndInstall>Bring {0} and install it here</AB_BringAndInstall>
   <AB_BringAndRefuel>Bring {0} and refuel {1}</AB_BringAndRefuel>
 
+  <AB_SubsystemDown>As above, so below: the '{0}' subsystem hit an error and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDown>
+
+  <AB_SkyVisitors>Visitors may arrive on sky plateaus</AB_SkyVisitors>
+  <AB_SkyVisitorsTip>When the sky level has player buildings, a standable map-edge opening, and working stairs, about half of visitor and traveler groups walk in up there instead of on the surface. Trade caravans always arrive on the surface.</AB_SkyVisitorsTip>
+  <AB_HospitalityRoaming>Hospitality guests roam all levels</AB_HospitalityRoaming>
+  <AB_HospitalityRoamingTip>Requires the Hospitality mod. During a visit, idle guests occasionally tour linked levels that have guest beds or vending machines, and walk back when their group leaves. Full guest services (shopping, bed claims) stay on the level their group arrived on.</AB_HospitalityRoamingTip>
+
 </LanguageData>

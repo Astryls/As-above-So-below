@@ -62,7 +62,10 @@ namespace AsAboveSoBelow
                 Thing spot = FindAssignedSpotInColumn(pawn);
                 if (spot == null)
                 {
-                    NeedsCross.Charge(cooldown, pawn);
+                    if (!TryRouteToBetterNaturalFocus(pawn, comp, ref __result))
+                    {
+                        NeedsCross.Charge(cooldown, pawn);
+                    }
                     return;
                 }
                 // One hop toward the spot's level; a direct link aims for the
@@ -86,6 +89,80 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Logistics, e, "cross level meditation");
             }
+        }
+
+        /// <summary>Natural-focus parity (2026-07-24): a psycaster with no
+        /// assigned spot anywhere compares vanilla's local pick against each
+        /// linked level's pick (vanilla FindMeditationSpot probed at the
+        /// stairwell exit under a virtual swap) and rides the stairs when a
+        /// strictly stronger focus (anima tree, natural spots) waits on
+        /// another level - on arrival the giver re-runs and vanilla's own
+        /// scoring seats the pawn at that focus. Non-psylink pawns never
+        /// travel: focus strength only benefits psycasters.</summary>
+        private static bool TryRouteToBetterNaturalFocus(Pawn pawn, LevelComp comp, ref Job __result)
+        {
+            if (!ModsConfig.RoyaltyActive || !pawn.HasPsylink)
+            {
+                return false;
+            }
+            float localStr = FocusStrength(MeditationUtility.FindMeditationSpot(pawn), pawn);
+            Map bestMap = null;
+            IntVec3 bestSpot = IntVec3.Invalid;
+            float bestStr = localStr + 0.05f; // strictly better only: no churn
+            Map[] linked = { comp.upperMap, comp.lowerMap };
+            for (int i = 0; i < linked.Length; i++)
+            {
+                Map m = linked[i];
+                if (m == null || m.Disposed)
+                {
+                    continue;
+                }
+                Building_ABStairs entry = CrossLevelWork.NearestUsableStairsCached(pawn, m);
+                Building_ABStairs exit = entry?.CounterpartTowards(m);
+                if (exit == null)
+                {
+                    continue;
+                }
+                if (!ABVirtualPosition.TrySwap(pawn, m, exit.Position, out ABVirtualPosition.Token token))
+                {
+                    continue;
+                }
+                MeditationSpotAndFocus far;
+                try
+                {
+                    far = MeditationUtility.FindMeditationSpot(pawn);
+                }
+                finally
+                {
+                    ABVirtualPosition.Restore(pawn, token);
+                }
+                float strength = FocusStrength(far, pawn);
+                if (strength > bestStr && far.spot.IsValid)
+                {
+                    bestStr = strength;
+                    bestMap = m;
+                    bestSpot = far.spot.Cell;
+                }
+            }
+            if (bestMap == null)
+            {
+                return false;
+            }
+            if (CrossLevelWork.TryStairsJobToward(pawn, bestMap, bestSpot, out Job job))
+            {
+                __result = job;
+                return true;
+            }
+            return false;
+        }
+
+        private static float FocusStrength(MeditationSpotAndFocus s, Pawn pawn)
+        {
+            if (!s.focus.IsValid || s.focus.Thing == null)
+            {
+                return 0f;
+            }
+            return s.focus.Thing.GetStatValueForPawn(StatDefOf.MeditationFocusStrength, pawn);
         }
 
         /// <summary>The pawn's assigned meditation spot or throne on the given

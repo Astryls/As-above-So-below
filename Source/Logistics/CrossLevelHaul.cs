@@ -8,9 +8,14 @@ namespace AsAboveSoBelow
     /// <summary>
     /// Decides whether an item should be carried to a linked level: true when a
     /// storage with better priority than the item's current cell exists there,
-    /// evaluated by vanilla StoreUtility while the pawn is virtually placed at the
-    /// stairwell exit. Verdicts are cached per item for 600 ticks so idle scan
-    /// passes stay cheap.
+    /// evaluated by vanilla StoreUtility while the pawn is virtually placed at a
+    /// stairwell exit. Island-aware since 2026-07-24: the storage search runs
+    /// from ONE exit per distinct island of the target level (a bridge larder
+    /// reachable only through the far staircase used to be invisible because
+    /// only the exit nearest the pawn was ever tried), and every route is
+    /// STRICT - stairs that cannot region-reach the discovered destination are
+    /// never used, so trips cannot strand cargo on the wrong island. Verdicts
+    /// are cached per item so idle scan passes stay cheap.
     /// </summary>
     public static class CrossLevelHaul
     {
@@ -22,13 +27,31 @@ namespace AsAboveSoBelow
         {
             public int tick;
             public int mapId;
-            /// <summary>Store cell discovered when the verdict was made, so the
-            /// cached path can still pick the stairwell nearest the storage.
-            /// Explicitly Invalid when unknown (default IntVec3 is a real cell).</summary>
+            /// <summary>Store cell (or demand island anchor) discovered when the
+            /// verdict was made, so the cached path can still route strictly
+            /// toward the goal. Explicitly Invalid when unknown (default
+            /// IntVec3 is a real cell).</summary>
             public IntVec3 cell;
         }
 
+        /// <summary>Storage settings changed somewhere: every cached verdict
+        /// downstream of storage priorities is suspect. Cheap full reset.</summary>
+        public static void ClearVerdicts()
+        {
+            verdictCache.Clear();
+        }
+
         public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs)
+        {
+            return TargetLevelFor(pawn, t, out stairs, ignorePins: false);
+        }
+
+        /// <summary>ignorePins is the explicit-player-intent variant (Allow
+        /// Tool's Haul Urgently designation): both export pins are bypassed -
+        /// the player pointed at the stack and said MOVE - and the verdict
+        /// cache is skipped in BOTH directions so pin-free verdicts never
+        /// poison the autonomous flows' cached answers.</summary>
+        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins)
         {
             stairs = null;
             if (!ABGuard.On(ABGuard.Logistics) || pawn == null || t == null)
@@ -46,39 +69,50 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            // A minified thing an install blueprint (any map - vanilla's lookup
+            // walks them all) is waiting for never storage-migrates: the
+            // construction ferry owns it, and a storage verdict could drag it
+            // AWAY from the install level. Player-explicit urgent designations
+            // (ignorePins) still win.
+            if (!ignorePins && t is MinifiedThing
+                && InstallBlueprintUtility.ExistingBlueprintFor(t) != null)
+            {
+                return null;
+            }
 
             int now = Find.TickManager.TicksGame;
-            if (verdictCache.TryGetValue(t.thingIDNumber, out VerdictEntry entry) && now - entry.tick < VerdictTtlTicks)
+            if (!ignorePins)
             {
-                if (entry.mapId == -1)
+                if (verdictCache.TryGetValue(t.thingIDNumber, out VerdictEntry entry) && now - entry.tick < VerdictTtlTicks)
                 {
-                    return null;
-                }
-                Map cached = FindLinked(comp, entry.mapId);
-                if (cached != null)
-                {
-                    stairs = CrossLevelWork.NearestUsableStairsCached(pawn, cached);
-                    Building_ABStairs cachedExit = stairs?.CounterpartTowards(cached);
-                    if (cachedExit == null)
+                    if (entry.mapId == -1)
                     {
                         return null;
                     }
-                    StairRouter.Reroute(pawn, cached, entry.cell, ref stairs, ref cachedExit);
-                    return cached;
+                    Map cached = FindLinked(comp, entry.mapId);
+                    if (cached != null && TryRouteCached(pawn, cached, entry.cell, out stairs))
+                    {
+                        return cached;
+                    }
+                    // Stale verdict (map gone, stairs gone, or islands changed so
+                    // the goal is no longer strictly routable): recompute now.
+                    verdictCache.Remove(t.thingIDNumber);
+                    stairs = null;
                 }
-                return null;
-            }
-            if (verdictCache.Count > 2048)
-            {
-                verdictCache.Clear();
+                if (verdictCache.Count > 2048)
+                {
+                    verdictCache.Clear();
+                }
             }
 
             Map found = null;
             IntVec3 foundCell = IntVec3.Invalid;
-            // Quantity-aware pin: a level keeps only as much of a material as its
-            // blueprints still need; surplus stacks export normally.
-            bool exportBlocked = !CrossLevelDemand.ExportAllowed(map, t);
-            if (!exportBlocked)
+            // Two gates (2026-07-24 relay fix): STORAGE moves respect the full
+            // export policy including the import pin; DEMAND moves only the
+            // native construction pin - a stack that just landed on an
+            // interchange level must be liftable onward toward the level that
+            // wants it immediately, or every two-hop chain stalls out the pin.
+            if (ignorePins || CrossLevelDemand.ExportAllowed(map, t))
             {
                 StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
                 if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell))
@@ -89,43 +123,47 @@ namespace AsAboveSoBelow
                 {
                     found = comp.lowerMap;
                 }
-                if (found == null)
+            }
+            if (found == null && (ignorePins || CrossLevelDemand.ExportAllowedForDemand(map, t)))
+            {
+                // No better storage move: pull materials toward islands whose
+                // blueprints, benches, mouths, or relay interchanges still
+                // need them. Strictly routed toward the demanding island.
+                if (CrossLevelDemand.TryRouteDemand(pawn, comp.upperMap, t, out stairs, out Building_ABStairs exitUp))
                 {
-                    // No better storage anywhere: pull materials toward levels whose
-                    // blueprints and frames still need them. Loose delivery at the
-                    // stairs is fine, construct-deliver uses unstored resources.
-                    if (DemandCheck(pawn, t, comp.upperMap, ref stairs))
-                    {
-                        found = comp.upperMap;
-                    }
-                    else if (DemandCheck(pawn, t, comp.lowerMap, ref stairs))
-                    {
-                        found = comp.lowerMap;
-                    }
+                    found = comp.upperMap;
+                    foundCell = exitUp.Position;
+                }
+                else if (CrossLevelDemand.TryRouteDemand(pawn, comp.lowerMap, t, out stairs, out Building_ABStairs exitDown))
+                {
+                    found = comp.lowerMap;
+                    foundCell = exitDown.Position;
                 }
             }
-            verdictCache[t.thingIDNumber] = new VerdictEntry
+            if (!ignorePins)
             {
-                tick = now,
-                mapId = found?.uniqueID ?? -1,
-                cell = foundCell
-            };
+                verdictCache[t.thingIDNumber] = new VerdictEntry
+                {
+                    tick = now,
+                    mapId = found?.uniqueID ?? -1,
+                    cell = foundCell
+                };
+            }
             return found;
         }
 
-        private static bool DemandCheck(Pawn pawn, Thing t, Map target, ref Building_ABStairs stairs)
+        /// <summary>Re-route a cached verdict. With a known goal cell the route
+        /// must be strict; without one (legacy or demand anchor lost) fall back
+        /// to the nearest usable stairwell, matching the old behavior.</summary>
+        private static bool TryRouteCached(Pawn pawn, Map target, IntVec3 cell, out Building_ABStairs stairs)
         {
-            if (target == null || target.Disposed || !CrossLevelDemand.Demands(target, t.def))
+            if (cell.IsValid)
             {
-                return false;
+                return StairRouter.TryBestToward(pawn, target, cell, requireReach: true,
+                    out stairs, out Building_ABStairs _);
             }
-            Building_ABStairs s = CrossLevelWork.NearestUsableStairsCached(pawn, target);
-            if (s?.CounterpartTowards(target) == null)
-            {
-                return false;
-            }
-            stairs = s;
-            return true;
+            stairs = CrossLevelWork.NearestUsableStairsCached(pawn, target);
+            return stairs?.CounterpartTowards(target) != null;
         }
 
         private static Map FindLinked(LevelComp comp, int id)
@@ -147,45 +185,51 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            Building_ABStairs s = CrossLevelWork.NearestUsableStairsCached(pawn, target);
-            Building_ABStairs exit = s?.CounterpartTowards(target);
-            if (exit == null)
+            // One storage search per distinct island of the target level: the
+            // exit nearest the pawn may belong to an island with no storage
+            // while another staircase leads straight to the larder.
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, target);
+            for (int p = 0; p < pairs.Count; p++)
             {
-                return false;
-            }
-            if (!ABVirtualPosition.TrySwap(pawn, target, exit.Position, out ABVirtualPosition.Token token))
-            {
-                return false;
-            }
-            // The item's position must ride along: IsGoodStoreCell starts its
-            // reachability test from the item, and the item's home coordinates
-            // usually mirror into region-less open air on the other level.
-            IntVec3 oldItemPos = ABVirtualPosition.SwapPositionOnly(t, exit.Position);
-            bool better;
-            IntVec3 storeCell = IntVec3.Invalid;
-            try
-            {
-                // Storage-FOR, not store-CELL (verify sweep 2026-07-23): the
-                // cell-only search misses container destinations - graves,
-                // caskets, and modded container storage (Deep Storage style) on
-                // the linked level were invisible to the push side, so corpses
-                // never rode down to a basement crypt. Containers resolve to
-                // their own position for stair routing.
-                better = StoreUtility.TryFindBestBetterStorageFor(t, pawn, target, current, pawn.Faction,
-                    out storeCell, out IHaulDestination haulDest, needAccurateResult: false);
-                if (better && !storeCell.IsValid && haulDest is Thing destThing)
+                Building_ABStairs s = pairs[p].stairs;
+                Building_ABStairs exit = pairs[p].exit;
+                if (!ABVirtualPosition.TrySwap(pawn, target, exit.Position, out ABVirtualPosition.Token token))
                 {
-                    storeCell = destThing.Position;
+                    return false;
                 }
-            }
-            finally
-            {
-                ABVirtualPosition.RestorePositionOnly(t, oldItemPos);
-                ABVirtualPosition.Restore(pawn, token);
-            }
-            if (better)
-            {
-                // Real positions are restored: safe to route by the store cell.
+                // The item's position must ride along: IsGoodStoreCell starts its
+                // reachability test from the item, and the item's home coordinates
+                // usually mirror into region-less open air on the other level.
+                IntVec3 oldItemPos = ABVirtualPosition.SwapPositionOnly(t, exit.Position);
+                bool better;
+                IntVec3 storeCell = IntVec3.Invalid;
+                try
+                {
+                    // Storage-FOR, not store-CELL (verify sweep 2026-07-23): the
+                    // cell-only search misses container destinations - graves,
+                    // caskets, and modded container storage (Deep Storage style) on
+                    // the linked level were invisible to the push side, so corpses
+                    // never rode down to a basement crypt. Containers resolve to
+                    // their own position for stair routing.
+                    better = StoreUtility.TryFindBestBetterStorageFor(t, pawn, target, current, pawn.Faction,
+                        out storeCell, out IHaulDestination haulDest, needAccurateResult: false);
+                    if (better && !storeCell.IsValid && haulDest is Thing destThing)
+                    {
+                        storeCell = destThing.Position;
+                    }
+                }
+                finally
+                {
+                    ABVirtualPosition.RestorePositionOnly(t, oldItemPos);
+                    ABVirtualPosition.Restore(pawn, token);
+                }
+                if (!better)
+                {
+                    continue;
+                }
+                // Real positions are restored: upgrade to the stair pair that
+                // minimizes the whole trip. Strict inside; the discovering pair
+                // stays when nothing better strictly routes.
                 StairRouter.Reroute(pawn, target, storeCell, ref s, ref exit);
                 stairs = s;
                 destCell = storeCell;

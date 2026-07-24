@@ -27,6 +27,7 @@ namespace AsAboveSoBelow
             CrossLevelCombatUI.ActiveShooters.Clear();
             CrossLevelAnimals.ClearAll();
             ABRitualAttendance.ClearAll();
+            ABHospitalityCompat.ClearAll();
         }
 
         public override void GameComponentTick()
@@ -41,6 +42,10 @@ namespace AsAboveSoBelow
             // No-op unless a routed order (right-click / Reverse Commands /
             // caravan) armed a self-heal retry on arrival.
             ABPendingOrders.Tick();
+            // Cadenced (900t) and detection-gated: Hospitality guest roaming.
+            ABHospitalityCompat.Tick();
+            // Cadenced (600t): stranded friendly NPCs walk back to the surface.
+            ABNeutralExit.Tick();
         }
 
         public override void GameComponentOnGUI()

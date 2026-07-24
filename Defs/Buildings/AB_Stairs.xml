@@ -28,6 +28,11 @@
       <Flammability>0</Flammability>
       <Mass>35</Mass>
     </statBases>
+    <!-- Door parity: the vanilla forbid toggle. Forbidden ends block colony
+         pawns and pets from the passage; raiders ignore it, like doors. -->
+    <comps>
+      <li Class="CompProperties_Forbiddable"/>
+    </comps>
     <!-- Stairs carry pawns only; utilities cross through the dedicated
          vertical links, so stairs need no ticker at all. -->
     <tickerType>Never</tickerType>
@@ -170,6 +175,9 @@
       <Flammability>0</Flammability>
       <Mass>10</Mass>
     </statBases>
+    <comps>
+      <li Class="CompProperties_Forbiddable"/>
+    </comps>
     <!-- No power bridge comp: ladders do not carry utility lines. -->
     <tickerType>Never</tickerType>
     <minifiedDef>MinifiedThing</minifiedDef>

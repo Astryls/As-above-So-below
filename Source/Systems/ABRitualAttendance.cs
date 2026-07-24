@@ -100,6 +100,64 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Merged colony-animal pool for animal ritual roles (sacrifice
+        /// etc., parity pass 2026-07-24): vanilla's SpawnedColonyAnimals plus
+        /// linked levels' colony animals with a usable stair route. Same
+        /// copy-on-merge + reentrancy rules as the colonist merge.</summary>
+        internal static List<Pawn> TryMergeAnimalCandidates(Map map, List<Pawn> vanilla)
+        {
+            if (merging || !candidateScope || !Enabled || map == null || vanilla == null)
+            {
+                return null;
+            }
+            LevelComp comp = map.Levels();
+            if (comp == null)
+            {
+                return null;
+            }
+            merging = true;
+            try
+            {
+                List<Pawn> merged = null;
+                AppendAnimalsFrom(comp.upperMap, map, vanilla, ref merged);
+                AppendAnimalsFrom(comp.lowerMap, map, vanilla, ref merged);
+                return merged;
+            }
+            finally
+            {
+                merging = false;
+            }
+        }
+
+        private static void AppendAnimalsFrom(Map other, Map ritualMap, List<Pawn> vanilla, ref List<Pawn> merged)
+        {
+            if (other == null || other.Disposed || other == ritualMap)
+            {
+                return;
+            }
+            List<Pawn> pool = other.mapPawns.SpawnedColonyAnimals;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                Pawn p = pool[i];
+                if (p == null || p.Dead || p.Downed || !p.Spawned || p.MentalStateDef != null)
+                {
+                    continue;
+                }
+                if (CrossLevelWork.NearestUsableStairsCached(p, ritualMap)?.CounterpartTowards(ritualMap) == null)
+                {
+                    continue;
+                }
+                if (merged == null)
+                {
+                    merged = new List<Pawn>(vanilla);
+                }
+                if (!merged.Contains(p))
+                {
+                    merged.Add(p);
+                }
+            }
+        }
+
         private static void AppendFrom(Map other, Map ritualMap, List<Pawn> vanilla, ref List<Pawn> merged)
         {
             if (other == null || other.Disposed || other == ritualMap)
@@ -114,10 +172,12 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (p.IsPrisoner)
+                if (p.IsPrisoner && (p.guest == null || !p.guest.PrisonerIsSecure))
                 {
-                    // Prisoners cannot walk themselves to another level's ritual;
-                    // cross-level prisoner participation stays out of scope.
+                    // Parity pass 2026-07-24: SECURE prisoners now cross for
+                    // rituals (vanilla walks them to same-map rituals via the
+                    // ritual duty; the gather machinery walks them over the
+                    // stairs the same way). Unsecured prisoners would bolt.
                     continue;
                 }
                 if (CrossLevelWork.NearestUsableStairsCached(p, ritualMap)?.CounterpartTowards(ritualMap) == null)
@@ -342,6 +402,30 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "ritual candidate merge");
+            }
+        }
+    }
+
+    /// <summary>The animal-role merge: inside a ritual candidate scope, the
+    /// spawned colony animals of the ritual map gain linked levels' animals
+    /// with a stair route (sacrifice roles etc.). Copy-on-merge, same
+    /// guards as the colonist merge.</summary>
+    [HarmonyPatch(typeof(MapPawns), nameof(MapPawns.SpawnedColonyAnimals), MethodType.Getter)]
+    internal static class Patch_MapPawns_RitualAnimalCandidates
+    {
+        private static void Postfix(Map ___map, ref List<Pawn> __result)
+        {
+            try
+            {
+                List<Pawn> merged = ABRitualAttendance.TryMergeAnimalCandidates(___map, __result);
+                if (merged != null)
+                {
+                    __result = merged;
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Movement, e, "ritual animal candidate merge");
             }
         }
     }
