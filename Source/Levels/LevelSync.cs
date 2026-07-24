@@ -126,6 +126,14 @@ namespace AsAboveSoBelow
         /// must reprint the revealed cells. The mirrored call cannot recurse:
         /// a sky map has no upper map, and the surface above a basement fails
         /// the level check.</summary>
+        /// <summary>Lazily built union of the mirrored dirty flags. Hoisted
+        /// out of OnLowerMeshDirty: that postfix rides EVERY MapMeshDirty call
+        /// on every map, and the three DefOf conversions per call add up.
+        /// Lazy (not static readonly) because flag masks are assigned in
+        /// PostSetIndices after def load; a def's mask is never zero once set,
+        /// so zero doubles as the unbuilt sentinel.</summary>
+        private static ulong mirroredDirtyMask;
+
         public static void OnLowerMeshDirty(Map map, IntVec3 c, ulong flags)
         {
             if ((!LevelComp.AnySkyLevels && SkylightSystem.GlobalPaneCount <= 0)
@@ -133,8 +141,14 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if ((flags & ((ulong)MapMeshFlagDefOf.Things | (ulong)MapMeshFlagDefOf.Buildings
-                | (ulong)MapMeshFlagDefOf.FogOfWar)) == 0)
+            ulong mask = mirroredDirtyMask;
+            if (mask == 0)
+            {
+                mask = (ulong)MapMeshFlagDefOf.Things | (ulong)MapMeshFlagDefOf.Buildings
+                    | (ulong)MapMeshFlagDefOf.FogOfWar;
+                mirroredDirtyMask = mask;
+            }
+            if ((flags & mask) == 0)
             {
                 return;
             }

@@ -49,6 +49,13 @@ namespace AsAboveSoBelow
         /// <summary>Original terrain per pane, restored on removal.</summary>
         private Dictionary<IntVec3, TerrainDef> originals = new Dictionary<IntVec3, TerrainDef>();
 
+        /// <summary>Bumped on every pane/planned mutation; AnyWork memoizes
+        /// against it so the per-pawn work-scan gate is O(1) instead of a walk
+        /// over both sets. -1 start forces the first computation.</summary>
+        private int workVersion;
+        private int anyWorkVersion = -1;
+        private bool anyWorkCached;
+
         private CellBoolDrawer drawer;
         private bool drawRequested;
 
@@ -74,6 +81,7 @@ namespace AsAboveSoBelow
             bool changed = on ? planned.Add(c) : planned.Remove(c);
             if (changed)
             {
+                workVersion++;
                 drawer?.SetDirty();
             }
         }
@@ -83,6 +91,7 @@ namespace AsAboveSoBelow
             if (panes.Add(c))
             {
                 SkylightSystem.GlobalPaneCount++;
+                workVersion++;
             }
             if (original != null)
             {
@@ -95,6 +104,7 @@ namespace AsAboveSoBelow
             if (panes.Remove(c))
             {
                 SkylightSystem.GlobalPaneCount--;
+                workVersion++;
             }
             originals.Remove(c);
         }
@@ -124,30 +134,43 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Memoized per mutation version: WorkGiver.ShouldSkip reads
+        /// this per construction pawn per work scan, and the sets only change
+        /// through the three mutators above.</summary>
         public bool AnyWork
         {
             get
             {
-                if (planned.Count == 0 && panes.Count == 0)
+                if (anyWorkVersion != workVersion)
                 {
-                    return false;
+                    anyWorkVersion = workVersion;
+                    anyWorkCached = ComputeAnyWork();
                 }
-                foreach (IntVec3 c in planned)
-                {
-                    if (!panes.Contains(c))
-                    {
-                        return true;
-                    }
-                }
-                foreach (IntVec3 c in panes)
-                {
-                    if (!planned.Contains(c))
-                    {
-                        return true;
-                    }
-                }
+                return anyWorkCached;
+            }
+        }
+
+        private bool ComputeAnyWork()
+        {
+            if (planned.Count == 0 && panes.Count == 0)
+            {
                 return false;
             }
+            foreach (IntVec3 c in planned)
+            {
+                if (!panes.Contains(c))
+                {
+                    return true;
+                }
+            }
+            foreach (IntVec3 c in panes)
+            {
+                if (!planned.Contains(c))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // --- planned-area overlay (vanilla area drawer language) ---
@@ -240,9 +263,38 @@ namespace AsAboveSoBelow
 
         public static bool FeatureOn => ABMod.Settings == null || ABMod.Settings.skylights;
 
+        /// <summary>Per-map comp cache mirroring LevelExtensions.Levels():
+        /// GetComponent is a list scan and this resolver rides per-frame
+        /// (DrawBelowStatic), per-SetTerrain, and per-mesh-dirty paths. Every
+        /// map constructs its comp with the map itself, so a resolved comp is
+        /// stable for the map's lifetime; the CWT drops entries when a map is
+        /// collected and is thread safe for the render-adjacent callers.</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Map, SkylightMapComp> compCache =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Map, SkylightMapComp>();
+
         public static SkylightMapComp CompFor(Map map)
         {
-            return map?.GetComponent<SkylightMapComp>();
+            if (map == null)
+            {
+                return null;
+            }
+            if (compCache.TryGetValue(map, out SkylightMapComp comp))
+            {
+                return comp;
+            }
+            comp = map.GetComponent<SkylightMapComp>();
+            if (comp != null)
+            {
+                try
+                {
+                    compCache.Add(map, comp);
+                }
+                catch (ArgumentException)
+                {
+                    // Benign race: another thread cached it first.
+                }
+            }
+            return comp;
         }
 
         public static bool AnyPanes(Map map)
@@ -486,6 +538,12 @@ namespace AsAboveSoBelow
     /// rare tick, exactly the cadence vanilla lamps use for power flicks.</summary>
     public class Thing_ABSkylightShaft : ThingWithComps, IThingGlower
     {
+        /// <summary>Lazily cached: the comp list never changes after
+        /// InitializeComps, and RefreshLit runs per shaft per rare tick.</summary>
+        private CompGlower glowerInt;
+
+        private CompGlower Glower => glowerInt ?? (glowerInt = GetComp<CompGlower>());
+
         public bool ShouldBeLitNow()
         {
             if (!Spawned || Map == null)
@@ -507,7 +565,7 @@ namespace AsAboveSoBelow
         {
             if (Spawned)
             {
-                GetComp<CompGlower>()?.UpdateLit(Map);
+                Glower?.UpdateLit(Map);
             }
         }
 
