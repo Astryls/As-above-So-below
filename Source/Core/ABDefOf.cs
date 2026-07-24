@@ -26,10 +26,6 @@ namespace AsAboveSoBelow
         public static TerrainDef AB_RoofSurface;
         public static TerrainDef AB_MountainTop;
 
-        public static ThingDef AB_Waterfall;
-        public static ThingDef AB_WaterfallBase;
-
-        public static SoundDef AB_WaterfallLoop;
 
         public static MapMeshFlagDef AB_BelowThings;
 

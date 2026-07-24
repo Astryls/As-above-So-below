@@ -277,8 +277,6 @@
 
   <AB_SkyVisitors>Visitors may arrive on sky plateaus</AB_SkyVisitors>
   <AB_SkyVisitorsTip>When the sky level has player buildings, a standable map-edge opening, and working stairs, about half of visitor and traveler groups walk in up there instead of on the surface. Trade caravans always arrive on the surface.</AB_SkyVisitorsTip>
-  <AB_MountainRivers>Rivers flow over mountain tops</AB_MountainRivers>
-  <AB_MountainRiversTip>When the map tile's river tunnels under a mountain, the sky level's mountain top carries the same watercourse, ending in waterfalls where it pours off the edges. Applies to sky levels generated after this is turned on.</AB_MountainRiversTip>
 
   <AB_GoUpVia>go up via {0}</AB_GoUpVia>
   <AB_GoDownVia>go down via {0}</AB_GoDownVia>

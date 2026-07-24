@@ -39,7 +39,6 @@
       <!-- Mountain rivers: projects the ground map's river across the mass top
            and places waterfall lips at the ledges. No-op without a tunneling
            river or with the setting off. -->
-      <li>AB_SkyRivers</li>
       <!-- Vanilla tile-mutator phases (Core defs): AB_SkyTerrain (order 200)
            adds the rolled landmark mutators to the pocket tile, then these run
            the real workers at 220/500/700/1600 - structures, ticking setup,
