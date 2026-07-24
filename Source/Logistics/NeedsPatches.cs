@@ -207,6 +207,13 @@ namespace AsAboveSoBelow
                 if (TryFoodTowards(pawn, comp.upperMap, out Job job)
                     || TryFoodTowards(pawn, comp.lowerMap, out job))
                 {
+                    if (pawn.RaceProps.Animal)
+                    {
+                        // Pets get walked home once fed and idle - without this
+                        // record the meal trip was one-way and basements filled
+                        // with pets one hunger cycle at a time (2026-07-24).
+                        CrossLevelAnimals.NotePetFoodTrip(pawn, pawn.Map);
+                    }
                     __result = job;
                     return;
                 }

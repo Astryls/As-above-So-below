@@ -30,6 +30,14 @@ namespace AsAboveSoBelow
             ABHospitalityCompat.ClearAll();
         }
 
+        public override void ExposeData()
+        {
+            base.ExposeData();
+            // Pet food-trip records must survive save/load: a pet saved between
+            // its meal and the walk home would otherwise be stranded for good.
+            CrossLevelAnimals.ExposePetTrips();
+        }
+
         public override void GameComponentTick()
         {
             base.GameComponentTick();

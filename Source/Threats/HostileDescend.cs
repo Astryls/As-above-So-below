@@ -218,10 +218,15 @@ namespace AsAboveSoBelow
                 return false;
             }
             // Wild animals get the wander policy (linger below, leave when hungry
-            // or done) instead of the NPC leave-duty rules.
+            // or done) instead of the NPC leave-duty rules. Two tiers: the polite
+            // path waits for an idle moment; hard-overdue visitors (a full extra
+            // linger past due - typically squatting on basement food stores,
+            // eating and sleeping and never idle at scan time) are interrupted
+            // regardless, so wildlife can never accumulate below permanently.
             if (p.Faction == null && p.RaceProps.Animal)
             {
-                return IsIdle(p) && CrossLevelAnimals.WildAnimalWantsOff(p);
+                return (IsIdle(p) && CrossLevelAnimals.WildAnimalWantsOff(p))
+                    || CrossLevelAnimals.WildAnimalMustOff(p);
             }
             return WantsToLeave(p);
         }

@@ -197,6 +197,12 @@ namespace AsAboveSoBelow
 
         private int nextAnimalDue = -1;
 
+        private int nextPetReturnDue = -1;
+
+        /// <summary>Pet food-trip return sweep cadence; the tick gate is a
+        /// static count read, so idle cost is nothing when no trips exist.</summary>
+        private const int PetReturnScanInterval = 600;
+
         /// <summary>Ambient wildlife descent cadence; long because the event itself
         /// is rare by design (per-scan roll + global spacing inside the scanner).</summary>
         private const int AnimalWanderInterval = 1200;
@@ -320,6 +326,20 @@ namespace AsAboveSoBelow
                 // the roof and terrain cascades can never stay dead for a whole
                 // session. One bool read per tick once subscribed.
                 TrySubscribeSync();
+            }
+            // Pets shipped to another level for food walk home once fed; runs
+            // on every level because meal trips can go up or down the column.
+            if (CrossLevelAnimals.AnyPetTrips && ABGuard.On(ABGuard.Logistics)
+                && Due(ref nextPetReturnDue, now, PetReturnScanInterval))
+            {
+                try
+                {
+                    CrossLevelAnimals.ScanPetReturns(this);
+                }
+                catch (Exception e)
+                {
+                    ABGuard.Disable(ABGuard.Logistics, e, "pet return scan");
+                }
             }
             if (level != 0 && ABGuard.On(ABGuard.HostileMove)
                 && Due(ref nextHostileDue, now, HostileScanInterval))
