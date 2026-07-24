@@ -1557,11 +1557,18 @@ namespace AsAboveSoBelow
                 sb.Append("[AB river diagnostic] genstep last run: ")
                     .Append(GenStep_ABSkyRivers.LastSummary);
                 Map cur = Find.CurrentMap;
-                Map ground = cur.GroundMap();
+                sb.Append(" | cur=L").Append(cur.Level());
+                // Robust ground resolution: a sky comp whose groundMap field
+                // has not linked yet (run #123 blind spot) still resolves
+                // through its lower neighbor.
+                Map ground = cur.GroundMap() ?? cur.LowerMap()?.GroundMap()
+                    ?? cur.UpperMap()?.GroundMap();
                 Map sky = ground?.UpperMap();
                 if (ground == null || sky == null || sky.Disposed)
                 {
-                    sb.Append(" | no sky level linked from here");
+                    sb.Append(" | no sky level linked from here (ground=")
+                        .Append(ground != null ? ("L" + ground.Level()) : "null")
+                        .Append(")");
                 }
                 else
                 {

@@ -69,13 +69,20 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            LastSummary = "ran, bailed: ground map has no river flow data";
+            // FLOW DATA IS OPTIONAL (live finding 2026-07-24, run #123: a
+            // quicktest map carried a visible river with an EMPTY
+            // riverFlowMap - 1.6 populates it per river variant and does not
+            // scribe riverGraph at all - and the old hard bail silently
+            // no-opped the whole feature; the user then read the see-below
+            // river through open air as "still duplicating"). Carving, drying,
+            // and banks need only TERRAIN data; flow merely animates the sky
+            // water and refines waterfall direction, so it degrades gracefully:
+            // no flow -> unanimated sky water (matching the ground's own
+            // render on such maps) and every air-bordering lip treated as a
+            // downstream fall.
             WaterInfo groundWater = ground.waterInfo;
-            if (groundWater == null || groundWater.riverFlowMap == null
-                || groundWater.riverFlowMap.Count == 0 || groundWater.riverGraph.NullOrEmpty())
-            {
-                return;
-            }
+            bool hasFlowData = groundWater?.riverFlowMap != null && groundWater.riverFlowMap.Count > 0;
+            bool hasGraph = groundWater != null && !groundWater.riverGraph.NullOrEmpty();
             LastSummary = "ran, bailed: no river cells under sky mass (river may not tunnel here)";
 
             TerrainGrid groundTerrain = ground.terrainGrid;
@@ -131,29 +138,40 @@ namespace AsAboveSoBelow
             UnfogSolidNeighbors(map, carved);
             UnfogSolidNeighbors(map, banks);
 
-            // Flow data: clone the graph, copy the per-cell flow list.
+            // Flow data: clone the graph and copy the per-cell flow list when
+            // the ground actually has them.
             WaterInfo skyWater = map.waterInfo;
-            skyWater.riverGraph = new List<RiverNode>();
-            for (int i = 0; i < groundWater.riverGraph.Count; i++)
+            if (hasGraph)
             {
-                RiverNode src = groundWater.riverGraph[i];
-                skyWater.riverGraph.Add(new RiverNode
+                skyWater.riverGraph = new List<RiverNode>();
+                for (int i = 0; i < groundWater.riverGraph.Count; i++)
                 {
-                    start = src.start,
-                    end = src.end,
-                    width = src.width
-                });
+                    RiverNode src = groundWater.riverGraph[i];
+                    skyWater.riverGraph.Add(new RiverNode
+                    {
+                        start = src.start,
+                        end = src.end,
+                        width = src.width
+                    });
+                }
             }
-            skyWater.riverFlowMap = new List<float>(groundWater.riverFlowMap);
+            if (hasFlowData)
+            {
+                skyWater.riverFlowMap = new List<float>(groundWater.riverFlowMap);
+            }
 
             // Ledges.
             List<IntVec3> basesPlaced = new List<IntVec3>();
             for (int i = 0; i < carved.Count; i++)
             {
                 IntVec3 c = carved[i];
-                Vector3 flow = groundWater.GetWaterMovement(c.ToVector3Shifted());
+                Vector3 flow = hasFlowData
+                    ? groundWater.GetWaterMovement(c.ToVector3Shifted())
+                    : Vector3.zero;
                 bool hasFlow = flow.sqrMagnitude > 0.0001f;
-                Vector3 flowDir = hasFlow ? flow.normalized : FallbackFlowDir(skyWater);
+                Vector3 flowDir = hasFlow ? flow.normalized
+                    : hasGraph ? FallbackFlowDir(skyWater) : Vector3.zero;
+                bool anyDirection = flowDir.sqrMagnitude > 0.0001f;
                 for (int d = 0; d < 4; d++)
                 {
                     IntVec3 dir = GenAdj.CardinalDirections[d];
@@ -161,6 +179,13 @@ namespace AsAboveSoBelow
                     if (!n.InBounds(map) || skyTerrain.TerrainAt(n) != air)
                     {
                         continue;
+                    }
+                    if (!anyDirection)
+                    {
+                        // No flow information at all: every ledge pours.
+                        SpawnLip(map, c, Rot4.FromIntVec3(dir), inflow: false);
+                        TrySpawnBase(ground, n, basesPlaced);
+                        break;
                     }
                     float dot = Vector3.Dot(flowDir, dir.ToVector3());
                     if (dot > LipFlowDot)
@@ -179,7 +204,8 @@ namespace AsAboveSoBelow
             LastSummary = "carved " + carved.Count + " water cells, " + banks.Count
                 + " bank cells, dried " + dried + " tunnel cells below, "
                 + map.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " waterfall lips, "
-                + basesPlaced.Count + " bases (sky map " + map.uniqueID + ")";
+                + basesPlaced.Count + " bases (sky map " + map.uniqueID
+                + (hasFlowData ? ", full flow data" : ", carve-only mode: no ground flow data") + ")";
             ABLog.Dev("Sky rivers: " + LastSummary);
         }
 
