@@ -1666,6 +1666,52 @@ namespace AsAboveSoBelow
             Messages.Message("AB basement diagnostic written to log.", MessageTypeDefOf.NeutralEvent, historical: false);
         }
 
+        /// <summary>Force-lift demo (round-10): click any mass-crossing water
+        /// cell on the surface and its WHOLE stretch lifts to the sky level
+        /// (seal + carve + banks + falls) regardless of flow classification -
+        /// instant waterfall demo on any river-through-mountain map, no tile
+        /// lottery. Ensures the sky level first.</summary>
+        [DebugAction("As above", "AB: force lift river (click water)", actionType = DebugActionType.ToolMap, allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void ForceLiftRiver()
+        {
+            try
+            {
+                IntVec3 cell = UI.MouseCell();
+                Map ground = Find.CurrentMap?.GroundMap();
+                if (ground == null)
+                {
+                    Messages.Message("AB dev: no ground map here.", MessageTypeDefOf.RejectInput, false);
+                    return;
+                }
+                if (ground.Levels()?.upperMap == null)
+                {
+                    LevelMapGen.GetOrGenerate(ground, 1, ABDefOf.AB_Sky, out _);
+                }
+                Map sky = ground.Levels()?.upperMap;
+                if (sky == null || sky.Disposed)
+                {
+                    Messages.Message("AB dev: could not ensure a sky level.", MessageTypeDefOf.RejectInput, false);
+                    return;
+                }
+                List<IntVec3> stretch = GenStep_ABSkyRivers.StretchAt(sky, ground, cell);
+                if (stretch.Count == 0)
+                {
+                    Messages.Message("AB dev: that cell is not mass-crossing water (click the river where it passes the mountain).",
+                        MessageTypeDefOf.RejectInput, false);
+                    return;
+                }
+                string report = GenStep_ABSkyRivers.ExecuteLift(sky, ground,
+                    new List<List<IntVec3>> { stretch });
+                Log.Warning("[AB force lift] " + report);
+                Messages.Message("AB dev: lifted " + stretch.Count + " cells - view the sky level.",
+                    MessageTypeDefOf.TaskCompletion, false);
+            }
+            catch (Exception e)
+            {
+                Log.Warning("[AB force lift] EXCEPTION: " + e);
+            }
+        }
+
         /// <summary>River generation ground truth: prints the genstep's own
         /// last-run summary (or bail reason) plus a LIVE recount of the
         /// column's river state, as one warning that crosses the bridge.</summary>

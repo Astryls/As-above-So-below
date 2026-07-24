@@ -90,6 +90,40 @@ namespace AsAboveSoBelow
             return false;
         }
 
+        /// <summary>MOUNTAIN CLOSENESS (user mechanic, round 11): ragged,
+        /// cave-pocked mountains have no clean walls for the axis flank scan,
+        /// but the neighborhood around a river threading them is majority
+        /// mass. A water cell whose surroundings within ClosenessRadius are
+        /// at least ClosenessThreshold mountain is INSIDE the mountain. The
+        /// threshold keeps one-sided hugs out: a river skirting a huge massif
+        /// on one side sees at most ~half-plane density (~0.45).</summary>
+        private const int ClosenessRadius = 8;
+
+        private const float ClosenessThreshold = 0.55f;
+
+        private static bool MountainClose(Map map, IntVec3 c, Func<IntVec3, bool> isMass)
+        {
+            int mass = 0;
+            int total = 0;
+            for (int dx = -ClosenessRadius; dx <= ClosenessRadius; dx++)
+            {
+                for (int dz = -ClosenessRadius; dz <= ClosenessRadius; dz++)
+                {
+                    IntVec3 n = new IntVec3(c.x + dx, 0, c.z + dz);
+                    if (!n.InBounds(map))
+                    {
+                        continue;
+                    }
+                    total++;
+                    if (isMass(n))
+                    {
+                        mass++;
+                    }
+                }
+            }
+            return total > 0 && mass >= total * ClosenessThreshold;
+        }
+
         public override void Generate(Map map, GenStepParams parms)
         {
             ABSettings settings = ABMod.Settings;
@@ -167,35 +201,98 @@ namespace AsAboveSoBelow
                 }
                 // TUNNEL: sky mass directly above (narrow roofed river), OR
                 // CANYON: open cut with the massif flanking both sides (wide
-                // rivers - vanilla strips their roof; round-8 finding).
-                return IsSkyMass(mc) || FlankedByMass(map, mc, IsSkyMass);
+                // rivers - vanilla strips their roof; round-8 finding), OR
+                // CLOSENESS: majority-mass neighborhood (ragged cave-pocked
+                // mountains with no clean walls; round-11 user mechanic).
+                return IsSkyMass(mc) || FlankedByMass(map, mc, IsSkyMass)
+                    || MountainClose(map, mc, IsSkyMass);
             }
             List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
             if (stretches.Count == 0)
             {
                 return;
             }
-            int lifted = 0;
+            // PER-FACE AMENDMENT (user-approved, round 10): through-rivers no
+            // longer stay fully vanilla. The UPSTREAM face keeps a tunnel
+            // apron (the river visibly dives into the rock); everything
+            // DOWNSTREAM of the apron lifts - the river re-emerges on the
+            // mountain top and pours off the exit edge. Mountain-source
+            // stretches (no inflow) lift whole, exactly as before.
+            int full = 0;
+            int partial = 0;
             int keptVanilla = 0;
-            List<IntVec3> carved = new List<IntVec3>();
+            List<List<IntVec3>> toLift = new List<List<IntVec3>>();
             for (int s = 0; s < stretches.Count; s++)
             {
                 List<IntVec3> stretch = stretches[s];
-                if (!ShouldLift(ground, groundWater, hasFlowData, stretch, IsMassRiver))
+                StretchVerdict verdict = AnalyzeStretch(ground, groundWater, hasFlowData,
+                    stretch, IsMassRiver, out List<IntVec3> inflowSeeds);
+                if (verdict == StretchVerdict.FullLift)
+                {
+                    toLift.Add(stretch);
+                    full++;
+                }
+                else if (verdict == StretchVerdict.PartialLift)
+                {
+                    List<IntVec3> downstream = DownstreamSubset(ground, stretch, inflowSeeds);
+                    if (downstream.Count > 0)
+                    {
+                        toLift.Add(downstream);
+                        partial++;
+                    }
+                    else
+                    {
+                        keptVanilla++; // stretch shorter than the apron
+                    }
+                }
+                else
                 {
                     keptVanilla++;
-                    continue;
                 }
-                lifted++;
-                for (int i = 0; i < stretch.Count; i++)
+            }
+            if (toLift.Count == 0)
+            {
+                LastSummary = "ran: " + stretches.Count + " crossing stretch(es), all kept vanilla"
+                    + " (too short, enclosed, or unclassifiable)";
+                return;
+            }
+            string liftReport = ExecuteLift(map, ground, toLift);
+            LastSummary = full + " full lift(s) + " + partial + " downstream lift(s) (upstream"
+                + " tunnel aprons kept), " + keptVanilla + " stretch(es) vanilla; " + liftReport
+                + (hasFlowData ? " (full flow data)" : " (no ground flow data)");
+            ABLog.Dev("Sky rivers: " + LastSummary);
+        }
+
+        /// <summary>Carves, seals, banks, unfogs, copies flow, and spawns the
+        /// falls for the given cell groups. Shared by the genstep and the
+        /// "AB: force lift river" dev tool; idempotent per cell (already-
+        /// carved cells no-op through the water/mass checks). Returns a short
+        /// human-readable report.</summary>
+        internal static string ExecuteLift(Map sky, Map ground, List<List<IntVec3>> toLift)
+        {
+            TerrainGrid groundTerrain = ground.terrainGrid;
+            TerrainGrid skyTerrain = sky.terrainGrid;
+            WaterInfo groundWater = ground.waterInfo;
+            bool hasFlowData = groundWater?.riverFlowMap != null && groundWater.riverFlowMap.Count > 0;
+            bool hasGraph = groundWater != null && !groundWater.riverGraph.NullOrEmpty();
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            List<IntVec3> carved = new List<IntVec3>();
+            for (int s = 0; s < toLift.Count; s++)
+            {
+                List<IntVec3> cells = toLift[s];
+                for (int i = 0; i < cells.Count; i++)
                 {
-                    IntVec3 c = stretch[i];
+                    IntVec3 c = cells[i];
                     TerrainDef below = groundTerrain.BaseTerrainAt(c);
+                    if (below == null || !below.IsWater)
+                    {
+                        continue; // already lifted or changed since analysis
+                    }
                     // Carve the sky channel: drop the rock wall, the roof,
                     // and the fog, then lay the same water the surface had.
-                    c.GetEdifice(map)?.Destroy();
-                    map.roofGrid.SetRoof(c, null);
-                    map.fogGrid.Unfog(c);
+                    c.GetEdifice(sky)?.Destroy();
+                    sky.roofGrid.SetRoof(c, null);
+                    sky.fogGrid.Unfog(c);
                     skyTerrain.SetTerrain(c, below);
                     carved.Add(c);
                     // Close the mountain below: solid rock to its boundary.
@@ -204,24 +301,19 @@ namespace AsAboveSoBelow
             }
             if (carved.Count == 0)
             {
-                LastSummary = "ran: " + stretches.Count + " tunnel stretch(es), all kept vanilla"
-                    + " (water flows into the rock)";
-                return;
+                return "nothing to lift";
             }
 
-            // Cut the channel like a vanilla river, not a slit: a walkable
-            // bank of the rock's rough floor on every mass-rock neighbor
-            // (ore veins stay standing - an exposed seam by the stream), and
-            // an unfogged rim ring so no gray fog skirt creeps over the banks
-            // (live report 2026-07-24: "gray fog of war shadow on its banks").
+            // Cut the channel like a vanilla river, not a slit: walkable rock
+            // banks (ore seams stay standing) and an unfogged rim ring.
             List<IntVec3> banks = new List<IntVec3>();
-            CarveBanks(map, carved, banks);
-            UnfogSolidNeighbors(map, carved);
-            UnfogSolidNeighbors(map, banks);
+            CarveBanks(sky, carved, banks);
+            UnfogSolidNeighbors(sky, carved);
+            UnfogSolidNeighbors(sky, banks);
 
             // Flow data: clone the graph and copy the per-cell flow list when
-            // the ground actually has them.
-            WaterInfo skyWater = map.waterInfo;
+            // the ground actually has them (idempotent overwrite).
+            WaterInfo skyWater = sky.waterInfo;
             if (hasGraph)
             {
                 skyWater.riverGraph = new List<RiverNode>();
@@ -257,38 +349,80 @@ namespace AsAboveSoBelow
                 {
                     IntVec3 dir = GenAdj.CardinalDirections[d];
                     IntVec3 n = c + dir;
-                    if (!n.InBounds(map) || skyTerrain.TerrainAt(n) != air)
+                    if (!n.InBounds(sky) || skyTerrain.TerrainAt(n) != air)
                     {
                         continue;
                     }
                     if (!anyDirection)
                     {
                         // No flow information at all: every ledge pours.
-                        SpawnLip(map, c, Rot4.FromIntVec3(dir), inflow: false);
+                        SpawnLip(sky, c, Rot4.FromIntVec3(dir), inflow: false);
                         TrySpawnBase(ground, n, basesPlaced);
                         break;
                     }
                     float dot = Vector3.Dot(flowDir, dir.ToVector3());
                     if (dot > LipFlowDot)
                     {
-                        SpawnLip(map, c, Rot4.FromIntVec3(dir), inflow: false);
+                        SpawnLip(sky, c, Rot4.FromIntVec3(dir), inflow: false);
                         TrySpawnBase(ground, n, basesPlaced);
                         break;
                     }
                     if (dot < -LipFlowDot)
                     {
-                        SpawnLip(map, c, Rot4.FromIntVec3(dir), inflow: true);
+                        SpawnLip(sky, c, Rot4.FromIntVec3(dir), inflow: true);
                         break;
                     }
                 }
             }
-            LastSummary = "lifted " + lifted + " mountain-source stretch(es): " + carved.Count
-                + " water cells + " + banks.Count + " banks on the sky, ground sealed solid below; kept "
-                + keptVanilla + " through-tunnel(s) vanilla; "
-                + map.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " waterfall lips, "
-                + basesPlaced.Count + " bases (sky map " + map.uniqueID
-                + (hasFlowData ? ", full flow data" : ", no ground flow data") + ")";
-            ABLog.Dev("Sky rivers: " + LastSummary);
+            return carved.Count + " water cells + " + banks.Count + " banks lifted, ground sealed; "
+                + sky.listerThings.ThingsOfDef(ABDefOf.AB_Waterfall).Count + " lips, "
+                + basesPlaced.Count + " bases (sky map " + sky.uniqueID + ")";
+        }
+
+        /// <summary>Tunnel apron kept at the upstream face, in cells: the
+        /// river visibly dives into the mountain before the lift takes over.</summary>
+        private const int ApronDepth = 10;
+
+        /// <summary>Cells of the stretch farther than ApronDepth (4-way BFS
+        /// within the stretch) from every inflow boundary cell.</summary>
+        private static List<IntVec3> DownstreamSubset(Map ground, List<IntVec3> stretch,
+            List<IntVec3> inflowSeeds)
+        {
+            HashSet<IntVec3> inStretch = new HashSet<IntVec3>(stretch);
+            Dictionary<IntVec3, int> dist = new Dictionary<IntVec3, int>();
+            Queue<IntVec3> open = new Queue<IntVec3>();
+            for (int i = 0; i < inflowSeeds.Count; i++)
+            {
+                dist[inflowSeeds[i]] = 0;
+                open.Enqueue(inflowSeeds[i]);
+            }
+            while (open.Count > 0)
+            {
+                IntVec3 c = open.Dequeue();
+                int d0 = dist[c];
+                if (d0 >= ApronDepth)
+                {
+                    continue; // beyond the apron: no need to expand further
+                }
+                for (int d = 0; d < 4; d++)
+                {
+                    IntVec3 n = c + GenAdj.CardinalDirections[d];
+                    if (inStretch.Contains(n) && !dist.ContainsKey(n))
+                    {
+                        dist[n] = d0 + 1;
+                        open.Enqueue(n);
+                    }
+                }
+            }
+            List<IntVec3> downstream = new List<IntVec3>();
+            for (int i = 0; i < stretch.Count; i++)
+            {
+                if (!dist.TryGetValue(stretch[i], out int dd) || dd > ApronDepth)
+                {
+                    downstream.Add(stretch[i]);
+                }
+            }
+            return downstream;
         }
 
         /// <summary>Contiguous (4-way) groups of under-mass river cells.</summary>
@@ -326,16 +460,27 @@ namespace AsAboveSoBelow
             return stretches;
         }
 
-        /// <summary>The hydrology verdict for one stretch. Crossings are
-        /// stretch cells cardinally adjacent to OPEN river (river outside the
-        /// mass); each is classified by the flow vector dotted with the
-        /// outward direction. Any inflow -> vanilla tunnel. All outflow ->
-        /// lift (mountain-source river). No flow data: a single crossing is a
-        /// terminal stretch, assumed source (lift); multiple crossings assume
-        /// a through-river (vanilla, the safe default).</summary>
-        internal static bool ShouldLift(Map ground, WaterInfo water, bool hasFlowData,
-            List<IntVec3> stretch, Func<IntVec3, bool> isMassRiver)
+        internal enum StretchVerdict
         {
+            Vanilla,
+            FullLift,
+            PartialLift
+        }
+
+        /// <summary>The per-face hydrology verdict (user spec rounds 8-10).
+        /// Crossings are stretch cells cardinally adjacent to OPEN water
+        /// outside the mass, classified by flow dotted with the outward
+        /// direction. All-outflow (mountain source) -> FullLift. Inflow AND
+        /// outflow (through-river) -> PartialLift: the upstream face keeps a
+        /// tunnel apron, everything downstream lifts (the river re-emerges on
+        /// the mountain top and falls off the exit). Inflow only (river dies
+        /// under the rock) -> Vanilla. Zero crossings (enclosed lake) ->
+        /// Vanilla. No flow data: single crossing = FullLift (terminal
+        /// source), otherwise Vanilla (safe).</summary>
+        internal static StretchVerdict AnalyzeStretch(Map ground, WaterInfo water, bool hasFlowData,
+            List<IntVec3> stretch, Func<IntVec3, bool> isMassRiver, out List<IntVec3> inflowSeeds)
+        {
+            inflowSeeds = new List<IntVec3>();
             TerrainGrid gt = ground.terrainGrid;
             int crossings = 0;
             int inflow = 0;
@@ -374,22 +519,75 @@ namespace AsAboveSoBelow
                     else if (dot < -0.2f)
                     {
                         inflow++;
+                        inflowSeeds.Add(c);
                     }
                 }
             }
             if (crossings == 0)
             {
-                return false; // enclosed water with no open connection: leave it
+                return StretchVerdict.Vanilla; // enclosed water: leave it
+            }
+            if (inflow > 0 && outflow > 0)
+            {
+                return StretchVerdict.PartialLift; // through-river: apron + lift
             }
             if (inflow > 0)
             {
-                return false; // water flows INTO the rock: vanilla tunnel
+                return StretchVerdict.Vanilla; // dies under the rock: tunnel
             }
             if (outflow > 0)
             {
-                return true; // every known crossing flows away: mountain source
+                return StretchVerdict.FullLift; // mountain source
             }
-            return crossings == 1; // no flow data: terminal stretch = source
+            return crossings == 1 ? StretchVerdict.FullLift : StretchVerdict.Vanilla;
+        }
+
+        /// <summary>The mass-crossing water stretch containing one cell, using
+        /// the live sky/ground predicates - the dev force-lift tool's entry.
+        /// Empty when the cell is not mass-crossing water.</summary>
+        internal static List<IntVec3> StretchAt(Map sky, Map ground, IntVec3 cell)
+        {
+            TerrainGrid groundTerrain = ground.terrainGrid;
+            TerrainGrid skyTerrain = sky.terrainGrid;
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            bool IsSkyMass(IntVec3 mc)
+            {
+                TerrainDef t = skyTerrain.TerrainAt(mc);
+                return t != null && t != air && t != ABDefOf.AB_RoofSurface && !t.IsWater;
+            }
+            bool IsMassRiver(IntVec3 mc)
+            {
+                TerrainDef b = groundTerrain.BaseTerrainAt(mc);
+                if (b == null || !b.IsWater)
+                {
+                    return false;
+                }
+                return IsSkyMass(mc) || FlankedByMass(sky, mc, IsSkyMass)
+                    || MountainClose(sky, mc, IsSkyMass);
+            }
+            List<IntVec3> stretch = new List<IntVec3>();
+            if (!cell.InBounds(ground) || !IsMassRiver(cell))
+            {
+                return stretch;
+            }
+            HashSet<IntVec3> visited = new HashSet<IntVec3> { cell };
+            Queue<IntVec3> open = new Queue<IntVec3>();
+            open.Enqueue(cell);
+            while (open.Count > 0)
+            {
+                IntVec3 c = open.Dequeue();
+                stretch.Add(c);
+                for (int d = 0; d < 4; d++)
+                {
+                    IntVec3 n = c + GenAdj.CardinalDirections[d];
+                    if (n.InBounds(ground) && !visited.Contains(n) && IsMassRiver(n))
+                    {
+                        visited.Add(n);
+                        open.Enqueue(n);
+                    }
+                }
+            }
+            return stretch;
         }
 
         /// <summary>Closes the mountain at ground level: the river cell
@@ -464,14 +662,15 @@ namespace AsAboveSoBelow
                 {
                     return false;
                 }
-                // Tunnel (thick roof over the water) or canyon (massif
-                // flanking both sides) - same union the genstep uses.
-                return IsThickRoofMass(c) || FlankedByMass(ground, c, IsThickRoofMass);
+                // Tunnel, canyon, or closeness - same union the genstep uses.
+                return IsThickRoofMass(c) || FlankedByMass(ground, c, IsThickRoofMass)
+                    || MountainClose(ground, c, IsThickRoofMass);
             }
             List<List<IntVec3>> stretches = CollectStretches(ground, IsMassRiver);
             for (int i = 0; i < stretches.Count; i++)
             {
-                if (ShouldLift(ground, water, hasFlowData, stretches[i], IsMassRiver))
+                if (AnalyzeStretch(ground, water, hasFlowData, stretches[i], IsMassRiver, out _)
+                    != StretchVerdict.Vanilla)
                 {
                     return true;
                 }
