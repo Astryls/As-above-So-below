@@ -28,6 +28,12 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<Targeter, Action<LocalTargetInfo>> ActionRef =
             AccessTools.FieldRefAccess<Targeter, Action<LocalTargetInfo>>("action");
 
+        private static readonly AccessTools.FieldRef<Targeter, TargetingParameters> TargetParamsRef =
+            AccessTools.FieldRefAccess<Targeter, TargetingParameters>("targetParams");
+
+        private static readonly AccessTools.FieldRef<Targeter, Func<LocalTargetInfo, bool>> TargetValidatorRef =
+            AccessTools.FieldRefAccess<Targeter, Func<LocalTargetInfo, bool>>("targetValidator");
+
         private static readonly List<Pawn> tmpPawns = new List<Pawn>();
 
         internal static bool TryHandle(Targeter targeter)
@@ -69,8 +75,16 @@ namespace AsAboveSoBelow
             }
             else if (action != null)
             {
-                mode = AttackMode.ForceMelee;
                 CollectSelectedDraftedPawns(tmpPawns);
+                if (tmpPawns.Count == 0)
+                {
+                    // No drafted attackers => this is a config/tool targeter (connect
+                    // fixture to bed, pick a cell, modded selectors), NOT the melee squad
+                    // path. Widen it to the level below with the targeter's own params
+                    // instead of letting it die on a vanilla same-map resolve.
+                    return TryHandleActionTargeter(targeter);
+                }
+                mode = AttackMode.ForceMelee;
             }
             else
             {
@@ -293,6 +307,99 @@ namespace AsAboveSoBelow
             CrossLevelOrders.RouteThenRun(caster, lower, entry,
                 delegate { src.OrderForceTarget(new LocalTargetInfo(cellCopy)); });
             return true;
+        }
+
+        /// <summary>Action-only (non-attack) targeters - a building's own targeting
+        /// gizmo (DBH "connect fixture to bed"), a cell picker, any modded
+        /// BeginTargeting(params, action) with no drafted attackers behind it. Vanilla
+        /// resolves the click against Find.CurrentMap only, so a below thing seen through
+        /// open air is unclickable. We resolve the below target with the targeter's OWN
+        /// params + validator and fire its action on it directly (no pawn routing - these
+        /// are instantaneous config actions). CurrentMap is pointed at the target's level
+        /// for the call so any map-scoped logic inside a foreign action resolves right;
+        /// the target itself already carries its map. A matching same-map thing under the
+        /// cursor stays vanilla's business.</summary>
+        private static bool TryHandleActionTargeter(Targeter targeter)
+        {
+            if (!BelowSelection.TryGetBelowView(out Map sky, out Map lower) || sky != Find.CurrentMap)
+            {
+                return false;
+            }
+            TargetingParameters tp = TargetParamsRef(targeter);
+            Action<LocalTargetInfo> action = ActionRef(targeter);
+            if (tp == null || action == null)
+            {
+                return false;
+            }
+            Func<LocalTargetInfo, bool> validator = TargetValidatorRef(targeter);
+            // A real same-map thing under the mouse that the targeter accepts: vanilla's.
+            foreach (LocalTargetInfo lt in GenUI.TargetsAtMouse(tp, thingsOnly: true))
+            {
+                if (lt.Thing != null)
+                {
+                    return false;
+                }
+            }
+            LocalTargetInfo target = ResolveBelowActionTarget(sky, lower, tp, validator);
+            if (!target.IsValid)
+            {
+                return false;
+            }
+            Map targetMap = target.Thing?.MapHeld ?? lower;
+            ABCurrentMapSwap.Token token = default;
+            bool swapped = targetMap != Find.CurrentMap && ABCurrentMapSwap.Swap(targetMap, out token);
+            try
+            {
+                action(target);
+            }
+            finally
+            {
+                if (swapped)
+                {
+                    ABCurrentMapSwap.Restore(token);
+                }
+            }
+            targeter.StopTargeting();
+            return true;
+        }
+
+        /// <summary>The below thing (preferred) or below cell under the cursor that the
+        /// action targeter's params + validator accept, mirroring the source-cast
+        /// resolution: a visible below thing first, then a bare open-air cell for
+        /// location-capable targeters.</summary>
+        private static LocalTargetInfo ResolveBelowActionTarget(Map sky, Map lower,
+            TargetingParameters tp, Func<LocalTargetInfo, bool> validator)
+        {
+            List<Thing> below = BelowSelection.SelectablesUnderMouse(sky, lower, UI.MouseMapPosition());
+            for (int i = 0; i < below.Count; i++)
+            {
+                LocalTargetInfo t = new LocalTargetInfo(below[i]);
+                if (tp.CanTarget(new TargetInfo(below[i]), null) && (validator == null || validator(t)))
+                {
+                    return t;
+                }
+            }
+            if (!tp.canTargetLocations)
+            {
+                return LocalTargetInfo.Invalid;
+            }
+            Vector3 mouse = UI.MouseMapPosition();
+            IntVec3 skyCell = mouse.ToIntVec3();
+            if (!skyCell.InBounds(sky) || sky.terrainGrid.TerrainAt(skyCell) != ABDefOf.AB_OpenAir)
+            {
+                return LocalTargetInfo.Invalid;
+            }
+            IntVec3 cell = LevelRenderer.ScreenToBelowPos(mouse).ToIntVec3();
+            if (!cell.InBounds(lower) || cell.Fogged(lower))
+            {
+                return LocalTargetInfo.Invalid;
+            }
+            LocalTargetInfo ct = new LocalTargetInfo(cell);
+            if (tp.CanTarget(new TargetInfo(cell, lower), null) && (validator == null || validator(ct)))
+            {
+                return ct;
+            }
+            return LocalTargetInfo.Invalid;
         }
 
         private static void CollectSelectedDraftedPawns(List<Pawn> into)

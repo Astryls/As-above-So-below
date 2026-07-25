@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using RimWorld;
@@ -520,6 +521,170 @@ namespace AsAboveSoBelow
                 return SelectorUtility.IsEquivalentRace(tp, sp);
             }
             return ti.def == si.def;
+        }
+
+        // --- Cross-level drag-box selection ---
+
+        /// <summary>The lower map's multi-selectable things whose screen position falls
+        /// inside the drag box AND are visible from above. Reuses vanilla's exact rect
+        /// scan by pointing Find.CurrentMap at the lower map for the read (the see-below
+        /// transform is plumb, so the same screen rect maps to the same cells) - zero
+        /// divergence from vanilla's own drag-box thing collection, including its
+        /// edge-item handling. Read-only: the swap is restored before anything selects.</summary>
+        internal static List<Thing> MultiSelectableBelowThingsInRect(Map sky, Map lower, Rect screenRect)
+        {
+            List<Thing> result = new List<Thing>();
+            if (lower == null || lower.Disposed || !ABCurrentMapSwap.Swap(lower, out ABCurrentMapSwap.Token token))
+            {
+                return result;
+            }
+            try
+            {
+                foreach (Thing t in ThingSelectionUtility.MultiSelectableThingsInScreenRectDistinct(screenRect))
+                {
+                    if (VisibleFromAbove(t, sky, lower))
+                    {
+                        result.Add(t);
+                    }
+                }
+            }
+            finally
+            {
+                ABCurrentMapSwap.Restore(token);
+            }
+            return result;
+        }
+
+        /// <summary>Selects everything a drag box covers across the sky AND the visible
+        /// surface below as ONE map, following vanilla's exact category priority
+        /// (colonists -> humanlikes -> resources -> pawns -> selectables). Sky things
+        /// select normally; below things add in place (no map switch / camera yank).
+        /// Colonist-bar portrait selection keeps vanilla priority. Mixed sky+below
+        /// selections are intended and handled downstream by the multi-order path.</summary>
+        internal static void HandleBelowDragBox(Selector selector, Map sky, Map lower, Rect screenRect, List<Thing> belowCands)
+        {
+            bool shift = Selector.ShiftIsHeld;
+            if (!shift)
+            {
+                selector.ClearSelection();
+            }
+            List<Thing> barColonists = Find.ColonistBar.MapColonistsOrCorpsesInScreenRect(screenRect);
+            if (barColonists.Count > 0)
+            {
+                for (int i = 0; i < barColonists.Count; i++)
+                {
+                    selector.Select(barColonists[i]);
+                }
+                return;
+            }
+            List<Thing> skyCands = ThingSelectionUtility.MultiSelectableThingsInScreenRectDistinct(screenRect).ToList();
+            // First non-empty category wins (each selector has the side effect of
+            // selecting its matches), mirroring vanilla's short-circuit priority chain.
+            _ = TrySelectDragCategory(selector, sky, skyCands, belowCands, IsColonistLike, SelectorUtility.SortInColonistBarOrder)
+                || TrySelectDragCategory(selector, sky, skyCands, belowCands, IsHumanlikeThing, null)
+                || TrySelectDragCategory(selector, sky, skyCands, belowCands, IsResourceThing, null)
+                || TrySelectDragCategory(selector, sky, skyCands, belowCands, IsPawnThing, null)
+                || TrySelectDragCategory(selector, sky, skyCands, belowCands, t => t.def.selectable, null);
+        }
+
+        private static bool TrySelectDragCategory(Selector selector, Map sky, List<Thing> skyCands,
+            List<Thing> belowCands, Predicate<Thing> pred, Action<List<Thing>> postProcessor)
+        {
+            List<Thing> matched = new List<Thing>();
+            for (int i = 0; i < skyCands.Count; i++)
+            {
+                if (pred(skyCands[i]))
+                {
+                    matched.Add(skyCands[i]);
+                }
+            }
+            for (int i = 0; i < belowCands.Count; i++)
+            {
+                if (pred(belowCands[i]))
+                {
+                    matched.Add(belowCands[i]);
+                }
+            }
+            if (matched.Count == 0)
+            {
+                return false;
+            }
+            postProcessor?.Invoke(matched);
+            // Sky things first (via vanilla Select, no switch) THEN below (AddInPlace,
+            // which bypasses SelectInternal's cross-map dedup) so the sky selects never
+            // wipe the below ones - keeps the mixed selection intact.
+            for (int i = 0; i < matched.Count; i++)
+            {
+                if (matched[i].MapHeld == sky)
+                {
+                    selector.Select(matched[i]);
+                }
+            }
+            for (int i = 0; i < matched.Count; i++)
+            {
+                if (matched[i].MapHeld != sky)
+                {
+                    AddInPlace(selector, matched[i]);
+                }
+            }
+            return true;
+        }
+
+        private static bool IsColonistLike(Thing t)
+        {
+            return t.def.category == ThingCategory.Pawn
+                && (((Pawn)t).RaceProps.Humanlike || (ModsConfig.BiotechActive && ((Pawn)t).RaceProps.IsMechanoid))
+                && t.Faction == Faction.OfPlayer;
+        }
+
+        private static bool IsHumanlikeThing(Thing t)
+        {
+            return t.def.category == ThingCategory.Pawn && ((Pawn)t).RaceProps.Humanlike;
+        }
+
+        private static bool IsResourceThing(Thing t) => t.def.CountAsResource;
+
+        private static bool IsPawnThing(Thing t) => t.def.category == ThingCategory.Pawn;
+    }
+
+    /// <summary>
+    /// Cross-level drag-box selection: a box dragged while looking down through the live
+    /// below view selects matching things on the sky AND the visible surface below as one
+    /// map. Only takes over when the box actually covers a visible below thing; a sky-only
+    /// box falls straight through to vanilla.
+    /// </summary>
+    [HarmonyPatch(typeof(Selector), "SelectInsideDragBox")]
+    internal static class Patch_Selector_SelectInsideDragBox_Below
+    {
+        private static readonly AccessTools.FieldRef<Selector, DragBox> DragBoxRef =
+            AccessTools.FieldRefAccess<Selector, DragBox>("dragBox");
+
+        private static bool Prefix(Selector __instance)
+        {
+            if (!ABGuard.On(ABGuard.Ui))
+            {
+                return true;
+            }
+            try
+            {
+                if (!BelowSelection.TryGetBelowView(out Map sky, out Map lower))
+                {
+                    return true;
+                }
+                Rect screenRect = DragBoxRef(__instance).ScreenRect;
+                List<Thing> belowCands = BelowSelection.MultiSelectableBelowThingsInRect(sky, lower, screenRect);
+                if (belowCands.Count == 0)
+                {
+                    return true; // nothing below in the box: vanilla owns it entirely.
+                }
+                BelowSelection.HandleBelowDragBox(__instance, sky, lower, screenRect, belowCands);
+                return false;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Ui, e, "below drag box select");
+                return true;
+            }
         }
     }
 
