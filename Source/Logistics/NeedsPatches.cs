@@ -30,6 +30,12 @@ namespace AsAboveSoBelow
 
         internal static readonly Dictionary<int, int> FoodNext = new Dictionary<int, int>();
 
+        internal static readonly Dictionary<int, int> DrugNext = new Dictionary<int, int>();
+
+        internal static readonly Dictionary<int, int> PatientBedNext = new Dictionary<int, int>();
+
+        internal static readonly Dictionary<int, int> DeathrestNext = new Dictionary<int, int>();
+
         internal static bool EligibleColonist(Pawn pawn)
         {
             return pawn != null && pawn.Spawned && pawn.IsColonistPlayerControlled
@@ -321,6 +327,292 @@ namespace AsAboveSoBelow
                 return false;
             }
             StairRouter.Reroute(pawn, target, StairRouter.DestHint(source, target), ref stairs, ref exit);
+            job = CrossLevelWork.MakeStairsJob(stairs, exit);
+            return true;
+        }
+    }
+
+    /// <summary>Scheduled drugs across levels (parity P2 #10, 2026-07-25).
+    /// JobGiver_TakeDrugsForDrugPolicy searches inventory, then the pawn's OWN
+    /// map, then pack animals - so a colonist whose scheduled doses sit in a
+    /// stockpile one level away silently skips them forever. When the vanilla
+    /// giver comes up empty and a linked level holds a valid stack of a due
+    /// policy drug (vanilla's own validator: unforbidden, reservable, socially
+    /// proper), take the stairs; the giver re-fires on arrival and ingests
+    /// normally.</summary>
+    [HarmonyPatch(typeof(JobGiver_TakeDrugsForDrugPolicy), "TryGiveJob")]
+    internal static class Patch_ScheduledDrugs_CrossLevel
+    {
+        private static void Postfix(Pawn pawn, ref Job __result)
+        {
+            if (__result != null || !ABGuard.On(ABGuard.Logistics))
+            {
+                return;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelNeeds)
+            {
+                return;
+            }
+            try
+            {
+                if (!NeedsCross.EligibleColonist(pawn))
+                {
+                    return;
+                }
+                DrugPolicy policy = pawn.drugs?.CurrentPolicy;
+                if (policy == null)
+                {
+                    return;
+                }
+                LevelComp comp = pawn.Map.Levels();
+                if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+                {
+                    return;
+                }
+                if (NeedsCross.OnCooldown(NeedsCross.DrugNext, pawn))
+                {
+                    return;
+                }
+                for (int i = 0; i < policy.Count; i++)
+                {
+                    ThingDef drug = policy[i].drug;
+                    if (drug == null || !pawn.drugs.ShouldTryToTakeScheduledNow(drug))
+                    {
+                        continue;
+                    }
+                    if (TryDrugTowards(pawn, comp.upperMap, drug, out Job job)
+                        || TryDrugTowards(pawn, comp.lowerMap, drug, out job))
+                    {
+                        __result = job;
+                        return;
+                    }
+                }
+                NeedsCross.Charge(NeedsCross.DrugNext, pawn);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "cross level scheduled drugs");
+            }
+        }
+
+        private static bool TryDrugTowards(Pawn pawn, Map target, ThingDef drug, out Job job)
+        {
+            job = null;
+            if (target == null || target.Disposed
+                || target.listerThings.ThingsOfDef(drug).Count == 0)
+            {
+                return false;
+            }
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            {
+                return false;
+            }
+            Thing found = null;
+            if (!ABVirtualPosition.WithPawnAt(pawn, target, exit.Position, delegate
+            {
+                found = GenClosest.ClosestThingReachable(pawn.Position, target,
+                    ThingRequest.ForDef(drug), PathEndMode.ClosestTouch,
+                    TraverseParms.For(pawn), 9999f,
+                    (Thing x) => x.def.IsDrug && !x.IsForbidden(pawn)
+                        && pawn.CanReserve(x, 10, 1) && x.IsSociallyProper(pawn));
+                return found != null;
+            }))
+            {
+                return false;
+            }
+            StairRouter.Reroute(pawn, target, StairRouter.DestHint(found, target), ref stairs, ref exit);
+            job = CrossLevelWork.MakeStairsJob(stairs, exit);
+            return true;
+        }
+    }
+
+    /// <summary>Patient self-bedding across levels (parity P2 #11,
+    /// 2026-07-25). JobGiver_PatientGoToBed resolves through map-scoped
+    /// RestUtility.FindBedFor, so an ambulatory sick colonist on a level with
+    /// no free medical bed lies down on the floor instead of walking to the
+    /// hospital one level away. The vanilla guard chain is re-run exactly
+    /// (urgency, timetable-with-surgery/tend exception, disturbance) before
+    /// probing linked levels with the same finder; downed pawns are excluded
+    /// (crawling never crosses levels - the rescue bridge owns them).</summary>
+    [HarmonyPatch(typeof(JobGiver_PatientGoToBed), "TryGiveJob")]
+    internal static class Patch_PatientGoToBed_CrossLevel
+    {
+        private static void Postfix(JobGiver_PatientGoToBed __instance, Pawn pawn, ref Job __result)
+        {
+            if (__result != null || !ABGuard.On(ABGuard.Logistics))
+            {
+                return;
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelNeeds)
+            {
+                return;
+            }
+            try
+            {
+                if (!NeedsCross.EligibleColonist(pawn))
+                {
+                    return;
+                }
+                if (__instance.urgentOnly && !HealthAIUtility.ShouldSeekMedicalRestUrgent(pawn))
+                {
+                    return;
+                }
+                if (!HealthAIUtility.ShouldSeekMedicalRest(pawn))
+                {
+                    return;
+                }
+                if (__instance.respectTimetable && RestUtility.TimetablePreventsLayDown(pawn)
+                    && !HealthAIUtility.ShouldHaveSurgeryDoneNow(pawn)
+                    && !HealthAIUtility.ShouldBeTendedNowByPlayer(pawn))
+                {
+                    return;
+                }
+                if (RestUtility.DisturbancePreventsLyingDown(pawn))
+                {
+                    return;
+                }
+                LevelComp comp = pawn.Map.Levels();
+                if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+                {
+                    return;
+                }
+                if (NeedsCross.OnCooldown(NeedsCross.PatientBedNext, pawn))
+                {
+                    return;
+                }
+                if (TryPatientBedTowards(pawn, comp.upperMap, out Job job)
+                    || TryPatientBedTowards(pawn, comp.lowerMap, out job))
+                {
+                    __result = job;
+                    return;
+                }
+                NeedsCross.Charge(NeedsCross.PatientBedNext, pawn);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "cross level patient bedding");
+            }
+        }
+
+        private static bool TryPatientBedTowards(Pawn pawn, Map target, out Job job)
+        {
+            job = null;
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            {
+                return false;
+            }
+            Thing found = null;
+            if (!ABVirtualPosition.WithPawnAt(pawn, target, exit.Position,
+                () => (found = RestUtility.FindBedFor(pawn, pawn, checkSocialProperness: false)) != null))
+            {
+                return false;
+            }
+            StairRouter.Reroute(pawn, target, StairRouter.DestHint(found, target), ref stairs, ref exit);
+            job = CrossLevelWork.MakeStairsJob(stairs, exit);
+            return true;
+        }
+    }
+
+    /// <summary>Deathrest across levels (parity P2 #12, Biotech, 2026-07-25).
+    /// JobGiver_GetDeathrest never returns null - with no bed on the pawn's
+    /// OWN map it deathrests on the bare ground - so a sanguophage whose
+    /// casket sits one level away collapsed at the stairs instead of walking
+    /// to it. When the vanilla result is the ground-sleep fallback (a cell,
+    /// not a bed), route toward the ASSIGNED deathrest casket anywhere in the
+    /// column first (one hop at a time, like owned beds), else probe linked
+    /// levels with vanilla's own finder; the giver re-fires on arrival.</summary>
+    [HarmonyPatch(typeof(JobGiver_GetDeathrest), "TryGiveJob")]
+    internal static class Patch_Deathrest_CrossLevel
+    {
+        private static void Postfix(JobGiver_GetDeathrest __instance, Pawn pawn, ref Job __result)
+        {
+            if (!ModsConfig.BiotechActive || !ABGuard.On(ABGuard.Logistics))
+            {
+                return;
+            }
+            if (__result == null || (__result.targetA.IsValid && __result.targetA.HasThing))
+            {
+                return; // found a real bed or casket locally: vanilla wins.
+            }
+            ABSettings settings = ABMod.Settings;
+            if (settings == null || !settings.crossLevelNeeds)
+            {
+                return;
+            }
+            try
+            {
+                if (!NeedsCross.EligibleColonist(pawn))
+                {
+                    return;
+                }
+                if (pawn.needs == null || !pawn.needs.TryGetNeed(out Need_Deathrest need)
+                    || need.CurLevelPercentage > __instance.maxNeedPercent)
+                {
+                    return;
+                }
+                if (pawn.InMentalState && !pawn.MentalState.AllowRestingInBed)
+                {
+                    return;
+                }
+                if (pawn.roping != null && pawn.roping.IsRoped)
+                {
+                    return;
+                }
+                LevelComp comp = pawn.Map.Levels();
+                if (comp == null || (comp.upperMap == null && comp.lowerMap == null))
+                {
+                    return;
+                }
+                // Assigned casket elsewhere in the column: one hop toward it.
+                Building_Bed casket = pawn.ownership?.AssignedDeathrestCasket;
+                if (casket != null && casket.Spawned && casket.Map != pawn.Map)
+                {
+                    Map pawnGround = pawn.Map.GroundMap();
+                    if (pawnGround != null && pawnGround == casket.Map.GroundMap())
+                    {
+                        Map nextMap = casket.Map.Level() > comp.level ? comp.upperMap : comp.lowerMap;
+                        IntVec3 dest = casket.Map == nextMap ? casket.Position : IntVec3.Invalid;
+                        if (CrossLevelWork.TryStairsJobToward(pawn, nextMap, dest, out Job hop))
+                        {
+                            __result = hop;
+                        }
+                        return;
+                    }
+                }
+                if (NeedsCross.OnCooldown(NeedsCross.DeathrestNext, pawn))
+                {
+                    return;
+                }
+                if (TryDeathrestBedTowards(pawn, comp.upperMap, out Job job)
+                    || TryDeathrestBedTowards(pawn, comp.lowerMap, out job))
+                {
+                    __result = job;
+                    return;
+                }
+                NeedsCross.Charge(NeedsCross.DeathrestNext, pawn);
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "cross level deathrest");
+            }
+        }
+
+        private static bool TryDeathrestBedTowards(Pawn pawn, Map target, out Job job)
+        {
+            job = null;
+            if (!CrossLevelWork.TryResolveStairs(pawn, target, out Building_ABStairs stairs, out Building_ABStairs exit))
+            {
+                return false;
+            }
+            Thing found = null;
+            if (!ABVirtualPosition.WithPawnAt(pawn, target, exit.Position,
+                () => (found = RestUtility.FindBedFor(pawn)) != null))
+            {
+                return false;
+            }
+            StairRouter.Reroute(pawn, target, StairRouter.DestHint(found, target), ref stairs, ref exit);
             job = CrossLevelWork.MakeStairsJob(stairs, exit);
             return true;
         }

@@ -370,6 +370,15 @@ namespace AsAboveSoBelow
             {
                 return true;
             }
+            // Scheduled surgery counts as doctor work even on a healthy,
+            // walking pawn (parity P1 #6, 2026-07-25): without this a BUSY
+            // surgeon's better-work probe skipped the Doctor bit for a level
+            // whose only "patient" is a bionics candidate, so the operation
+            // waited for the surgeon to go fully idle.
+            if (p.health.surgeryBills != null && p.health.surgeryBills.AnyShouldDoNow)
+            {
+                return true;
+            }
             return p.InBed() && HealthAIUtility.ShouldSeekMedicalRest(p);
         }
 
@@ -418,6 +427,64 @@ namespace AsAboveSoBelow
             catch
             {
                 // Cache freshness only; never let it break spawning.
+            }
+        }
+    }
+
+    /// <summary>Fire is the highest-stakes freshness case (parity P1 #7,
+    /// 2026-07-25): the emergency migration path reads the live fire lister
+    /// and responds instantly, but the BETTER-WORK path (a pawn busy on
+    /// low-priority work whose Firefighter priority is top) consults the
+    /// summary's Firefighter bit, which could be a TTL (600 ticks) stale.
+    /// A spreading fire earns an instant version bump: probes re-arm and the
+    /// touched map's summary rebuilds on next read. Fire declares its own
+    /// SpawnSetup, so this never touches the base Thing method.</summary>
+    [HarmonyPatch(typeof(Fire), nameof(Fire.SpawnSetup))]
+    internal static class Patch_FireSpawn_WorkChanged
+    {
+        private static void Postfix(Fire __instance)
+        {
+            try
+            {
+                Map map = __instance?.Map;
+                if (map != null && map.ConnectedToOtherLevel())
+                {
+                    LevelWorkSummary.Notify_WorkChanged(map);
+                }
+            }
+            catch
+            {
+                // Cache freshness only; never let it break spawning.
+            }
+        }
+    }
+
+    /// <summary>New bills re-arm the column immediately (parity P1 #6/#8 +
+    /// P4 #18 cadence, 2026-07-25): adding a bill - workbench production OR
+    /// scheduled surgery (the surgery bill stack's giver is the PAWN) - used
+    /// to wait out both the work-summary TTL (busy crafters' probes skipped
+    /// the stale bills/Doctor bits) and the demand-cache TTL (ingredient
+    /// ferries idled). One postfix at the shared AddBill sink bumps the work
+    /// version and wakes the demand cache for the giver's map, mirroring the
+    /// blueprint-spawn hook. Load-time scribe restores bypass AddBill, so
+    /// this fires only on real player/runtime additions.</summary>
+    [HarmonyPatch(typeof(BillStack), nameof(BillStack.AddBill))]
+    internal static class Patch_BillAdded_WorkChanged
+    {
+        private static void Postfix(BillStack __instance)
+        {
+            try
+            {
+                Map map = __instance?.billGiver?.Map;
+                if (map != null && map.ConnectedToOtherLevel())
+                {
+                    LevelWorkSummary.Notify_WorkChanged(map);
+                    CrossLevelDemand.Invalidate(map);
+                }
+            }
+            catch
+            {
+                // Cache freshness only; never let it break bill creation.
             }
         }
     }
