@@ -221,6 +221,84 @@ namespace AsAboveSoBelow
             return cat == ThingCategory.Item || cat == ThingCategory.Building;
         }
 
+        /// <summary>Best right-clickable below thing under (or immediately beside)
+        /// the cursor when looking down through the live below view: the nearest
+        /// visible pawn by rendered center, else a visible building/item in the
+        /// cursor cell or one of its 8 neighbours. Hands back the SURFACE cell so a
+        /// cross-level right-click aims at the building exactly where the renderer
+        /// draws it - left-click selection already hit-tests this way, this brings
+        /// right-click ordering to parity. The cursor cell wins ties so a dead-on
+        /// click never prefers a neighbour. Only visible-from-above things qualify,
+        /// so the one-way mirror still holds.</summary>
+        internal static bool TryBelowRightClickCell(Map sky, Map lower, Vector3 clickPos, out IntVec3 cell)
+        {
+            cell = IntVec3.Invalid;
+            if (sky == null || lower == null || lower.Disposed)
+            {
+                return false;
+            }
+            Pawn bestPawn = null;
+            float bestPawnDist = float.MaxValue;
+            IReadOnlyList<Pawn> pawns = lower.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                Pawn pawn = pawns[i];
+                if (pawn == null || !pawn.def.selectable || pawn.IsHiddenFromPlayer()
+                    || !VisibleFromAbove(pawn, sky, lower))
+                {
+                    continue;
+                }
+                float dist = (LevelRenderer.ShiftedBelowDrawPos(pawn.DrawPos) - clickPos).MagnitudeHorizontal();
+                if (dist < ClickRadius && dist < bestPawnDist)
+                {
+                    bestPawnDist = dist;
+                    bestPawn = pawn;
+                }
+            }
+            if (bestPawn != null)
+            {
+                cell = bestPawn.Position;
+                return true;
+            }
+            IntVec3 origin = LevelRenderer.ScreenToBelowPos(clickPos).ToIntVec3();
+            IntVec3 best = IntVec3.Invalid;
+            float bestD = float.MaxValue;
+            for (int i = -1; i < 8; i++)
+            {
+                IntVec3 c = i < 0 ? origin : origin + GenAdj.AdjacentCells[i];
+                if (!c.InBounds(lower) || !CellVisibleFromAbove(c, sky, lower))
+                {
+                    continue;
+                }
+                List<Thing> things = lower.thingGrid.ThingsListAtFast(c);
+                bool has = false;
+                for (int j = 0; j < things.Count; j++)
+                {
+                    if (IsBelowSelectableThing(things[j]))
+                    {
+                        has = true;
+                        break;
+                    }
+                }
+                if (!has)
+                {
+                    continue;
+                }
+                float d = (c.ToVector3Shifted() - clickPos).MagnitudeHorizontal();
+                if (d < bestD)
+                {
+                    bestD = d;
+                    best = c;
+                }
+            }
+            if (best.IsValid)
+            {
+                cell = best;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Whether the sky level itself has something selectable under the
         /// cursor; if so we leave the click entirely to vanilla.</summary>
         internal static bool SkyBlocksSelection(Map sky, Vector3 clickPos)

@@ -977,17 +977,49 @@ namespace AsAboveSoBelow
             {
                 return true;
             }
+            // See-below right-click parity (user report "can't right click the well"):
+            // when looking down through the live below view, snap the click onto a
+            // visible below BUILDING/item/pawn under or beside the cursor so its cell
+            // drives the whole cross-level menu. The target level was keyed off the
+            // raw clicked cell's open-air terrain ALONE, which missed a building whose
+            // cell the cursor rounded just shy of - the render draws the building where
+            // it is, but the hit-test looked one cell over. Only refines when the cheap
+            // test would NOT already resolve below, so an open-air click pays nothing.
+            if (selectedPawns != null && selectedPawns.Count == 1 && Find.CurrentMap != null
+                && CrossLevelOrders.ResolveTargetMap(Find.CurrentMap, clickPos, out _) == Find.CurrentMap
+                && BelowSelection.TryGetLiveBelowView(out Map skyV, out Map lowerV)
+                && BelowSelection.TryBelowRightClickCell(skyV, lowerV, clickPos, out IntVec3 belowCell))
+            {
+                clickPos = belowCell.ToVector3Shifted();
+            }
             if (!CrossLevelOrders.ShouldRedirect(selectedPawns, clickPos, out Map cur, out Map targetMap, out Pawn pawn))
             {
                 if (Prefs.DevMode && selectedPawns != null && selectedPawns.Count == 1)
                 {
                     Pawn sp = selectedPawns[0];
                     Map below = cur?.Levels()?.lowerMap;
+                    IntVec3 rc = clickPos.ToIntVec3();
+                    string terr = (cur != null && rc.InBounds(cur)) ? cur.terrainGrid.TerrainAt(rc)?.defName : "oob";
+                    string belowBld = "n/a";
+                    if (below != null && rc.InBounds(below))
+                    {
+                        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                        List<Thing> bthings = below.thingGrid.ThingsListAtFast(rc);
+                        for (int i = 0; i < bthings.Count; i++)
+                        {
+                            if (bthings[i].def.category == ThingCategory.Building || bthings[i].def.category == ThingCategory.Item)
+                            {
+                                sb.Append(bthings[i].LabelShort).Append(",");
+                            }
+                        }
+                        belowBld = sb.Length == 0 ? "(none)" : sb.ToString();
+                    }
                     Log.Message("[AB RMB diag] NO redirect: sel=" + sp?.LabelShort
                         + " selMapL=" + (sp?.Map != null ? sp.Map.Level().ToString() : "?")
                         + " curL=" + (cur != null ? cur.Level().ToString() : "?")
                         + " targetL=" + (targetMap != null ? targetMap.Level().ToString() : "?")
-                        + " hasBelow=" + (below != null) + " commandable=" + CrossLevelOrders.PlayerCommandable(sp));
+                        + " cell=" + rc + " skyTerr=" + terr + " belowBld=[" + belowBld + "]"
+                        + " hasBelow=" + (below != null));
                 }
                 // Multi-pawn cross-level orders: group move/attack across the column.
                 if (CrossLevelOrders.ShouldRedirectMulti(selectedPawns, clickPos,
