@@ -454,7 +454,8 @@ namespace AsAboveSoBelow
             try
             {
                 Thing carried = p.carryTracker?.CarriedThing;
-                if (carried == null || !p.IsColonistPlayerControlled || p.Drafted || p.GetLord() != null)
+                if (carried == null || p.Drafted || p.GetLord() != null
+                    || (!p.IsColonistPlayerControlled && !p.IsColonyMechPlayerControlled))
                 {
                     return;
                 }
@@ -499,14 +500,31 @@ namespace AsAboveSoBelow
                     }
                     return;
                 }
-                Job store = HaulAIUtility.HaulToStorageJob(p, carried, forced: false);
+                // ITEM CARGO: land it FIRST, then build every continuation
+                // against the RESULTING thing. Job cleanup drops the carried
+                // thing the moment this job ends anyway (none of our jobs set
+                // carryThingAfterJob), and a Near-drop can MERGE the cargo
+                // into a stack already lying at the exit - destroying the
+                // Thing a pre-built store job targeted and silently killing
+                // the store leg. One stray stack at an interchange then made
+                // every later arrival merge and strand: the "haul up, then
+                // leave it at the top of the stairs" pile (2026-07-25).
+                if (!p.carryTracker.TryDropCarriedThing(p.Position, ThingPlaceMode.Near, out Thing landed)
+                    || landed == null || !landed.Spawned)
+                {
+                    return;
+                }
+                // Re-arm the import pin under the landed stack's own id: the
+                // merge target can be a different Thing than Transfer pinned.
+                CrossLevelDemand.NoteTransferred(landed, cameFrom, p.Map);
+                Job store = HaulAIUtility.HaulToStorageJob(p, landed, forced: false);
                 if (store != null)
                 {
                     p.jobs?.jobQueue?.EnqueueFirst(store, JobTag.Misc);
                 }
-                else if (!TryOnwardDemandHop(p, carried, cameFrom))
+                else
                 {
-                    p.carryTracker.TryDropCarriedThing(p.Position, ThingPlaceMode.Near, out Thing _);
+                    TryOnwardDemandHop(p, landed, cameFrom);
                 }
             }
             catch (Exception e)
@@ -519,17 +537,19 @@ namespace AsAboveSoBelow
         /// interchange with NO local storage used to be dropped at the stair
         /// mouth for a second pawn to rediscover - the "hauling TO stairs
         /// instead of THROUGH stairs" report. When a FURTHER linked level
-        /// still wants the carried def (residual-aware, net of other pawns'
-        /// en-route cargo), the same pawn lands the load and immediately
-        /// carries it on through the next stairwell. Never routes back toward
-        /// the map the cargo just came from, so demand on both ends cannot
-        /// ping-pong a stack. Storage still wins when it exists (checked by
-        /// the caller first), per the one-big-map doctrine.</summary>
-        private static bool TryOnwardDemandHop(Pawn p, Thing carried, Map cameFrom)
+        /// still wants the landed def (residual-aware, net of other pawns'
+        /// en-route cargo), the same pawn immediately carries it on through
+        /// the next stairwell. landed is already spawned at the pawn's feet
+        /// (the caller lands cargo before any continuation). Never routes
+        /// back toward the map the cargo just came from, so demand on both
+        /// ends cannot ping-pong a stack. Storage still wins when it exists
+        /// (checked by the caller first), per the one-big-map doctrine.</summary>
+        private static bool TryOnwardDemandHop(Pawn p, Thing landed, Map cameFrom)
         {
             try
             {
-                if (!ABGuard.On(ABGuard.Logistics) || carried == null || carried is Pawn)
+                if (!ABGuard.On(ABGuard.Logistics) || landed == null || !landed.Spawned
+                    || landed is Pawn)
                 {
                     return false;
                 }
@@ -543,23 +563,16 @@ namespace AsAboveSoBelow
                 Building_ABStairs exit = null;
                 int wanted = 0;
                 if (comp.upperMap != null && comp.upperMap != cameFrom && !comp.upperMap.Disposed
-                    && CrossLevelDemand.TryRouteDemand(p, comp.upperMap, carried, out entry, out exit, out wanted))
+                    && CrossLevelDemand.TryRouteDemand(p, comp.upperMap, landed, out entry, out exit, out wanted))
                 {
                     onward = comp.upperMap;
                 }
                 else if (comp.lowerMap != null && comp.lowerMap != cameFrom && !comp.lowerMap.Disposed
-                    && CrossLevelDemand.TryRouteDemand(p, comp.lowerMap, carried, out entry, out exit, out wanted))
+                    && CrossLevelDemand.TryRouteDemand(p, comp.lowerMap, landed, out entry, out exit, out wanted))
                 {
                     onward = comp.lowerMap;
                 }
                 if (onward == null || entry == null || exit == null || wanted <= 0)
-                {
-                    return false;
-                }
-                // Land the load (the haul driver picks it back up - its toils
-                // need a spawned target), then continue the errand at once.
-                if (!p.carryTracker.TryDropCarriedThing(p.Position, ThingPlaceMode.Near, out Thing landed)
-                    || landed == null || !landed.Spawned)
                 {
                     return false;
                 }
