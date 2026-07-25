@@ -94,7 +94,7 @@ namespace AsAboveSoBelow
             // material registers no shortfall.
             Thing t = CrossLevelDemand.FindFetchableDemand(target, pawn.Map, pawn,
                 requireReachable: true, constructionOnly: true,
-                out Building_ABStairs stairs, out Building_ABStairs exit);
+                out Building_ABStairs stairs, out Building_ABStairs exit, out int wanted);
             int fixedCount = 0;
             Thing site = null;
             if (t == null)
@@ -112,9 +112,18 @@ namespace AsAboveSoBelow
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
             job.targetC = exit;
+            // Clamp to the residual construction shortfall (net of en-route
+            // cargo) and claim the errand: several idle suppliers used to each
+            // ferry a full stack for the same blueprint and strand the surplus
+            // at the stairs (2026-07-25 report).
             job.count = fixedCount > 0
                 ? fixedCount
-                : Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                : Mathf.Min(wanted > 0 ? wanted : int.MaxValue,
+                    Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def)));
+            if (fixedCount == 0 && wanted > 0)
+            {
+                CrossLevelDemand.NoteInFlight(pawn, target, t.def, job.count);
+            }
             // DIRECT-TO-BLUEPRINT LEG (user request 2026-07-24): resolve the
             // needing site now and carry the load ALL THE WAY there, reusing
             // the manual bring-and-build order's arrival continuation (drop at

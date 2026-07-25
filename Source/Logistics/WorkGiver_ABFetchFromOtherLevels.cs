@@ -164,12 +164,21 @@ namespace AsAboveSoBelow
                         // demanding island are measured there.
                         Thing demanded = CrossLevelDemand.FindFetchableDemand(demandMap, target, pawn,
                             requireReachable: true, constructionOnly: false,
-                            out Building_ABStairs _, out Building_ABStairs _);
+                            out Building_ABStairs _, out Building_ABStairs _, out int wanted);
                         demandFetch = demanded != null;
                         found = demandFetch;
                         if (demanded != null)
                         {
                             fetchDest = StairRouter.DestHint(demanded, target);
+                            // Claim the errand for the OUTBOUND leg already:
+                            // other idle fetchers must see this shortfall as
+                            // covered while this pawn rides up (2026-07-25
+                            // duplicate-ferry report). The haul-back refreshes
+                            // the claim with the real carried count.
+                            CrossLevelDemand.NoteInFlight(pawn, demandMap, demanded.def,
+                                Mathf.Min(wanted > 0 ? wanted : int.MaxValue,
+                                    Mathf.Min(demanded.stackCount,
+                                        pawn.carryTracker.MaxStackSpaceEver(demanded.def))));
                         }
                     }
                 }
@@ -220,14 +229,19 @@ namespace AsAboveSoBelow
                 // return cargo cannot strand on the wrong island.
                 Thing t = CrossLevelDemand.FindFetchableDemand(demandMap, sourceMap, pawn,
                     requireReachable: true, constructionOnly: false,
-                    out Building_ABStairs stairs, out Building_ABStairs exit);
+                    out Building_ABStairs stairs, out Building_ABStairs exit, out int wanted);
                 if (t == null || stairs == null || exit == null)
                 {
                     return;
                 }
                 Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
                 job.targetC = exit;
-                job.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                // Residual-clamped: carry what the origin level still wants,
+                // not the whole stack; refresh this pawn's claim to the real
+                // carried count (the outbound leg claimed an estimate).
+                job.count = Mathf.Min(wanted > 0 ? wanted : int.MaxValue,
+                    Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def)));
+                CrossLevelDemand.NoteInFlight(pawn, demandMap, t.def, job.count);
                 pawn.jobs?.TryTakeOrderedJob(job, JobTag.Misc);
             }
             catch (Exception e)

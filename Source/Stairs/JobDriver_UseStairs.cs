@@ -335,7 +335,7 @@ namespace AsAboveSoBelow
                 {
                     LevelCamera.FollowPawn(p);
                 }
-                FinishCarriedDelivery(p, intent);
+                FinishCarriedDelivery(p, intent, sourceMap);
                 PullFollowers(p, stairs, sourceMap, dest);
                 ContinueRide(p, dest, rideFinal, targetMap);
                 ABPendingOrders.TryRun(p, targetMap);
@@ -449,7 +449,7 @@ namespace AsAboveSoBelow
         /// at random. So we queue the store job ourselves; if no storage accepts
         /// it anymore (filled up mid-carry), drop it at the exit so it lands as
         /// a normal local haulable instead of riding around in someone's arms.</summary>
-        private static void FinishCarriedDelivery(Pawn p, CarriedIntent intent)
+        private static void FinishCarriedDelivery(Pawn p, CarriedIntent intent, Map cameFrom)
         {
             try
             {
@@ -504,7 +504,7 @@ namespace AsAboveSoBelow
                 {
                     p.jobs?.jobQueue?.EnqueueFirst(store, JobTag.Misc);
                 }
-                else
+                else if (!TryOnwardDemandHop(p, carried, cameFrom))
                 {
                     p.carryTracker.TryDropCarriedThing(p.Position, ThingPlaceMode.Near, out Thing _);
                 }
@@ -512,6 +512,71 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "carried delivery finish");
+            }
+        }
+
+        /// <summary>Onward relay hop (2026-07-25): cargo that arrived at an
+        /// interchange with NO local storage used to be dropped at the stair
+        /// mouth for a second pawn to rediscover - the "hauling TO stairs
+        /// instead of THROUGH stairs" report. When a FURTHER linked level
+        /// still wants the carried def (residual-aware, net of other pawns'
+        /// en-route cargo), the same pawn lands the load and immediately
+        /// carries it on through the next stairwell. Never routes back toward
+        /// the map the cargo just came from, so demand on both ends cannot
+        /// ping-pong a stack. Storage still wins when it exists (checked by
+        /// the caller first), per the one-big-map doctrine.</summary>
+        private static bool TryOnwardDemandHop(Pawn p, Thing carried, Map cameFrom)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Logistics) || carried == null || carried is Pawn)
+                {
+                    return false;
+                }
+                LevelComp comp = p.Map.Levels();
+                if (comp == null)
+                {
+                    return false;
+                }
+                Map onward = null;
+                Building_ABStairs entry = null;
+                Building_ABStairs exit = null;
+                int wanted = 0;
+                if (comp.upperMap != null && comp.upperMap != cameFrom && !comp.upperMap.Disposed
+                    && CrossLevelDemand.TryRouteDemand(p, comp.upperMap, carried, out entry, out exit, out wanted))
+                {
+                    onward = comp.upperMap;
+                }
+                else if (comp.lowerMap != null && comp.lowerMap != cameFrom && !comp.lowerMap.Disposed
+                    && CrossLevelDemand.TryRouteDemand(p, comp.lowerMap, carried, out entry, out exit, out wanted))
+                {
+                    onward = comp.lowerMap;
+                }
+                if (onward == null || entry == null || exit == null || wanted <= 0)
+                {
+                    return false;
+                }
+                // Land the load (the haul driver picks it back up - its toils
+                // need a spawned target), then continue the errand at once.
+                if (!p.carryTracker.TryDropCarriedThing(p.Position, ThingPlaceMode.Near, out Thing landed)
+                    || landed == null || !landed.Spawned)
+                {
+                    return false;
+                }
+                Job on = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, landed, entry);
+                on.targetC = exit;
+                on.count = Math.Min(wanted, Math.Min(landed.stackCount,
+                    p.carryTracker.MaxStackSpaceEver(landed.def)));
+                CrossLevelDemand.NoteInFlight(p, onward, landed.def, on.count);
+                p.jobs?.jobQueue?.EnqueueFirst(on, JobTag.Misc);
+                ABLog.Dev("Onward demand hop: " + p.LabelShort + " continues " + landed.LabelShort
+                    + " toward level " + onward.Level() + ".");
+                return true;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Logistics, e, "onward demand hop");
+                return false;
             }
         }
     }

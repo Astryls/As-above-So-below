@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
@@ -196,14 +197,134 @@ namespace AsAboveSoBelow
                 && Find.TickManager.TicksGame < until;
         }
 
+        // --- in-flight ledger (2026-07-25) --------------------------------
+        //
+        // "They need to be aware other pawns are doing a task that requires
+        // traversing levels" (user report): demand shortfalls were computed
+        // from map contents only, so every idle hauler saw the SAME shortfall
+        // until the cache TTL and each ferried a full stack - goods piled up
+        // at the stair mouths far beyond what the level wanted. Every
+        // demand-routed haul now claims what it carries toward which map;
+        // want queries net the ledger out, and job counts clamp to the
+        // residual, so the second hauler only covers what the first left.
+
+        private const int InFlightExpireTicks = 5000;
+
+        private struct InFlightEntry
+        {
+            public Pawn pawn;
+            public int demandMapId;
+            public ThingDef def;
+            public int count;
+            public int expire;
+        }
+
+        /// <summary>pawn id -> its single outstanding demand errand (a pawn
+        /// carries one demand load at a time, so re-claims overwrite).</summary>
+        private static readonly Dictionary<int, InFlightEntry> inFlight = new Dictionary<int, InFlightEntry>();
+
+        /// <summary>Claim a demand errand: pawn is about to carry count of def
+        /// toward demandMap. Called at job-build time by every demand-routed
+        /// flow (haul giver, fetch giver's outbound leg and haul-back, the
+        /// construction supply giver, and the onward interchange hop).</summary>
+        public static void NoteInFlight(Pawn pawn, Map demandMap, ThingDef def, int count)
+        {
+            if (pawn == null || demandMap == null || def == null || count <= 0)
+            {
+                return;
+            }
+            if (inFlight.Count > 128)
+            {
+                inFlight.Clear();
+            }
+            inFlight[pawn.thingIDNumber] = new InFlightEntry
+            {
+                pawn = pawn,
+                demandMapId = demandMap.uniqueID,
+                def = def,
+                count = count,
+                expire = Find.TickManager.TicksGame + InFlightExpireTicks
+            };
+        }
+
+        /// <summary>Sum of cargo currently en route toward demandMap for def,
+        /// excluding the acting pawn's own claim (its stale entry must never
+        /// block the errand it is executing). Entries self-validate: the pawn
+        /// must be alive and either mid cross-level errand (stairs/haul job)
+        /// or already on the demand map with the cargo in its arms (the store
+        /// leg); anything else is pruned on sight - no driver hooks needed.</summary>
+        private static int InFlightToward(Map demandMap, ThingDef def, Pawn ignore)
+        {
+            if (inFlight.Count == 0)
+            {
+                return 0;
+            }
+            int now = Find.TickManager.TicksGame;
+            int sum = 0;
+            List<int> dead = null;
+            foreach (KeyValuePair<int, InFlightEntry> kvp in inFlight)
+            {
+                InFlightEntry e = kvp.Value;
+                if (!InFlightLive(e, now))
+                {
+                    (dead ?? (dead = new List<int>())).Add(kvp.Key);
+                    continue;
+                }
+                if (ignore != null && kvp.Key == ignore.thingIDNumber)
+                {
+                    continue;
+                }
+                if (e.demandMapId == demandMap.uniqueID && e.def == def)
+                {
+                    sum += e.count;
+                }
+            }
+            if (dead != null)
+            {
+                for (int i = 0; i < dead.Count; i++)
+                {
+                    inFlight.Remove(dead[i]);
+                }
+            }
+            return sum;
+        }
+
+        private static bool InFlightLive(InFlightEntry e, int now)
+        {
+            if (now >= e.expire || e.pawn == null || e.pawn.Dead || !e.pawn.Spawned)
+            {
+                return false;
+            }
+            JobDef cur = e.pawn.CurJobDef;
+            if (cur == ABDefOf.AB_UseStairs || cur == ABDefOf.AB_HaulAcrossLevels
+                || cur == ABDefOf.AB_BulkHaulAcrossLevels)
+            {
+                return true;
+            }
+            // Store leg: arrived on the demand map, cargo still in hand.
+            return e.pawn.Map != null && e.pawn.Map.uniqueID == e.demandMapId
+                && e.pawn.carryTracker?.CarriedThing?.def == e.def;
+        }
+
         /// <summary>Push side: the pawn stands next to stack t on its own map;
         /// does a linked level want it, and which stairs actually reach the
         /// wanting island? Strict: no routable island, no verdict.</summary>
         public static bool TryRouteDemand(Pawn pawn, Map demandMap, Thing t,
             out Building_ABStairs stairs, out Building_ABStairs exit)
         {
+            return TryRouteDemand(pawn, demandMap, t, out stairs, out exit, out int _);
+        }
+
+        /// <summary>Count-aware variant: wanted is the residual item count the
+        /// matched island still pulls AFTER netting out other pawns' en-route
+        /// cargo - callers clamp their job counts to it so demand hauls carry
+        /// exactly what is missing, never the whole stack.</summary>
+        public static bool TryRouteDemand(Pawn pawn, Map demandMap, Thing t,
+            out Building_ABStairs stairs, out Building_ABStairs exit, out int wanted)
+        {
             stairs = null;
             exit = null;
+            wanted = 0;
             if (pawn == null || demandMap == null || demandMap.Disposed || t?.def == null)
             {
                 return false;
@@ -213,16 +334,29 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            int inflight = InFlightToward(demandMap, t.def, pawn);
             List<IslandDemand> islands = IslandsFor(demandMap, entry, t.def);
             for (int i = 0; i < islands.Count; i++)
             {
-                if (!IslandWants(demandMap, entry, t.def, islands[i], constructionOnly: false))
+                int want = IslandWantCount(demandMap, entry, t.def, islands[i], constructionOnly: false);
+                if (want <= 0)
+                {
+                    continue;
+                }
+                // Consume the ledger against islands in scan order (stable per
+                // cache lifetime): cargo already en route covers the earliest
+                // islands first, and only uncovered want routes a new trip.
+                int covered = Math.Min(want, inflight);
+                want -= covered;
+                inflight -= covered;
+                if (want <= 0)
                 {
                     continue;
                 }
                 if (StairRouter.TryBestToward(pawn, demandMap, islands[i].rep, requireReach: true,
                     out stairs, out exit))
                 {
+                    wanted = want;
                     return true;
                 }
             }
@@ -240,8 +374,19 @@ namespace AsAboveSoBelow
             bool requireReachable, bool constructionOnly,
             out Building_ABStairs stairs, out Building_ABStairs exit)
         {
+            return FindFetchableDemand(demandMap, sourceMap, pawn, requireReachable, constructionOnly,
+                out stairs, out exit, out int _);
+        }
+
+        /// <summary>Count-aware variant: wanted is the matched island's residual
+        /// want net of other pawns' en-route cargo (see TryRouteDemand).</summary>
+        public static Thing FindFetchableDemand(Map demandMap, Map sourceMap, Pawn pawn,
+            bool requireReachable, bool constructionOnly,
+            out Building_ABStairs stairs, out Building_ABStairs exit, out int wanted)
+        {
             stairs = null;
             exit = null;
+            wanted = 0;
             if (demandMap == null || demandMap.Disposed || sourceMap == null || sourceMap.Disposed
                 || pawn == null)
             {
@@ -260,16 +405,26 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                int inflight = InFlightToward(demandMap, kvp.Key, pawn);
                 List<IslandDemand> islands = IslandsFor(demandMap, entry, kvp.Key);
                 for (int i = 0; i < islands.Count; i++)
                 {
-                    if (!IslandWants(demandMap, entry, kvp.Key, islands[i], constructionOnly))
+                    int want = IslandWantCount(demandMap, entry, kvp.Key, islands[i], constructionOnly);
+                    if (want <= 0)
+                    {
+                        continue;
+                    }
+                    int covered = Math.Min(want, inflight);
+                    want -= covered;
+                    inflight -= covered;
+                    if (want <= 0)
                     {
                         continue;
                     }
                     if (StairRouter.TryBestToward(pawn, demandMap, islands[i].rep, requireReach: true,
                         out stairs, out exit))
                     {
+                        wanted = want;
                         return stack;
                     }
                 }
@@ -298,12 +453,20 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                int inflight = InFlightToward(demandMap, kvp.Key, pawn);
                 List<IslandDemand> islands = IslandsFor(demandMap, entry, kvp.Key);
                 bool anyIsland = false;
                 for (int i = 0; i < islands.Count; i++)
                 {
-                    if (IslandWants(demandMap, entry, kvp.Key, islands[i], constructionOnly: false)
-                        && pawn.CanReach(islands[i].rep, PathEndMode.Touch, Danger.Deadly))
+                    int want = IslandWantCount(demandMap, entry, kvp.Key, islands[i], constructionOnly: false);
+                    if (want <= 0)
+                    {
+                        continue;
+                    }
+                    int covered = Math.Min(want, inflight);
+                    want -= covered;
+                    inflight -= covered;
+                    if (want > 0 && pawn.CanReach(islands[i].rep, PathEndMode.Touch, Danger.Deadly))
                     {
                         anyIsland = true;
                         break;
@@ -389,15 +552,29 @@ namespace AsAboveSoBelow
         /// consumables registered their shortfall at build time.</summary>
         private static bool IslandWants(Map map, CacheEntry entry, ThingDef def, IslandDemand isl, bool constructionOnly)
         {
+            return IslandWantCount(map, entry, def, isl, constructionOnly) > 0;
+        }
+
+        /// <summary>How many items of def the island still pulls: construction
+        /// shortfall plus (unless constructionOnly) the registered consumable
+        /// shortfall. The count feeds the in-flight netting and job clamps.</summary>
+        private static int IslandWantCount(Map map, CacheEntry entry, ThingDef def, IslandDemand isl, bool constructionOnly)
+        {
+            int want = 0;
             if (isl.constructionNeed > 0)
             {
                 EnsureAvail(map, entry, def, isl);
-                if (isl.constructionNeed - isl.avail > 0)
+                int shortfall = isl.constructionNeed - isl.avail;
+                if (shortfall > 0)
                 {
-                    return true;
+                    want += shortfall;
                 }
             }
-            return !constructionOnly && isl.consumableNeed > 0;
+            if (!constructionOnly && isl.consumableNeed > 0)
+            {
+                want += isl.consumableNeed;
+            }
+            return want;
         }
 
         private static Thing FindExportableStack(Map sourceMap, ThingDef def, Pawn pawn, bool requireReachable)

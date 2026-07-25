@@ -32,6 +32,10 @@ namespace AsAboveSoBelow
             /// toward the goal. Explicitly Invalid when unknown (default
             /// IntVec3 is a real cell).</summary>
             public IntVec3 cell;
+            /// <summary>Residual demand count when the verdict came from the
+            /// demand path (callers clamp job counts to it); 0 for storage
+            /// moves, which carry full stacks per vanilla parity.</summary>
+            public int count;
         }
 
         /// <summary>Storage settings changed somewhere: every cached verdict
@@ -43,7 +47,12 @@ namespace AsAboveSoBelow
 
         public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs)
         {
-            return TargetLevelFor(pawn, t, out stairs, ignorePins: false);
+            return TargetLevelFor(pawn, t, out stairs, ignorePins: false, out int _);
+        }
+
+        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins)
+        {
+            return TargetLevelFor(pawn, t, out stairs, ignorePins, out int _);
         }
 
         /// <summary>ignorePins is the explicit-player-intent variant (Allow
@@ -51,9 +60,14 @@ namespace AsAboveSoBelow
         /// the player pointed at the stack and said MOVE - and the verdict
         /// cache is skipped in BOTH directions so pin-free verdicts never
         /// poison the autonomous flows' cached answers.</summary>
-        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins)
+        /// <summary>Count-aware variant: demandCount is the residual item
+        /// count the demand island still wants (net of other pawns' en-route
+        /// cargo) when the verdict came from the demand path; 0 for storage
+        /// moves. Callers clamp demand-haul job counts to it.</summary>
+        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins, out int demandCount)
         {
             stairs = null;
+            demandCount = 0;
             if (!ABGuard.On(ABGuard.Logistics) || pawn == null || t == null)
             {
                 return null;
@@ -92,6 +106,7 @@ namespace AsAboveSoBelow
                     Map cached = FindLinked(comp, entry.mapId);
                     if (cached != null && TryRouteCached(pawn, cached, entry.cell, out stairs))
                     {
+                        demandCount = entry.count;
                         return cached;
                     }
                     // Stale verdict (map gone, stairs gone, or islands changed so
@@ -128,16 +143,19 @@ namespace AsAboveSoBelow
             {
                 // No better storage move: pull materials toward islands whose
                 // blueprints, benches, mouths, or relay interchanges still
-                // need them. Strictly routed toward the demanding island.
-                if (CrossLevelDemand.TryRouteDemand(pawn, comp.upperMap, t, out stairs, out Building_ABStairs exitUp))
+                // need them. Strictly routed toward the demanding island,
+                // count-aware so callers clamp to the residual want.
+                if (CrossLevelDemand.TryRouteDemand(pawn, comp.upperMap, t, out stairs, out Building_ABStairs exitUp, out int wantUp))
                 {
                     found = comp.upperMap;
                     foundCell = exitUp.Position;
+                    demandCount = wantUp;
                 }
-                else if (CrossLevelDemand.TryRouteDemand(pawn, comp.lowerMap, t, out stairs, out Building_ABStairs exitDown))
+                else if (CrossLevelDemand.TryRouteDemand(pawn, comp.lowerMap, t, out stairs, out Building_ABStairs exitDown, out int wantDown))
                 {
                     found = comp.lowerMap;
                     foundCell = exitDown.Position;
+                    demandCount = wantDown;
                 }
             }
             if (!ignorePins)
@@ -146,7 +164,8 @@ namespace AsAboveSoBelow
                 {
                     tick = now,
                     mapId = found?.uniqueID ?? -1,
-                    cell = foundCell
+                    cell = foundCell,
+                    count = demandCount
                 };
             }
             return found;
