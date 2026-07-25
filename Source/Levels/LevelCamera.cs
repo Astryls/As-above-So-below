@@ -52,7 +52,14 @@ namespace AsAboveSoBelow
                 }
                 Map g1 = target.GroundMap();
                 Map g2 = cur.GroundMap();
-                return g1 != null && g1 == g2;
+                bool suppress = g1 != null && g1 == g2;
+                if (Prefs.DevMode)
+                {
+                    Log.Message("[AB lock diag] locked target=L" + target.Level()
+                        + " cur=L" + cur.Level() + " g1=" + (g1?.uniqueID ?? -1)
+                        + " g2=" + (g2?.uniqueID ?? -1) + " suppress=" + suppress);
+                }
+                return suppress;
             }
             catch
             {

@@ -55,7 +55,35 @@ namespace AsAboveSoBelow
             {
                 return c.groundMap;
             }
-            return c.level == 0 ? map : null;
+            if (c.level == 0)
+            {
+                return map;
+            }
+            // groundMap field unset (old save, out-of-gen-context creation, or an
+            // unrestored scribe reference): derive the ground by walking the
+            // vertical links instead of failing to null. A null ground silently
+            // breaks every column check keyed off it - SameColumn, the camera
+            // level lock's ShouldSuppressJump, 2-hop cross-level RMB - so the
+            // link-walk is the robust source of truth. Bounded by the 3-level cap.
+            Map m = map;
+            for (int i = 0; i < 4 && m != null; i++)
+            {
+                LevelComp mc = m.Levels();
+                if (mc == null)
+                {
+                    return m;
+                }
+                if (mc.groundMap != null)
+                {
+                    return mc.groundMap;
+                }
+                if (mc.level == 0)
+                {
+                    return m;
+                }
+                m = mc.level > 0 ? mc.lowerMap : mc.upperMap;
+            }
+            return null;
         }
 
         /// <summary>The column controller: the ground map's comp.</summary>
