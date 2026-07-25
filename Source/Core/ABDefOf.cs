@@ -18,6 +18,7 @@ namespace AsAboveSoBelow
         public static JobDef AB_CaptureAcrossLevels;
         public static JobDef AB_TakePrisonerAcrossLevels;
         public static JobDef AB_TakeToPenAcrossLevels;
+        public static JobDef AB_TakeEntityAcrossLevels;
 
         public static MapGeneratorDef AB_Basement;
         public static MapGeneratorDef AB_Sky;

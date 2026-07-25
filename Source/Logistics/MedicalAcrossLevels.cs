@@ -183,11 +183,14 @@ namespace AsAboveSoBelow
             this.FailOnDespawnedOrNull(TargetIndex.B);
             this.FailOn(() => Stairs == null || !Stairs.HasAnyLink);
             // Prisoner transport carries awake prisoners too (vanilla escort does
-            // the same); every other intent requires a downed victim.
+            // the same); entity transport mirrors vanilla's carry gate (downed OR
+            // dormant = threat disabled); every other intent requires a downed victim.
             this.FailOn(() => Victim == null || Victim.Dead
                 || (job.def == ABDefOf.AB_TakePrisonerAcrossLevels
                     ? !Victim.IsPrisonerOfColony
-                    : !Victim.Downed));
+                    : job.def == ABDefOf.AB_TakeEntityAcrossLevels
+                        ? !Victim.ThreatDisabled(pawn)
+                        : !Victim.Downed));
             yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.OnCell)
                 .FailOnSomeonePhysicallyInteracting(TargetIndex.A);
             yield return Toils_Haul.StartCarryThing(TargetIndex.A);
@@ -209,6 +212,13 @@ namespace AsAboveSoBelow
                 else if (job.def == ABDefOf.AB_TakePrisonerAcrossLevels)
                 {
                     intent = CarriedIntent.Imprison;
+                }
+                else if (job.def == ABDefOf.AB_TakeEntityAcrossLevels)
+                {
+                    // Entities just land at the exit (Auto adds no bed
+                    // continuation for non-faction cargo); the pending order
+                    // re-arms targetHolder and the local giver finishes.
+                    intent = CarriedIntent.Auto;
                 }
                 StairTransfer.Transfer(pawn, Stairs, intent, dest);
             };

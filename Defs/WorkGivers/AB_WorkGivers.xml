@@ -101,6 +101,22 @@
     </requiredCapacities>
   </WorkGiverDef>
 
+  <!-- Anomaly entity capture across levels: inert without Anomaly
+       (runtime-gated in ShouldSkip). Runs below the vanilla capture giver
+       (priorityInType 300) so same-map captures always win. -->
+  <WorkGiverDef>
+    <defName>AB_TakeEntityAcrossLevels</defName>
+    <label>carry entities to containment on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABTakeEntityAcrossLevels</giverClass>
+    <workType>Hauling</workType>
+    <verb>capture</verb>
+    <gerund>capturing</gerund>
+    <priorityInType>290</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
   <WorkGiverDef>
     <defName>AB_FetchFromOtherLevels</defName>
     <label>fetch things from other levels</label>
