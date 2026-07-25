@@ -41,7 +41,7 @@ namespace AsAboveSoBelow
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
             Map target = CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs stairs,
-                ignorePins: false, out int demandCount);
+                ignorePins: false, out int allowedCount, out bool demand);
             if (target == null || stairs == null)
             {
                 return null;
@@ -49,14 +49,19 @@ namespace AsAboveSoBelow
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
             job.targetC = stairs.CounterpartTowards(target);
             int count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
-            if (demandCount > 0)
+            if (allowedCount > 0)
             {
-                // Demand pull: carry only what the level still wants, net of
-                // other pawns' en-route cargo, and claim the errand so idle
-                // haulers stop ferrying duplicates to the stair mouth
-                // (2026-07-25 "hauling TO stairs" report). Storage moves keep
-                // full stacks per vanilla parity.
-                count = Mathf.Min(count, demandCount);
+                // Both flavors clamp (2026-07-25 log-carousel fix): demand
+                // pulls carry only the residual want net of other pawns'
+                // en-route cargo; storage moves carry only what the
+                // destination storage can absorb, so a full stack never
+                // chases a sliver of space and strands at the stair mouth.
+                count = Mathf.Min(count, allowedCount);
+            }
+            if (demand)
+            {
+                // Claim the errand so idle haulers stop ferrying duplicates
+                // to the stair mouth (2026-07-25 "hauling TO stairs" report).
                 CrossLevelDemand.NoteInFlight(pawn, target, t.def, count);
             }
             job.count = count;

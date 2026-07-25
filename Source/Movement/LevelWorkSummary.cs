@@ -402,7 +402,15 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(DesignationManager __instance)
         {
-            LevelWorkSummary.Notify_WorkChanged(__instance.map);
+            // Only level-linked maps matter: no probe ever targets an
+            // unlinked map, and unconditional bumps (auto vein designations
+            // fire on every mined cell) re-armed every pawn's better-work
+            // probe colony-wide, feeding the stair-thrash loop.
+            Map map = __instance?.map;
+            if (map != null && map.ConnectedToOtherLevel())
+            {
+                LevelWorkSummary.Notify_WorkChanged(map);
+            }
         }
     }
 
@@ -418,7 +426,7 @@ namespace AsAboveSoBelow
             try
             {
                 Map map = __instance?.Map;
-                if (map != null)
+                if (map != null && map.ConnectedToOtherLevel())
                 {
                     LevelWorkSummary.Notify_WorkChanged(map);
                     CrossLevelDemand.Invalidate(map);

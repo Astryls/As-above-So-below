@@ -192,13 +192,20 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            Map target = CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs stairs, ignorePins: true);
+            Map target = CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs stairs, ignorePins: true,
+                out int allowedCount, out bool demand);
             if (target == null || stairs == null)
             {
                 return null;
             }
-            // An urgent trip carries only urgent cargo, pin-exempt throughout.
-            return CrossLevelHaulJob.Build(pawn, t, target, stairs, ABAllowToolCompat.IsUrgent, ignorePins: true);
+            if (demand && allowedCount > 0)
+            {
+                CrossLevelDemand.NoteInFlight(pawn, target, t.def, allowedCount);
+            }
+            // An urgent trip carries only urgent cargo, pin-exempt throughout;
+            // the count still clamps to what the destination can take.
+            return CrossLevelHaulJob.Build(pawn, t, target, stairs, ABAllowToolCompat.IsUrgent,
+                ignorePins: true, allowedCount: allowedCount);
         }
     }
 }

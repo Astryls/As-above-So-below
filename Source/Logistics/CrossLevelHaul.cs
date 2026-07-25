@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.AI;
 
@@ -32,10 +33,18 @@ namespace AsAboveSoBelow
             /// toward the goal. Explicitly Invalid when unknown (default
             /// IntVec3 is a real cell).</summary>
             public IntVec3 cell;
-            /// <summary>Residual demand count when the verdict came from the
-            /// demand path (callers clamp job counts to it); 0 for storage
-            /// moves, which carry full stacks per vanilla parity.</summary>
+            /// <summary>Clamp for the ferry job's count: residual demand when
+            /// the verdict came from the demand path, or the destination
+            /// storage's absorbable capacity for storage moves (2026-07-25
+            /// log-carousel fix: carrying a full stack toward a sliver of
+            /// space stranded the remainder unstored at the stair mouth and
+            /// the return haul built a permanent up-down loop). Always > 0 on
+            /// a live verdict.</summary>
             public int count;
+            /// <summary>True when the verdict came from the demand path (the
+            /// caller claims an in-flight ledger entry); false for storage
+            /// moves.</summary>
+            public bool demand;
         }
 
         /// <summary>Storage settings changed somewhere: every cached verdict
@@ -47,12 +56,12 @@ namespace AsAboveSoBelow
 
         public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs)
         {
-            return TargetLevelFor(pawn, t, out stairs, ignorePins: false, out int _);
+            return TargetLevelFor(pawn, t, out stairs, ignorePins: false, out int _, out bool _);
         }
 
         public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins)
         {
-            return TargetLevelFor(pawn, t, out stairs, ignorePins, out int _);
+            return TargetLevelFor(pawn, t, out stairs, ignorePins, out int _, out bool _);
         }
 
         /// <summary>ignorePins is the explicit-player-intent variant (Allow
@@ -60,14 +69,18 @@ namespace AsAboveSoBelow
         /// the player pointed at the stack and said MOVE - and the verdict
         /// cache is skipped in BOTH directions so pin-free verdicts never
         /// poison the autonomous flows' cached answers.</summary>
-        /// <summary>Count-aware variant: demandCount is the residual item
-        /// count the demand island still wants (net of other pawns' en-route
-        /// cargo) when the verdict came from the demand path; 0 for storage
-        /// moves. Callers clamp demand-haul job counts to it.</summary>
-        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins, out int demandCount)
+        /// <summary>Count-aware variant: allowedCount is the clamp for the
+        /// ferry job's count - residual demand (net of other pawns' en-route
+        /// cargo) when demand is true, or the destination storage's
+        /// absorbable capacity when demand is false. Always > 0 on a
+        /// non-null verdict; callers clamp job counts to it so a trip never
+        /// carries more than the other level can actually take (vanilla
+        /// no-space parity).</summary>
+        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins, out int allowedCount, out bool demand)
         {
             stairs = null;
-            demandCount = 0;
+            allowedCount = 0;
+            demand = false;
             if (!ABGuard.On(ABGuard.Logistics) || pawn == null || t == null)
             {
                 return null;
@@ -106,7 +119,8 @@ namespace AsAboveSoBelow
                     Map cached = FindLinked(comp, entry.mapId);
                     if (cached != null && TryRouteCached(pawn, cached, entry.cell, out stairs))
                     {
-                        demandCount = entry.count;
+                        allowedCount = entry.count;
+                        demand = entry.demand;
                         return cached;
                     }
                     // Stale verdict (map gone, stairs gone, or islands changed so
@@ -130,13 +144,16 @@ namespace AsAboveSoBelow
             if (ignorePins || CrossLevelDemand.ExportAllowed(map, t))
             {
                 StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
-                if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell))
+                int cap = 0;
+                if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell, ref cap))
                 {
                     found = comp.upperMap;
+                    allowedCount = cap;
                 }
-                else if (Check(pawn, t, comp.lowerMap, current, ref stairs, ref foundCell))
+                else if (Check(pawn, t, comp.lowerMap, current, ref stairs, ref foundCell, ref cap))
                 {
                     found = comp.lowerMap;
+                    allowedCount = cap;
                 }
             }
             if (found == null && (ignorePins || CrossLevelDemand.ExportAllowedForDemand(map, t)))
@@ -149,13 +166,15 @@ namespace AsAboveSoBelow
                 {
                     found = comp.upperMap;
                     foundCell = exitUp.Position;
-                    demandCount = wantUp;
+                    allowedCount = wantUp;
+                    demand = true;
                 }
                 else if (CrossLevelDemand.TryRouteDemand(pawn, comp.lowerMap, t, out stairs, out Building_ABStairs exitDown, out int wantDown))
                 {
                     found = comp.lowerMap;
                     foundCell = exitDown.Position;
-                    demandCount = wantDown;
+                    allowedCount = wantDown;
+                    demand = true;
                 }
             }
             if (!ignorePins)
@@ -165,7 +184,8 @@ namespace AsAboveSoBelow
                     tick = now,
                     mapId = found?.uniqueID ?? -1,
                     cell = foundCell,
-                    count = demandCount
+                    count = allowedCount,
+                    demand = demand
                 };
             }
             return found;
@@ -198,7 +218,7 @@ namespace AsAboveSoBelow
             return null;
         }
 
-        private static bool Check(Pawn pawn, Thing t, Map target, StoragePriority current, ref Building_ABStairs stairs, ref IntVec3 destCell)
+        private static bool Check(Pawn pawn, Thing t, Map target, StoragePriority current, ref Building_ABStairs stairs, ref IntVec3 destCell, ref int capacity)
         {
             if (target == null || target.Disposed)
             {
@@ -222,6 +242,7 @@ namespace AsAboveSoBelow
                 IntVec3 oldItemPos = ABVirtualPosition.SwapPositionOnly(t, exit.Position);
                 bool better;
                 IntVec3 storeCell = IntVec3.Invalid;
+                int cap = 0;
                 try
                 {
                     // Storage-FOR, not store-CELL (verify sweep 2026-07-23): the
@@ -232,6 +253,14 @@ namespace AsAboveSoBelow
                     // their own position for stair routing.
                     better = StoreUtility.TryFindBestBetterStorageFor(t, pawn, target, current, pawn.Faction,
                         out storeCell, out IHaulDestination haulDest, needAccurateResult: false);
+                    if (better)
+                    {
+                        // Capacity BEFORE the container position overwrites
+                        // storeCell (an invalid cell is what identifies the
+                        // container path). Reads only target-map grids, so
+                        // running under the virtual swap is safe.
+                        cap = AbsorbCapacity(t, target, storeCell, haulDest);
+                    }
                     if (better && !storeCell.IsValid && haulDest is Thing destThing)
                     {
                         storeCell = destThing.Position;
@@ -246,15 +275,101 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                // No-space parity (2026-07-25): the trip may only carry what
+                // the discovered destination can actually absorb. A full
+                // stack chasing a sliver of space stranded the remainder
+                // unstored at the stair mouth, and the return haul toward its
+                // old storage built the endless up-down log carousel.
+                if (cap <= 0)
+                {
+                    continue;
+                }
                 // Real positions are restored: upgrade to the stair pair that
                 // minimizes the whole trip. Strict inside; the discovering pair
                 // stays when nothing better strictly routes.
                 StairRouter.Reroute(pawn, target, storeCell, ref s, ref exit);
                 stairs = s;
                 destCell = storeCell;
+                capacity = cap;
                 return true;
             }
             return false;
+        }
+
+        /// <summary>How many items of t the discovered destination can absorb
+        /// right now. Mirrors vanilla's storage-capacity semantics: container
+        /// destinations report their own acceptance; cell destinations sum the
+        /// slot group's free space (empty cells and same-def partial stacks),
+        /// capped at one stack - a single trip never carries more. Coarse on
+        /// purpose: reservation races self-heal via the vanilla store leg on
+        /// arrival, exactly like two local haulers racing one cell.</summary>
+        private static int AbsorbCapacity(Thing t, Map target, IntVec3 storeCell, IHaulDestination haulDest)
+        {
+            int max = t.def.stackLimit;
+            // Container destination (grave, casket, Deep-Storage style):
+            // resolved before storeCell is overwritten with its position.
+            if (!storeCell.IsValid)
+            {
+                if (haulDest is Thing destThing)
+                {
+                    ThingOwner inner = ThingOwnerUtility.TryGetInnerInteractableThingOwner(destThing);
+                    if (inner != null)
+                    {
+                        return Mathf.Min(inner.GetCountCanAccept(t), max);
+                    }
+                }
+                // Unknown destination shape: fail open with the old behavior.
+                return max;
+            }
+            SlotGroup group = target.haulDestinationManager.SlotGroupAt(storeCell);
+            if (group == null)
+            {
+                return CellCapacity(t, target, storeCell);
+            }
+            int sum = 0;
+            List<IntVec3> cells = group.CellsList;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                sum += CellCapacity(t, target, cells[i]);
+                if (sum >= max)
+                {
+                    return max;
+                }
+            }
+            return sum;
+        }
+
+        /// <summary>Free space for t in one storage cell, mirroring vanilla's
+        /// NoStorageBlockersIn: a non-stackable item or a blocking building
+        /// zeroes the cell; a same-def partial stack leaves its remainder.</summary>
+        private static int CellCapacity(Thing t, Map map, IntVec3 c)
+        {
+            if (!c.InBounds(map))
+            {
+                return 0;
+            }
+            int cap = t.def.stackLimit;
+            List<Thing> list = map.thingGrid.ThingsListAt(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Thing other = list[i];
+                if (other.def.EverStorable(false))
+                {
+                    if (!other.CanStackWith(t))
+                    {
+                        return 0;
+                    }
+                    cap = Mathf.Min(cap, Mathf.Max(t.def.stackLimit - other.stackCount, 0));
+                }
+                else if ((other.def.entityDefToBuild != null
+                        && other.def.entityDefToBuild.passability != Traversability.Standable)
+                    || (other.def.surfaceType == SurfaceType.None
+                        && other.def.passability != Traversability.Standable))
+                {
+                    return 0;
+                }
+            }
+            return cap;
         }
     }
 }

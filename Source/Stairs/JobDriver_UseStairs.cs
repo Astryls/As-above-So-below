@@ -328,6 +328,10 @@ namespace AsAboveSoBelow
                 HostileDescend.NoteArrived(p, targetMap);
                 // Wild animals start a fresh linger window on the new level.
                 CrossLevelAnimals.NoteArrived(p);
+                // Fresh-arrival commitment: probe-based work migration stands
+                // down so the pawn settles into this level's work instead of
+                // bouncing straight back (2026-07-25 stair-thrash fix).
+                CrossLevelWork.NoteArrived(p);
                 // Arrival flourish: ease out of the stairwell (no-op for elevators).
                 ClimbAnimation.StartEmerge(p, dest, Math.Sign(targetMap.Level() - sourceMap.Level()));
                 ABApi.NotifyPawnTransferred(p, sourceMap, targetMap);

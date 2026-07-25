@@ -63,6 +63,12 @@ namespace AsAboveSoBelow
             public IntVec3 cell;
             public int count;
             public bool construction;
+            /// <summary>True for retention-only sites: the RAW consumer
+            /// requirement (bill counts, mouths x meals, live refuel gap),
+            /// registered regardless of shortfall. Drives the export pin so
+            /// already-delivered goods stay put while the want persists;
+            /// never feeds pulls or relay (2026-07-25 log-carousel fix).</summary>
+            public bool requirementOnly;
             /// <summary>True for relay sites: a NEIGHBOR level's native need
             /// projected onto this map at the interchange stairs toward it.
             /// Relay sites pull goods (so two-hop chains form hop by hop) but
@@ -88,6 +94,12 @@ namespace AsAboveSoBelow
             /// (relay excluded). The export pin uses this: goods parked at an
             /// interchange must stay liftable toward the demanding level.</summary>
             public int nativeConstructionNeed;
+            /// <summary>RAW consumable requirement on this island (native
+            /// only). The export pin holds stacks while island availability
+            /// stays below this - the condition-based generalization of the
+            /// construction pin, so meals near patients and fuel near burners
+            /// cannot be dragged back to storage while still wanted.</summary>
+            public int consumableRequired;
             /// <summary>Stacks of the def reachable from rep, lazily counted.</summary>
             public int avail = -1;
         }
@@ -106,6 +118,10 @@ namespace AsAboveSoBelow
             /// relay never feeds relay, so a 3-level column cannot loop.</summary>
             public readonly Dictionary<ThingDef, int> nativeNeed = new Dictionary<ThingDef, int>();
             public readonly Dictionary<ThingDef, int> nativeConstructionNeed = new Dictionary<ThingDef, int>();
+            /// <summary>RAW consumable requirement per def (native only,
+            /// registered regardless of shortfall). Fast existence gate for
+            /// the generalized export pin; island math is authoritative.</summary>
+            public readonly Dictionary<ThingDef, int> nativeConsumableRequired = new Dictionary<ThingDef, int>();
             public readonly Dictionary<ThingDef, int> available = new Dictionary<ThingDef, int>();
             /// <summary>Lazy per-def island grouping (reach checks are paid at
             /// most once per def per cache lifetime).</summary>
@@ -486,7 +502,8 @@ namespace AsAboveSoBelow
 
         /// <summary>Export policy for STORAGE-priority hauling (vanilla
         /// parity: storage wins everything else). Two holds: an island whose
-        /// OWN construction still needs the stack, and a fresh import pin.</summary>
+        /// OWN need (construction or live consumer requirement) still covers
+        /// the stack, and a fresh import pin.</summary>
         public static bool ExportAllowed(Map map, Thing t)
         {
             if (map == null || map.Disposed || t?.def == null)
@@ -497,7 +514,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            return !PinnedByNativeConstruction(map, t);
+            return !PinnedByNativeNeed(map, t);
         }
 
         /// <summary>Export policy for DEMAND-pull flows (supply givers, demand
@@ -506,20 +523,32 @@ namespace AsAboveSoBelow
         /// level that actually wants it, immediately - otherwise every two-hop
         /// chain stalls for the pin duration. Ping-pong stays impossible
         /// because demand pulls only move toward native shortfall, and the
-        /// native construction pin below still protects a needing island.</summary>
+        /// native-need pin below still protects a needing island.</summary>
         public static bool ExportAllowedForDemand(Map map, Thing t)
         {
             if (map == null || map.Disposed || t?.def == null)
             {
                 return true;
             }
-            return !PinnedByNativeConstruction(map, t);
+            return !PinnedByNativeNeed(map, t);
         }
 
-        private static bool PinnedByNativeConstruction(Map map, Thing t)
+        /// <summary>Condition-based retention (2026-07-25 log-carousel fix,
+        /// generalizing the old construction-only pin): a stack standing on
+        /// an island whose OWN want - remaining construction cost OR raw live
+        /// consumer requirement (bills, meals, refuel, transporter loads) -
+        /// exceeds what the island holds without this stack is not exported
+        /// by ANY flow. The old timer pin let storage drag demand-delivered
+        /// goods back after ~1h, the next cache rebuild re-registered the
+        /// shortfall, and the same logs rode the stairs forever. When the
+        /// want ends (bill done, torch refueled, patient healed) the pin
+        /// lifts by itself and surplus flows to best storage once.</summary>
+        private static bool PinnedByNativeNeed(Map map, Thing t)
         {
             CacheEntry entry = GetEntry(map);
-            if (!entry.nativeConstructionNeed.TryGetValue(t.def, out int need) || need <= 0)
+            entry.nativeConstructionNeed.TryGetValue(t.def, out int constr);
+            entry.nativeConsumableRequired.TryGetValue(t.def, out int required);
+            if (constr <= 0 && required <= 0)
             {
                 return false;
             }
@@ -527,7 +556,8 @@ namespace AsAboveSoBelow
             for (int i = 0; i < islands.Count; i++)
             {
                 IslandDemand isl = islands[i];
-                if (isl.nativeConstructionNeed <= 0)
+                int hold = isl.nativeConstructionNeed + isl.consumableRequired;
+                if (hold <= 0)
                 {
                     continue;
                 }
@@ -537,7 +567,7 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 EnsureAvail(map, entry, t.def, isl);
-                if (isl.avail - t.stackCount < isl.nativeConstructionNeed)
+                if (isl.avail - t.stackCount < hold)
                 {
                     return true;
                 }
@@ -634,7 +664,12 @@ namespace AsAboveSoBelow
                         island = new IslandDemand { rep = site.cell };
                         list.Add(island);
                     }
-                    if (site.construction)
+                    if (site.requirementOnly)
+                    {
+                        // Retention only: never feeds IslandWantCount pulls.
+                        island.consumableRequired += site.count;
+                    }
+                    else if (site.construction)
                     {
                         island.constructionNeed += site.count;
                         if (!site.relay)
@@ -812,27 +847,36 @@ namespace AsAboveSoBelow
         /// in step and merges overflow into the nearest kept site so island
         /// totals stay correct when a floor holds hundreds of blueprints.</summary>
         private static void Register(CacheEntry entry, ThingDef def, IntVec3 cell, int count,
-            bool construction, bool relay = false)
+            bool construction, bool relay = false, bool requirementOnly = false)
         {
             if (def == null || count <= 0)
             {
                 return;
             }
-            entry.need.TryGetValue(def, out int cur);
-            entry.need[def] = cur + count;
-            if (!relay)
+            if (requirementOnly)
             {
-                entry.nativeNeed.TryGetValue(def, out int curN);
-                entry.nativeNeed[def] = curN + count;
+                // Retention bookkeeping only: raw requirement, never a pull.
+                entry.nativeConsumableRequired.TryGetValue(def, out int curR);
+                entry.nativeConsumableRequired[def] = curR + count;
             }
-            if (construction)
+            else
             {
-                entry.constructionNeed.TryGetValue(def, out int curC);
-                entry.constructionNeed[def] = curC + count;
+                entry.need.TryGetValue(def, out int cur);
+                entry.need[def] = cur + count;
                 if (!relay)
                 {
-                    entry.nativeConstructionNeed.TryGetValue(def, out int curNC);
-                    entry.nativeConstructionNeed[def] = curNC + count;
+                    entry.nativeNeed.TryGetValue(def, out int curN);
+                    entry.nativeNeed[def] = curN + count;
+                }
+                if (construction)
+                {
+                    entry.constructionNeed.TryGetValue(def, out int curC);
+                    entry.constructionNeed[def] = curC + count;
+                    if (!relay)
+                    {
+                        entry.nativeConstructionNeed.TryGetValue(def, out int curNC);
+                        entry.nativeConstructionNeed[def] = curNC + count;
+                    }
                 }
             }
             if (!entry.sites.TryGetValue(def, out List<DemandSite> list))
@@ -850,7 +894,8 @@ namespace AsAboveSoBelow
             int bestDist = int.MaxValue;
             for (int i = 0; i < list.Count; i++)
             {
-                if (list[i].construction != construction || list[i].relay != relay)
+                if (list[i].construction != construction || list[i].relay != relay
+                    || list[i].requirementOnly != requirementOnly)
                 {
                     continue;
                 }
@@ -869,7 +914,14 @@ namespace AsAboveSoBelow
                 list[best] = merged;
                 return;
             }
-            list.Add(new DemandSite { cell = cell, count = count, construction = construction, relay = relay });
+            list.Add(new DemandSite
+            {
+                cell = cell,
+                count = count,
+                construction = construction,
+                relay = relay,
+                requirementOnly = requirementOnly
+            });
         }
 
         private static int CountOnMap(Map map, ThingDef def)
@@ -969,6 +1021,10 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     int required = ing.CountRequiredOfFor(def, bill.recipe, bill);
+                    // Retention: the raw requirement holds already-delivered
+                    // ingredients near the bill while it is live.
+                    Register(entry, def, site, required, construction: false, relay: false,
+                        requirementOnly: true);
                     int shortfall = required - Available(map, entry, def);
                     if (shortfall > 0)
                     {
@@ -1002,10 +1058,6 @@ namespace AsAboveSoBelow
                     }
                 }
                 int aggShortfall = anyRequired - totalAvailable;
-                if (aggShortfall <= 0)
-                {
-                    continue;
-                }
                 int fan = 0;
                 foreach (ThingDef def in ing.filter.AllowedThingDefs)
                 {
@@ -1017,7 +1069,14 @@ namespace AsAboveSoBelow
                     {
                         break;
                     }
-                    Register(entry, def, site, aggShortfall, construction: false);
+                    // Retention runs even with zero shortfall: goods that
+                    // already landed must stay while the bill wants them.
+                    Register(entry, def, site, anyRequired, construction: false, relay: false,
+                        requirementOnly: true);
+                    if (aggShortfall > 0)
+                    {
+                        Register(entry, def, site, aggShortfall, construction: false);
+                    }
                 }
             }
         }
@@ -1085,7 +1144,9 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                int required = UnityEngine.Mathf.CeilToInt(comp.TargetFuelLevel - comp.Fuel);
+                // ITEM count, not fuel units (2026-07-25): the old math
+                // ignored the fuel-per-item multiplier and over-pulled.
+                int required = comp.GetFuelCountToFullyRefuel();
                 if (required <= 0)
                 {
                     continue;
@@ -1101,10 +1162,6 @@ namespace AsAboveSoBelow
                     totalAvailable += Available(map, entry, def);
                 }
                 int shortfall = required - totalAvailable;
-                if (shortfall <= 0)
-                {
-                    continue;
-                }
                 fan = 0;
                 foreach (ThingDef def in comp.Props.fuelFilter.AllowedThingDefs)
                 {
@@ -1112,7 +1169,14 @@ namespace AsAboveSoBelow
                     {
                         break;
                     }
-                    Register(entry, def, buildings[i].Position, shortfall, construction: false);
+                    // Retention holds delivered fuel beside the burner until
+                    // the refueler consumes it (or the comp stops asking).
+                    Register(entry, def, buildings[i].Position, required, construction: false,
+                        relay: false, requirementOnly: true);
+                    if (shortfall > 0)
+                    {
+                        Register(entry, def, buildings[i].Position, shortfall, construction: false);
+                    }
                 }
             }
         }
@@ -1140,6 +1204,9 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
+                    // Retention keeps staged cargo beside the pod until loaded.
+                    Register(entry, def, transporters[i].Position, tr.CountToTransfer,
+                        construction: false, relay: false, requirementOnly: true);
                     int shortfall = tr.CountToTransfer - Available(map, entry, def);
                     if (shortfall > 0)
                     {
@@ -1199,7 +1266,10 @@ namespace AsAboveSoBelow
                 ThingDef babyFood = DefDatabase<ThingDef>.GetNamedSilentFail("BabyFood");
                 if (babyFood != null)
                 {
-                    int shortfallB = babies * MealsPerMouth - Available(map, entry, babyFood);
+                    int requiredB = babies * MealsPerMouth;
+                    Register(entry, babyFood, babySite, requiredB, construction: false,
+                        relay: false, requirementOnly: true);
+                    int shortfallB = requiredB - Available(map, entry, babyFood);
                     if (shortfallB > 0)
                     {
                         Register(entry, babyFood, babySite, shortfallB, construction: false);
@@ -1222,6 +1292,11 @@ namespace AsAboveSoBelow
                 if (meals[i] != null)
                 {
                     totalAvailable += Available(map, entry, meals[i]);
+                    // Retention keeps the delivered buffer beside the mouths
+                    // while patients or prisoners remain - the old timer pin
+                    // let storage reclaim it and the pull loop restarted.
+                    Register(entry, meals[i], mouthSite, required, construction: false,
+                        relay: false, requirementOnly: true);
                 }
             }
             int shortfall = required - totalAvailable;

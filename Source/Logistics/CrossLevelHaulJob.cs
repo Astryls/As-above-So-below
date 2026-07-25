@@ -36,8 +36,11 @@ namespace AsAboveSoBelow
         /// much of its carry capacity, leaving headroom for the last stack.</summary>
         private const float GatherEncumbranceCap = 0.8f;
 
+        /// <summary>allowedCount clamps the single-carry job's count when
+        /// positive (destination capacity for storage moves, residual want
+        /// for demand pulls - the no-space parity rule); 0 means no clamp.</summary>
         public static Job Build(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs,
-            Predicate<Thing> extra = null, bool ignorePins = false)
+            Predicate<Thing> extra = null, bool ignorePins = false, int allowedCount = 0)
         {
             if (pawn == null || seed == null || target == null || stairs == null)
             {
@@ -53,14 +56,20 @@ namespace AsAboveSoBelow
             {
                 return BuildBulk(pawn, seed, target, stairs, exit, extra, ignorePins);
             }
-            return BuildSingle(pawn, seed, target, stairs, exit);
+            return BuildSingle(pawn, seed, target, stairs, exit, allowedCount);
         }
 
-        private static Job BuildSingle(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs, Building_ABStairs exit)
+        private static Job BuildSingle(Pawn pawn, Thing seed, Map target, Building_ABStairs stairs,
+            Building_ABStairs exit, int allowedCount)
         {
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, seed, stairs);
             job.targetC = exit;
-            job.count = Mathf.Min(seed.stackCount, pawn.carryTracker.MaxStackSpaceEver(seed.def));
+            int count = Mathf.Min(seed.stackCount, pawn.carryTracker.MaxStackSpaceEver(seed.def));
+            if (allowedCount > 0)
+            {
+                count = Mathf.Min(count, allowedCount);
+            }
+            job.count = count;
             return job;
         }
 

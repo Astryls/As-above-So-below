@@ -131,7 +131,7 @@ namespace AsAboveSoBelow
                 return;
             }
             Map target = CrossLevelHaul.TargetLevelFor(actor, product, out Building_ABStairs stairs,
-                ignorePins: false, out int demandCount);
+                ignorePins: false, out int allowedCount, out bool demand);
             if (target == null || stairs == null)
             {
                 return;
@@ -139,9 +139,12 @@ namespace AsAboveSoBelow
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, product, stairs);
             job.targetC = stairs.CounterpartTowards(target);
             int count = Mathf.Min(product.stackCount, actor.carryTracker.MaxStackSpaceEver(product.def));
-            if (demandCount > 0)
+            if (allowedCount > 0)
             {
-                count = Mathf.Min(count, demandCount);
+                count = Mathf.Min(count, allowedCount);
+            }
+            if (demand)
+            {
                 CrossLevelDemand.NoteInFlight(actor, target, product.def, count);
             }
             job.count = count;

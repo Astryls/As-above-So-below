@@ -52,6 +52,34 @@ namespace AsAboveSoBelow
 
         private static readonly ABPawnCooldown emergencyCooldown = new ABPawnCooldown();
 
+        /// <summary>Post-arrival commitment (2026-07-25 stair-thrash fix): a
+        /// pawn that just crossed levels commits to the new level for a full
+        /// migration window before ANY probe path may move it again. Plain
+        /// tick cooldown on purpose - the versioned better-work cooldown is
+        /// bypassed by every work-version bump (designations, blueprints,
+        /// bills fire constantly in a live colony), and the probe-time charge
+        /// of the migration cooldown eroded during the walk + climb, so a
+        /// pawn could do one 5-second work chunk and immediately bounce back.
+        /// Emergency migration (fire, rescue, urgent tend) stays exempt.</summary>
+        private static readonly ABPawnCooldown arrivalCommitment = new ABPawnCooldown();
+
+        /// <summary>Called by the stair transfer for every player-faction
+        /// arrival: charges the commitment AND re-arms the idle-migration
+        /// cooldown from the ARRIVAL tick (probe-time charges erode in
+        /// transit). Player orders, needs bridges, and local WorkGivers
+        /// (including the cross-level ferries) are unaffected - this only
+        /// gates the probe-based migration paths.</summary>
+        internal static void NoteArrived(Pawn pawn)
+        {
+            if (pawn == null || pawn.Faction != Faction.OfPlayer)
+            {
+                return;
+            }
+            int now = Find.TickManager.TicksGame;
+            arrivalCommitment.ChargeUntil(pawn, now + MigrationCooldownTicks);
+            migrationCooldown.ChargeUntil(pawn, now + MigrationCooldownTicks);
+        }
+
         /// <summary>Per-pawn cooldown that also stores the work version it was
         /// charged at: a version bump (new designations anywhere) re-arms every
         /// pawn at once, O(1), no pawn iteration.</summary>
@@ -195,6 +223,12 @@ namespace AsAboveSoBelow
                 return null;
             }
             int now = Find.TickManager.TicksGame;
+            // Commitment first: version bumps bypass the versioned cooldown
+            // below, but never the fresh-arrival window.
+            if (!arrivalCommitment.Ready(pawn, now))
+            {
+                return null;
+            }
             if (!betterWorkCooldown.Ready(pawn, now))
             {
                 return null;
@@ -265,7 +299,10 @@ namespace AsAboveSoBelow
             workDest = IntVec3.Invalid;
             stairs = null;
             exit = null;
-            if (order == null || order.Count == 0 || !TryClaimProbeBudget(Find.TickManager.TicksGame))
+            int probeNow = Find.TickManager.TicksGame;
+            if (order == null || order.Count == 0
+                || !arrivalCommitment.Ready(pawn, probeNow)
+                || !TryClaimProbeBudget(probeNow))
             {
                 return false;
             }
