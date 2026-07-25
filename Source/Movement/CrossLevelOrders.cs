@@ -994,33 +994,6 @@ namespace AsAboveSoBelow
             }
             if (!CrossLevelOrders.ShouldRedirect(selectedPawns, clickPos, out Map cur, out Map targetMap, out Pawn pawn))
             {
-                if (Prefs.DevMode && selectedPawns != null && selectedPawns.Count == 1)
-                {
-                    Pawn sp = selectedPawns[0];
-                    Map below = cur?.Levels()?.lowerMap;
-                    IntVec3 rc = clickPos.ToIntVec3();
-                    string terr = (cur != null && rc.InBounds(cur)) ? cur.terrainGrid.TerrainAt(rc)?.defName : "oob";
-                    string belowBld = "n/a";
-                    if (below != null && rc.InBounds(below))
-                    {
-                        System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                        List<Thing> bthings = below.thingGrid.ThingsListAtFast(rc);
-                        for (int i = 0; i < bthings.Count; i++)
-                        {
-                            if (bthings[i].def.category == ThingCategory.Building || bthings[i].def.category == ThingCategory.Item)
-                            {
-                                sb.Append(bthings[i].LabelShort).Append(",");
-                            }
-                        }
-                        belowBld = sb.Length == 0 ? "(none)" : sb.ToString();
-                    }
-                    Log.Message("[AB RMB diag] NO redirect: sel=" + sp?.LabelShort
-                        + " selMapL=" + (sp?.Map != null ? sp.Map.Level().ToString() : "?")
-                        + " curL=" + (cur != null ? cur.Level().ToString() : "?")
-                        + " targetL=" + (targetMap != null ? targetMap.Level().ToString() : "?")
-                        + " cell=" + rc + " skyTerr=" + terr + " belowBld=[" + belowBld + "]"
-                        + " hasBelow=" + (below != null));
-                }
                 // Multi-pawn cross-level orders: group move/attack across the column.
                 if (CrossLevelOrders.ShouldRedirectMulti(selectedPawns, clickPos,
                         out Map mCur, out Map mTarget, out List<Pawn> mPawns))
@@ -1060,14 +1033,6 @@ namespace AsAboveSoBelow
                     return false;
                 }
                 __result = CrossLevelOrders.BuildOptions(pawn, clickPos, cur, targetMap, out context);
-                if (Prefs.DevMode)
-                {
-                    string labels = __result == null ? "null"
-                        : string.Join(" | ", __result.ConvertAll(o => (o?.Label ?? "?") + (o != null && o.Disabled ? "(disabled)" : "")).ToArray());
-                    Log.Message("[AB RMB diag] curL=" + cur.Level() + " targetL=" + targetMap.Level()
-                        + " pawn=" + pawn.LabelShort + " onTarget=" + (pawn.Map == targetMap)
-                        + " opts=[" + labels + "]");
-                }
                 return false;
             }
             catch (Exception e)

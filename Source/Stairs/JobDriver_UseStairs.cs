@@ -263,6 +263,7 @@ namespace AsAboveSoBelow
             // at the level being left (never yanks the view for AI haulers, pets,
             // or hostiles crossing on their own).
             bool followCam = false;
+            bool wasSelected = false;
             try
             {
                 ABSettings s = ABMod.Settings;
@@ -270,6 +271,9 @@ namespace AsAboveSoBelow
                     && p.Faction == Faction.OfPlayer && !p.RaceProps.Animal
                     && Find.Selector.SingleSelectedThing == p
                     && sourceMap == Find.CurrentMap;
+                // Whether the player had this pawn selected before it despawns, so the
+                // selection can survive the level change (see the re-add after arrival).
+                wasSelected = Find.Selector.SelectedObjects.Contains(p);
             }
             catch
             {
@@ -338,6 +342,18 @@ namespace AsAboveSoBelow
                 if (followCam && p.Spawned && !p.Dead)
                 {
                     LevelCamera.FollowPawn(p);
+                }
+                // Keep the pawn selected across the level change. DeSpawn drops it from
+                // the selection, so a selected GROUP crossing, a single pawn with
+                // camera-follow off, and a pawn ordered from another level all lost their
+                // selection. Re-added in place (no camera yank) and without vanilla's
+                // cross-map dedup, so group-mates still on the source level stay selected
+                // too. The single-pawn follow case above already reselected it, so the
+                // Contains guard skips it there.
+                if (wasSelected && p.Spawned && !p.Dead
+                    && !Find.Selector.SelectedObjects.Contains(p))
+                {
+                    BelowSelection.RestoreSelected(Find.Selector, p);
                 }
                 FinishCarriedDelivery(p, intent, sourceMap);
                 PullFollowers(p, stairs, sourceMap, dest);
