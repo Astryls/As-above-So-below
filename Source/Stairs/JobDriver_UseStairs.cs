@@ -251,8 +251,10 @@ namespace AsAboveSoBelow
                 return;
             }
             // Backstop for jobs started before mounting: never despawn a mounted
-            // rider, it would strand the mount with a live linkage.
-            if (ABGiddyUpCompat.BlockForMount(p))
+            // rider, it would strand the mount with a live linkage. Silent - any
+            // player nudge was already posted when the stairs job was taken; a
+            // message here would fire on every transfer attempt.
+            if (ABGiddyUpCompat.IsMounted(p))
             {
                 return;
             }

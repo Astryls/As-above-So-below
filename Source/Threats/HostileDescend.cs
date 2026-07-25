@@ -170,7 +170,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
+            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.IsMounted(p))
             {
                 return false;
             }
@@ -205,7 +205,7 @@ namespace AsAboveSoBelow
 
         private static bool ShouldDescendFriendly(Pawn p)
         {
-            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.BlockForMount(p))
+            if (p.InMentalState || p.CurJobDef == ABDefOf.AB_UseStairs || ABGiddyUpCompat.IsMounted(p))
             {
                 return false;
             }

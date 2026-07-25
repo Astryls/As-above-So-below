@@ -14,6 +14,7 @@ namespace AsAboveSoBelow
         internal readonly string name;
         internal bool on = true;
         internal string lastContext;
+        internal string lastCulprit;
 
         internal ABGuardSwitch(string name)
         {
@@ -27,6 +28,10 @@ namespace AsAboveSoBelow
         public bool IsOn => on;
 
         public string LastContext => lastContext;
+
+        /// <summary>What tripped the switch - the failing item/mod/pawn named
+        /// by ABBlame, or null when nothing specific could be attributed.</summary>
+        public string LastCulprit => lastCulprit;
     }
 
     /// <summary>
@@ -67,24 +72,40 @@ namespace AsAboveSoBelow
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;
 
-        public static void Disable(ABGuardSwitch subsystem, Exception e, string context)
+        /// <summary>Trip a subsystem's kill switch after an error. Pass a
+        /// <paramref name="subject"/> (the Thing/Def/Pawn the failing code was
+        /// working on) whenever the call site knows it, so the log line AND the
+        /// in-game message name the culprit - a modded mech that could not
+        /// charge, an item that would not store, etc. When no subject is given,
+        /// the exception stack is mined for a third-party mod instead.</summary>
+        public static void Disable(ABGuardSwitch subsystem, Exception e, string context, object subject = null)
         {
             if (subsystem.on)
             {
                 subsystem.on = false;
                 subsystem.lastContext = context;
+                // Attribution runs inside the handler and never throws (ABBlame
+                // swallows its own faults), so a failed blame can't compound the
+                // original error.
+                string culprit = ABBlame.Cause(subject, e);
+                subsystem.lastCulprit = culprit;
+                string blame = culprit != null ? " Likely cause: " + culprit + "." : string.Empty;
                 Log.Error(ABLog.Tag + " Subsystem '" + subsystem.name + "' hit an error in " + context
-                    + " and shut itself down to protect your game. Other features keep running. Details: " + e);
+                    + " and shut itself down to protect your game. Other features keep running." + blame
+                    + " Details: " + e);
                 // A tripped switch used to be invisible outside the dev log,
                 // and players read the resulting silence (no cross-level
                 // hauling, no column stuff picker) as separate bugs. One
-                // non-historical message makes the shutdown visible in-game.
+                // non-historical message makes the shutdown visible in-game,
+                // now naming what tripped it when we can.
                 try
                 {
                     if (Current.ProgramState == ProgramState.Playing)
                     {
-                        Messages.Message("AB_SubsystemDown".Translate(subsystem.name),
-                            MessageTypeDefOf.CautionInput, historical: false);
+                        TaggedString msg = culprit != null
+                            ? "AB_SubsystemDownBecause".Translate(subsystem.name, culprit)
+                            : "AB_SubsystemDown".Translate(subsystem.name);
+                        Messages.Message(msg, MessageTypeDefOf.CautionInput, historical: false);
                     }
                 }
                 catch
@@ -106,6 +127,7 @@ namespace AsAboveSoBelow
             {
                 subsystem.on = true;
                 subsystem.lastContext = null;
+                subsystem.lastCulprit = null;
                 ABLog.Dev("Kill switch '" + subsystem.name + "' re-armed from settings.");
             }
         }
@@ -120,6 +142,7 @@ namespace AsAboveSoBelow
                 {
                     All[i].on = true;
                     All[i].lastContext = null;
+                    All[i].lastCulprit = null;
                     cleared++;
                 }
             }

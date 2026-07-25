@@ -17,6 +17,12 @@ namespace AsAboveSoBelow
         private static bool resolved;
         private static JobDef mountedDef;
 
+        /// <summary>Per-rider throttle so even a legitimately-blocked player
+        /// order cannot post "dismount first" more than once every few seconds.</summary>
+        private const int MessageCooldownTicks = 240;
+
+        private static readonly ABPawnCooldown messageCooldown = new ABPawnCooldown();
+
         private static JobDef MountedDef
         {
             get
@@ -67,15 +73,29 @@ namespace AsAboveSoBelow
             return def != null && animal?.CurJobDef == def;
         }
 
-        /// <summary>Blocks a stairs interaction for mounted riders with a player
-        /// facing message. Returns true when blocked.</summary>
+        /// <summary>Blocks a PLAYER-INITIATED stairs interaction for mounted
+        /// riders, with a throttled player-facing nudge. Returns true when
+        /// blocked. Only the player's own riders get the message, at most once
+        /// per MessageCooldownTicks - AI scans that merely need the yes/no
+        /// answer (raider descent, neutral exit, the transfer backstop, pet
+        /// follow) must call the silent IsMounted predicate instead, or a
+        /// mounted raid spams "dismount first" on every scan tick.</summary>
         public static bool BlockForMount(Pawn rider)
         {
             if (!IsMounted(rider))
             {
                 return false;
             }
-            Messages.Message("AB_DismountFirst".Translate(), rider, MessageTypeDefOf.RejectInput, historical: false);
+            if (rider.Faction == Faction.OfPlayer)
+            {
+                int now = Find.TickManager.TicksGame;
+                if (messageCooldown.Ready(rider, now))
+                {
+                    messageCooldown.ChargeUntil(rider, now + MessageCooldownTicks);
+                    Messages.Message("AB_DismountFirst".Translate(), rider,
+                        MessageTypeDefOf.RejectInput, historical: false);
+                }
+            }
             return true;
         }
     }

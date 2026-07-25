@@ -101,6 +101,7 @@
   <AB_GuardPanelTip>Every subsystem runs behind its own kill switch: if one hits an error it shuts itself down so the rest of the mod and your game keep running. Tripped subsystems are listed here and can be re-armed; they also reset when a game is loaded.</AB_GuardPanelTip>
   <AB_GuardAllGreen>All {0} subsystems running normally.</AB_GuardAllGreen>
   <AB_GuardTripped>{0} - shut down after an error in {1}</AB_GuardTripped>
+  <AB_GuardTrippedBecause>{0} - shut down after an error in {1} (likely cause: {2})</AB_GuardTrippedBecause>
   <AB_ReArm>Re-arm</AB_ReArm>
   <AB_ResetTab>Reset this tab to defaults</AB_ResetTab>
   <AB_ResetAll>Reset all settings to defaults</AB_ResetAll>
@@ -274,6 +275,7 @@
   <AB_BringAndRefuel>Bring {0} and refuel {1}</AB_BringAndRefuel>
 
   <AB_SubsystemDown>As above, so below: the '{0}' subsystem hit an error and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDown>
+  <AB_SubsystemDownBecause>As above, so below: the '{0}' subsystem hit an error (likely cause: {1}) and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDownBecause>
 
   <AB_SkyVisitors>Visitors may arrive on sky plateaus</AB_SkyVisitors>
   <AB_SkyVisitorsTip>When the sky level has player buildings, a standable map-edge opening, and working stairs, about half of visitor and traveler groups walk in up there instead of on the surface. Trade caravans always arrive on the surface.</AB_SkyVisitorsTip>

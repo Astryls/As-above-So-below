@@ -58,6 +58,25 @@ namespace AsAboveSoBelow
         /// the map a demand-pull delivered it to.</summary>
         private static readonly Dictionary<int, int> importPins = new Dictionary<int, int>();
 
+        /// <summary>How long a delivered-level entry lingers before it is
+        /// pruned. Purely a dictionary bound - the RETENTION itself is the
+        /// condition "still on the level it was delivered to", not this timer
+        /// (that is exactly the mistake the old ImportPinTicks pin made). One
+        /// in-game day is long enough that a genuinely looping item never gets
+        /// a re-try window, short enough that the map stays tiny.</summary>
+        private const int DeliveredExpireTicks = 60000;
+
+        /// <summary>thingIDNumber -> the map a cross-level ferry last delivered
+        /// the stack to. Drives the monotone storage pin below.</summary>
+        private static readonly Dictionary<int, DeliveredEntry> deliveredTo =
+            new Dictionary<int, DeliveredEntry>();
+
+        private struct DeliveredEntry
+        {
+            public int mapId;
+            public int tick;
+        }
+
         private struct DemandSite
         {
             public IntVec3 cell;
@@ -179,6 +198,7 @@ namespace AsAboveSoBelow
                 PrunePins();
             }
             importPins[t.thingIDNumber] = Find.TickManager.TicksGame + ImportPinTicks;
+            NoteDelivered(t, to);
             Invalidate(from);
             Invalidate(to);
         }
@@ -211,6 +231,79 @@ namespace AsAboveSoBelow
         {
             return importPins.TryGetValue(t.thingIDNumber, out int until)
                 && Find.TickManager.TicksGame < until;
+        }
+
+        /// <summary>Record which map a ferry just delivered a stack to, for the
+        /// monotone storage pin (DeliveredHere).</summary>
+        private static void NoteDelivered(Thing t, Map to)
+        {
+            if (t == null || to == null)
+            {
+                return;
+            }
+            if (deliveredTo.Count > 1024)
+            {
+                PruneDelivered();
+            }
+            deliveredTo[t.thingIDNumber] = new DeliveredEntry
+            {
+                mapId = to.uniqueID,
+                tick = Find.TickManager.TicksGame
+            };
+        }
+
+        /// <summary>Monotone storage retention (2026-07-25, the "hauls an item up
+        /// and down the stairs forever" report). A cross-level ferry delivered
+        /// this stack to THIS map, so the STORAGE flows must not lift it back
+        /// off again. Vanilla picks strictly-better storage, but a destination's
+        /// free space is a race - the scan sees an open slot, a local hauler
+        /// claims it before the carrier finishes climbing - so an item chasing a
+        /// nearly-full better-storage one level away lands in worse storage here
+        /// and instantly chases it again. Storage type is irrelevant (zone,
+        /// shelf, or a modded container all present the same race). Pinning the
+        /// item to the level it was delivered to makes every storage move
+        /// monotone: it can be pulled onward by real DEMAND (a consumer, a
+        /// blueprint - those gates never call this), but never storage-bounced
+        /// back the way it came. Condition-based on purpose: the pin holds only
+        /// while the item stays on this map and self-clears the instant it
+        /// leaves (consumed, demand-pulled, hand-moved) or its entry ages out.</summary>
+        private static bool DeliveredHere(Map map, Thing t)
+        {
+            if (map == null || t == null
+                || !deliveredTo.TryGetValue(t.thingIDNumber, out DeliveredEntry e))
+            {
+                return false;
+            }
+            if (Find.TickManager.TicksGame - e.tick > DeliveredExpireTicks)
+            {
+                deliveredTo.Remove(t.thingIDNumber);
+                return false;
+            }
+            return e.mapId == map.uniqueID;
+        }
+
+        private static void PruneDelivered()
+        {
+            int now = Find.TickManager.TicksGame;
+            List<int> dead = null;
+            foreach (KeyValuePair<int, DeliveredEntry> kvp in deliveredTo)
+            {
+                if (now - kvp.Value.tick > DeliveredExpireTicks)
+                {
+                    (dead ?? (dead = new List<int>())).Add(kvp.Key);
+                }
+            }
+            if (dead != null)
+            {
+                for (int i = 0; i < dead.Count; i++)
+                {
+                    deliveredTo.Remove(dead[i]);
+                }
+            }
+            if (deliveredTo.Count > 1024)
+            {
+                deliveredTo.Clear();
+            }
         }
 
         // --- in-flight ledger (2026-07-25) --------------------------------
@@ -511,6 +604,13 @@ namespace AsAboveSoBelow
                 return true;
             }
             if (ImportPinned(t))
+            {
+                return false;
+            }
+            // Monotone: never storage-bounce a just-delivered stack back off
+            // the level it landed on (demand flows use ExportAllowedForDemand
+            // and are unaffected, so consumers still pull it onward).
+            if (DeliveredHere(map, t))
             {
                 return false;
             }

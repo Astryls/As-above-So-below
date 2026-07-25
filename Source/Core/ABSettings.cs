@@ -703,8 +703,10 @@ namespace AsAboveSoBelow
                 tripped++;
                 Rect row = listing.GetRect(28f);
                 GUI.color = ColorLibrary.RedReadable;
-                Widgets.Label(new Rect(row.x, row.y + 3f, row.width - 100f, 24f),
-                    "AB_GuardTripped".Translate(g.Name, g.LastContext ?? "?"));
+                TaggedString trippedLabel = g.LastCulprit != null
+                    ? "AB_GuardTrippedBecause".Translate(g.Name, g.LastContext ?? "?", g.LastCulprit)
+                    : "AB_GuardTripped".Translate(g.Name, g.LastContext ?? "?");
+                Widgets.Label(new Rect(row.x, row.y + 3f, row.width - 100f, 24f), trippedLabel);
                 GUI.color = Color.white;
                 if (Widgets.ButtonText(new Rect(row.xMax - 94f, row.y + 1f, 92f, 26f), "AB_ReArm".Translate()))
                 {

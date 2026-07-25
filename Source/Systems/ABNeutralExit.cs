@@ -107,7 +107,7 @@ namespace AsAboveSoBelow
                     || p.HostileTo(Faction.OfPlayer) || p.IsPrisoner || p.Downed
                     || p.InMentalState || !p.Awake()
                     || p.CurJobDef == ABDefOf.AB_UseStairs
-                    || ABGiddyUpCompat.BlockForMount(p))
+                    || ABGiddyUpCompat.IsMounted(p))
                 {
                     continue;
                 }

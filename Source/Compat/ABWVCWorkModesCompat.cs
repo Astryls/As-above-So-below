@@ -359,7 +359,7 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                ABGuard.Disable(ABGuard.Logistics, e, "WVC mech charge routing");
+                ABGuard.Disable(ABGuard.Logistics, e, "WVC mech charge routing", pawn);
             }
         }
 

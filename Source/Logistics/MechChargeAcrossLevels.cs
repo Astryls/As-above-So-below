@@ -67,7 +67,7 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                ABGuard.Disable(ABGuard.Logistics, e, "mech charge routing");
+                ABGuard.Disable(ABGuard.Logistics, e, "mech charge routing", pawn);
             }
         }
 
@@ -84,9 +84,23 @@ namespace AsAboveSoBelow
         {
             if (shouldAutoRecharge != null && giver != null)
             {
-                return shouldAutoRecharge.Invoke(giver, new object[] { pawn }) is bool b && b;
+                try
+                {
+                    return shouldAutoRecharge.Invoke(giver, new object[] { pawn }) is bool b && b;
+                }
+                catch (Exception e)
+                {
+                    // A modded recharge-policy override (WVC etc.) threw. Do not
+                    // let it trip the whole Logistics kill switch - name it once
+                    // and fall through to the simple low-battery threshold.
+                    Log.WarningOnce(ABLog.Tag + " a mech recharge policy threw for "
+                        + ABBlame.Describe(pawn) + "; using the low-battery fallback. "
+                        + (e.InnerException ?? e).Message,
+                        Gen.HashCombineInt(pawn.def?.shortHash ?? 0, 0x0C0FFEE));
+                }
             }
-            // Fallback if the vanilla helper moves: route only when clearly low.
+            // Fallback if the vanilla helper moves or a modded override faulted:
+            // route only when clearly low.
             return pawn.needs.energy.CurLevelPercentage < 0.35f;
         }
 
@@ -118,6 +132,19 @@ namespace AsAboveSoBelow
                 try
                 {
                     usable = candidate.CanPawnChargeCurrently(pawn);
+                }
+                catch (Exception ce)
+                {
+                    // Harden against modded chargers (or modded mechs whose
+                    // usability check chokes): skip this one charger and keep
+                    // scanning instead of letting the throw bubble up and trip
+                    // the entire Logistics subsystem. Named once, not spammed.
+                    Log.WarningOnce(ABLog.Tag + " charger " + ABBlame.Describe(candidate)
+                        + " threw while checking " + ABBlame.Describe(pawn)
+                        + " for cross-level recharge; skipping it. "
+                        + (ce.InnerException ?? ce).Message,
+                        Gen.HashCombineInt(candidate.thingIDNumber, 0x5EED));
+                    continue;
                 }
                 finally
                 {
