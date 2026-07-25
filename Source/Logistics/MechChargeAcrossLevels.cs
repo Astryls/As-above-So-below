@@ -90,7 +90,10 @@ namespace AsAboveSoBelow
             return pawn.needs.energy.CurLevelPercentage < 0.35f;
         }
 
-        private static Job TryToward(Pawn pawn, Map target)
+        /// <summary>Internal so the WVC Work Modes compat module can reuse the
+        /// verified charger probe for their own charger giver (which declares
+        /// its own TryGiveJob, bypassing this patch).</summary>
+        internal static Job TryToward(Pawn pawn, Map target)
         {
             if (target == null || target.Disposed)
             {

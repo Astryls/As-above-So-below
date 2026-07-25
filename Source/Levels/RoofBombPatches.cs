@@ -35,22 +35,33 @@ namespace AsAboveSoBelow
                 Map sky = explosion.Map;
                 if (sky == null || sky.Disposed || sky.Level() != 1
                     || !c.InBounds(sky)
-                    || sky.terrainGrid.TerrainAt(c) != ABDefOf.AB_RoofSurface
-                    || explosion.GetDamageAmountAt(c) < RoofPunchThreshold)
+                    || sky.terrainGrid.TerrainAt(c) != ABDefOf.AB_RoofSurface)
                 {
                     return;
                 }
                 Map ground = sky.LowerMap();
-                if (ground == null || ground.Disposed || !c.InBounds(ground))
+                if (ground == null || ground.Disposed || !c.InBounds(ground)
+                    || ground.roofGrid.RoofAt(c) == null)
                 {
                     return;
                 }
-                if (ground.roofGrid.RoofAt(c) != null)
+                float damage = explosion.GetDamageAmountAt(c);
+                // Stratum HP-tracks every roof (its Vanilla_Roofs patch covers
+                // vanilla defs too). Route the blast into its integrity system
+                // - no flat threshold, its per-roof threshold/armor decide -
+                // and let its 0-HP collapse call SetRoof(null), which fires
+                // our normal rooftop cascade.
+                if (ABStratumCompat.TryDamageRoof(ground, c, damage, null))
                 {
-                    // Cascades through map events: rooftop above reverts to air,
-                    // contents fall. Idempotent: guarded on there being a roof.
-                    ground.roofGrid.SetRoof(c, null);
+                    return;
                 }
+                if (damage < RoofPunchThreshold)
+                {
+                    return;
+                }
+                // Cascades through map events: rooftop above reverts to air,
+                // contents fall. Idempotent: guarded on there being a roof.
+                ground.roofGrid.SetRoof(c, null);
             }
             catch (Exception e)
             {
