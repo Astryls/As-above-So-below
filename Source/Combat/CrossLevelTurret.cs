@@ -497,6 +497,14 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                // Vanilla parity: the engagement line and target marker are
+                // selection overlays - only draw them when this turret is
+                // selected (matching the pawn shooter path; a forced-target line
+                // is a selection overlay in vanilla).
+                if (!Find.Selector.IsSelected(turret))
+                {
+                    continue;
+                }
                 Vector3 end = e.target.HasThing ? e.target.Thing.DrawPos : e.target.Cell.ToVector3Shifted();
                 if (turret.Map == cur)
                 {
@@ -505,18 +513,12 @@ namespace AsAboveSoBelow
                         end = LevelRenderer.ShiftedBelowDrawPos(end);
                     }
                     CrossLevelCombatUI.DrawLine(turret.DrawPos, end);
-                    if (Find.Selector.IsSelected(turret))
-                    {
-                        CrossLevelCombatUI.DrawTargetMarker(end);
-                    }
+                    CrossLevelCombatUI.DrawTargetMarker(end);
                 }
                 else if (below != null && turret.Map == below && e.targetMap == cur)
                 {
                     CrossLevelCombatUI.DrawLine(LevelRenderer.ShiftedBelowDrawPos(turret.DrawPos), end);
-                    if (Find.Selector.IsSelected(turret))
-                    {
-                        CrossLevelCombatUI.DrawTargetMarker(end);
-                    }
+                    CrossLevelCombatUI.DrawTargetMarker(end);
                 }
             }
         }

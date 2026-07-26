@@ -17,12 +17,17 @@ namespace AsAboveSoBelow
     /// 2. Targeter hover CROSSHAIR (TargeterUpdate postfix): the rotating target
     ///    highlight, drawn at the position the below target actually renders at
     ///    (shifted), so aiming across the gap reads exactly like same-map aiming.
-    /// 3. ALWAYS-ON engagement lines (drawn per frame from LevelComp.MapComponentUpdate,
-    ///    not selection-gated): every active cross-level shooter - pawn or turret -
-    ///    draws a line to its target whenever either end is on the viewed map, with the
-    ///    vanilla aim pie while a pawn warms up. Endpoints are altitude-clamped to the
-    ///    overlay layer (the raw see-below shift carries y = -2.5, which buried the
-    ///    line under the below-view band - the round-2 "no line" report).
+    /// 3. Engagement overlays (drawn per frame from LevelComp.MapComponentUpdate):
+    ///    each active cross-level shooter - pawn or turret - whose SHOOTER IS
+    ///    SELECTED draws a line to its target, the vanilla warmup aim pie, and the
+    ///    target marker, whenever either end is on the viewed map. Selection-gated
+    ///    for vanilla parity: a drafted pawn's target line (DrawExtraSelectionOverlays)
+    ///    and its warmup pie (Stance_Warmup.StanceDraw) are selection overlays in
+    ///    vanilla, so an unselected cross-fire must not paint the map with lines. The
+    ///    weapon aim POSE itself (Stance_ABCrossAim) still renders for every shooter.
+    ///    Endpoints are altitude-clamped to the overlay layer (the raw see-below shift
+    ///    carries y = -2.5, which buried the line under the below-view band - the
+    ///    round-2 "no line" report).
     ///
     /// Registry: JobDriver_ABCrossLevelAttack registers/unregisters its pawn (load-safe
     /// via MakeNewToils); turrets are enumerated from CrossLevelTurret's own store.
@@ -60,6 +65,17 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                // Vanilla parity: the engagement line, warmup aim pie and target
+                // marker are all SELECTION overlays - vanilla draws a drafted
+                // pawn's target line (DrawExtraSelectionOverlays) and its warmup
+                // pie (Stance_Warmup.StanceDraw) only for the selected pawn. Draw
+                // these only when the shooter is selected; the weapon AIM POSE
+                // itself (Stance_ABCrossAim) still renders for every shooter,
+                // exactly like a same-map firefight.
+                if (!Find.Selector.IsSelected(p))
+                {
+                    continue;
+                }
                 if (p.Map == cur)
                 {
                     // Shooter on the viewed level; target below (shifted) or above
@@ -73,21 +89,15 @@ namespace AsAboveSoBelow
                         GenDraw.DrawAimPie(p, new LocalTargetInfo(target),
                             (int)(driver.WarmupTicksLeft * 0.5f), 0.2f);
                     }
-                    if (Find.Selector.IsSelected(p))
-                    {
-                        // The vanilla "who am I attacking" target highlight, which
-                        // vanilla itself cannot draw for a cross-map job target.
-                        DrawTargetMarker(end);
-                    }
+                    // The vanilla "who am I attacking" target highlight, which
+                    // vanilla itself cannot draw for a cross-map job target.
+                    DrawTargetMarker(end);
                 }
                 else if (below != null && p.Map == below)
                 {
                     // Shooter seen through the hole, firing up at the viewed level.
                     DrawLine(LevelRenderer.ShiftedBelowDrawPos(p.DrawPos), target.DrawPos);
-                    if (Find.Selector.IsSelected(p))
-                    {
-                        DrawTargetMarker(target.DrawPos);
-                    }
+                    DrawTargetMarker(target.DrawPos);
                 }
             }
             for (int i = 0; i < tmpStale.Count; i++)
