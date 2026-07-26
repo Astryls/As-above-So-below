@@ -10,6 +10,8 @@
     <!-- Rotatable: the flight faces the direction pawns descend/ascend.
          Counterpart spawning copies Rotation, so the pair stays aligned. -->
     <rotatable>true</rotatable>
+    <!-- New art faces south by default; place that way so the icon matches. -->
+    <defaultPlacingRot>South</defaultPlacingRot>
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
@@ -52,12 +54,9 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2.12,1.51)</drawSize>
-      <drawOffsetNorth>(0,0,0.14)</drawOffsetNorth>
-      <drawOffsetEast>(0.07,0,-0.3)</drawOffsetEast>
-      <drawOffsetSouth>(0.04,0,0)</drawOffsetSouth>
-      <drawOffsetWest>(-0.04,0,-0.3)</drawOffsetWest>
+      <drawSize>(2,2)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -88,8 +87,9 @@
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2,2)</drawSize>
+      <drawSize>(3,3)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -106,12 +106,9 @@
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(2.75,2.75)</drawSize>
-      <drawOffsetNorth>(0,0,0.4)</drawOffsetNorth>
-      <drawOffsetEast>(0,0,0.4)</drawOffsetEast>
-      <drawOffsetSouth>(0,0,0.35)</drawOffsetSouth>
-      <drawOffsetWest>(0,0,0.4)</drawOffsetWest>
+      <drawSize>(3,3)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
@@ -139,10 +136,11 @@
       <Mass>70</Mass>
     </statBases>
     <graphicData>
-      <texPath>Things/Building/AB_Elevator_AB_Elevator</texPath>
+      <texPath>Things/Building/AB_Elevator</texPath>
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_Elevator</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>0</deltaLevel>
@@ -160,6 +158,8 @@
     <fillPercent>0.20</fillPercent>
     <!-- Rotatable: the ladder leans against the wall on its facing edge. -->
     <rotatable>true</rotatable>
+    <!-- New art faces south by default; place that way so the icon matches. -->
+    <defaultPlacingRot>South</defaultPlacingRot>
     <size>(1,1)</size>
     <designationCategory>Structure</designationCategory>
     <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
@@ -198,6 +198,7 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>-1</deltaLevel>
@@ -216,11 +217,12 @@
       <texPath>Things/Building/AB_LadderUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
-      <drawOffsetNorth>(0,0,0.33)</drawOffsetNorth>
-      <drawOffsetEast>(0.33,0,0)</drawOffsetEast>
-      <drawOffsetSouth>(0,0,-0.33)</drawOffsetSouth>
-      <drawOffsetWest>(-0.33,0,0)</drawOffsetWest>
+      <drawOffsetNorth>(0,0,-0.33)</drawOffsetNorth>
+      <drawOffsetEast>(0,0,0)</drawOffsetEast>
+      <drawOffsetSouth>(0,0,0.33)</drawOffsetSouth>
+      <drawOffsetWest>(0,0,0)</drawOffsetWest>
     </graphicData>
+    <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
@@ -238,12 +240,9 @@
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1.85,1.85)</drawSize>
-      <drawOffsetNorth>(0,0,0.27)</drawOffsetNorth>
-      <drawOffsetEast>(-0.1,0,0.3)</drawOffsetEast>
-      <drawOffsetSouth>(0,0,0.4)</drawOffsetSouth>
-      <drawOffsetWest>(0.1,0,0.2)</drawOffsetWest>
+      <drawSize>(2,2)</drawSize>
     </graphicData>
+    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABStairsExtension">
         <deltaLevel>1</deltaLevel>
