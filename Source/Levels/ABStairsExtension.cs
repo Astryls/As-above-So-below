@@ -38,5 +38,11 @@ namespace AsAboveSoBelow
         /// <summary>Whether this link bridges Rimefeller oil and fuel pipeline
         /// networks. Only the vertical chem pipe sets this.</summary>
         public bool bridgeChem;
+
+        /// <summary>Whether this link bridges Dubs Bad Hygiene air-conditioning
+        /// (cooling) networks touching its cells: outdoor-unit cooling capacity
+        /// is pooled across the two levels so a compressor on one level cools
+        /// rooms on the other. Only the vertical air duct sets this.</summary>
+        public bool bridgeAircon;
     }
 }
