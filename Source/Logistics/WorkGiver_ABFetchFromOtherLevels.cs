@@ -168,6 +168,52 @@ namespace AsAboveSoBelow
                             }
                         }
                     }
+                    // In-STORAGE items on `target` whose best storage is a STRICTLY
+                    // better level elsewhere in the column - e.g. a new Critical
+                    // basement stockpile pulling items out of a Normal sky stockpile
+                    // two levels up. Vanilla considers such an item "in valid best
+                    // storage" (best on ITS OWN map) and drops it from the haulables
+                    // lister, so only a pawn already standing on `target` would ever
+                    // push the upgrade. Bring an idle pawn here; on arrival the push
+                    // giver / chain carries it to the better tier. Bounded by the
+                    // shared per-island examine budget.
+                    if (!found)
+                    {
+                        System.Collections.Generic.List<SlotGroup> groups =
+                            target.haulDestinationManager?.AllGroupsListForReading;
+                        if (groups != null)
+                        {
+                            for (int gi = 0; gi < groups.Count && !found && examined <= MaxItemsPerScan; gi++)
+                            {
+                                SlotGroup g = groups[gi];
+                                if (g?.HeldThings == null)
+                                {
+                                    continue;
+                                }
+                                foreach (Thing st in g.HeldThings)
+                                {
+                                    if (++examined > MaxItemsPerScan)
+                                    {
+                                        break;
+                                    }
+                                    if (st == null || !st.Spawned || st.Map != target
+                                        || st.IsForbidden(pawn)
+                                        || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, st, forced: false))
+                                    {
+                                        continue;
+                                    }
+                                    if (CrossLevelHaul.TargetLevelFor(pawn, st, out Building_ABStairs _) != null
+                                        || CrossLevelHaulChain.TryStartFarHaul(pawn, st,
+                                            out Building_ABStairs _, out Building_ABStairs _))
+                                    {
+                                        found = true;
+                                        fetchDest = st.PositionHeld;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (!found && wantDemand)
                     {
                         // Pawn is virtually on `target` now, so both the stack

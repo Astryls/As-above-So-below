@@ -27,6 +27,14 @@ namespace AsAboveSoBelow
         private struct VerdictEntry
         {
             public int tick;
+            /// <summary>uniqueID of the map the item was ON when this verdict was
+            /// computed. The cache is keyed by thingIDNumber alone, but a relay
+            /// stack CHANGES level between hops - a verdict made while the item
+            /// sat in a Normal sky stockpile ('nothing adjacent') must NOT be
+            /// reused once the same item is set down on the surface, or the
+            /// downward relay stalls (no auto-haul, RMB 'no spot configured').
+            /// Stale when this != the item's current map.</summary>
+            public int sourceMapId;
             public int mapId;
             /// <summary>Store cell (or demand island anchor) discovered when the
             /// verdict was made, so the cached path can still route strictly
@@ -147,7 +155,9 @@ namespace AsAboveSoBelow
             int now = Find.TickManager.TicksGame;
             if (!ignorePins)
             {
-                if (verdictCache.TryGetValue(t.thingIDNumber, out VerdictEntry entry) && now - entry.tick < VerdictTtlTicks)
+                if (verdictCache.TryGetValue(t.thingIDNumber, out VerdictEntry entry)
+                    && now - entry.tick < VerdictTtlTicks
+                    && entry.sourceMapId == map.uniqueID)
                 {
                     if (entry.mapId == -1)
                     {
@@ -185,17 +195,36 @@ namespace AsAboveSoBelow
                 // Best tier the item could reach on its OWN level right now
                 // (its current cell, or a strictly-better local stockpile).
                 StoragePriority bestLocal = BestLocalPriority(pawn, t, map, current);
-                int cap = 0;
+                // Evaluate BOTH linked levels and keep the STRICTLY-HIGHER-priority
+                // destination (not just upper-first). One big map: an item goes to
+                // the best storage tier in the column, and - critically - a relay
+                // stack set down on an interchange level continues toward the better
+                // tier instead of bouncing back the way it came. Without this a
+                // sky-Normal item bound for a Critical basement, set down on the
+                // surface mid-relay, would be re-evaluated upper-first and hauled
+                // straight back up into the Normal sky storage it just left.
+                Building_ABStairs upStairs = null, downStairs = null;
+                IntVec3 upCell = IntVec3.Invalid, downCell = IntVec3.Invalid;
+                int upCap = 0, downCap = 0;
+                StoragePriority upPrio = StoragePriority.Unstored, downPrio = StoragePriority.Unstored;
+                bool upOk = Check(pawn, t, comp.upperMap, current, ref upStairs, ref upCell, ref upCap, out upPrio);
+                bool downOk = Check(pawn, t, comp.lowerMap, current, ref downStairs, ref downCell, ref downCap, out downPrio);
                 StoragePriority destPrio = StoragePriority.Unstored;
-                if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell, ref cap, out destPrio))
+                if (upOk && (!downOk || (int)upPrio >= (int)downPrio))
                 {
                     found = comp.upperMap;
-                    allowedCount = cap;
+                    stairs = upStairs;
+                    foundCell = upCell;
+                    allowedCount = upCap;
+                    destPrio = upPrio;
                 }
-                else if (Check(pawn, t, comp.lowerMap, current, ref stairs, ref foundCell, ref cap, out destPrio))
+                else if (downOk)
                 {
                     found = comp.lowerMap;
-                    allowedCount = cap;
+                    stairs = downStairs;
+                    foundCell = downCell;
+                    allowedCount = downCap;
+                    destPrio = downPrio;
                 }
                 if (found != null)
                 {
@@ -246,6 +275,7 @@ namespace AsAboveSoBelow
                 verdictCache[t.thingIDNumber] = new VerdictEntry
                 {
                     tick = now,
+                    sourceMapId = map.uniqueID,
                     mapId = found?.uniqueID ?? -1,
                     cell = foundCell,
                     count = allowedCount,
