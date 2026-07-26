@@ -35,11 +35,16 @@ namespace AsAboveSoBelow
         private static bool CanStartFor(Pawn pawn, Thing item)
         {
             if (!ABGuard.On(ABGuard.Logistics) || pawn == null || item == null
-                || ABMod.Settings == null || !ABMod.Settings.crossLevelHauling
-                || CrossLevelWork.VirtualScanActive)
+                || ABMod.Settings == null || !ABMod.Settings.crossLevelHauling)
             {
                 return false;
             }
+            // NOTE: intentionally NOT gated on VirtualScanActive. TryStartFarHaul
+            // does no virtual position swaps of its own (coarse LevelAcceptsItem
+            // + reachability + a same-map best-local read), so it is safe to
+            // EVALUATE inside another giver's virtual scan - which is exactly how
+            // the fetch giver discovers that an off-level item is destined 2+
+            // gaps away and sends an idle pawn to go start the push.
             if (!item.Spawned || item.Map != pawn.Map || item.IsForbidden(pawn)
                 || !HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, item, forced: false))
             {

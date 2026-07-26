@@ -155,6 +155,17 @@ namespace AsAboveSoBelow
                                 fetchDest = t.PositionHeld;
                                 break;
                             }
+                            // Or is its only accepting storage 2+ gaps away (multi-hop)?
+                            // The pawn is virtually on `target`, so this reads the far
+                            // destination from the item's real level. Bring the pawn
+                            // here; on arrival the push chain carries it onward.
+                            if (CrossLevelHaulChain.TryStartFarHaul(pawn, t,
+                                    out Building_ABStairs _, out Building_ABStairs _))
+                            {
+                                found = true;
+                                fetchDest = t.PositionHeld;
+                                break;
+                            }
                         }
                     }
                     if (!found && wantDemand)
