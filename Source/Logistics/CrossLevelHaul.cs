@@ -45,6 +45,11 @@ namespace AsAboveSoBelow
             /// caller claims an in-flight ledger entry); false for storage
             /// moves.</summary>
             public bool demand;
+            /// <summary>True when this is a STORAGE verdict whose destination
+            /// priority strictly beats the best storage the item could reach on
+            /// its own level - the elevated (above-vanilla) haul giver fires
+            /// only on these. Always false for demand verdicts.</summary>
+            public bool beatsLocal;
         }
 
         /// <summary>Storage settings changed somewhere: every cached verdict
@@ -78,9 +83,23 @@ namespace AsAboveSoBelow
         /// no-space parity).</summary>
         public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins, out int allowedCount, out bool demand)
         {
+            return TargetLevelFor(pawn, t, out stairs, ignorePins, out allowedCount, out demand, out bool _);
+        }
+
+        /// <summary>beatsLocal variant: also reports whether this is a STORAGE
+        /// move whose destination priority strictly beats the best storage the
+        /// item could reach on its own level. The elevated cross-level haul
+        /// giver (priorityInType above vanilla HaulGeneral) fires only on
+        /// beatsLocal verdicts, so a higher-tier stockpile on another level - a
+        /// Critical larder below, say - pulls the stack across at full hauling
+        /// urgency instead of starving behind every local haul, while
+        /// equal-tier lateral moves stay on the low-priority givers.</summary>
+        public static Map TargetLevelFor(Pawn pawn, Thing t, out Building_ABStairs stairs, bool ignorePins, out int allowedCount, out bool demand, out bool beatsLocal)
+        {
             stairs = null;
             allowedCount = 0;
             demand = false;
+            beatsLocal = false;
             if (!ABGuard.On(ABGuard.Logistics) || pawn == null || t == null)
             {
                 return null;
@@ -121,6 +140,7 @@ namespace AsAboveSoBelow
                     {
                         allowedCount = entry.count;
                         demand = entry.demand;
+                        beatsLocal = entry.beatsLocal;
                         return cached;
                     }
                     // Stale verdict (map gone, stairs gone, or islands changed so
@@ -144,16 +164,29 @@ namespace AsAboveSoBelow
             if (ignorePins || CrossLevelDemand.ExportAllowed(map, t))
             {
                 StoragePriority current = StoreUtility.CurrentStoragePriorityOf(t);
+                // Best tier the item could reach on its OWN level right now
+                // (its current cell, or a strictly-better local stockpile).
+                StoragePriority bestLocal = BestLocalPriority(pawn, t, map, current);
                 int cap = 0;
-                if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell, ref cap))
+                StoragePriority destPrio = StoragePriority.Unstored;
+                if (Check(pawn, t, comp.upperMap, current, ref stairs, ref foundCell, ref cap, out destPrio))
                 {
                     found = comp.upperMap;
                     allowedCount = cap;
                 }
-                else if (Check(pawn, t, comp.lowerMap, current, ref stairs, ref foundCell, ref cap))
+                else if (Check(pawn, t, comp.lowerMap, current, ref stairs, ref foundCell, ref cap, out destPrio))
                 {
                     found = comp.lowerMap;
                     allowedCount = cap;
+                }
+                if (found != null)
+                {
+                    // One-big-map parity: only a STRICTLY higher tier than the
+                    // best local option elevates the haul above vanilla. Equal
+                    // tiers stay on the low-priority givers (no stair thrash),
+                    // and the elevation is monotone (bounded by Critical) so it
+                    // cannot oscillate.
+                    beatsLocal = (int)destPrio > (int)bestLocal;
                 }
             }
             if (found == null && (ignorePins || CrossLevelDemand.ExportAllowedForDemand(map, t)))
@@ -185,7 +218,8 @@ namespace AsAboveSoBelow
                     mapId = found?.uniqueID ?? -1,
                     cell = foundCell,
                     count = allowedCount,
-                    demand = demand
+                    demand = demand,
+                    beatsLocal = beatsLocal
                 };
             }
             return found;
@@ -218,8 +252,9 @@ namespace AsAboveSoBelow
             return null;
         }
 
-        private static bool Check(Pawn pawn, Thing t, Map target, StoragePriority current, ref Building_ABStairs stairs, ref IntVec3 destCell, ref int capacity)
+        private static bool Check(Pawn pawn, Thing t, Map target, StoragePriority current, ref Building_ABStairs stairs, ref IntVec3 destCell, ref int capacity, out StoragePriority destPriority)
         {
+            destPriority = StoragePriority.Unstored;
             if (target == null || target.Disposed)
             {
                 return false;
@@ -243,6 +278,7 @@ namespace AsAboveSoBelow
                 bool better;
                 IntVec3 storeCell = IntVec3.Invalid;
                 int cap = 0;
+                StoragePriority foundPrio = StoragePriority.Unstored;
                 try
                 {
                     // Storage-FOR, not store-CELL (verify sweep 2026-07-23): the
@@ -255,10 +291,12 @@ namespace AsAboveSoBelow
                         out storeCell, out IHaulDestination haulDest, needAccurateResult: false);
                     if (better)
                     {
-                        // Capacity BEFORE the container position overwrites
+                        // Destination tier (for the beats-local elevation test)
+                        // and capacity BEFORE the container position overwrites
                         // storeCell (an invalid cell is what identifies the
                         // container path). Reads only target-map grids, so
                         // running under the virtual swap is safe.
+                        foundPrio = haulDest.GetStoreSettings().Priority;
                         cap = AbsorbCapacity(t, target, storeCell, haulDest);
                     }
                     if (better && !storeCell.IsValid && haulDest is Thing destThing)
@@ -291,9 +329,29 @@ namespace AsAboveSoBelow
                 stairs = s;
                 destCell = storeCell;
                 capacity = cap;
+                destPriority = foundPrio;
                 return true;
             }
             return false;
+        }
+
+        /// <summary>Highest storage priority the item could reach on its OWN
+        /// level right now: its current cell's tier, or a strictly-better local
+        /// stockpile if one exists. The elevated cross-level giver fires only
+        /// when another level beats THIS, so equal-tier lateral moves stay
+        /// deprioritized (no stair thrash) while a genuinely higher tier - a
+        /// Critical stockpile below - pulls the item across at full urgency.
+        /// Runs on the pawn's real map (no virtual swap), reading real
+        /// positions.</summary>
+        private static StoragePriority BestLocalPriority(Pawn pawn, Thing t, Map map, StoragePriority current)
+        {
+            if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, map, current, pawn.Faction,
+                    out IntVec3 _, out IHaulDestination localDest, needAccurateResult: false)
+                && localDest != null)
+            {
+                return localDest.GetStoreSettings().Priority;
+            }
+            return current;
         }
 
         /// <summary>How many items of t the discovered destination can absorb

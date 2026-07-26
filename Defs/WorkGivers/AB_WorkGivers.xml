@@ -1,6 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
+  <!-- One-big-map storage-priority parity: an item whose best storage is a
+       STRICTLY higher-priority stockpile on a linked level (a Critical
+       larder below, etc.) crosses at full hauling urgency, ABOVE vanilla
+       HaulGeneral (priorityInType 20 > 15), so high-tier stockpiles on other
+       levels are not starved behind local hauling. Equal-tier lateral moves
+       stay on the low-priority givers below so pawns do not thrash the stairs.
+       Handles single and bulk pawns via the shared job builder. -->
+  <WorkGiverDef>
+    <defName>AB_HaulToBetterLevelStorage</defName>
+    <label>haul to higher-priority storage on other levels</label>
+    <giverClass>AsAboveSoBelow.WorkGiver_ABHaulToBetterLevelStorage</giverClass>
+    <workType>Hauling</workType>
+    <verb>haul</verb>
+    <gerund>hauling</gerund>
+    <priorityInType>20</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
   <WorkGiverDef>
     <defName>AB_HaulAcrossLevels</defName>
     <label>haul things to other levels</label>
