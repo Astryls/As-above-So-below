@@ -52,7 +52,17 @@ namespace AsAboveSoBelow
                 return null;
             }
 
-            if (ABInventoryHaulBridge.AnyActive && ABInventoryHaulBridge.HasComp(pawn))
+            // Bulk loads into INVENTORY, which is mass-gated: a heavy stack
+            // (stone chunks, steel slag, corpses) can weigh more than the pawn's
+            // remaining free space, so the inventory pickup returns 0 and the
+            // bulk driver walks the whole queue lifting NOTHING, ends empty, and
+            // the giver re-issues the same job forever - the "pawns walk between
+            // chunks one after the other but never pick them up" loop players
+            // hit. Only take the bulk path when the seed can actually ride in
+            // inventory; otherwise fall back to the carry-in-hands single haul,
+            // which always lifts one stack regardless of inventory encumbrance.
+            if (ABInventoryHaulBridge.AnyActive && ABInventoryHaulBridge.HasComp(pawn)
+                && MassUtility.CountToPickUpUntilOverEncumbered(pawn, seed) > 0)
             {
                 return BuildBulk(pawn, seed, target, stairs, exit, extra, ignorePins);
             }

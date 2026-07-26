@@ -17,11 +17,14 @@ namespace AsAboveSoBelow
     /// a Critical basement larder that never filled while any surface hauling
     /// remained).
     ///
-    /// Equal-tier lateral cross-level moves stay on the LOW-priority givers
-    /// (AB_HaulAcrossLevels / fetch, below vanilla) so pawns never thrash the
-    /// stairs for a same-priority shuffle. The verdict is monotone - each
-    /// elevated move strictly raises the stack's stored tier, bounded by
-    /// Critical - so there is no oscillation.
+    /// Equal-tier (or lower) cross-level moves are NOT hauled at all: a
+    /// same-priority stockpile on another level is never a reason to walk the
+    /// stairs (user directive 2026-07-26). TargetLevelFor discards them at the
+    /// source, so neither this giver nor the low-priority ones ferry a stack
+    /// between two same-priority stores on different levels. Only explicit
+    /// player intent (Allow Tool Haul Urgently) still crosses on equal tier.
+    /// The verdict is monotone - each elevated move strictly raises the stack's
+    /// stored tier, bounded by Critical - so there is no oscillation.
     ///
     /// Handles both single and bulk pawns via the shared job builder, which
     /// auto-selects a Pick Up And Haul / Hauler's Dream bulk load when the pawn

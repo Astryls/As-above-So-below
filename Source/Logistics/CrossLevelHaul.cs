@@ -181,12 +181,25 @@ namespace AsAboveSoBelow
                 }
                 if (found != null)
                 {
-                    // One-big-map parity: only a STRICTLY higher tier than the
-                    // best local option elevates the haul above vanilla. Equal
-                    // tiers stay on the low-priority givers (no stair thrash),
-                    // and the elevation is monotone (bounded by Critical) so it
-                    // cannot oscillate.
+                    // One-big-map parity: a cross-level STORAGE move is only
+                    // worth the stairs when the destination tier STRICTLY beats
+                    // the best storage the item could reach on its OWN level.
                     beatsLocal = (int)destPrio > (int)bestLocal;
+                    // Equal (or lower) tier than a local store the item can
+                    // reach: a same-priority stockpile on another level is NOT
+                    // a reason to walk the stairs (user directive 2026-07-26 -
+                    // "two same-priority stores on different levels must not
+                    // invoke a cross-level haul"). Discard the move entirely so
+                    // vanilla's local haul owns the item and the storage branch
+                    // falls through to the demand path. Explicit player intent
+                    // (Allow Tool Haul Urgently -> ignorePins) still crosses.
+                    if (!beatsLocal && !ignorePins)
+                    {
+                        found = null;
+                        stairs = null;
+                        foundCell = IntVec3.Invalid;
+                        allowedCount = 0;
+                    }
                 }
             }
             if (found == null && (ignorePins || CrossLevelDemand.ExportAllowedForDemand(map, t)))

@@ -25,6 +25,13 @@ namespace AsAboveSoBelow
 
         private bool hauledAnything;
 
+        /// <summary>Whether the MOST RECENT pickup toil actually loaded
+        /// something. Once a stack is too heavy to add (inventory near
+        /// capacity), continuing to walk the rest of the queue lifts nothing
+        /// and just wastes a trip, so gathering stops the moment a visit comes
+        /// up empty instead of trudging to every queued stack.</summary>
+        private bool lastPickupOk;
+
         private Building_ABStairs Stairs => job.GetTarget(TargetIndex.A).Thing as Building_ABStairs;
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
@@ -61,9 +68,13 @@ namespace AsAboveSoBelow
             yield return next;
             yield return gotoItem;
             yield return pickup;
-            // Keep gathering same-destination cargo until the queue is empty or
-            // the pawn is near capacity.
-            yield return Toils_Jump.JumpIf(next, () => !job.targetQueueB.NullOrEmpty()
+            // Keep gathering same-destination cargo until the queue is empty,
+            // the pawn is near capacity, OR the last visited stack could not be
+            // lifted (lastPickupOk) - the latter stops the pawn from walking to
+            // every remaining stack when its inventory is already full of heavy
+            // cargo it cannot add to.
+            yield return Toils_Jump.JumpIf(next, () => lastPickupOk
+                && !job.targetQueueB.NullOrEmpty()
                 && MassUtility.EncumbrancePercent(pawn) < GatherEncumbranceCap);
             // Picked up nothing (already loaded down): bail cleanly, no trip.
             yield return Toils_Jump.JumpIf(done, () => !hauledAnything);
@@ -78,6 +89,7 @@ namespace AsAboveSoBelow
             Toil toil = ToilMaker.MakeToil("AB_BulkHaulPickup");
             toil.initAction = delegate
             {
+                lastPickupOk = false;
                 Thing t = job.GetTarget(TargetIndex.B).Thing;
                 if (t == null || !t.Spawned || pawn.inventory == null)
                 {
@@ -109,6 +121,7 @@ namespace AsAboveSoBelow
                 Thing reg = split.Destroyed ? FirstOfDef(inv, split.def) : split;
                 ABInventoryHaulBridge.Register(pawn, reg);
                 hauledAnything = true;
+                lastPickupOk = true;
             };
             toil.defaultCompleteMode = ToilCompleteMode.Instant;
             return toil;

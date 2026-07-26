@@ -334,6 +334,24 @@ namespace AsAboveSoBelow
                 }
             }
 
+            // A foreign FloatMenuMakerMap.GetOptions PREFIX (a bed-ownership
+            // mod was the reported culprit) may SKIP the vanilla original during
+            // this re-entrant call and leave both the returned list AND the out
+            // context null. Vanilla never does that, so nothing downstream
+            // guards it - not our own AddOption, and not the foreign GetOptions
+            // POSTFIXES that run on the OUTER call (Melee Animation's postfix
+            // does __result.AddRange(...) and NREs on a null list, throwing a
+            // red "Error trying to make float menu" on every cross-level click).
+            // Coalesce so the menu degrades to empty instead of crashing.
+            if (options == null)
+            {
+                options = new List<FloatMenuOption>();
+            }
+            if (context == null)
+            {
+                context = new FloatMenuContext(single, crossMap ? destPos : clickPos, cur);
+            }
+
             if (!pawnOnTarget)
             {
                 // Cross-level attack: if the click hits an attackable target, route the
@@ -1033,6 +1051,18 @@ namespace AsAboveSoBelow
                     return false;
                 }
                 __result = CrossLevelOrders.BuildOptions(pawn, clickPos, cur, targetMap, out context);
+                // Never hand a null result/context back to the Selector or to
+                // foreign GetOptions postfixes (Melee Animation etc.) - vanilla
+                // guarantees non-null, so they assume it. BuildOptions already
+                // coalesces, this is the belt-and-suspenders at the boundary.
+                if (__result == null)
+                {
+                    __result = new List<FloatMenuOption>();
+                }
+                if (context == null)
+                {
+                    context = new FloatMenuContext(new List<Pawn> { pawn }, clickPos, cur);
+                }
                 return false;
             }
             catch (Exception e)
