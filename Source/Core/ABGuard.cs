@@ -60,6 +60,11 @@ namespace AsAboveSoBelow
         public static readonly ABGuardSwitch Transit = new ABGuardSwitch("transit");
         public static readonly ABGuardSwitch Areas = new ABGuardSwitch("areas");
 
+        /// <summary>CAI 5000 (Krkr.rule56) integration: cross-level fog-of-war
+        /// vision reveal. Tripping it stops feeding sky/surface vision across
+        /// the gap; CAI keeps working per-map and the see-below keeps rendering.</summary>
+        public static readonly ABGuardSwitch CombatAI = new ABGuardSwitch("combatAI");
+
         /// <summary>Background-thread compute lanes (see-below mask build).
         /// Tripping this falls back to synchronous rebuilds, never off.</summary>
         public static readonly ABGuardSwitch Async = new ABGuardSwitch("async");
@@ -67,7 +72,7 @@ namespace AsAboveSoBelow
         private static readonly ABGuardSwitch[] All =
         {
             Ui, LevelGen, Rendering, Movement, Combat, Logistics, RoofSync, Weather, Power, Pipes, Climate,
-            Threats, HostileMove, World, Social, Transit, Areas, Async
+            Threats, HostileMove, World, Social, Transit, Areas, CombatAI, Async
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;

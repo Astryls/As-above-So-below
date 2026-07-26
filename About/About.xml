@@ -104,6 +104,7 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
     <li>BiomesTeam.BiomesCaverns</li>
     <li>sarg.alphabiomes</li>
     <li>XMB.AncientUrbanrUins.MO</li>
+    <li>Krkr.rule56</li>
   </loadAfter>
   <incompatibleWith>
     <li>telardo.MultiFloors</li>

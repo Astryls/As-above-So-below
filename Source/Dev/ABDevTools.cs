@@ -216,6 +216,96 @@ namespace AsAboveSoBelow
             Report("cross-gap combat self-test", sb, pass, fail);
         }
 
+        [DebugAction("As above", "AB: CAI fog self-test", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void SelfTestCombatAIFog()
+        {
+            StringBuilder sb = new StringBuilder();
+            int pass = 0;
+            int fail = 0;
+
+            void Check(string name, bool cond, string detail = "")
+            {
+                if (cond)
+                {
+                    pass++;
+                    sb.AppendLine("  PASS  " + name);
+                }
+                else
+                {
+                    fail++;
+                    sb.AppendLine("  FAIL  " + name + (string.IsNullOrEmpty(detail) ? "" : "   [" + detail + "]"));
+                }
+            }
+
+            void Note(string line)
+            {
+                sb.AppendLine("  INFO  " + line);
+            }
+
+            try
+            {
+                if (!ABCombatAICompat.Active)
+                {
+                    sb.AppendLine("  SKIP  CAI 5000 (Krkr.rule56) not loaded - nothing to verify.");
+                    Report("CAI fog self-test", sb, pass, fail);
+                    return;
+                }
+                Note(ABCombatAICompat.StatusLine());
+
+                // Reflection surface must fully resolve or the bridge is inert.
+                Check("CAI fog API resolved (MapComponent_FogGrid + RevealSpot + settings)", ABCombatAICompat.Ready);
+                if (!ABCombatAICompat.Ready)
+                {
+                    Report("CAI fog self-test", sb, pass, fail);
+                    return;
+                }
+
+                // Fog Of War is opt-in; report but do not fail on it being off.
+                Note("CAI Fog Of War is currently " + (ABCombatAICompat.FogEnabled ? "ON" : "off (opt-in in CAI mod settings)")
+                    + "; cross-level vision only runs while it is ON.");
+
+                Map surface = Find.CurrentMap?.GroundMap();
+                if (surface == null)
+                {
+                    Check("ground/surface map exists", false, "no ground map");
+                    Report("CAI fog self-test", sb, pass, fail);
+                    return;
+                }
+                Map sky = surface.Levels()?.upperMap ?? LevelMapGen.GetOrGenerate(surface, 1, ABDefOf.AB_Sky, out _);
+                Check("sky level exists", sky != null);
+
+                // CAI adds its fog component to every map, ours included.
+                Check("surface carries CAI fog component", ABCombatAICompat.HasFogComp(surface));
+                if (sky != null)
+                {
+                    Check("sky carries CAI fog component", ABCombatAICompat.HasFogComp(sky));
+                }
+
+                // Exercise the reveal seam end to end: queue a reveal on the
+                // surface at an open base cell. Succeeds (queues without error)
+                // regardless of whether FoW is currently on.
+                IntVec3 b = FindOpenBaseCell(surface);
+                bool revealed = ABCombatAICompat.RevealOnMap(surface, b, 18f, 90);
+                Check("RevealSpot invoked on the surface fog grid at " + b, revealed);
+
+                if (sky != null)
+                {
+                    bool revealedUp = ABCombatAICompat.RevealOnMap(sky, b, 18f, 90);
+                    Check("RevealSpot invoked on the sky fog grid at " + b, revealedUp);
+                }
+
+                Note("Phase 1 seam verified. Turn on CAI Fog Of War, view the sky over a hole, "
+                    + "and (once the vision pass is wired) the surface below should stay lit under a colonist.");
+            }
+            catch (Exception e)
+            {
+                fail++;
+                sb.AppendLine("  EXCEPTION during self-test:\n" + e);
+            }
+
+            Report("CAI fog self-test", sb, pass, fail);
+        }
+
         [DebugAction("As above", "AB: auto-engage self-test", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void SelfTestAutoEngage()
         {
