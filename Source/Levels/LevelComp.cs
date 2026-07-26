@@ -261,7 +261,6 @@ namespace AsAboveSoBelow
             {
                 CrossLevelCombatUI.DrawEngagementVisuals(map);
                 CrossLevelTurret.DrawVisuals(map);
-                ABCrossLevelTracers.Draw(map);
                 ABBelowGotoDrag.FrameUpdate(map);
             }
             catch (Exception e)

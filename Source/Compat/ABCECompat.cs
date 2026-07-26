@@ -124,6 +124,7 @@ namespace AsAboveSoBelow
                 }
 
                 var proj = (ProjectileCE)GenSpawn.Spawn(projDef, spawnCell, targetMap);
+                CrossGapProjectiles.Register(proj);
 
                 float shotHeight = 1f;
                 float shotSpeed = projDef.projectile.speed;

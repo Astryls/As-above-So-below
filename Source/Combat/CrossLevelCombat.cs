@@ -370,6 +370,7 @@ namespace AsAboveSoBelow
 
                 Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, targetMap);
                 ABShotEffects.ApplyWeaponTraits(proj, verb);
+                CrossGapProjectiles.Register(proj);
                 Thing equip = verb.EquipmentSource;
 
                 // Vanilla forced-miss scatter (Verb_LaunchProjectile.TryCastShot's
@@ -524,20 +525,18 @@ namespace AsAboveSoBelow
                 }
                 Map map = shot.targetMap;
 
-                Vector3 dir = (shooter.Position - target.Position).ToVector3();
-                dir.y = 0f;
-                dir = dir.sqrMagnitude > 0.001f ? dir.normalized : Vector3.forward;
-                // Short spawn-to-target flight: enough for a readable streak, small
-                // enough that a surface wall next to the target cannot intercept a
-                // shot our sky-plane line-of-fire model says is clear.
-                float back = Mathf.Min(2f, Mathf.Max(1f, shot.distance - 1f));
-                Vector3 originGround = target.DrawPos + dir * back;
-                IntVec3 spawnCell = originGround.ToIntVec3();
-                if (!spawnCell.InBounds(map))
-                {
-                    spawnCell = target.Position;
-                    originGround = target.DrawPos;
-                }
+                // Full 1:1 flight: the round spawns at the shooter's OWN column on the
+                // target map and flies the entire real distance to the target, so the
+                // projectile itself reads the cross-gap shot (the fake tracer is gone).
+                // Hit-case flags stay IntendedTarget only, so intervening surface walls
+                // and bystanders do NOT intercept a shot the sky-plane line-of-fire
+                // model already called clear (Projectile.CanHit gates non-target world
+                // and pawns behind flags we deliberately omit); a miss can legitimately
+                // clip cover along the way, exactly as a same-map shot would.
+                IntVec3 spawnCell = shooter.Position;
+                spawnCell.x = Mathf.Clamp(spawnCell.x, 0, map.Size.x - 1);
+                spawnCell.z = Mathf.Clamp(spawnCell.z, 0, map.Size.z - 1);
+                Vector3 originGround = spawnCell.ToVector3Shifted();
 
                 Thing equip = verb.EquipmentSource;
 
@@ -553,7 +552,6 @@ namespace AsAboveSoBelow
                         return false;
                     }
                     ABShotEffects.OnShotFired(shooter, verb, target);
-                    ABCrossLevelTracers.Add(shooter, target, shot.distance);
                     return true;
                 }
 
@@ -562,6 +560,7 @@ namespace AsAboveSoBelow
                 bool hit = Rand.Chance(aim);
                 Projectile proj = (Projectile)GenSpawn.Spawn(projDef, spawnCell, map);
                 ABShotEffects.ApplyWeaponTraits(proj, verb);
+                CrossGapProjectiles.Register(proj);
 
                 if (hit)
                 {
@@ -584,9 +583,6 @@ namespace AsAboveSoBelow
                 // The full vanilla per-shot side effects at the shooter (sound + tail,
                 // muzzle flash, records, notifies, changeable/charged, fuel).
                 ABShotEffects.OnShotFired(shooter, verb, target);
-                // A cross-level tracer bolt so the shot reads through the gap even when
-                // the single-column hole hides the real projectile from above.
-                ABCrossLevelTracers.Add(shooter, target, shot.distance);
                 return true;
             }
             catch (Exception e)

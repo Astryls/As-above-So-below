@@ -1219,14 +1219,21 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                TerrainDef top = skyTerrain.TerrainAt(pos);
-                if (top != air || roofs.Roofed(pos))
+                // Cross-gap rounds (Model B projectiles we launched across the gap) are
+                // exempt from the one-way-mirror visibility gate: the real bullet draws
+                // along its WHOLE path so it reads the shot 1:1, even where solid sky
+                // floor sits above it. Everything else obeys open-air / roof / fog.
+                if (!CrossGapProjectiles.IsCrossGap(t))
                 {
-                    continue;
-                }
-                if (fog.IsFogged(pos))
-                {
-                    continue;
+                    TerrainDef top = skyTerrain.TerrainAt(pos);
+                    if (top != air || roofs.Roofed(pos))
+                    {
+                        continue;
+                    }
+                    if (fog.IsFogged(pos))
+                    {
+                        continue;
+                    }
                 }
                 if (!view.Contains(pos) && !t.def.drawOffscreen)
                 {

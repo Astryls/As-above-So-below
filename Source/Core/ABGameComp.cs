@@ -24,6 +24,7 @@ namespace AsAboveSoBelow
             // Thing references from the previous session.
             CrossLevelCombat.PendingTargets.Clear();
             CrossLevelTurret.ClearAll();
+            CrossGapProjectiles.ClearAll();
             CrossLevelCombatUI.ActiveShooters.Clear();
             CrossLevelAnimals.ClearAll();
             ABRitualAttendance.ClearAll();
