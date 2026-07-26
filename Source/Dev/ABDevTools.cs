@@ -1962,7 +1962,8 @@ namespace AsAboveSoBelow
                 else
                 {
                     sb.Append(" || evalPawn=").Append(evalPawn.LabelShort).Append("@L").Append(evalPawn.Map.Level());
-                    sb.Append(" exportAllowed=").Append(CrossLevelDemand.ExportAllowed(itemMap, item));
+                    sb.Append(" exportAllowed=").Append(CrossLevelDemand.ExportAllowed(itemMap, item))
+                        .Append(" [").Append(CrossLevelDemand.ExportDiag(itemMap, item)).Append("]");
                     if (col)
                     {
                         bool fh = ColumnStorage.FirstHopToward(evalPawn, tm,

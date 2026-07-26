@@ -597,6 +597,19 @@ namespace AsAboveSoBelow
         /// parity: storage wins everything else). Two holds: an island whose
         /// OWN need (construction or live consumer requirement) still covers
         /// the stack, and a fresh import pin.</summary>
+        /// <summary>Dev diagnostic: which sub-condition of ExportAllowed (if any)
+        /// is blocking a storage export of t on map.</summary>
+        public static string ExportDiag(Map map, Thing t)
+        {
+            if (map == null || t?.def == null)
+            {
+                return "n/a";
+            }
+            return "importPinned=" + ImportPinned(t)
+                + " deliveredHere=" + DeliveredHere(map, t)
+                + " constrPin=" + PinnedByNativeNeed(map, t, constructionOnly: true);
+        }
+
         public static bool ExportAllowed(Map map, Thing t)
         {
             if (map == null || map.Disposed || t?.def == null)
@@ -614,7 +627,19 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            return !PinnedByNativeNeed(map, t);
+            // Retain CONSTRUCTION materials only (constructionOnly). A blueprint
+            // actively pulls material toward itself and holds it until built, so
+            // storage must not drag it away and trigger the re-demand "log
+            // carousel". CONSUMABLES (food, medicine) are consumed on delivery -
+            // they do not carousel (the just-delivered DeliveredHere retention
+            // above covers the brief window) - so they follow one-big-map storage
+            // priority instead: they consolidate into the player's best stockpile
+            // (e.g. a Critical basement) and consumers fetch them cross-level,
+            // exactly like vanilla stores medicine in a far stockpile and pawns
+            // walk to it. Retaining consumables here made medicine and food ignore
+            // a strictly-better stockpile the player explicitly built on another
+            // level (diagnostic: ColumnStorage=cross, but exportAllowed=False).
+            return !PinnedByNativeNeed(map, t, constructionOnly: true);
         }
 
         /// <summary>Export policy for DEMAND-pull flows (supply givers, demand
@@ -643,11 +668,15 @@ namespace AsAboveSoBelow
         /// shortfall, and the same logs rode the stairs forever. When the
         /// want ends (bill done, torch refueled, patient healed) the pin
         /// lifts by itself and surplus flows to best storage once.</summary>
-        private static bool PinnedByNativeNeed(Map map, Thing t)
+        private static bool PinnedByNativeNeed(Map map, Thing t, bool constructionOnly = false)
         {
             CacheEntry entry = GetEntry(map);
             entry.nativeConstructionNeed.TryGetValue(t.def, out int constr);
-            entry.nativeConsumableRequired.TryGetValue(t.def, out int required);
+            int required = 0;
+            if (!constructionOnly)
+            {
+                entry.nativeConsumableRequired.TryGetValue(t.def, out required);
+            }
             if (constr <= 0 && required <= 0)
             {
                 return false;
@@ -656,7 +685,7 @@ namespace AsAboveSoBelow
             for (int i = 0; i < islands.Count; i++)
             {
                 IslandDemand isl = islands[i];
-                int hold = isl.nativeConstructionNeed + isl.consumableRequired;
+                int hold = isl.nativeConstructionNeed + (constructionOnly ? 0 : isl.consumableRequired);
                 if (hold <= 0)
                 {
                     continue;
