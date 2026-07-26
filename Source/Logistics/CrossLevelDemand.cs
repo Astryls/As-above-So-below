@@ -279,7 +279,19 @@ namespace AsAboveSoBelow
                 deliveredTo.Remove(t.thingIDNumber);
                 return false;
             }
-            return e.mapId == map.uniqueID;
+            if (e.mapId != map.uniqueID)
+            {
+                return false;
+            }
+            // Only pin a stack that actually LANDED IN STORAGE here. The race this
+            // guards is an item landing in WORSE storage and instantly re-chasing
+            // the better one - so a stack must be IN storage to be at risk. A LOOSE
+            // delivered stack (a relay interchange drop, or a demand delivery to a
+            // consumer with no local storage) is NOT at its best home and must stay
+            // free to organize onward into a strictly-better stockpile (doctrine B;
+            // was the medicine/food relay stall). Active work still retains its
+            // loose ingredients via PinnedByNativeNeed, not this pin.
+            return t.IsInValidStorage();
         }
 
         private static void PruneDelivered()
@@ -607,7 +619,7 @@ namespace AsAboveSoBelow
             }
             return "importPinned=" + ImportPinned(t)
                 + " deliveredHere=" + DeliveredHere(map, t)
-                + " constrPin=" + PinnedByNativeNeed(map, t, constructionOnly: true);
+                + " nativeNeedPin=" + PinnedByNativeNeed(map, t);
         }
 
         public static bool ExportAllowed(Map map, Thing t)
@@ -627,19 +639,16 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            // Retain CONSTRUCTION materials only (constructionOnly). A blueprint
-            // actively pulls material toward itself and holds it until built, so
-            // storage must not drag it away and trigger the re-demand "log
-            // carousel". CONSUMABLES (food, medicine) are consumed on delivery -
-            // they do not carousel (the just-delivered DeliveredHere retention
-            // above covers the brief window) - so they follow one-big-map storage
-            // priority instead: they consolidate into the player's best stockpile
-            // (e.g. a Critical basement) and consumers fetch them cross-level,
-            // exactly like vanilla stores medicine in a far stockpile and pawns
-            // walk to it. Retaining consumables here made medicine and food ignore
-            // a strictly-better stockpile the player explicitly built on another
-            // level (diagnostic: ColumnStorage=cross, but exportAllowed=False).
-            return !PinnedByNativeNeed(map, t, constructionOnly: true);
+            // Retain a stack a level's OWN active work still needs on it - a
+            // blueprint's material, a live bill/surgery ingredient, refuel, a
+            // transporter load, or food for an IMMOBILE consumer (prisoner,
+            // bedridden patient, baby) who cannot fetch it themselves. These are
+            // location-specific: the work/consumer needs them where they sit, so
+            // storage must not drag them off (the "log carousel"). MOBILE pawns
+            // register no such need - their food/medicine follows one-big-map
+            // storage priority into the best stockpile and they fetch it
+            // cross-level at use time (doctrine B).
+            return !PinnedByNativeNeed(map, t);
         }
 
         /// <summary>Export policy for DEMAND-pull flows (supply givers, demand
@@ -668,15 +677,11 @@ namespace AsAboveSoBelow
         /// shortfall, and the same logs rode the stairs forever. When the
         /// want ends (bill done, torch refueled, patient healed) the pin
         /// lifts by itself and surplus flows to best storage once.</summary>
-        private static bool PinnedByNativeNeed(Map map, Thing t, bool constructionOnly = false)
+        private static bool PinnedByNativeNeed(Map map, Thing t)
         {
             CacheEntry entry = GetEntry(map);
             entry.nativeConstructionNeed.TryGetValue(t.def, out int constr);
-            int required = 0;
-            if (!constructionOnly)
-            {
-                entry.nativeConsumableRequired.TryGetValue(t.def, out required);
-            }
+            entry.nativeConsumableRequired.TryGetValue(t.def, out int required);
             if (constr <= 0 && required <= 0)
             {
                 return false;
@@ -685,7 +690,7 @@ namespace AsAboveSoBelow
             for (int i = 0; i < islands.Count; i++)
             {
                 IslandDemand isl = islands[i];
-                int hold = isl.nativeConstructionNeed + (constructionOnly ? 0 : isl.consumableRequired);
+                int hold = isl.nativeConstructionNeed + isl.consumableRequired;
                 if (hold <= 0)
                 {
                     continue;

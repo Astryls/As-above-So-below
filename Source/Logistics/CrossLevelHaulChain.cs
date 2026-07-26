@@ -44,31 +44,39 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // 1) This level accepts it (best reachable home here)? Store it.
+                // 1) This level is its best home? Store it (vanilla deposit; a
+                //    pawn already holding it just walks it to the cell).
                 if (TryStoreHere(pawn, carried))
                 {
                     return;
                 }
-                // 2) Is a strictly-better tier still reachable elsewhere in the
-                //    column? (ColumnStorage works for a carried item - MapHeld =
-                //    this level, current = Unstored.)
-                bool more = ColumnStorage.TryFindBetter(pawn, carried,
-                    out Map _, out IntVec3 _, out IHaulDestination _, out StoragePriority _);
-                // Set it down here and hand it back to the normal givers.
+                // 2) Otherwise set it down and, if a strictly-better tier still
+                //    lives elsewhere in the column, take the next hop toward it
+                //    DIRECTLY. Issuing the hop ourselves (not via the storage
+                //    giver) is deliberate: a committed relay continuation must NOT
+                //    be gated by the DeliveredHere / import pin, which guards
+                //    against a storage-race BOUNCE and would otherwise trap a
+                //    just-transferred stack on this interchange level (root cause
+                //    of the medicine/food relay stall - diagnostic exportAllowed=
+                //    False [deliveredHere=True]). Drop first so a re-entrant job
+                //    start never threads a carried item.
                 if (!pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near,
                         out Thing dropped) || dropped == null || !dropped.Spawned)
                 {
                     return;
                 }
-                // Non-alwaysHaulable things (chunks) need a Haul designation to be
-                // picked up again - the origin designation was on the level it left,
-                // so re-stamp it here. alwaysHaulable things need none.
-                if (more && !dropped.def.alwaysHaulable
-                    && dropped.Map.designationManager.DesignationOn(dropped, DesignationDefOf.Haul) == null)
+                if (ColumnStorage.TryFindBetter(pawn, dropped, out Map tm, out IntVec3 _,
+                        out IHaulDestination _, out StoragePriority _)
+                    && ColumnStorage.FirstHopToward(pawn, tm,
+                        out Building_ABStairs entry, out Building_ABStairs exit))
                 {
-                    dropped.Map.designationManager.AddDesignation(
-                        new Designation(dropped, DesignationDefOf.Haul));
+                    Job hop = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, dropped, entry);
+                    hop.targetC = exit;
+                    hop.count = dropped.stackCount;
+                    pawn.jobs?.TryTakeOrderedJob(hop, JobTag.Misc);
                 }
+                // else: nowhere strictly better - leave it here (self-heals when
+                // storage frees up or the pin ages out).
             }
             catch (Exception e)
             {
