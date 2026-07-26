@@ -1936,16 +1936,42 @@ namespace AsAboveSoBelow
                     out IHaulDestination _, out StoragePriority tier);
                 sb.Append(" || ColumnStorage=")
                     .Append(col ? ("cross to L" + tm.Level() + " @" + tier) : "NO CROSS (best is here/local or nothing better)");
-                if (pawn != null)
+                // TargetLevelFor MUST be evaluated with a pawn standing on the
+                // ITEM's level (its early gate rejects a pawn on another map, and
+                // FirstHopToward reads the pawn's level for direction) - that is
+                // exactly how the real haul giver calls it.
+                Map itemMap = item.MapHeld;
+                Pawn evalPawn = null;
+                List<Pawn> onLevel = itemMap?.mapPawns?.FreeColonistsSpawned;
+                if (onLevel != null)
                 {
-                    Map tlf = CrossLevelHaul.TargetLevelFor(pawn, item, out Building_ABStairs st);
-                    sb.Append(" || TargetLevelFor=").Append(tlf != null ? ("L" + tlf.Level()) : "null")
-                        .Append(" (pawn ").Append(pawn.LabelShort).Append(" @L").Append(pawn.Map.Level())
-                        .Append(st != null ? ", stairs " + st.Position : ", no stairs").Append(")");
+                    for (int i = 0; i < onLevel.Count; i++)
+                    {
+                        if (onLevel[i] != null && !onLevel[i].Dead)
+                        {
+                            evalPawn = onLevel[i];
+                            break;
+                        }
+                    }
+                }
+                if (evalPawn == null)
+                {
+                    sb.Append(" || (NO colonist on the item's level L").Append(itemMap?.Level() ?? -99)
+                        .Append(" - a pawn there is required to push; fetch would bring one)");
                 }
                 else
                 {
-                    sb.Append(" || (no colonist available to evaluate TargetLevelFor)");
+                    sb.Append(" || evalPawn=").Append(evalPawn.LabelShort).Append("@L").Append(evalPawn.Map.Level());
+                    sb.Append(" exportAllowed=").Append(CrossLevelDemand.ExportAllowed(itemMap, item));
+                    if (col)
+                    {
+                        bool fh = ColumnStorage.FirstHopToward(evalPawn, tm,
+                            out Building_ABStairs _, out Building_ABStairs _);
+                        sb.Append(" firstHopToward(L").Append(tm.Level()).Append(")=").Append(fh);
+                    }
+                    Map tlf = CrossLevelHaul.TargetLevelFor(evalPawn, item, out Building_ABStairs st);
+                    sb.Append(" TargetLevelFor=").Append(tlf != null ? ("L" + tlf.Level()) : "null")
+                        .Append(st != null ? " stairs " + st.Position : " no-stairs");
                 }
             }
             catch (Exception e)
