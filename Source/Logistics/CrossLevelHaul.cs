@@ -115,6 +115,24 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            // Vanilla haulability parity for non-alwaysHaulable things (stone /
+            // slag chunks - corpses are alwaysHaulable and unaffected). Vanilla
+            // only AUTO-hauls such a thing when the player DESIGNATED it (Orders
+            // -> Haul) or it is already sitting in storage (moving to a better
+            // tier). PawnCanAutomaticallyHaulFast SKIPS that gate, so without
+            // this our cross-level givers would ferry undesignated chunks the
+            // player never asked to move - and, worse, keep re-issuing jobs for
+            // things vanilla's own listers reject, which reads as pawns walking
+            // to chunks and abandoning them. Mirror ListerHaulables.ShouldBeHaulable
+            // / HaulAIUtility.PawnCanAutomaticallyHaul exactly. Explicit player
+            // intent (ignorePins = Allow Tool Haul Urgently) is its own
+            // designation and bypasses this, matching vanilla forced hauls.
+            if (!ignorePins && !t.def.alwaysHaulable
+                && t.Map.designationManager.DesignationOn(t, DesignationDefOf.Haul) == null
+                && !t.IsInValidStorage())
+            {
+                return null;
+            }
             // A minified thing an install blueprint (any map - vanilla's lookup
             // walks them all) is waiting for never storage-migrates: the
             // construction ferry owns it, and a storage verdict could drag it
