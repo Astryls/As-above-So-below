@@ -4,6 +4,11 @@ using System.Linq;
 using RimWorld;
 using Verse;
 using Verse.AI;
+// Narrow alias (no namespace-wide UnityEngine import to avoid Verse type
+// collisions) so the cs-assets manifest scanner can see the ContentFinder
+// literal below - it matches ContentFinder<Texture2D>, not the fully-qualified
+// form.
+using Texture2D = UnityEngine.Texture2D;
 
 namespace AsAboveSoBelow
 {
@@ -466,7 +471,7 @@ namespace AsAboveSoBelow
             {
                 if (removeLevelIcon == null)
                 {
-                    removeLevelIcon = ContentFinder<UnityEngine.Texture2D>.Get("UI/AB_RemoveLevel", false)
+                    removeLevelIcon = ContentFinder<Texture2D>.Get("UI/AB_RemoveLevel", false)
                         ?? RemoveIcon;
                 }
                 return removeLevelIcon;

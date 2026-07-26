@@ -118,7 +118,16 @@ namespace AsAboveSoBelow
             // Engagement-line registry: MakeNewToils runs on fresh starts AND on load
             // resume, so loaded mid-fight shooters re-register too.
             CrossLevelCombatUI.ActiveShooters.Add(pawn);
-            AddFinishAction(delegate { CrossLevelCombatUI.ActiveShooters.Remove(pawn); });
+            AddFinishAction(delegate
+            {
+                CrossLevelCombatUI.ActiveShooters.Remove(pawn);
+                // Drop the render-only cross-gap aim stance so the weapon does
+                // not stay frozen aiming after the engagement ends.
+                if (pawn.stances?.curStance is Stance_ABCrossAim)
+                {
+                    pawn.stances.SetStance(new Stance_Mobile());
+                }
+            });
             this.FailOn(() => !Valid());
             yield return Toils_Goto.GotoCell(TargetIndex.B, PathEndMode.OnCell);
 
@@ -136,6 +145,43 @@ namespace AsAboveSoBelow
         private const int LofCheckInterval = 15;
 
         private int lofCheckIn;
+
+        /// <summary>Ticks the render-only aim stance is set to last; refreshed
+        /// every FireTick so it never lapses mid-engagement, and cleared in the
+        /// finish action. Small so it drops within half a second even if the
+        /// driver ever stops refreshing without cleanup.</summary>
+        private const int AimStanceTicks = 30;
+
+        /// <summary>Give the shooter a Stance_Busy so the pawn renderer draws
+        /// the weapon AIMED at the cross-gap target. Vanilla only aims when
+        /// curStance is a Stance_Busy with a valid focusTarg; this custom driver
+        /// otherwise leaves the pawn mobile, so gun-wielders render carried-
+        /// openly (the "pawns don't aim across levels" report). focusTarg is the
+        /// target THING on the paired map - the renderer's AngleFlat uses x/z
+        /// only, which the plumb below-view maps identically, so the muzzle
+        /// points exactly at where the target appears. Render-only: never casts
+        /// (the driver owns firing) and draws no warmup pie.</summary>
+        private void EnsureAimStance(Verb verb)
+        {
+            Pawn_StanceTracker st = pawn.stances;
+            if (st == null)
+            {
+                return;
+            }
+            if (st.curStance is Stance_ABCrossAim aim)
+            {
+                aim.ticksLeft = AimStanceTicks;
+                aim.focusTarg = target;
+                aim.verb = verb;
+                return;
+            }
+            // Do not stomp a genuine vanilla combat stance if one is somehow
+            // present; otherwise install the render-only aim stance.
+            if (!(st.curStance is Stance_Warmup) && !(st.curStance is Stance_Cooldown))
+            {
+                st.SetStance(new Stance_ABCrossAim(AimStanceTicks, target, verb));
+            }
+        }
 
         private void FireTick()
         {
@@ -155,6 +201,7 @@ namespace AsAboveSoBelow
                 lofCheckIn = LofCheckInterval;
             }
             pawn.rotationTracker.FaceCell(target.Position);
+            EnsureAimStance(verb);
 
             if (cooldownTicksLeft > 0)
             {
