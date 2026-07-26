@@ -20,12 +20,16 @@ namespace AsAboveSoBelow
     {
         private static int MigrationCooldownTicks => ABMod.Settings?.jobMigrationCooldown ?? 1200;
 
-        /// <summary>Retry cadence for the priority-aware probe (a local job
-        /// exists but a linked level might hold strictly better-ranked work).
-        /// Bypassed instantly when the global work version changes (fresh
-        /// designations), so new orders never wait this out.</summary>
-        // Keeps the historical 900:1200 ratio against the migration slider.
-        private static int BetterWorkCooldownTicks => (MigrationCooldownTicks * 3) / 4;
+        /// <summary>Cadence for re-running the EXPENSIVE better-work virtual
+        /// scan after it found nothing actionable. This is NOT a priority
+        /// throttle - strictly-higher-priority work preempts immediately at
+        /// every job transition (see TryMigrateForBetterWork). It only stops a
+        /// pawn doing rapid tiny jobs from full-scanning linked levels every
+        /// few ticks for a fail-open-plausible work type that has no real
+        /// target. Bypassed instantly by any work-version bump (new
+        /// designation, blueprint, bill, or fire), so fresh orders never wait
+        /// it out.</summary>
+        private const int NegativeProbeMemoTicks = 250;
 
         /// <summary>Colony-wide cap on priority probes per tick. Smooths the
         /// stampede after mass job-end moments (morning wake-ups, version
@@ -52,15 +56,17 @@ namespace AsAboveSoBelow
 
         private static readonly ABPawnCooldown emergencyCooldown = new ABPawnCooldown();
 
-        /// <summary>Post-arrival commitment (2026-07-25 stair-thrash fix): a
-        /// pawn that just crossed levels commits to the new level for a full
-        /// migration window before ANY probe path may move it again. Plain
-        /// tick cooldown on purpose - the versioned better-work cooldown is
-        /// bypassed by every work-version bump (designations, blueprints,
-        /// bills fire constantly in a live colony), and the probe-time charge
-        /// of the migration cooldown eroded during the walk + climb, so a
-        /// pawn could do one 5-second work chunk and immediately bounce back.
-        /// Emergency migration (fire, rescue, urgent tend) stays exempt.</summary>
+        /// <summary>Post-arrival commitment window. As of the 2026-07-25
+        /// one-big-map parity rework the colonist better-work path NO LONGER
+        /// gates on this - strictly-higher-priority work preempts immediately
+        /// and rank-exactness (a total order) is what prevents ping-pong, not a
+        /// timer. This survives only for the rank-BLIND probe path (Misc.
+        /// Robots, whose think node owns its own giver order so "strictly
+        /// better" can't be computed): there a fresh arrival must settle before
+        /// re-probing. Still charged from the ARRIVAL tick by NoteArrived (a
+        /// probe-time charge erodes during the walk + climb). Kept as a cheap
+        /// re-add point should reservation-race bounce ever surface in the
+        /// colonist path during testing.</summary>
         private static readonly ABPawnCooldown arrivalCommitment = new ABPawnCooldown();
 
         /// <summary>Called by the stair transfer for every player-faction
@@ -116,7 +122,7 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static readonly VersionedCooldown betterWorkCooldown = new VersionedCooldown();
+        private static readonly VersionedCooldown betterWorkNegativeMemo = new VersionedCooldown();
 
         private static int probeBudgetTick = -1;
 
@@ -169,12 +175,38 @@ namespace AsAboveSoBelow
             }
             migrationCooldown.ChargeUntil(pawn, now + MigrationCooldownTicks);
 
-            ThinkResult? work = TryTowards(giver, pawn, comp.upperMap) ?? TryTowards(giver, pawn, comp.lowerMap);
+            // One-big-map parity: a fully-idle pawn goes to the globally
+            // highest-priority work across BOTH linked levels, not merely the
+            // first level that happens to have anything. Scan both and keep the
+            // better-ranked hit; ties fall to the upper level (arbitrary but
+            // stable). Gated by the idle migration cooldown, so scanning both
+            // is paid at most once per window per idle pawn.
+            ThinkResult? upper = TryTowards(giver, pawn, comp.upperMap, out int upperRank);
+            ThinkResult? lower = TryTowards(giver, pawn, comp.lowerMap, out int lowerRank);
+            ThinkResult? work;
+            if (upper.HasValue && lower.HasValue)
+            {
+                work = RankBeats(upperRank, lowerRank) ? upper : lower;
+            }
+            else
+            {
+                work = upper ?? lower;
+            }
             if (work.HasValue)
             {
                 return work;
             }
             return TryReturnHome(giver, pawn, comp);
+        }
+
+        /// <summary>True when rank a is at least as good (high priority) as b.
+        /// Lower index = higher priority; -1 (unknown non-scan giver) is
+        /// treated as the top. Ties resolve to a (the upper level).</summary>
+        private static bool RankBeats(int a, int b)
+        {
+            int ra = a < 0 ? int.MinValue : a;
+            int rb = b < 0 ? int.MinValue : b;
+            return ra <= rb;
         }
 
         /// <summary>Priority-aware migration: the local scan DID find a job, but
@@ -223,24 +255,56 @@ namespace AsAboveSoBelow
                 return null;
             }
             int now = Find.TickManager.TicksGame;
-            // Commitment first: version bumps bypass the versioned cooldown
-            // below, but never the fresh-arrival window.
-            if (!arrivalCommitment.Ready(pawn, now))
+
+            // One-big-map priority (2026-07-25 parity rework): strictly-higher-
+            // priority work on a linked level must preempt the local job
+            // IMMEDIATELY - no cooldown, no arrival-commitment gate. This is
+            // safe from thrash because the metric is rank-EXACT: a level is
+            // only entered for work strictly better-ranked than what the pawn
+            // holds, and rank is a total order, so the destination can never
+            // simultaneously rank the origin as better (no ping-pong). The
+            // only natural throttle is vanilla's own - JobGiver_Work re-runs
+            // just at job transitions, so a busy pawn finishes its current job
+            // before this fires again ("complete before moving on").
+            //
+            // Cheap gate first, UNBUDGETED: is any higher-ranked work type even
+            // plausible on a linked level? Pure bool-array reads behind a
+            // per-map TTL. Nothing plausible -> keep the local job for free.
+            Map upper = comp.upperMap;
+            Map lower = comp.lowerMap;
+            bool plausibleUpper = upper != null && !upper.Disposed
+                && LevelWorkSummary.AnyPlausibleBefore(upper, order, stop);
+            bool plausibleLower = lower != null && !lower.Disposed
+                && LevelWorkSummary.AnyPlausibleBefore(lower, order, stop);
+            if (!plausibleUpper && !plausibleLower)
             {
                 return null;
             }
-            if (!betterWorkCooldown.Ready(pawn, now))
+            // Fail-open work types (no detector: BasicWorker, modded types)
+            // stay perpetually "plausible", so a pawn doing rapid tiny jobs
+            // would full-scan linked levels every transition. A short memo,
+            // charged only after an expensive scan finds nothing and bypassed
+            // by any work-version bump, caps that without ever delaying a real
+            // preemption (a real hit migrates the pawn away immediately).
+            if (!betterWorkNegativeMemo.Ready(pawn, now))
             {
                 return null;
             }
+            // Only the full virtual scan is expensive; it alone claims the
+            // colony-wide budget. A denied pawn keeps its local job and retries
+            // next transition - with no cooldown that is near-immediate, so a
+            // version-bump stampede clears in a handful of ticks.
             if (!TryClaimProbeBudget(now))
             {
                 return null;
             }
-            // Charged before the scan so empty probes are rate-limited too.
-            betterWorkCooldown.Charge(pawn, now + BetterWorkCooldownTicks);
-            return TryTowardsBetter(giver, pawn, comp.upperMap, order, stop)
-                ?? TryTowardsBetter(giver, pawn, comp.lowerMap, order, stop);
+            ThinkResult? hit = (plausibleUpper ? TryTowardsBetter(giver, pawn, upper, order, stop) : null)
+                ?? (plausibleLower ? TryTowardsBetter(giver, pawn, lower, order, stop) : null);
+            if (!hit.HasValue)
+            {
+                betterWorkNegativeMemo.Charge(pawn, now + NegativeProbeMemoTicks);
+            }
+            return hit;
         }
 
         private static ThinkResult? TryTowardsBetter(JobGiver_Work giver, Pawn pawn, Map target,
@@ -250,12 +314,9 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            // Summary bits first: no plausible better-ranked work type on that
-            // level means no swap, no scan, no stairs search.
-            if (!LevelWorkSummary.AnyPlausibleBefore(target, order, stop))
-            {
-                return null;
-            }
+            // Plausibility (any better-ranked work type on this level) is
+            // pre-checked by the caller so it can gate the probe budget; no
+            // redundant summary walk here.
             // Island-aware (2026-07-24): probe from one exit per distinct
             // island so better-ranked work behind a different stairwell than
             // the nearest is not invisible.
@@ -524,6 +585,18 @@ namespace AsAboveSoBelow
 
         private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target)
         {
+            return TryTowards(giver, pawn, target, out int _);
+        }
+
+        /// <summary>Idle-migration scan of one linked level. Also reports the
+        /// RANK (index in the pawn's ordered giver list) of the best job found
+        /// there, so a fully-idle pawn can be sent to the globally-highest-
+        /// priority work across levels rather than the first level that has
+        /// anything (one-big-map parity). rank is int.MaxValue when no work,
+        /// or -1 for a non-scan job whose giver is unknown (treated as top).</summary>
+        private static ThinkResult? TryTowards(JobGiver_Work giver, Pawn pawn, Map target, out int rank)
+        {
+            rank = int.MaxValue;
             if (target == null || target.Disposed)
             {
                 return null;
@@ -545,7 +618,7 @@ namespace AsAboveSoBelow
             IntVec3 workDest = IntVec3.Invalid;
             for (int i = 0; i < pairs.Count; i++)
             {
-                if (WorkTargetAt(giver, pawn, target, pairs[i].exit.Position, out workDest))
+                if (WorkTargetAt(giver, pawn, target, pairs[i].exit.Position, out workDest, out rank))
                 {
                     stairs = pairs[i].stairs;
                     exit = pairs[i].exit;
@@ -734,9 +807,10 @@ namespace AsAboveSoBelow
         /// private fields (a technique MultiFloors also uses, implemented independently here) and restored in a
         /// finally block no matter what the scan does. Any job the scan produces is
         /// discarded; the real job gets picked normally after the transfer.</summary>
-        private static bool WorkTargetAt(JobGiver_Work giver, Pawn pawn, Map target, IntVec3 entryCell, out IntVec3 workDest)
+        private static bool WorkTargetAt(JobGiver_Work giver, Pawn pawn, Map target, IntVec3 entryCell, out IntVec3 workDest, out int rank)
         {
             workDest = IntVec3.Invalid;
+            rank = int.MaxValue;
             if (!ABVirtualPosition.TrySwap(pawn, target, entryCell, out ABVirtualPosition.Token token))
             {
                 return false;
@@ -750,6 +824,7 @@ namespace AsAboveSoBelow
                 if (found)
                 {
                     workDest = StairRouter.DestHint(result.Job, target);
+                    rank = RankOf(pawn, result.Job.workGiverDef);
                 }
             }
             finally
@@ -758,6 +833,31 @@ namespace AsAboveSoBelow
                 VirtualScanActive = false;
             }
             return found;
+        }
+
+        /// <summary>Rank of a work giver in the pawn's ordered giver list
+        /// (lower = higher priority). -1 for a null giver (non-scan job, giver
+        /// unknown) which we treat as top priority; int.MaxValue when the giver
+        /// is somehow absent from the list.</summary>
+        private static int RankOf(Pawn pawn, WorkGiverDef def)
+        {
+            if (def == null)
+            {
+                return -1;
+            }
+            List<WorkGiver> order = pawn.workSettings?.WorkGiversInOrderNormal;
+            if (order == null)
+            {
+                return int.MaxValue;
+            }
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (order[i].def == def)
+                {
+                    return i;
+                }
+            }
+            return int.MaxValue;
         }
     }
 
