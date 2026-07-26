@@ -1,4 +1,5 @@
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.AI;
 
@@ -31,7 +32,8 @@ namespace AsAboveSoBelow
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null;
+            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null
+                || CrossLevelHaulChain.TryStartFarHaul(pawn, t, out Building_ABStairs _, out Building_ABStairs _);
         }
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
@@ -39,6 +41,16 @@ namespace AsAboveSoBelow
             Map target = CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs stairs);
             if (target == null || stairs == null)
             {
+                // No adjacent accepting level - carry it to the nearest level
+                // 2+ gaps away that accepts it (single-item chain).
+                if (CrossLevelHaulChain.TryStartFarHaul(pawn, t,
+                        out Building_ABStairs chainEntry, out Building_ABStairs chainExit))
+                {
+                    Job chain = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, t, chainEntry);
+                    chain.targetC = chainExit;
+                    chain.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                    return chain;
+                }
                 return null;
             }
             return CrossLevelHaulJob.Build(pawn, t, target, stairs);

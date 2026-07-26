@@ -35,7 +35,8 @@ namespace AsAboveSoBelow
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null;
+            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null
+                || CrossLevelHaulChain.TryStartFarHaul(pawn, t, out Building_ABStairs _, out Building_ABStairs _);
         }
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
@@ -44,6 +45,16 @@ namespace AsAboveSoBelow
                 ignorePins: false, out int allowedCount, out bool demand);
             if (target == null || stairs == null)
             {
+                // No adjacent accepting level - is there one 2+ gaps away? Carry
+                // it there hop by hop, storing at the first accepting level.
+                if (CrossLevelHaulChain.TryStartFarHaul(pawn, t,
+                        out Building_ABStairs chainEntry, out Building_ABStairs chainExit))
+                {
+                    Job chain = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, t, chainEntry);
+                    chain.targetC = chainExit;
+                    chain.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                    return chain;
+                }
                 return null;
             }
             Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);

@@ -374,7 +374,7 @@ namespace AsAboveSoBelow
         /// Critical stockpile below - pulls the item across at full urgency.
         /// Runs on the pawn's real map (no virtual swap), reading real
         /// positions.</summary>
-        private static StoragePriority BestLocalPriority(Pawn pawn, Thing t, Map map, StoragePriority current)
+        internal static StoragePriority BestLocalPriority(Pawn pawn, Thing t, Map map, StoragePriority current)
         {
             if (StoreUtility.TryFindBestBetterStorageFor(t, pawn, map, current, pawn.Faction,
                     out IntVec3 _, out IHaulDestination localDest, needAccurateResult: false)
@@ -431,7 +431,7 @@ namespace AsAboveSoBelow
         /// <summary>Free space for t in one storage cell, mirroring vanilla's
         /// NoStorageBlockersIn: a non-stackable item or a blocking building
         /// zeroes the cell; a same-def partial stack leaves its remainder.</summary>
-        private static int CellCapacity(Thing t, Map map, IntVec3 c)
+        internal static int CellCapacity(Thing t, Map map, IntVec3 c)
         {
             if (!c.InBounds(map))
             {

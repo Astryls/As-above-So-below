@@ -32,6 +32,13 @@
   </JobDef>
 
   <JobDef>
+    <defName>AB_HaulChainAcrossLevels</defName>
+    <driverClass>AsAboveSoBelow.JobDriver_HaulAcrossLevels</driverClass>
+    <reportString>hauling TargetA across levels.</reportString>
+    <playerInterruptible>true</playerInterruptible>
+  </JobDef>
+
+  <JobDef>
     <defName>AB_BulkHaulAcrossLevels</defName>
     <driverClass>AsAboveSoBelow.JobDriver_ABBulkHaulAcrossLevels</driverClass>
     <reportString>hauling things to another level.</reportString>

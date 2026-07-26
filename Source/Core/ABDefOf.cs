@@ -13,6 +13,7 @@ namespace AsAboveSoBelow
         public static JobDef AB_UseStairs;
         public static JobDef AB_CrossLevelAttack;
         public static JobDef AB_HaulAcrossLevels;
+        public static JobDef AB_HaulChainAcrossLevels;
         public static JobDef AB_BulkHaulAcrossLevels;
         public static JobDef AB_RescueAcrossLevels;
         public static JobDef AB_CaptureAcrossLevels;
