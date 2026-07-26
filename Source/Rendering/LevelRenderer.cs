@@ -1205,6 +1205,11 @@ namespace AsAboveSoBelow
             CellRect view = Find.CameraDriver.CurrentViewRect.ExpandedBy(1).ClipInsideMap(lower);
             RoofGrid roofs = lower.roofGrid;
             FogGrid fog = lower.fogGrid;
+            // Honor CAI 5000's fog of war in the below view (option B). Null unless
+            // CAI is in overlay mode (the one config where vanilla fog does NOT
+            // already carry CAI fog); resolved once per pass, so default setups
+            // pay nothing per cell.
+            Func<IntVec3, bool> caiFog = ABCombatAICompat.GetOverlayFogChecker(lower);
             TerrainGrid skyTerrain = sky.terrainGrid;
             TerrainDef air = ABDefOf.AB_OpenAir;
             for (int i = 0; i < things.Count; i++)
@@ -1230,7 +1235,7 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    if (fog.IsFogged(pos))
+                    if (fog.IsFogged(pos) || (caiFog != null && caiFog(pos)))
                     {
                         continue;
                     }

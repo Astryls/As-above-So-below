@@ -97,6 +97,10 @@ namespace AsAboveSoBelow
                 TerrainGrid skyTerrain = map.terrainGrid;
                 TerrainDef air = ABDefOf.AB_OpenAir;
                 FogGrid lowerFog = lower.fogGrid;
+                // Honor CAI 5000 fog of war in the below view (option B). Null
+                // unless CAI is in overlay mode; resolved once per regen so the
+                // default setup pays nothing per cell.
+                Func<IntVec3, bool> caiFog = ABCombatAICompat.GetOverlayFogChecker(lower);
                 float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
                 bool doScale = scale < 0.999f;
                 bool printed = false;
@@ -154,7 +158,7 @@ namespace AsAboveSoBelow
                         // Vanilla bakes only unfogged things; mirror that so the
                         // below view never reveals what surface pawns have not
                         // explored (fog lifting below reprints via the mirror).
-                        if (!t.def.seeThroughFog && lowerFog.IsFogged(pos))
+                        if (!t.def.seeThroughFog && (lowerFog.IsFogged(pos) || (caiFog != null && caiFog(pos))))
                         {
                             continue;
                         }

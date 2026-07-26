@@ -294,8 +294,24 @@ namespace AsAboveSoBelow
                     Check("RevealSpot invoked on the sky fog grid at " + b, revealedUp);
                 }
 
-                Note("Phase 1 seam verified. Turn on CAI Fog Of War, view the sky over a hole, "
-                    + "and (once the vision pass is wired) the surface below should stay lit under a colonist.");
+                // Phase 2 - option B: the below view honors CAI fog. In CAI's
+                // default mode this is free (vanilla fog carries CAI fog); only
+                // overlay mode (UseVanillaUnexplored off) needs our explicit check.
+                Note("Below-view fog: option B is automatic in CAI default mode; overlay-mode explicit check "
+                    + (ABCombatAICompat.OverlayFogMode ? "ACTIVE" : "not needed right now") + ".");
+                Func<IntVec3, bool> caiFog = ABCombatAICompat.GetOverlayFogChecker(surface);
+                Check("overlay fog checker matches mode (non-null iff overlay mode)",
+                    (caiFog != null) == ABCombatAICompat.OverlayFogMode);
+                if (caiFog != null)
+                {
+                    bool threw = false;
+                    try { caiFog(b); }
+                    catch { threw = true; }
+                    Check("overlay fog checker evaluates a cell without throwing", !threw);
+                }
+
+                Note("Phase 1+2 seams verified. Turn on CAI Fog Of War, view the sky over a hole, "
+                    + "and (once the vision pass is wired in Phase 3) the surface below should stay lit under a colonist.");
             }
             catch (Exception e)
             {

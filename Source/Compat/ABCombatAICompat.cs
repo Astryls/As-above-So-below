@@ -60,9 +60,11 @@ namespace AsAboveSoBelow
 
         private static Type fogGridType;                 // CombatAI.MapComponent_FogGrid
         private static MethodInfo revealSpotMethod;      // RevealSpot(IntVec3, float, int, bool)
+        private static MethodInfo isFoggedCellMethod;    // MapComponent_FogGrid.IsFogged(IntVec3)
         private static MethodInfo settingsGetter;        // static CombatAI.Finder.Settings getter
         private static FieldInfo settingsField;          // fallback if Settings is a field
         private static FieldInfo fogEnabledField;        // CombatAI.Settings.FogOfWar_Enabled
+        private static FieldInfo useVanillaUnexploredField; // CombatAI.Settings.FogOfWar_UseVanillaUnexplored
 
         /// <summary>Resolve the reflection surface once. Sets <see cref="ready"/>
         /// only when every member we need was found; a partial resolve leaves us
@@ -85,6 +87,10 @@ namespace AsAboveSoBelow
                 {
                     revealSpotMethod = AccessTools.Method(fogGridType, "RevealSpot",
                         new[] { typeof(IntVec3), typeof(float), typeof(int), typeof(bool) });
+                    // The authoritative per-cell fog test (true = hidden by CAI),
+                    // used only when CAI is in overlay mode (see GetOverlayFogChecker).
+                    isFoggedCellMethod = AccessTools.Method(fogGridType, "IsFogged",
+                        new[] { typeof(IntVec3) });
                 }
 
                 Type finderType = AccessTools.TypeByName("CombatAI.Finder");
@@ -100,6 +106,7 @@ namespace AsAboveSoBelow
                 if (settingsType != null)
                 {
                     fogEnabledField = AccessTools.Field(settingsType, "FogOfWar_Enabled");
+                    useVanillaUnexploredField = AccessTools.Field(settingsType, "FogOfWar_UseVanillaUnexplored");
                 }
 
                 ready = fogGridType != null && revealSpotMethod != null
@@ -172,6 +179,83 @@ namespace AsAboveSoBelow
                 {
                     return false;
                 }
+            }
+        }
+
+        /// <summary>True when CAI has Fog Of War on AND is NOT mirroring into the
+        /// vanilla unexplored fog bits (UseVanillaUnexplored off) - CAI's OVERLAY
+        /// mode. This is the one mode where vanilla FogGrid.IsFogged does NOT carry
+        /// CAI fog, so our see-below gate needs an explicit CAI check to honor it
+        /// (option B). Every other case returns false (vanilla fog already carries
+        /// it, or FoW is off).</summary>
+        internal static bool OverlayFogMode
+        {
+            get
+            {
+                if (!Ready || !FogEnabled)
+                {
+                    return false;
+                }
+                if (useVanillaUnexploredField == null)
+                {
+                    // Cannot read the flag: assume default (mirrors to vanilla),
+                    // so no explicit check needed. Safe (never over-hides).
+                    return false;
+                }
+                try
+                {
+                    object s = GetSettings();
+                    return s != null && !(bool)useVanillaUnexploredField.GetValue(s);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Single-entry cache: only one below map renders at a time, so a bound
+        // delegate per map is enough. Cleared implicitly when the map changes.
+        private static Map cachedFogMap;
+        private static Func<IntVec3, bool> cachedFogChecker;
+
+        /// <summary>
+        /// A per-cell "is this cell hidden by CAI" predicate for <paramref name="map"/>,
+        /// or null when no explicit check is needed. Non-null ONLY in CAI's overlay
+        /// mode (<see cref="OverlayFogMode"/>); in every other case it returns null
+        /// and the caller pays nothing extra per cell. The predicate is a delegate
+        /// bound to the map's fog comp instance, so per-cell calls are a direct
+        /// virtual call, not reflection. Call ONCE per render pass, then invoke the
+        /// returned delegate per cell. Fails open (returns null) and trips the guard
+        /// on error.
+        /// </summary>
+        internal static Func<IntVec3, bool> GetOverlayFogChecker(Map map)
+        {
+            if (isFoggedCellMethod == null || map == null || map.Disposed || !OverlayFogMode)
+            {
+                return null;
+            }
+            try
+            {
+                if (cachedFogMap == map && cachedFogChecker != null)
+                {
+                    return cachedFogChecker;
+                }
+                object comp = map.GetComponent(fogGridType);
+                if (comp == null)
+                {
+                    return null;
+                }
+                var checker = (Func<IntVec3, bool>)Delegate.CreateDelegate(
+                    typeof(Func<IntVec3, bool>), comp, isFoggedCellMethod);
+                cachedFogMap = map;
+                cachedFogChecker = checker;
+                return checker;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.CombatAI, e, "CAI overlay fog checker");
+                return null;
             }
         }
 
