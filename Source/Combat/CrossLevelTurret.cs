@@ -626,25 +626,55 @@ namespace AsAboveSoBelow
                 : FireResult.Dead;
         }
 
-        /// <summary>Vanilla firing preconditions: manned when mannable, powered when
-        /// powered, a projectile actually loaded, no live local fight.</summary>
+        /// <summary>Firing preconditions, generalized for modded turrets
+        /// (2026-07-25 modded-turret parity): a projectile must be loaded and there
+        /// must be no live local fight, AND the turret must not be disabled by ANY
+        /// of the conditions vanilla itself uses to gate a turret. Rather than
+        /// hand-check power + manning only, defer to Building_Turret.ThreatDisabled
+        /// - one call that covers power, manning, dormancy (mech clusters), the
+        /// initiatable/mech-power-cell/hackable comps modded turrets rely on, and
+        /// "never a threat" - plus a stun check (EMP). Net effect: a dormant
+        /// cluster turret, an EMP-stunned turret, a hacked turret, or a modded
+        /// turret gated by any of those comps behaves across the gap exactly as it
+        /// does same-map, instead of cross-firing while disabled.</summary>
         private static bool ReadyToFire(Building_Turret turret, Verb_LaunchProjectile verb)
         {
-            CompMannable mannable = turret.TryGetComp<CompMannable>();
-            if (mannable != null && !mannable.MannedNow)
-            {
-                return false;
-            }
-            CompPowerTrader power = turret.TryGetComp<CompPowerTrader>();
-            if (power != null && !power.PowerOn)
-            {
-                return false;
-            }
             if (verb.Projectile == null)
             {
                 return false;
             }
+            // A live local target always wins; leave the turret to vanilla.
             if (turret.CurrentTarget.IsValid)
+            {
+                return false;
+            }
+            try
+            {
+                // Power, manning, dormancy, initiation, mech power cell, hacking,
+                // never-a-threat - every vanilla + modded gate in one call.
+                if (turret.ThreatDisabled(turret))
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                // A misbehaving modded ThreatDisabled must never break firing:
+                // fall back to the essential manual gates.
+                CompMannable mannable = turret.TryGetComp<CompMannable>();
+                if (mannable != null && !mannable.MannedNow)
+                {
+                    return false;
+                }
+                CompPowerTrader power = turret.TryGetComp<CompPowerTrader>();
+                if (power != null && !power.PowerOn)
+                {
+                    return false;
+                }
+            }
+            // Stun (EMP) is not part of ThreatDisabled, but a stunned turret cannot
+            // fire same-map either.
+            if (turret.GetComp<CompStunnable>()?.StunHandler?.Stunned ?? false)
             {
                 return false;
             }
