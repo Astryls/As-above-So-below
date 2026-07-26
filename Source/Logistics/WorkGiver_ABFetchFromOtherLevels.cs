@@ -94,7 +94,14 @@ namespace AsAboveSoBelow
             // standing on the source level. Cheap pre-check keeps idle scans free.
             bool wantDemand = ABMod.Settings.crossLevelSupply
                 && CrossLevelDemand.HasFetchableDemand(demandMap, target, pawn);
-            if (!anyHaulables && !wantDemand)
+            // In-STORAGE upgrade candidates (an item in its best LOCAL storage that
+            // a strictly-better level elsewhere in the column wants) are NOT in the
+            // haulables lister, so the old `!anyHaulables && !wantDemand` early-out
+            // skipped them entirely - a Normal sky item never got pulled to a new
+            // Critical basement when no pawn stood on the sky. Only bail when the
+            // target has no storage to scan either.
+            bool anyStorage = (target.haulDestinationManager?.AllGroupsListForReading?.Count ?? 0) > 0;
+            if (!anyHaulables && !wantDemand && !anyStorage)
             {
                 return null;
             }
@@ -148,19 +155,10 @@ namespace AsAboveSoBelow
                                 break;
                             }
                             // Or does it want to travel to yet another level (for example
-                            // back down to this pawn's own fridge)? Cached verdict.
+                            // back down to this pawn's own fridge, or a strictly-
+                            // better tier 2+ gaps away)? TargetLevelFor (ColumnStorage)
+                            // returns adjacent AND far storage/upgrade targets.
                             if (CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null)
-                            {
-                                found = true;
-                                fetchDest = t.PositionHeld;
-                                break;
-                            }
-                            // Or is its only accepting storage 2+ gaps away (multi-hop)?
-                            // The pawn is virtually on `target`, so this reads the far
-                            // destination from the item's real level. Bring the pawn
-                            // here; on arrival the push chain carries it onward.
-                            if (CrossLevelHaulChain.TryStartFarHaul(pawn, t,
-                                    out Building_ABStairs _, out Building_ABStairs _))
                             {
                                 found = true;
                                 fetchDest = t.PositionHeld;
@@ -202,9 +200,7 @@ namespace AsAboveSoBelow
                                     {
                                         continue;
                                     }
-                                    if (CrossLevelHaul.TargetLevelFor(pawn, st, out Building_ABStairs _) != null
-                                        || CrossLevelHaulChain.TryStartFarHaul(pawn, st,
-                                            out Building_ABStairs _, out Building_ABStairs _))
+                                    if (CrossLevelHaul.TargetLevelFor(pawn, st, out Building_ABStairs _) != null)
                                     {
                                         found = true;
                                         fetchDest = st.PositionHeld;

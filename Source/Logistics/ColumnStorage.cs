@@ -148,6 +148,45 @@ namespace AsAboveSoBelow
             return best;
         }
 
+        /// <summary>Nearest usable (entry, exit) stair pair on the pawn's map for
+        /// the FIRST hop toward targetMap (one step up or down). For a 2-gap target
+        /// this just heads the right direction; the relay re-resolves each further
+        /// hop live. Doubles as the coarse cross-level reachability gate - no
+        /// routable first hop means no cross-level verdict.</summary>
+        public static bool FirstHopToward(Pawn pawn, Map targetMap,
+            out Building_ABStairs entry, out Building_ABStairs exit)
+        {
+            entry = null;
+            exit = null;
+            if (pawn?.Map == null || targetMap == null)
+            {
+                return false;
+            }
+            LevelComp comp = pawn.Map.Levels();
+            if (comp == null)
+            {
+                return false;
+            }
+            int dir = System.Math.Sign(targetMap.Level() - pawn.Map.Level());
+            if (dir == 0)
+            {
+                return false;
+            }
+            Map adj = dir > 0 ? comp.upperMap : comp.lowerMap;
+            if (adj == null || adj.Disposed)
+            {
+                return false;
+            }
+            List<StairIslands.Pair> pairs = StairIslands.EntryPairs(pawn, adj);
+            if (pairs.Count == 0)
+            {
+                return false;
+            }
+            entry = pairs[0].stairs;
+            exit = pairs[0].exit;
+            return entry != null && exit != null;
+        }
+
         /// <summary>The column's maps, the item's OWN level first (so priority ties
         /// prefer the local option), then the up-chain and the down-chain.</summary>
         private static IEnumerable<Map> ColumnMaps(LevelComp comp, Map self)

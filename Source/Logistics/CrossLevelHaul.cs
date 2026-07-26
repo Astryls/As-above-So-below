@@ -195,58 +195,32 @@ namespace AsAboveSoBelow
                 // Best tier the item could reach on its OWN level right now
                 // (its current cell, or a strictly-better local stockpile).
                 StoragePriority bestLocal = BestLocalPriority(pawn, t, map, current);
-                // Evaluate BOTH linked levels and keep the STRICTLY-HIGHER-priority
-                // destination (not just upper-first). One big map: an item goes to
-                // the best storage tier in the column, and - critically - a relay
-                // stack set down on an interchange level continues toward the better
-                // tier instead of bouncing back the way it came. Without this a
-                // sky-Normal item bound for a Critical basement, set down on the
-                // surface mid-relay, would be re-evaluated upper-first and hauled
-                // straight back up into the Normal sky storage it just left.
-                Building_ABStairs upStairs = null, downStairs = null;
-                IntVec3 upCell = IntVec3.Invalid, downCell = IntVec3.Invalid;
-                int upCap = 0, downCap = 0;
-                StoragePriority upPrio = StoragePriority.Unstored, downPrio = StoragePriority.Unstored;
-                bool upOk = Check(pawn, t, comp.upperMap, current, ref upStairs, ref upCell, ref upCap, out upPrio);
-                bool downOk = Check(pawn, t, comp.lowerMap, current, ref downStairs, ref downCell, ref downCap, out downPrio);
-                StoragePriority destPrio = StoragePriority.Unstored;
-                if (upOk && (!downOk || (int)upPrio >= (int)downPrio))
+                // Column-wide storage decision (pass 41): the single best storage
+                // anywhere in the column via vanilla's own search per level (mod-
+                // safe, no virtual-position swaps, no stale cache). It returns a
+                // cross-level target ONLY for a strictly-higher tier on another
+                // level (equal tiers and the item's own level stay a vanilla local
+                // haul), so it inherently satisfies strictly-better + best-of-
+                // up/down + multi-hop-upgrade in one call. The far branch of
+                // CrossLevelHaulJob.Build turns a 2-gap target into a relay hop.
+                if (ColumnStorage.TryFindBetter(pawn, t, out Map colMap, out IntVec3 colCell,
+                        out IHaulDestination colDest, out StoragePriority colTier)
+                    && ColumnStorage.FirstHopToward(pawn, colMap,
+                        out Building_ABStairs colEntry, out Building_ABStairs colExit))
                 {
-                    found = comp.upperMap;
-                    stairs = upStairs;
-                    foundCell = upCell;
-                    allowedCount = upCap;
-                    destPrio = upPrio;
-                }
-                else if (downOk)
-                {
-                    found = comp.lowerMap;
-                    stairs = downStairs;
-                    foundCell = downCell;
-                    allowedCount = downCap;
-                    destPrio = downPrio;
-                }
-                if (found != null)
-                {
-                    // One-big-map parity: a cross-level STORAGE move is only
-                    // worth the stairs when the destination tier STRICTLY beats
-                    // the best storage the item could reach on its OWN level.
-                    beatsLocal = (int)destPrio > (int)bestLocal;
-                    // Equal (or lower) tier than a local store the item can
-                    // reach: a same-priority stockpile on another level is NOT
-                    // a reason to walk the stairs (user directive 2026-07-26 -
-                    // "two same-priority stores on different levels must not
-                    // invoke a cross-level haul"). Discard the move entirely so
-                    // vanilla's local haul owns the item and the storage branch
-                    // falls through to the demand path. Explicit player intent
-                    // (Allow Tool Haul Urgently -> ignorePins) still crosses.
-                    if (!beatsLocal && !ignorePins)
+                    // Adjacent target: bias the first hop toward the store cell.
+                    if ((colMap == comp.upperMap || colMap == comp.lowerMap)
+                        && colCell.IsValid && colCell.InBounds(colMap))
                     {
-                        found = null;
-                        stairs = null;
-                        foundCell = IntVec3.Invalid;
-                        allowedCount = 0;
+                        StairRouter.Reroute(pawn, colMap, colCell, ref colEntry, ref colExit);
                     }
+                    found = colMap;
+                    stairs = colEntry;
+                    foundCell = colCell;
+                    allowedCount = AbsorbCapacity(t, colMap, colCell, colDest);
+                    // TryFindBetter only crosses for a strictly-higher tier, so
+                    // this is always an above-vanilla (elevated) move.
+                    beatsLocal = (int)colTier > (int)bestLocal;
                 }
             }
             if (found == null && (ignorePins || CrossLevelDemand.ExportAllowedForDemand(map, t)))

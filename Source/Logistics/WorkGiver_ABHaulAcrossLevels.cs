@@ -35,8 +35,10 @@ namespace AsAboveSoBelow
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null
-                || CrossLevelHaulChain.TryStartFarHaul(pawn, t, out Building_ABStairs _, out Building_ABStairs _);
+            // TargetLevelFor (ColumnStorage-backed) now returns adjacent AND far
+            // (2+ gap) storage/upgrade targets in one call; Build turns a far one
+            // into a relay hop, so the old TryStartFarHaul fallback is gone.
+            return CrossLevelHaul.TargetLevelFor(pawn, t, out Building_ABStairs _) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
@@ -45,38 +47,21 @@ namespace AsAboveSoBelow
                 ignorePins: false, out int allowedCount, out bool demand);
             if (target == null || stairs == null)
             {
-                // No adjacent accepting level - is there one 2+ gaps away? Carry
-                // it there hop by hop, storing at the first accepting level.
-                if (CrossLevelHaulChain.TryStartFarHaul(pawn, t,
-                        out Building_ABStairs chainEntry, out Building_ABStairs chainExit))
-                {
-                    Job chain = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, t, chainEntry);
-                    chain.targetC = chainExit;
-                    chain.count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
-                    return chain;
-                }
                 return null;
-            }
-            Job job = JobMaker.MakeJob(ABDefOf.AB_HaulAcrossLevels, t, stairs);
-            job.targetC = stairs.CounterpartTowards(target);
-            int count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
-            if (allowedCount > 0)
-            {
-                // Both flavors clamp (2026-07-25 log-carousel fix): demand
-                // pulls carry only the residual want net of other pawns'
-                // en-route cargo; storage moves carry only what the
-                // destination storage can absorb, so a full stack never
-                // chases a sliver of space and strands at the stair mouth.
-                count = Mathf.Min(count, allowedCount);
             }
             if (demand)
             {
-                // Claim the errand so idle haulers stop ferrying duplicates
-                // to the stair mouth (2026-07-25 "hauling TO stairs" report).
+                // Claim the errand so idle haulers stop ferrying duplicates to
+                // the stair mouth. Count matches Build's own clamp below.
+                int count = Mathf.Min(t.stackCount, pawn.carryTracker.MaxStackSpaceEver(t.def));
+                if (allowedCount > 0)
+                {
+                    count = Mathf.Min(count, allowedCount);
+                }
                 CrossLevelDemand.NoteInFlight(pawn, target, t.def, count);
             }
-            job.count = count;
-            return job;
+            // Single/bulk for an adjacent target, relay hop for a far one.
+            return CrossLevelHaulJob.Build(pawn, t, target, stairs, allowedCount: allowedCount);
         }
     }
 }

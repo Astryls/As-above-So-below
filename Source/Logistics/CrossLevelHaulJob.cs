@@ -46,6 +46,30 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
+            // FAR (2+ gaps): stairs only link adjacent levels, so this hop just
+            // heads one step toward the destination and the relay (OnArrive)
+            // carries it the rest of the way. `stairs` is the first-hop entry;
+            // its counterpart is the intermediate-level landing.
+            int delta = target.Level() - pawn.Map.Level();
+            if (System.Math.Abs(delta) > 1)
+            {
+                LevelComp comp = pawn.Map.Levels();
+                Map inter = delta > 0 ? comp?.upperMap : comp?.lowerMap;
+                Building_ABStairs interExit = inter != null ? stairs.CounterpartTowards(inter) : null;
+                if (inter == null || interExit == null)
+                {
+                    return null;
+                }
+                Job chain = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, seed, stairs);
+                chain.targetC = interExit;
+                int chainCount = Mathf.Min(seed.stackCount, pawn.carryTracker.MaxStackSpaceEver(seed.def));
+                if (allowedCount > 0)
+                {
+                    chainCount = Mathf.Min(chainCount, allowedCount);
+                }
+                chain.count = chainCount;
+                return chain;
+            }
             Building_ABStairs exit = stairs.CounterpartTowards(target);
             if (exit == null)
             {
