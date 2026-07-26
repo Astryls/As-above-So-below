@@ -19,6 +19,7 @@
   <AB_OnlySurfaceForNow>Must be placed on the surface level.</AB_OnlySurfaceForNow>
   <AB_LevelCap>Level limit reached (one above, one below).</AB_LevelCap>
   <AB_NoLevelsUrbanRuins>Cannot add levels here: this is an Ancient urban ruins exploration map. Enable it under As above, So below settings, Compat tab, if you want to build vertical bases inside urban ruins.</AB_NoLevelsUrbanRuins>
+  <AB_NoLevelsGravship>Cannot build vertical links on a gravship. Stacked levels cannot fly with the ship, so stairs, ladders, elevators and utility risers are refused on gravship substructure.</AB_NoLevelsGravship>
   <AB_ShowLiveBelow>Show live movement on the level below</AB_ShowLiveBelow>
   <AB_ShowLiveBelowTip>Draw pawns, animals, and projectiles from the level below when looking down through open air. Turn off if you want a small performance gain on the sky level.</AB_ShowLiveBelowTip>
   <AB_SelectBelowInPlace>Select things on the level below</AB_SelectBelowInPlace>
@@ -165,6 +166,20 @@
   <AB_RemoveLink>Remove</AB_RemoveLink>
   <AB_RemoveLinkDesc>Mark this for removal. A builder will deconstruct it, which also removes the linked end on the other level. Vertical links cannot be damaged, so this is the only way to get rid of them.</AB_RemoveLinkDesc>
   <AB_RemoveQueued>Already marked for removal.</AB_RemoveQueued>
+  <AB_RemoveLevelAbove>Remove level above</AB_RemoveLevelAbove>
+  <AB_RemoveLevelBelow>Remove level below</AB_RemoveLevelBelow>
+  <AB_RemoveLevelDesc>Permanently remove the whole level this stairwell opens onto, without abandoning the colony. By default everyone on it is moved to the surface first. The level, and everything built on it, is destroyed.</AB_RemoveLevelDesc>
+  <AB_RemoveLevelTitle>Remove the {0}?</AB_RemoveLevelTitle>
+  <AB_RemoveLevelBody>This permanently destroys the {0} and everything built on it - floors, walls, buildings, and any items left behind. The rest of your colony is unaffected. This cannot be undone.</AB_RemoveLevelBody>
+  <AB_RemoveLevelOccupants>On this level now: {0} colonist(s), {1} prisoner(s), {2} animal(s).</AB_RemoveLevelOccupants>
+  <AB_RemoveLevelEvacuate>Evacuate colonists, prisoners and animals to the surface first</AB_RemoveLevelEvacuate>
+  <AB_RemoveLevelEvacuateTip>On by default: everyone belonging to your colony is moved safely to the surface before the level is removed. Turn off to delete the level with everyone still on it - they will be lost.</AB_RemoveLevelEvacuateTip>
+  <AB_RemoveLevelLoseWarning>Warning: {0} living pawn(s) belonging to your colony will be LOST with the level.</AB_RemoveLevelLoseWarning>
+  <AB_RemoveLevelConfirm>Remove level</AB_RemoveLevelConfirm>
+  <AB_RemoveLevelCantGround>The surface level cannot be removed this way.</AB_RemoveLevelCantGround>
+  <AB_RemoveLevelNoGround>Could not find the surface level to evacuate to; removal cancelled.</AB_RemoveLevelNoGround>
+  <AB_RemoveLevelDone>The level has been removed.</AB_RemoveLevelDone>
+  <AB_RemoveLevelDoneEvac>The level has been removed. {0} pawn(s) were moved to the surface.</AB_RemoveLevelDoneEvac>
   <AB_ColumnWealth>Raids scale with whole-column wealth</AB_ColumnWealth>
   <AB_ColumnWealthTip>The storyteller counts wealth and pawns on all your levels, not just the surface. Prevents hiding wealth from raid scaling in the basement. Recommended on for honest difficulty.</AB_ColumnWealthTip>
   <AB_WorldIntegration>World integration</AB_WorldIntegration>
@@ -207,7 +222,7 @@
   <AB_GridLinkSending>Grid link: sending {0} W to the connected level.</AB_GridLinkSending>
   <AB_GridLinkIdle>Grid link: connected, no flow needed.</AB_GridLinkIdle>
   <AB_CrossLevelPipes>Bridge pipe networks through stairwells</AB_CrossLevelPipes>
-  <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked stairwell on both levels, their stored contents flow between the levels. Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>
+  <AB_CrossLevelPipesTip>When pipes from Dubs Bad Hygiene or a Vanilla Expanded pipe network touch a linked utility riser on both levels, their contents flow between the levels: water, piped resources, Vanilla Temperature Expanded cooling, and Dubs Bad Hygiene air conditioning (an outdoor compressor on one level cools rooms on the other through a vertical air duct). Power conduits connect through stairwells regardless of this setting.</AB_CrossLevelPipesTip>
   <AB_CrossLevelTemperature>Stairwells exchange heat between levels</AB_CrossLevelTemperature>
   <AB_CrossLevelTemperatureTip>Linked stairwells slowly equalize temperature between the rooms they stand in, like a vent between floors. The sky level also follows the surface's outdoor temperature and seasons.</AB_CrossLevelTemperatureTip>
 

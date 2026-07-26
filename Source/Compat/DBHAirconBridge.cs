@@ -135,7 +135,6 @@ namespace AsAboveSoBelow
             float indoor = 0f;
             SumInto(netA, a.Map, ref outdoor, ref indoor);
             SumInto(netB, b.Map, ref outdoor, ref indoor);
-            _ = netsA; // (kept above only for the local net scan)
             if (indoor <= 0f)
             {
                 // No indoor demand anywhere on the pooled system: leave DBH's own

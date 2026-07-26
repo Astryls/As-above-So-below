@@ -30,6 +30,12 @@ namespace AsAboveSoBelow
             {
                 return new AcceptanceReport("AB_NoLevelsUrbanRuins".Translate());
             }
+            // Gravships (Odyssey): a column cannot ride along when the ship
+            // launches, so no vertical link may be built on substructure.
+            if (ABGravship.OnSubstructure(map, loc, rot, ((ThingDef)checkingDef).Size))
+            {
+                return new AcceptanceReport("AB_NoLevelsGravship".Translate());
+            }
             if (target == 0 && map.Level() != 0)
             {
                 Map ground = map.GroundMap();

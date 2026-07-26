@@ -236,6 +236,14 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // Never grow a column from a link mounted on gravship substructure:
+            // the level maps cannot fly with the ship. PlaceWorker refuses this
+            // at build time; this is the backstop for any path that reaches here.
+            if (ABGravship.OnSubstructure(this))
+            {
+                ABLog.Dev("Refused stair link on gravship substructure at " + Position + ".");
+                return;
+            }
             try
             {
                 int target = Map.Level() + delta;
@@ -448,6 +456,23 @@ namespace AsAboveSoBelow
             }
         }
 
+        private static UnityEngine.Texture removeLevelIcon;
+
+        /// <summary>Icon for the remove-level command; falls back to the
+        /// deconstruct icon if the custom texture is missing.</summary>
+        private static UnityEngine.Texture RemoveLevelIcon
+        {
+            get
+            {
+                if (removeLevelIcon == null)
+                {
+                    removeLevelIcon = ContentFinder<UnityEngine.Texture2D>.Get("UI/AB_RemoveLevel", false)
+                        ?? RemoveIcon;
+                }
+                return removeLevelIcon;
+            }
+        }
+
         protected virtual List<Gizmo> BuildGizmos()
         {
             List<Gizmo> list = new List<Gizmo>();
@@ -487,7 +512,41 @@ namespace AsAboveSoBelow
                     }
                 });
             }
+            // Safe level deletion: remove the whole level this stair opens onto
+            // (never the ground level 0). Opens a confirmation with an evacuate
+            // toggle; see Dialog_ABDeleteLevel / ABLevelDeletion.
+            if (Faction == Faction.OfPlayer)
+            {
+                AddRemoveLevelGizmo(list, Counterpart);
+                AddRemoveLevelGizmo(list, SecondCounterpart);
+            }
             return list;
+        }
+
+        private void AddRemoveLevelGizmo(List<Gizmo> list, Building_ABStairs cp)
+        {
+            if (cp == null || cp.Map == null || cp.Map.Disposed)
+            {
+                return;
+            }
+            int lvl = cp.Map.Level();
+            if (lvl == 0)
+            {
+                // Never offer to delete the ground/home level.
+                return;
+            }
+            bool above = lvl > Map.Level();
+            Map target = cp.Map;
+            list.Add(new Command_Action
+            {
+                defaultLabel = (above ? "AB_RemoveLevelAbove" : "AB_RemoveLevelBelow").Translate(),
+                defaultDesc = "AB_RemoveLevelDesc".Translate(),
+                icon = RemoveLevelIcon,
+                action = delegate
+                {
+                    Find.WindowStack.Add(new Dialog_ABDeleteLevel(target));
+                }
+            });
         }
 
         public override IEnumerable<FloatMenuOption> GetFloatMenuOptions(Pawn selPawn)
