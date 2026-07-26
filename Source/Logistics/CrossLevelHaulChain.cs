@@ -99,11 +99,15 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        /// <summary>Runs on every landing of a chain hop (via ABPendingOrders,
-        /// after StairTransfer). Stops the item at the FIRST level that accepts
-        /// it; otherwise takes the next hop toward the nearest accepting level;
-        /// if nowhere accepts it anymore, drops it here so a local hauler can
-        /// relocate it (self-healing, never lost).</summary>
+        /// <summary>Runs on each landing of a chain hop (via ABPendingOrders,
+        /// after StairTransfer). Stores the item if THIS level accepts it (first
+        /// accepting level wins); otherwise sets it down here and - if a linked
+        /// level still accepts it - (re-)designates it to haul, so the ordinary
+        /// single-hop / far givers carry it onward. Every remaining leg is then a
+        /// normal, well-tested haul; no carried item is threaded through a
+        /// re-entrant follow-up job (the source of the "stops at the top of the
+        /// first flight and never continues" bug). If nowhere accepts it, it just
+        /// stays put (self-heals when storage frees up).</summary>
         public static void OnArrive(Pawn pawn, Thing item)
         {
             try
@@ -122,17 +126,22 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // 2) Otherwise continue toward the nearest accepting level.
-                if (FindNextHop(pawn, carried, out Building_ABStairs entry, out Building_ABStairs exit))
+                // 2) Set it down here and hand it back to the normal givers.
+                bool more = AnyLinkedLevelAccepts(pawn, carried);
+                if (!pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near,
+                        out Thing dropped) || dropped == null || !dropped.Spawned)
                 {
-                    Job hop = JobMaker.MakeJob(ABDefOf.AB_HaulChainAcrossLevels, carried, entry);
-                    hop.targetC = exit;
-                    hop.count = carried.stackCount;
-                    pawn.jobs?.TryTakeOrderedJob(hop, JobTag.Misc);
                     return;
                 }
-                // 3) Dead end (storage filled mid-transit): set it down here.
-                pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out _);
+                // Non-alwaysHaulable things (chunks) need a Haul designation to be
+                // picked up again - the origin designation was on the level it left,
+                // so re-stamp it here. alwaysHaulable things need no designation.
+                if (more && !dropped.def.alwaysHaulable
+                    && dropped.Map.designationManager.DesignationOn(dropped, DesignationDefOf.Haul) == null)
+                {
+                    dropped.Map.designationManager.AddDesignation(
+                        new Designation(dropped, DesignationDefOf.Haul));
+                }
             }
             catch (Exception e)
             {
@@ -151,6 +160,25 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Does any DIRECTLY-linked level (or one two gaps away) have
+        /// accepting storage for the item? Gate for re-designating an
+        /// intermediate drop so it is not left with a stray Haul designation and
+        /// nowhere to go.</summary>
+        private static bool AnyLinkedLevelAccepts(Pawn pawn, Thing item)
+        {
+            LevelComp comp = pawn.Map.Levels();
+            if (comp == null)
+            {
+                return false;
+            }
+            Map up1 = comp.upperMap;
+            Map down1 = comp.lowerMap;
+            return LevelAcceptsItem(up1, item, 0)
+                || LevelAcceptsItem(down1, item, 0)
+                || LevelAcceptsItem(up1?.Levels()?.upperMap, item, 0)
+                || LevelAcceptsItem(down1?.Levels()?.lowerMap, item, 0);
+        }
+
         /// <summary>Store the carried item on the pawn's CURRENT level if that
         /// level has accepting, reachable storage. Vanilla builds the deposit
         /// job; a pawn already carrying the thing just walks it to the cell.</summary>
@@ -163,45 +191,6 @@ namespace AsAboveSoBelow
             }
             pawn.jobs?.TryTakeOrderedJob(store, JobTag.Misc);
             return true;
-        }
-
-        /// <summary>Nearest accepting level from the pawn's current level, either
-        /// direction, adjacent or two away, returning the FIRST-hop stairs toward
-        /// it. Used by the in-flight continuation, so ANY real storage counts
-        /// ("stop at first accepting"). The origin level never accepts the item
-        /// (that is why it is being hauled away), so this cannot bounce it back.</summary>
-        private static bool FindNextHop(Pawn pawn, Thing item,
-            out Building_ABStairs entry, out Building_ABStairs exit)
-        {
-            entry = null;
-            exit = null;
-            LevelComp comp = pawn.Map.Levels();
-            if (comp == null)
-            {
-                return false;
-            }
-            Map up1 = comp.upperMap;
-            Map down1 = comp.lowerMap;
-            Map up2 = up1?.Levels()?.upperMap;
-            Map down2 = down1?.Levels()?.lowerMap;
-            // distance 1 first (nearest), then distance 2.
-            if (LevelAcceptsItem(up1, item, 0) && FirstHop(pawn, 1, out entry, out exit))
-            {
-                return true;
-            }
-            if (LevelAcceptsItem(down1, item, 0) && FirstHop(pawn, -1, out entry, out exit))
-            {
-                return true;
-            }
-            if (LevelAcceptsItem(up2, item, 0) && FirstHop(pawn, 1, out entry, out exit))
-            {
-                return true;
-            }
-            if (LevelAcceptsItem(down2, item, 0) && FirstHop(pawn, -1, out entry, out exit))
-            {
-                return true;
-            }
-            return false;
         }
 
         /// <summary>Coarse "does this level have accepting storage for the item at
