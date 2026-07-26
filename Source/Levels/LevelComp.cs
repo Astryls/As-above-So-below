@@ -193,6 +193,8 @@ namespace AsAboveSoBelow
 
         private int nextAutoEngageDue = -1;
 
+        private int nextVisionDue = -1;
+
         private int nextGroundHostileDue = -1;
 
         private int nextAnimalDue = -1;
@@ -408,6 +410,26 @@ namespace AsAboveSoBelow
                     catch (Exception e)
                     {
                         ABGuard.Disable(ABGuard.Combat, e, "cross gap auto engage scan");
+                    }
+                }
+                // Cross-level fog-of-war vision (CAI 5000): pawns watching
+                // through the gap light the other level. Static count early-out
+                // when CAI is absent; the pass itself no-ops unless CAI Fog Of
+                // War is on and a level of this pair is on screen.
+                if (ABGuard.On(ABGuard.CombatAI) && ABCombatAICompat.Active
+                    && Due(ref nextVisionDue, now, CrossLevelVision.ScanInterval))
+                {
+                    try
+                    {
+                        Map ground = lowerMap ?? groundMap;
+                        if (ground != null && !ground.Disposed)
+                        {
+                            CrossLevelVision.ScanPair(map, ground);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        ABGuard.Disable(ABGuard.CombatAI, e, "cross level vision scan");
                     }
                 }
                 int weatherInterval = visible ? WeatherSyncInterval : WeatherSyncInterval * HiddenWeatherMultiplier;
