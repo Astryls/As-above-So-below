@@ -79,7 +79,14 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(StorageSettings __instance)
         {
-            if (!ABGuard.On(ABGuard.Logistics) || Current.ProgramState != ProgramState.Playing)
+            NotifyStorageChanged(__instance);
+        }
+
+        /// <summary>Shared invalidation for any storage reconfiguration.</summary>
+        internal static void NotifyStorageChanged(StorageSettings settings)
+        {
+            if (settings == null || !ABGuard.On(ABGuard.Logistics)
+                || Current.ProgramState != ProgramState.Playing)
             {
                 return;
             }
@@ -88,7 +95,7 @@ namespace AsAboveSoBelow
                 CrossLevelHaul.ClearVerdicts();
                 CrossLevelDemand.InvalidateAll();
                 Map map = null;
-                IStoreSettingsParent owner = __instance.owner;
+                IStoreSettingsParent owner = settings.owner;
                 if (owner is Zone zone)
                 {
                     map = zone.Map;
@@ -108,6 +115,21 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Logistics, e, "storage change invalidation");
             }
+        }
+    }
+
+    /// <summary>The storage PRIORITY setter is a plain field assignment - it does
+    /// NOT call TryNotifyChanged the way the filter does - so bumping a stockpile
+    /// to Critical never invalidated our cross-level verdict cache, and haulers
+    /// kept using a stale "no better storage" answer until the cache TTL lapsed
+    /// (user report 2026-07-26: "sometimes they don't react to changes in storage
+    /// priority"). Fire the same invalidation on a priority change.</summary>
+    [HarmonyPatch(typeof(StorageSettings), nameof(StorageSettings.Priority), MethodType.Setter)]
+    internal static class Patch_StoragePriorityChanged_CrossLevel
+    {
+        private static void Postfix(StorageSettings __instance)
+        {
+            Patch_StorageChanged_CrossLevel.NotifyStorageChanged(__instance);
         }
     }
 }
