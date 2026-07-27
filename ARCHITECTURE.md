@@ -4,7 +4,7 @@
 > structural change — a new module folder, a new tick hub, a new cross-cutting pattern, a
 > renamed public API. If a diagram below no longer matches the code, the diagram is the bug.
 >
-> Last synced: 2026-07-26 · Pass 42 (tier-1 static perf gates).
+> Last synced: 2026-07-26 · Pass 42 (perf gates) + refactor pass R1–R4 (tick registry / partial splits / compat registry).
 > Regenerate the whole-codebase snapshot for high-level chats with `docs/generate-helicopter-view.sh`.
 
 ---
@@ -26,20 +26,21 @@ Design priorities, in order: **(1)** visual clarity from the sky, **(2)** perfor
 
 | Metric | Count |
 |---|---|
-| C# files | 156 |
-| C# lines | 41,982 |
+| C# files | 165 |
+| C# lines | 42,495 |
 | Defs + Patches XML files | 14 |
 | Defs + Patches XML lines | 1,428 |
 | All XML incl. About + Languages | 1,851 |
-| **Total code (C# + Defs/Patches)** | **~43,410** |
+| **Total code (C# + Defs/Patches)** | **~43,923** |
 | Declarative `Patch_*` Harmony classes | 110 |
 | Imperative `.Patch()` calls (Compat) | 24 |
 | `[HarmonyPatch]` attribute usages | 113 |
 | Per-subsystem kill switches (`ABGuard`) | 19 |
 | Foreign-mod compat bridges | ~30 |
 
-Two files dominate and are the standing refactor candidates: `Dev/ABDevTools.cs` (2,559) and
-`Logistics/CrossLevelDemand.cs` (1,489). See §7.
+Largest files after the R1–R4 refactor pass: `Logistics/CrossLevelDemand.cs` (1,489) and
+`Rendering/LevelRenderer.cs` (1,260) — deliberately left intact (R5). The old 2,559-LOC
+`Dev/ABDevTools.cs` monolith is gone, split into domain partials (R2). See §7 and §9.
 
 ---
 
@@ -56,11 +57,11 @@ Two files dominate and are the standing refactor candidates: `Dev/ABDevTools.cs`
 ├─ Patches/                          PatchOperations: DBH/Rimefeller/VCHE/VEF vertical pipes
 ├─ Languages/English/Keyed/          C#-emitted strings (translate everything player-facing)
 ├─ Textures/                         stairs/ladder/elevator art (MORTON pack) + UI icons
-└─ Source/                           C# (41,982 LOC, 156 files, one namespace: AsAboveSoBelow)
+└─ Source/                           C# (42,495 LOC, 165 files, one namespace: AsAboveSoBelow)
    │
-   ├─ Core/        (1,674 · 8)   FOUNDATION — boot, settings, kill switches, tick hub
+   ├─ Core/        (~1,864 · 9)  FOUNDATION — boot, settings, kill switches, ABGameHooks tick registry
    ├─ API/         (  498 · 2)   PUBLIC modder surface — cross-level jobs, need migration, policy
-   ├─ Levels/      (4,331 · 19)  LEVEL MODEL — LevelComp, LevelExtensions, generation, camera, sync
+   ├─ Levels/      (~4,410 · 21) LEVEL MODEL — LevelComp(+.Scheduler), LevelCensus, LevelExtensions, gen, camera
    │
    ├─ Stairs/      (1,898 · 6)   vertical links: buildings, use-job, climb animation
    ├─ Movement/    (3,776 · 9)   cross-level RMB orders, work-priority migration, targeting
@@ -72,8 +73,8 @@ Two files dominate and are the standing refactor candidates: `Dev/ABDevTools.cs`
    ├─ World/       (  575 · 4)   caravans, trade, wealth, comms, abandon warning
    ├─ UI/          (2,536 · 13)  colonist bar, alerts, tables, selection, play-settings buttons
    │
-   ├─ Compat/      (5,549 · 30)  foreign-mod bridges (each [StaticConstructorOnStartup]+ABDetect)
-   └─ Dev/         (2,559 · 1)   ABDevTools: in-game self-test / diagnostic debug actions
+   ├─ Compat/      (~5,700 · 31) foreign-mod bridges + ABCompat registry (ABDetect/ABCompat.Detect gated)
+   └─ Dev/         (2,678 · 8)   ABDevTools.*.cs: self-test/diagnostics, split into domain partials (R2)
 ```
 `(LOC · files)`. `obj/` and `bin/` are gitignored build scratch.
 
@@ -81,8 +82,10 @@ Two files dominate and are the standing refactor candidates: `Dev/ABDevTools.cs`
 
 ## 4. Layered dependency graph
 
-Everything points **down**. The two dashed edges are the deliberate exception — the tick hubs
-in the foundation reach *up* into features to dispatch per-tick work (see §6 and refactor R1).
+Everything points **down**. Since the R1 refactor, game-scoped ticks are decoupled: features
+self-register `[ABGameTick]` hooks that `ABGameHooks` discovers by reflection, so `ABGameComp`
+holds no direct feature refs. The one remaining upward edge (dashed) is `LevelComp`'s per-map
+tick scheduler, kept explicit on purpose (perf + heterogeneous scheduling — see §9 R1/R3).
 
 ```mermaid
 flowchart TD
@@ -90,12 +93,14 @@ flowchart TD
         Boot["HarmonyBoot<br/><i>patches every [HarmonyPatch]<br/>class independently</i>"]
         Mod["ABMod + ABSettings<br/><i>mod entry · settings model+UI</i>"]
         Guard["ABGuard + ABBlame<br/><i>19 kill switches · error blame</i>"]
-        GameComp["ABGameComp<br/><i>GameComponent tick/OnGUI hub<br/>+ level view hotkeys</i>"]
+        GameComp["ABGameComp<br/><i>runs ABGameHooks each tick/reset<br/>+ level view hotkeys</i>"]
+        Hooks["ABGameHooks<br/><i>[ABGameTick]/[ABGameReset]/<br/>[ABGameExpose] registry (R1)</i>"]
         DefOf["ABDefOf · ABLog · ABPawnCooldown"]
     end
 
     subgraph L1["Layer 1 · Level Model — Levels/"]
-        Comp["LevelComp<br/><i>MapComponent · links · static perf gates<br/>· per-map tick scheduler</i>"]
+        Comp["LevelComp<br/><i>MapComponent · links · scribe<br/>(+.Scheduler partial: per-map ticks)</i>"]
+        Census["LevelCensus<br/><i>static column-count perf gates (R3)</i>"]
         Ext["LevelExtensions<br/><b>Map→column backbone API</b><br/><i>Levels() UpperMap() LowerMap()<br/>GroundMap() SameColumn()</i>"]
         Gen["LevelMapGen + GenStep_*<br/><i>sky/rock/cavern/ruins generation</i>"]
         Cam["LevelCamera · LevelSync<br/><i>view switching · roof/terrain mirror</i>"]
@@ -130,14 +135,16 @@ flowchart TD
     Dev --> L1
     Dev --> L0
 
-    GameComp -. "dispatches ticks (upward ref — see R1)" .-> L2
-    Comp -. "dispatches ticks (upward ref — see R1)" .-> L2
+    GameComp -->|"runs hooks each tick"| Hooks
+    L2 -. "self-register [ABGameTick] (R1)" .-> Hooks
+    Comp -. "map-tick dispatches features directly — the one remaining upward ref (perf; see R1/R3)" .-> L2
 ```
 
 **Reading it:** `LevelExtensions` is the single most-depended-on type — nearly every feature file
 calls `map.Levels()` / `map.GroundMap()` / `a.SameColumn(b)`. If you change that API, expect
 ripples everywhere. `ABGuard.On(...)` is the second: every hot path and every subsystem entry
-point is wrapped in a kill switch.
+point is wrapped in a kill switch. The static perf gate `LevelCensus.AnyLevelColumns` is read at
+the top of ~27 hot patches; `ABGameHooks` is the reflection-driven registry the game-tick loop runs.
 
 ---
 
@@ -161,19 +168,20 @@ sequenceDiagram
 
     Note over RW,Map: --- new / loaded game ---
     RW->>GC: FinalizeInit()
-    GC->>GC: ABGuard.Reset() + clear all static session state
+    GC->>GC: ABGuard.Reset() + ABGameHooks.RunResets() [clears via [ABGameReset]]
     RW->>Map: map created → LevelComp added
     Map->>Map: ctor reads LevelMapGen.Context → sets level + wires own links
-    Map->>Map: FinalizeInit() → NoteLevel(±1) [perf counts], subscribe sync, reveal fog
+    Map->>Map: FinalizeInit() → LevelCensus.NoteLevel(±1), subscribe sync, reveal fog
 
     Note over GC,Map: --- runtime, every tick/frame ---
-    GC->>L2: GameComponentTick/OnGUI → ritual, climb, supply, orders, hospitality, neutral-exit, hotkeys
-    Map->>L2: MapComponentTick → weather, sweep, hostile, animal, pipes, turret, auto-engage, vision
+    GC->>L2: GameComponentTick → ABGameHooks.RunTicks() → [ABGameTick] hooks (ritual, climb, supply, orders, hospitality, neutral-exit)
+    Map->>L2: MapComponentTick (.Scheduler) → weather, sweep, hostile, animal, pipes, turret, auto-engage, vision
 ```
 
-The **two tick hubs** are `ABGameComp` (per game) and `LevelComp.MapComponentTick` (per map).
-Every recurring behavior is scheduled from one of these two places. Both early-out on a static
-count read (`LevelComp.AnyLevelColumns`) so a zero-column game pays almost nothing.
+The **two tick hubs** are `ABGameComp` (per game) and `LevelComp.MapComponentTick` (per map, in
+the `.Scheduler` partial). Game-scoped work is now self-registered via `[ABGameTick]` and run by
+`ABGameHooks` (R1); map-scoped work stays explicit in the scheduler. Both early-out on a static
+count read (`LevelCensus.AnyLevelColumns`) so a zero-column game pays almost nothing.
 
 ---
 
@@ -185,7 +193,7 @@ This is the core idiom repeated ~110 times. Vanilla asks a scoped question about
 ```mermaid
 flowchart LR
     V["Vanilla code asks a<br/>map-scoped question<br/>(InAllowedArea? best storage?<br/>colonists? wealth?)"]
-    G{"LevelComp.AnyLevelColumns?<br/><i>single static int read</i>"}
+    G{"LevelCensus.AnyLevelColumns?<br/><i>single static int read</i>"}
     P["Patch_* widens scope:<br/>walk column via LevelExtensions<br/>(GroundMap → Upper/Lower)"]
     K{"ABGuard.On(subsystem)?"}
     R["Return column-wide answer<br/>(fail-open to vanilla on throw)"]
@@ -213,9 +221,9 @@ flowchart LR
 
 | Module | LOC·files | Role | Key types |
 |---|---|---|---|
-| **Core** | 1,674·8 | Foundation: boot, settings, kill switches, tick hub | `HarmonyBoot` · `ABMod` · `ABSettings` · `ABGuard`/`ABBlame` · `ABGameComp` · `ABDefOf` |
+| **Core** | ~1,864·9 | Foundation: boot, settings, kill switches, tick registry | `HarmonyBoot` · `ABMod` · `ABSettings` · `ABGuard`/`ABBlame` · `ABGameComp` · `ABGameHooks` |
 | **API** | 498·2 | Public modder surface | `ABApi` · `NeedMigration` · `ABIncidentLevelPolicy` · `ABSkyfallerTransit` |
-| **Levels** | 4,331·19 | The level model + generation + camera + sync | `LevelComp` · `LevelExtensions` · `LevelMapGen` · `GenStep_ABSkyTerrain/SolidRock/CavernCarve/UrbanRuins` · `LevelCamera` · `LevelSync` |
+| **Levels** | ~4,410·21 | The level model + census + generation + camera + sync | `LevelComp`(+`.Scheduler`) · `LevelCensus` · `LevelExtensions` · `LevelMapGen` · `GenStep_AB*` · `LevelCamera` · `LevelSync` |
 | **Stairs** | 1,898·6 | Vertical links | `Building_ABStairs`/`ABElevator`/`ABUtilityLink` · `JobDriver_UseStairs` · `ClimbAnimation` |
 | **Movement** | 3,776·9 | Cross-level RMB orders + work-priority migration | `CrossLevelOrders` · `CrossLevelWork` · `CrossLevelTargeting` · `StairRouter`/`StairIslands` |
 | **Logistics** | 6,834·26 | Hauling, demand, column storage, needs, supply | `CrossLevelHaul`/`HaulChain` · `CrossLevelDemand` · `ColumnStorage` · `ABGearAcrossLevels` · `WorkGiver_AB*` |
@@ -225,8 +233,8 @@ flowchart LR
 | **Threats** | 1,524·5 | Optional threats & arrivals | `HostileDescend` · `PodTransit` · `ThreatDivert` · `SkyArrivals` |
 | **World** | 575·4 | Planet integration | `CaravanAcrossLevels` · `ColumnTrade` · `ColumnWorld` |
 | **UI** | 2,536·13 | HUD, alerts, tables, selection | `BelowSelection` · `ABGenPreview` · `ABIcons`/`ABTheme` · `Dialog_ABDeleteLevel` |
-| **Compat** | 5,549·30 | Foreign-mod bridges (ABDetect-gated) | DBH/Rimefeller/VEF pipes · CE · Vehicles · Hospitality · CAI5000 (`CrossLevelVision`) · Biomes Caverns · Ancient Urban Ruins |
-| **Dev** | 2,559·1 | In-game self-test / diagnostics | `ABDevTools` |
+| **Compat** | ~5,700·31 | Foreign-mod bridges + `ABCompat` registry | `ABCompat`/`ABDetect` · DBH/Rimefeller/VEF pipes · CE · Vehicles · Hospitality · CAI5000 · Biomes Caverns · Ancient Urban Ruins |
+| **Dev** | 2,678·8 | Self-test / diagnostics (domain partials) | `ABDevTools.*` (Combat/Movement/Systems/Levels/Rendering/Threats/Logistics) |
 
 ---
 
@@ -238,16 +246,23 @@ flowchart LR
 - **Kill switches** (`Core/ABGuard.cs`). 19 `ABGuardSwitch` singletons. Pattern: guard the entry
   (`if (!ABGuard.On(ABGuard.X)) return;`), `try { … } catch (e) { ABGuard.Disable(ABGuard.X, e, "ctx", subject); }`.
   Prefixes must **fail open**. Switches reset on load and are re-armable from settings.
-- **Tier-1 static perf gates** (`LevelComp.AnySkyLevels` / `AnyBasementLevels` / `AnyLevelColumns`).
+- **Tier-1 static perf gates** (`LevelCensus.AnySkyLevels` / `AnyBasementLevels` / `AnyLevelColumns`).
   First line of every hot cross-level patch. Superset of the real precondition ⇒ behavior-preserving.
   Keyed to `Current.Game` by weak reference; a stale count only ever *degrades* the optimization.
-- **Two tick hubs.** `ABGameComp` (game-scoped) and `LevelComp.MapComponentTick` (map-scoped).
-  All recurring work is scheduled here via elapsed-time `Due(ref due, now, interval)` with a
-  per-map stagger, not `TicksGame % n` (modulo beats are missed across time-skips/loads).
-- **Compat bridges** (`Compat/*`). Each is `[StaticConstructorOnStartup]` + `ABDetect` +
-  manual `HarmonyBoot.Harmony.Patch(...)`, active only if the foreign mod is loaded. Bridges
-  carry **no** `[HarmonyPatch]` attribute (so `HarmonyBoot` never reflects their foreign-typed
-  method signatures — that was the "Skipped patch class RimefellerBridge" ghost-warning trap).
+  (Extracted from `LevelComp` in R3; `LevelComp` feeds the counts via `LevelCensus.NoteLevel`.)
+- **Two tick hubs.** `ABGameComp` (game-scoped) and `LevelComp.MapComponentTick` (map-scoped, in
+  the `.Scheduler` partial). Game-scoped features self-register `[ABGameTick]`/`[ABGameReset]`/
+  `[ABGameExpose]` and `ABGameHooks` runs them (R1) — add a ticked feature by annotating its own
+  method, no Core edit. Map-scoped work stays explicit and uses elapsed-time
+  `Due(ref due, now, interval)` with a per-map stagger, not `TicksGame % n` (modulo beats are
+  missed across time-skips/loads).
+- **Compat bridges** (`Compat/*`). Each is `[StaticConstructorOnStartup]` + a detection probe +
+  manual `HarmonyBoot.Harmony.Patch(...)`, active only if the foreign mod is loaded. Detection now
+  routes through `ABCompat.Detect(id, name)`/`ABCompat.Note(...)` (R4) so every target lands in one
+  auditable registry (`ABCompat.Modules`, dumpable via the "AB: list compat modules" Dev action);
+  `ABCompat.Setup()` is the go-forward boot helper. Bridges carry **no** `[HarmonyPatch]` attribute
+  (so `HarmonyBoot` never reflects their foreign-typed method signatures — that was the "Skipped
+  patch class RimefellerBridge" ghost-warning trap).
 - **Localization.** Player-facing C# strings go through `"AB_Key".Translate()` with the key in
   `Languages/English/Keyed/AsAboveSoBelow.xml`. Def labels/descriptions are DefInjected (don't hand-author).
 
@@ -255,31 +270,39 @@ flowchart LR
 
 ## 9. Refactor backlog (honest assessment)
 
-Ordered by value ÷ risk. None are urgent — the mod ships green — but this is where the structural
-debt is.
+The 2026-07-26 pass applied R1–R4 (all behavior-preserving, green 0/0) and recorded R5 as a
+deliberate non-split. History kept here so the reasoning survives.
 
-- **R1 · Tick-hub upward coupling (medium).** `ABGameComp` and `LevelComp.MapComponentTick`
-  hardcode calls into a dozen feature subsystems (`CrossLevelCombat`, `HostileDescend`,
-  `ABRitualAttendance`, `ABPipeCompat`, …), inverting the layer rule that foundation shouldn't
-  know features. Adding a ticked feature means editing Core/Levels. *Fix:* a lightweight
-  ordered tick-subscriber registry (`interface IABTickable { int Interval; void Tick(Map); }`
-  registered at boot). *Trade-off:* costs the current explicit, greppable, deterministically-ordered
-  list — and perf is priority #2, so any registry must preserve order and add zero per-tick
-  allocation. Defensible to leave as-is; document it if so.
-- **R2 · `Dev/ABDevTools.cs` is a 2,559-LOC monolith (low risk, high readability).** Split into
-  per-domain partials mirroring the feature folders (`ABDevTools.Logistics.cs`, `.Combat.cs`, …).
-  Dev-only, so zero gameplay risk.
-- **R3 · Split `LevelComp` (medium).** It's the heart (679 LOC) but wears three hats: the level
-  model (links/scribe), the static perf census, and the per-map tick scheduler. Extract
-  `LevelCensus` (the static counts + gates) and `LevelTickScheduler` (the `Due`/interval logic)
-  to shrink the class to just the model. Pairs naturally with R1.
-- **R4 · Standardize the Compat boot contract (medium).** 30 bridges each hand-roll
-  detect→patch→guard. An `IABCompatModule { bool Detect(); void Activate(); }` discovered by
-  reflection would make the compat surface auditable and kill copy-paste, without changing the
-  ABDetect gating. Watch the ghost-warning trap (R-note: keep bridges attribute-free).
-- **R5 · Large service files (low).** `CrossLevelDemand` (1,489) and `LevelRenderer` (1,260) are
-  the next split candidates *if they keep churning* — split along their internal responsibilities
-  (demand model vs. pull-side fetch; mask build vs. section printing). Don't split preemptively.
+- **R1 · Tick-hub coupling — DONE (game-scoped).** `Core/ABGameHooks.cs` is a reflection-discovered
+  registry: features annotate their own static methods `[ABGameTick]` / `[ABGameReset]` /
+  `[ABGameExpose]` and `ABGameComp` just runs them (deterministic order by [Order]+name, zero
+  per-tick allocation). Core no longer lists feature tick calls. **Scope note:** `LevelComp`'s
+  *map-scoped* tick loop was deliberately NOT genericized — its scheduling is heterogeneous
+  (every-tick vs interval vs sweep-cursor vs on-view catch-up vs visibility throttle) and lives on
+  the perf-critical MapComponent, so a generic registry there would add risk/cost for little gain.
+  It stays explicit in the `.Scheduler` partial (see R3).
+- **R2 · `ABDevTools` monolith — DONE.** Split into domain partials (`ABDevTools.Combat.cs`,
+  `.Movement.cs`, `.Systems.cs`, `.Levels.cs`, `.Rendering.cs`, `.Threats.cs`, `.Logistics.cs`) plus
+  the core file (setup action + shared helpers). Same `partial class`, byte-identical bodies.
+- **R3 · Split `LevelComp` — DONE.** `LevelCensus` (standalone class) owns the static column-count
+  perf gates; the per-map tick scheduler + sync wiring moved to the `LevelComp.Scheduler.cs`
+  partial. `LevelComp.cs` is now the model (links, stairs registry, scribe). All ~27 gate call
+  sites read `LevelCensus.*`.
+- **R4 · Compat registry — DONE (framework + full audit).** `Compat/ABCompat.cs` is the central
+  registry; all detections route through `ABCompat.Detect`/`.Note`, so the whole soft-compat surface
+  is auditable in one place (`ABCompat.Modules`, dumped by the "AB: list compat modules" Dev
+  action). `ABCompat.Setup(id, name, activate)` is the standardized boot for new bridges. **Scope
+  note:** existing bridges keep their bespoke reflection-guarded boot (each foreign mod needs a
+  different probe); migrating them to `Setup()` is optional and low-value — the auditable
+  *declaration* is what R4 was for, and that is done for every bridge.
+
+Standing decision:
+
+- **R5 · Large service files — DO NOT SPLIT (for now).** `Logistics/CrossLevelDemand.cs` (1,489) and
+  `Rendering/LevelRenderer.cs` (1,260) are the largest files, but they are cohesive and not actively
+  churning, so splitting them would add risk for no readability win. Revisit only if one starts
+  taking frequent unrelated edits; then split along internal responsibilities (demand model vs.
+  pull-side fetch; mask build vs. section printing).
 
 ---
 
