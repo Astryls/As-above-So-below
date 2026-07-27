@@ -31,24 +31,23 @@ namespace AsAboveSoBelow
     [StaticConstructorOnStartup]
     public class SectionLayer_ABBelowV2 : SectionLayer
     {
-        /// <summary>Below content is tinted down so depth reads at a glance.
+        /// <summary>Below content draws at FULL brightness and FULL size - no artificial
+        /// dim, no "fake zoom out" shrink.
         ///
-        /// NEUTRAL on purpose: an earlier blue-biased value turned the warm tan rock and
-        /// soil of the surface cold grey, making the below view look like a different map
-        /// rather than the same one dimmer. LIGHT on purpose too (0.8): the sky level's own
-        /// lighting overlay dims this content a second time, so a heavy tint compounds into
-        /// unreadable murk.</summary>
-        private const byte BelowTintByte = 204;
-
-        private static readonly Color32 BelowTint =
-            new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 255);
+        /// V1 tinted and shrank below content as a depth cue, because its below view had no
+        /// real lighting of its own and needed some way to read as "further away". V2 has
+        /// SectionLayer_ABBelowLighting, which shades below content with the SURFACE's own
+        /// glow - so an artificial dim on top is exactly the double-darkening that made the
+        /// sky view murky, and it fights the ONE BIG MAP premise: looking down a hole should
+        /// show the level below as it actually is.
+        ///
+        /// Depth now reads from what is genuinely there - the air mask and fog around the
+        /// opening, and the opaque rooftops and mountain caps framing it.</summary>
+        private static readonly Color32 BelowTint = new Color32(255, 255, 255, 255);
 
         /// <summary>Transparent counterpart of BelowTint. Terrain edge fades encode their
-        /// coverage in vertex ALPHA, so the dim must touch RGB only.</summary>
-        private static readonly Color32 BelowTintClear =
-            new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 0);
-
-        private const float BelowTintFactor = BelowTintByte / 255f;
+        /// coverage in vertex ALPHA, so RGB stays full and only alpha goes to zero.</summary>
+        private static readonly Color32 BelowTintClear = new Color32(255, 255, 255, 0);
 
         private static readonly Color32 OpaqueWhite = new Color32(255, 255, 255, 255);
 
@@ -65,8 +64,6 @@ namespace AsAboveSoBelow
                 ShaderDatabase.SolidColorBehind);
 
         private readonly List<int> vertCountsBefore = new List<int>();
-
-        private readonly List<int> colorCountsBefore = new List<int>();
 
         private readonly CellTerrain[] adjTerrain = new CellTerrain[8];
 
@@ -104,8 +101,6 @@ namespace AsAboveSoBelow
                 TerrainGrid terrainGrid = map.terrainGrid;
                 FogGrid fog = map.fogGrid;
                 ThingGrid thingGrid = map.thingGrid;
-                float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
-                bool doScale = scale < 0.999f;
                 float maskAlt = AltitudeLayer.Terrain.AltitudeFor();
                 float terrainAlt = AltitudeLayer.TerrainScatter.AltitudeFor();
                 float fogAlt = AltitudeLayer.Filth.AltitudeFor();
@@ -178,8 +173,7 @@ namespace AsAboveSoBelow
                         {
                             SnapshotVertCounts();
                             t.Print(this);
-                            TransformNewVerts(t.TrueCenter(), slot, scale, doScale && CanScale(t));
-                            TintNewColors();
+                            TranslateNewVerts(slot);
                         }
                         catch (Exception e)
                         {
@@ -420,61 +414,21 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        /// <summary>Rock and linked graphics keep full size and stay flush: shrinking each
-        /// cell about its own centre tears a mountain or a wall run into a gappy field
-        /// (V1 run #50). Everything else shrinks in place for the depth illusion.</summary>
-        private static bool CanScale(Thing t)
-        {
-            ThingDef d = t.def;
-            if (d.mineable || (d.building != null && d.building.isNaturalRock))
-            {
-                return false;
-            }
-            GraphicData g = d.graphicData;
-            return g == null || g.linkType == LinkDrawerType.None;
-        }
-
         private void SnapshotVertCounts()
         {
             vertCountsBefore.Clear();
-            colorCountsBefore.Clear();
             List<LayerSubMesh> subs = subMeshes;
             for (int i = 0; i < subs.Count; i++)
             {
                 vertCountsBefore.Add(subs[i].verts.Count);
-                colorCountsBefore.Add(subs[i].colors.Count);
             }
         }
 
-        /// <summary>Dims the vertex colours the last print emitted, so below THINGS are
-        /// shaded to match below TERRAIN. Without it the terrain was tinted while trees,
-        /// walls and rock printed at full brightness, so the level below read as bright
-        /// objects floating on a dark plate instead of one coherent scene underneath.</summary>
-        private void TintNewColors()
+        /// <summary>Translates the vertices the last print emitted up one band. Altitude (y)
+        /// is left alone, and nothing is scaled or tinted: the below level is drawn exactly
+        /// as it is, which is the whole point of ONE BIG MAP.</summary>
+        private void TranslateNewVerts(int slot)
         {
-            List<LayerSubMesh> subs = subMeshes;
-            for (int i = 0; i < subs.Count; i++)
-            {
-                List<Color32> colors = subs[i].colors;
-                int from = i < colorCountsBefore.Count ? colorCountsBefore[i] : 0;
-                for (int j = from; j < colors.Count; j++)
-                {
-                    Color32 col = colors[j];
-                    colors[j] = new Color32(
-                        (byte)(col.r * BelowTintFactor),
-                        (byte)(col.g * BelowTintFactor),
-                        (byte)(col.b * BelowTintFactor),
-                        col.a);
-                }
-            }
-        }
-
-        /// <summary>Translates the vertices the last print emitted up one band, optionally
-        /// shrinking them about the translated centre. Altitude (y) is left alone.</summary>
-        private void TransformNewVerts(Vector3 thingCenter, int slot, float scale, bool doScale)
-        {
-            float cx = thingCenter.x;
-            float cz = thingCenter.z + slot;
             List<LayerSubMesh> subs = subMeshes;
             for (int i = 0; i < subs.Count; i++)
             {
@@ -483,14 +437,7 @@ namespace AsAboveSoBelow
                 for (int j = from; j < verts.Count; j++)
                 {
                     Vector3 v = verts[j];
-                    float x = v.x;
-                    float z = v.z + slot;
-                    if (doScale)
-                    {
-                        x = cx + (x - cx) * scale;
-                        z = cz + (z - cz) * scale;
-                    }
-                    verts[j] = new Vector3(x, v.y, z);
+                    verts[j] = new Vector3(v.x, v.y, v.z + slot);
                 }
             }
         }
