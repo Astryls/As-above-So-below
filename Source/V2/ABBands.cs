@@ -1,73 +1,73 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Verse;
 
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// V2 SPIKE. The band model: which layer of the single map a cell belongs to.
-    ///
-    /// In shipping V2 this is pure geometry - the map is (w, h * bandCount), bands
-    /// stack along +z, and BandOf is one integer divide. Because CellIndices is
-    /// row-major (z * sizeX + x), a band is a CONTIGUOUS index range, which is why
-    /// +z was chosen over +x.
-    ///
-    /// For the spike we also support a rect layout so a wormhole can be tested on an
-    /// ordinary map without generating a banded one: the sealed test chamber is
-    /// "band 1", everything else is "band 0". The consumer-facing API (BandOf /
-    /// SameBand) is identical either way, so the segmentation code the spike
-    /// exercises is the code V2 ships.
+    /// V2 SPIKE-ONLY layout: lets a wormhole be tested on an ordinary (unbanded) map by
+    /// declaring one rect to be "band 1". Kept so the Stage 0 spike still runs after the
+    /// real band model landed. Production banding comes from ABBandMap.
     /// </summary>
     public sealed class ABBandLayout
     {
-        /// <summary>Band height in cells for the stacked (real V2) layout.</summary>
-        private readonly int bandHeight;
-
-        /// <summary>Spike-only: cells inside this rect are band 1.</summary>
         private readonly CellRect testRect;
 
-        private readonly bool useRect;
-
-        private ABBandLayout(int bandHeight, CellRect testRect, bool useRect)
+        private ABBandLayout(CellRect testRect)
         {
-            this.bandHeight = bandHeight;
             this.testRect = testRect;
-            this.useRect = useRect;
         }
 
-        /// <summary>The real V2 layout: bands stacked along +z.</summary>
-        public static ABBandLayout Stacked(int bandHeight)
-        {
-            return new ABBandLayout(bandHeight, default(CellRect), useRect: false);
-        }
+        public static ABBandLayout TestRect(CellRect rect) => new ABBandLayout(rect);
 
-        /// <summary>Spike layout: one rect carved out of an ordinary map.</summary>
-        public static ABBandLayout TestRect(CellRect rect)
-        {
-            return new ABBandLayout(0, rect, useRect: true);
-        }
-
-        public int BandOf(IntVec3 cell)
-        {
-            if (useRect)
-            {
-                return testRect.Contains(cell) ? 1 : 0;
-            }
-            return bandHeight > 0 ? cell.z / bandHeight : 0;
-        }
+        public int BandOf(IntVec3 cell) => testRect.Contains(cell) ? 1 : 0;
     }
 
+    /// <summary>
+    /// The band API every other V2 system talks to. Reads the persisted ABBandMap first
+    /// and falls back to a spike layout when one is registered.
+    ///
+    /// Everything here must stay allocation-free and cheap: BandOf sits on the movement
+    /// hot path (every StartPath) and inside region/plant/temperature patches.
+    /// </summary>
     public static class ABBands
     {
-        private static readonly Dictionary<int, ABBandLayout> layouts = new Dictionary<int, ABBandLayout>();
+        private static readonly ConditionalWeakTable<Map, ABBandMap> cache = new ConditionalWeakTable<Map, ABBandMap>();
 
-        /// <summary>Spike-only: runtime registration, not scribed. A reload drops the
-        /// layout and the wormhole goes inert - acceptable for a throwaway branch,
-        /// and a reminder that V2 must persist the layout on the map itself.</summary>
+        private static readonly Dictionary<int, ABBandLayout> spikeLayouts = new Dictionary<int, ABBandLayout>();
+
+        public static ABBandMap CompOf(Map map)
+        {
+            if (map == null)
+            {
+                return null;
+            }
+            if (cache.TryGetValue(map, out ABBandMap comp))
+            {
+                return comp;
+            }
+            comp = map.GetComponent<ABBandMap>();
+            if (comp != null)
+            {
+                try
+                {
+                    cache.Add(map, comp);
+                }
+                catch (System.ArgumentException)
+                {
+                    // Benign race.
+                }
+            }
+            return comp;
+        }
+
+        // ---- spike support -------------------------------------------------
+
         public static void Register(Map map, ABBandLayout layout)
         {
             if (map != null)
             {
-                layouts[map.uniqueID] = layout;
+                spikeLayouts[map.uniqueID] = layout;
             }
         }
 
@@ -75,31 +75,86 @@ namespace AsAboveSoBelow
         {
             if (map != null)
             {
-                layouts.Remove(map.uniqueID);
+                spikeLayouts.Remove(map.uniqueID);
             }
         }
 
-        public static ABBandLayout LayoutOf(Map map)
+        private static ABBandLayout SpikeLayoutOf(Map map)
         {
             if (map == null)
             {
                 return null;
             }
-            return layouts.TryGetValue(map.uniqueID, out ABBandLayout l) ? l : null;
+            return spikeLayouts.TryGetValue(map.uniqueID, out ABBandLayout l) ? l : null;
         }
 
-        public static bool Banded(Map map) => LayoutOf(map) != null;
+        // ---- primary API ---------------------------------------------------
+
+        public static bool Banded(Map map)
+        {
+            ABBandMap c = CompOf(map);
+            return (c != null && c.Banded) || SpikeLayoutOf(map) != null;
+        }
 
         public static int BandOf(Map map, IntVec3 cell)
         {
-            ABBandLayout l = LayoutOf(map);
-            return l == null ? 0 : l.BandOf(cell);
+            ABBandMap c = CompOf(map);
+            if (c != null && c.Banded)
+            {
+                return c.BandOf(cell);
+            }
+            ABBandLayout l = SpikeLayoutOf(map);
+            return l != null ? l.BandOf(cell) : 0;
         }
 
         public static bool SameBand(Map map, IntVec3 a, IntVec3 b)
         {
-            ABBandLayout l = LayoutOf(map);
+            ABBandMap c = CompOf(map);
+            if (c != null && c.Banded)
+            {
+                return c.BandOf(a) == c.BandOf(b);
+            }
+            ABBandLayout l = SpikeLayoutOf(map);
             return l == null || l.BandOf(a) == l.BandOf(b);
+        }
+
+        /// <summary>Level of a cell: 0 surface, +1 sky, -1 basement.</summary>
+        public static int LevelOf(Map map, IntVec3 cell)
+        {
+            ABBandMap c = CompOf(map);
+            return c != null && c.Banded ? c.LevelOf(cell) : 0;
+        }
+
+        public static bool InGutter(Map map, IntVec3 cell)
+        {
+            ABBandMap c = CompOf(map);
+            return c != null && c.InGutter(cell);
+        }
+
+        public static CellRect RectOfBand(Map map, int band)
+        {
+            ABBandMap c = CompOf(map);
+            return c != null && c.Banded ? c.RectOfBand(band) : CellRect.WholeMap(map);
+        }
+
+        public static int SurfaceBand(Map map)
+        {
+            ABBandMap c = CompOf(map);
+            return c != null ? c.surfaceBand : 0;
+        }
+
+        public static int BandCount(Map map)
+        {
+            ABBandMap c = CompOf(map);
+            return c != null && c.Banded ? c.bandCount : 1;
+        }
+
+        /// <summary>True when the cell is on the surface band (or the map isn't banded).
+        /// The standard gate for "should vanilla map-wide behaviour apply here".</summary>
+        public static bool IsSurface(Map map, IntVec3 cell)
+        {
+            ABBandMap c = CompOf(map);
+            return c == null || !c.Banded || c.BandOf(cell) == c.surfaceBand;
         }
     }
 }
