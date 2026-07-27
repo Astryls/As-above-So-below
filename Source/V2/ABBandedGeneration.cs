@@ -154,7 +154,15 @@ namespace AsAboveSoBelow
                 }
                 else
                 {
-                    FillSky(map, rect, bands, rocks, noises);
+                    // Clear first, then let the sky generator lay a real mountain over it.
+                    foreach (IntVec3 c in rect)
+                    {
+                        if (c.InBounds(map))
+                        {
+                            ClearCellHard(map, c);
+                        }
+                    }
+                    ABSkyBandGen.Generate(map, bands, band, rocks, noises);
                 }
             }
             CarveGutters(map, bands);
@@ -189,82 +197,6 @@ namespace AsAboveSoBelow
             }
             ABOreGen.ScatterOres(map, rect.Cells.ToList(),
                 Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f));
-        }
-
-        /// <summary>
-        /// The sky band is a PROJECTION of the surface directly below it, not a void.
-        /// This is what makes the sky level read as "the top of the mountain" the way V1's
-        /// GenStep_ABSkyTerrain did:
-        ///   natural rock below   -> walkable mountain top (stone / gravel / soil by noise)
-        ///   constructed roof     -> rooftop you can walk and build on
-        ///   natural thin roof    -> mountain cap (overhang strip)
-        ///   nothing below        -> open air, so the surface stays visible from up here
-        ///
-        /// V2 gets this much cheaper than V1: the surface is in the SAME map, so the cell
-        /// below is one Translate away instead of a cross-map lookup and a sync mirror.
-        ///
-        /// NOT YET PORTED from V1: noise-driven peaks, ledges, outcrops, hidden valleys
-        /// and sky ore. This is the structural projection only.
-        /// </summary>
-        private static void FillSky(Map map, CellRect rect, ABBandMap bands,
-            List<ThingDef> rocks, List<Perlin> noises)
-        {
-            TerrainDef air = ABDefOf.AB_OpenAir;
-            TerrainGrid terrain = map.terrainGrid;
-            Perlin soilNoise = new Perlin(0.05, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
-            RoofGrid roofs = map.roofGrid;
-            foreach (IntVec3 c in rect)
-            {
-                if (!c.InBounds(map))
-                {
-                    continue;
-                }
-                ClearCellHard(map, c);
-                roofs.SetRoof(c, null);
-
-                IntVec3 below = bands.Translate(c, bands.surfaceBand);
-                if (!below.InBounds(map))
-                {
-                    terrain.SetTerrain(c, air);
-                    continue;
-                }
-                Building edifice = below.GetEdifice(map);
-                bool mountain = edifice != null && edifice.def.building != null
-                    && edifice.def.building.isNaturalRock;
-                RoofDef roofBelow = roofs.RoofAt(below);
-
-                if (mountain)
-                {
-                    float n = (float)(soilNoise.GetValue(c.x, 0.0, c.z) + 1.0) * 0.5f;
-                    TerrainDef t;
-                    if (n < 0.25f)
-                    {
-                        ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
-                        t = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
-                    }
-                    else if (n > 0.85f)
-                    {
-                        t = TerrainDefOf.Soil;
-                    }
-                    else
-                    {
-                        t = TerrainDefOf.Gravel;
-                    }
-                    terrain.SetTerrain(c, t);
-                }
-                else if (roofBelow != null && !roofBelow.isNatural)
-                {
-                    terrain.SetTerrain(c, ABDefOf.AB_RoofSurface);
-                }
-                else if (roofBelow != null && roofBelow.isNatural)
-                {
-                    terrain.SetTerrain(c, ABDefOf.AB_MountainTop);
-                }
-                else
-                {
-                    terrain.SetTerrain(c, air);
-                }
-            }
         }
 
         /// <summary>The seam rows. Impassable open air, permanently fogged, no roof - so

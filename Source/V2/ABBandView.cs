@@ -112,9 +112,9 @@ namespace AsAboveSoBelow
             return SetBand(map, CurrentBand(map) + delta);
         }
 
-        /// <summary>The z-range the camera may occupy for the current band, in world
-        /// units, inset so the view never shows the gutter.</summary>
-        public static bool TryBandCameraRange(Map map, out float minZ, out float maxZ)
+        /// <summary>World-space z bounds of the current band. The camera must keep its
+        /// whole VIEW inside these, not just its centre - see the clamp below.</summary>
+        public static bool TryBandBounds(Map map, out float minZ, out float maxZ)
         {
             minZ = 0f;
             maxZ = 0f;
@@ -124,17 +124,24 @@ namespace AsAboveSoBelow
                 return false;
             }
             CellRect r = bands.RectOfBand(CurrentBand(map));
-            minZ = r.minZ + 2f;
-            maxZ = r.maxZ - 1f;
+            minZ = r.minZ;
+            maxZ = r.maxZ + 1;
             return true;
         }
     }
 
     /// <summary>
-    /// Re-clamps the camera into the current band. CameraDriver.Update clamps rootPos.z
-    /// to the whole map every frame, so this postfix runs after it and narrows the clamp.
-    /// A postfix (rather than a transpiler on the inline Mathf.Clamp) keeps us clear of
-    /// the many mods that touch camera movement.
+    /// Keeps the camera's whole VIEW inside the current band.
+    ///
+    /// Run #7 caught the naive version: clamping only rootPos (the view CENTRE) still let
+    /// the viewport overhang the band edge, so the gutter and the neighbouring level were
+    /// visible as a strip along the top/bottom of the screen. The camera is orthographic,
+    /// so the visible half-height in world units IS RootSize - the centre must therefore
+    /// stay RootSize away from each band edge, and the zoom must not exceed half the band
+    /// height or no centre position can satisfy that.
+    ///
+    /// Band isolation still costs nothing to RENDER (MapDrawer only draws sections that
+    /// overlap the ViewRect); this is purely about where the viewport is allowed to sit.
     /// </summary>
     [HarmonyPatch(typeof(CameraDriver), nameof(CameraDriver.Update))]
     public static class Patch_CameraDriver_ABClampToBand
@@ -142,17 +149,33 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<CameraDriver, Vector3> RootPosRef =
             AccessTools.FieldRefAccess<CameraDriver, Vector3>("rootPos");
 
+        private static readonly AccessTools.FieldRef<CameraDriver, float> RootSizeRef =
+            AccessTools.FieldRefAccess<CameraDriver, float>("rootSize");
+
         private static void Postfix(CameraDriver __instance)
         {
             try
             {
                 Map map = Find.CurrentMap;
-                if (map == null || !ABBandView.TryBandCameraRange(map, out float minZ, out float maxZ))
+                if (map == null || !ABBandView.TryBandBounds(map, out float minZ, out float maxZ))
                 {
                     return;
                 }
+                float bandHeight = maxZ - minZ;
+
+                // Never zoom out further than the band can fill, or the neighbouring band
+                // is guaranteed to show no matter where the camera sits.
+                float maxSize = bandHeight * 0.5f;
+                if (RootSizeRef(__instance) > maxSize)
+                {
+                    RootSizeRef(__instance) = maxSize;
+                }
+
+                float half = RootSizeRef(__instance);
                 Vector3 p = RootPosRef(__instance);
-                float clamped = Mathf.Clamp(p.z, minZ, maxZ);
+                float lo = minZ + half;
+                float hi = maxZ - half;
+                float clamped = lo > hi ? (minZ + maxZ) * 0.5f : Mathf.Clamp(p.z, lo, hi);
                 if (!Mathf.Approximately(clamped, p.z))
                 {
                     p.z = clamped;
