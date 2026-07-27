@@ -76,10 +76,10 @@ namespace AsAboveSoBelow
                     return;
                 }
                 List<Pawn> extra = new List<Pawn>();
-                foreach (KeyValuePair<int, Map> kvp in controller.MapByLevel.OrderByDescending(k => k.Key))
+                // Level keys capped to {1,0,-1}; walk high->low, no LINQ alloc.
+                for (int lvl = 1; lvl >= -1; lvl--)
                 {
-                    Map m = kvp.Value;
-                    if (m == null || m == cur || m.Disposed)
+                    if (!controller.MapByLevel.TryGetValue(lvl, out Map m) || m == null || m == cur || m.Disposed)
                     {
                         continue;
                     }

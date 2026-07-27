@@ -37,10 +37,12 @@ namespace AsAboveSoBelow
                 // base-chained table would ghost them into the Work tab.
                 bool includeSubhumans = __instance is MainTabWindow_Schedule;
                 List<Pawn> list = new List<Pawn>(__result);
-                foreach (KeyValuePair<int, Map> kvp in controller.MapByLevel.OrderByDescending(k => k.Key))
+                // MapByLevel keys are capped to {1 sky, 0 ground, -1 basement};
+                // walk them high->low without a LINQ OrderByDescending allocation
+                // (this postfix runs on every pawn-table rebuild).
+                for (int lvl = 1; lvl >= -1; lvl--)
                 {
-                    Map m = kvp.Value;
-                    if (m == null || m == cur || m.Disposed)
+                    if (!controller.MapByLevel.TryGetValue(lvl, out Map m) || m == null || m == cur || m.Disposed)
                     {
                         continue;
                     }
@@ -82,10 +84,10 @@ namespace AsAboveSoBelow
                     return;
                 }
                 List<Pawn> list = new List<Pawn>(__result);
-                foreach (KeyValuePair<int, Map> kvp in controller.MapByLevel.OrderByDescending(k => k.Key))
+                // Level keys capped to {1,0,-1}; walk high->low, no LINQ alloc.
+                for (int lvl = 1; lvl >= -1; lvl--)
                 {
-                    Map m = kvp.Value;
-                    if (m == null || m == cur || m.Disposed)
+                    if (!controller.MapByLevel.TryGetValue(lvl, out Map m) || m == null || m == cur || m.Disposed)
                     {
                         continue;
                     }

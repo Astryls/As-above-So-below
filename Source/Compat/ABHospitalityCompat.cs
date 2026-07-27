@@ -255,10 +255,23 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (guestBedType.IsInstanceOfType(b)
-                    || (vendingCompType != null && ((ThingWithComps)b).AllComps.Any(c => vendingCompType.IsInstanceOfType(c))))
+                if (guestBedType.IsInstanceOfType(b))
                 {
                     return target;
+                }
+                // Manual comp scan instead of AllComps.Any(lambda): the lambda
+                // captures vendingCompType, so LINQ allocates a closure + delegate
+                // + enumerator per building in this cadenced guest scan.
+                if (vendingCompType != null)
+                {
+                    List<ThingComp> comps = ((ThingWithComps)b).AllComps;
+                    for (int j = 0; j < comps.Count; j++)
+                    {
+                        if (vendingCompType.IsInstanceOfType(comps[j]))
+                        {
+                            return target;
+                        }
+                    }
                 }
             }
             return null;
