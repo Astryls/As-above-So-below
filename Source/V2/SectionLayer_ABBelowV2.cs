@@ -42,6 +42,11 @@ namespace AsAboveSoBelow
 
         private const float BelowTintFactor = 170f / 255f;
 
+        /// <summary>The opaque air mask: what an open-air cell shows when there is nothing
+        /// legible beneath it (unexplored fog below, or off-map).</summary>
+        private static readonly Material AirMaskMat =
+            SolidColorMaterials.SimpleSolidColorMaterial(new Color(0.05f, 0.05f, 0.06f, 1f));
+
         public SectionLayer_ABBelowV2(Section section) : base(section)
         {
             relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain
@@ -74,6 +79,9 @@ namespace AsAboveSoBelow
                 ThingGrid thingGrid = map.thingGrid;
                 float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
                 bool doScale = scale < 0.999f;
+                // Mask sits just under the below-terrain, which in turn sits under
+                // everything the sky level itself draws.
+                float maskAlt = AltitudeLayer.Terrain.AltitudeFor();
                 float terrainAlt = AltitudeLayer.TerrainScatter.AltitudeFor();
                 bool printed = false;
 
@@ -92,12 +100,26 @@ namespace AsAboveSoBelow
                     {
                         continue; // opaque by construction
                     }
+                    // AIR MASK FIRST, unconditionally.
+                    //
+                    // An open-air cell must NEVER be left with zero geometry. AB_OpenAir is
+                    // dontRender, so vanilla's terrain layer emits only a ShadowMask there;
+                    // if we then print nothing on top (because the cell below is fogged or
+                    // off-map) the cell has no opaque surface at all and renders as shader
+                    // garbage - the run #14 "red Unity error texture where the ground is
+                    // still fogged" report. Laying an opaque backdrop under everything also
+                    // gives fog-below its correct reading: a dark void seen from height,
+                    // not a hole in the world.
+                    AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
+                    printed = true;
+
                     IntVec3 below = new IntVec3(c.x, c.y, c.z - slot);
                     if (!below.InBounds(map) || bands.InGutter(below))
                     {
                         continue;
                     }
-                    // Mirror vanilla: never reveal what the colony has not explored.
+                    // Mirror vanilla: never reveal what the colony has not explored. The
+                    // air mask above is what the player sees instead.
                     if (fog.IsFogged(below))
                     {
                         continue;
@@ -167,6 +189,33 @@ namespace AsAboveSoBelow
         /// Verts are emitted at the ABOVE cell's coordinates directly, so unlike the thing
         /// prints this needs no vertex translation afterwards.
         /// </summary>
+        private static readonly Color32 OpaqueWhite = new Color32(255, 255, 255, 255);
+
+        /// <summary>One cell-sized quad, vanilla terrain-mesh shape (verts + colors + tris,
+        /// deliberately no uvs).</summary>
+        private void AddQuad(LayerSubMesh sub, IntVec3 c, float y, Color32 color)
+        {
+            if (sub == null)
+            {
+                return;
+            }
+            int n = sub.verts.Count;
+            sub.verts.Add(new Vector3(c.x, y, c.z));
+            sub.verts.Add(new Vector3(c.x, y, c.z + 1));
+            sub.verts.Add(new Vector3(c.x + 1, y, c.z + 1));
+            sub.verts.Add(new Vector3(c.x + 1, y, c.z));
+            sub.colors.Add(color);
+            sub.colors.Add(color);
+            sub.colors.Add(color);
+            sub.colors.Add(color);
+            sub.tris.Add(n);
+            sub.tris.Add(n + 1);
+            sub.tris.Add(n + 2);
+            sub.tris.Add(n);
+            sub.tris.Add(n + 2);
+            sub.tris.Add(n + 3);
+        }
+
         private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
             IntVec3 above, float altitude)
         {

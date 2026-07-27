@@ -179,15 +179,26 @@ namespace AsAboveSoBelow
             {
                 return false; // still armed
             }
-            TearDown(p);
-
-            // Diagnostic, not a hard failure: if the anchors aren't Portal regions the
-            // rooms WILL merge and assertion 2 fails. Surface it loudly at arm time.
+            // REFUSE to arm unless both ends are Portal regions.
+            //
+            // This is nearly always a STALE READ rather than a broken def: Link() is
+            // called from SpawnSetup, and the region containing the brand-new door has
+            // only been marked dirty at that point - GetValidRegionAt_NoRebuild (which
+            // must not trigger a rebuild, since we run inside the rebuild postfix) still
+            // returns the pre-door Normal region.
+            //
+            // Arming anyway would be actively harmful: a link between two NORMAL regions
+            // merges their districts into one room, so the basement would share a room -
+            // and a temperature - with the surface. Deferring costs nothing; the rebuild
+            // postfix re-runs this a moment later with the Portal regions in place.
             if (ra.type != RegionType.Portal || rb.type != RegionType.Portal)
             {
-                Log.Warning(ABLog.Tag + " V2 spike: anchor region is " + ra.type + "/" + rb.type
-                    + ", expected Portal/Portal. Rooms will merge across the wormhole.");
+                ABLog.Dev("Wormhole ends not Portal yet (" + ra.type + "/" + rb.type
+                    + "); deferring to the next region rebuild.");
+                return false;
             }
+
+            TearDown(p);
 
             RegionLink link = new RegionLink();
             // Synthetic span. Never handed to RegionLinkDatabase, so the hash cannot
