@@ -94,18 +94,9 @@ namespace AsAboveSoBelow
                         continue;
                     }
 
-                    TerrainDef bt = terrainGrid.TerrainAt(below);
-                    if (bt != null && bt != air && bt.graphic != null)
+                    if (PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt))
                     {
-                        Material mat = bt.graphic.MatSingle;
-                        if (mat != null)
-                        {
-                            Printer_Plane.PrintPlane(this,
-                                new Vector3(c.x + 0.5f, terrainAlt, c.z + 0.5f),
-                                Vector2.one, mat, 0f, false, null,
-                                new Color32[] { BelowTint, BelowTint, BelowTint, BelowTint });
-                            printed = true;
-                        }
+                        printed = true;
                     }
 
                     List<Thing> things = thingGrid.ThingsListAtFast(below);
@@ -148,6 +139,58 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Rendering, e, "V2 below layer");
             }
+        }
+
+        /// <summary>
+        /// One below-terrain quad, built EXACTLY the way vanilla SectionLayer_Terrain
+        /// builds its own: four corner verts, vertex colours, two tris, and NO uvs.
+        ///
+        /// The uvs are the crux. RimWorld's terrain shaders derive their sampling from
+        /// WORLD POSITION, so vanilla never writes uvs for a terrain quad. The first cut of
+        /// this layer used Printer_Plane, which DOES write 0..1 uvs per quad, and the below
+        /// terrain came out as a dark muddy smear - the run #8 "lower level textures don't
+        /// look right" report.
+        ///
+        /// The material must come from TerrainGrid.GetMaterial (which honours the cell's
+        /// paint colour and pollution variant), NOT from def.graphic.MatSingle.
+        ///
+        /// Verts are emitted at the ABOVE cell's coordinates directly, so unlike the thing
+        /// prints this needs no vertex translation afterwards.
+        /// </summary>
+        private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
+            IntVec3 above, float altitude)
+        {
+            TerrainDef def = terrainGrid.TerrainAt(below);
+            if (def == null || def.dontRender)
+            {
+                return false;
+            }
+            Material mat = terrainGrid.GetMaterial(def, false, terrainGrid.ColorAt(below));
+            if (mat == null)
+            {
+                return false;
+            }
+            LayerSubMesh sub = GetSubMesh(mat);
+            if (sub == null)
+            {
+                return false;
+            }
+            int count = sub.verts.Count;
+            sub.verts.Add(new Vector3(above.x, altitude, above.z));
+            sub.verts.Add(new Vector3(above.x, altitude, above.z + 1));
+            sub.verts.Add(new Vector3(above.x + 1, altitude, above.z + 1));
+            sub.verts.Add(new Vector3(above.x + 1, altitude, above.z));
+            sub.colors.Add(BelowTint);
+            sub.colors.Add(BelowTint);
+            sub.colors.Add(BelowTint);
+            sub.colors.Add(BelowTint);
+            sub.tris.Add(count);
+            sub.tris.Add(count + 1);
+            sub.tris.Add(count + 2);
+            sub.tris.Add(count);
+            sub.tris.Add(count + 2);
+            sub.tris.Add(count + 3);
+            return true;
         }
 
         /// <summary>Multi-cell things print exactly once, from the first occupied cell

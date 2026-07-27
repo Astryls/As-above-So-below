@@ -256,11 +256,30 @@ namespace AsAboveSoBelow
                 }
                 else
                 {
-                    int terrace = 1 + Mathf.FloorToInt(Noise01(terraceNoise, c) * terraceMax);
-                    kind[i] = ed <= Mathf.Clamp(terrace, 1, terraceMax) ? KindLedge : KindWall;
+                    kind[i] = ed <= TerraceWidth(terraceNoise, c, terraceMax) ? KindLedge : KindWall;
                 }
             }
             return kind;
+        }
+
+        /// <summary>Width of the walkable rim before solid rock begins.
+        ///
+        /// Ported verbatim from V1 — the shape matters enormously. HALF of all cells get
+        /// width exactly 1 (n &lt; 0.5), and above that it grows on a 1.6 power curve, so
+        /// wide terraces are rare and the mass is mostly ROCK.
+        ///
+        /// The naive `1 + floor(noise * max)` (uniform 1..5, mean ~3) made almost every
+        /// cell a ledge, so no rock ever spawned and the sky read as a flat plate — the
+        /// run #8 "ledges don't spawn with rock, it's all flat" report.</summary>
+        private static int TerraceWidth(Perlin noise, IntVec3 c, int max)
+        {
+            float n = Noise01(noise, c);
+            if (n < 0.5f || max <= 1)
+            {
+                return 1;
+            }
+            int w = 1 + Mathf.FloorToInt(Mathf.Pow(Mathf.InverseLerp(0.5f, 1f, n), 1.6f) * max);
+            return Mathf.Clamp(w, 1, max);
         }
 
         private static bool AllWithinRadius(byte[] kind, int w, int h, int x, int z, int radius, byte want)
