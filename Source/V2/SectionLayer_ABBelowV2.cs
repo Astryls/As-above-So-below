@@ -26,6 +26,7 @@ namespace AsAboveSoBelow
     /// anything, so rooftops and mountain caps are opaque and can never lose a
     /// render-queue contest against below content (V1's hardest-won rendering lesson).
     /// </summary>
+    [StaticConstructorOnStartup]
     public class SectionLayer_ABBelowV2 : SectionLayer
     {
         private readonly List<int> vertCountsBefore = new List<int>();
@@ -48,9 +49,16 @@ namespace AsAboveSoBelow
         private const float BelowTintFactor = BelowTintByte / 255f;
 
         /// <summary>The opaque air mask: what an open-air cell shows when there is nothing
-        /// legible beneath it (unexplored fog below, or off-map).</summary>
+        /// legible beneath it (unexplored fog below, or off-map).
+        ///
+        /// SolidColorBehind, not SimpleSolidColorMaterial: the plain solid-colour material
+        /// sits in a LATE render queue, so it painted straight over the below terrain that
+        /// had already been emitted in the geometry queue - leaving a black field with only
+        /// plants and buildings floating on it (run #17). Draw order inside a SectionLayer
+        /// is decided by material render queue, NOT by the altitude we hand the verts.</summary>
         private static readonly Material AirMaskMat =
-            SolidColorMaterials.SimpleSolidColorMaterial(new Color(0.05f, 0.05f, 0.06f, 1f));
+            SolidColorMaterials.NewSolidColorMaterial(new Color(0.05f, 0.05f, 0.06f, 1f),
+                ShaderDatabase.SolidColorBehind);
 
         public SectionLayer_ABBelowV2(Section section) : base(section)
         {
@@ -88,6 +96,7 @@ namespace AsAboveSoBelow
                 // everything the sky level itself draws.
                 float maskAlt = AltitudeLayer.Terrain.AltitudeFor();
                 float terrainAlt = AltitudeLayer.TerrainScatter.AltitudeFor();
+                float fogAlt = AltitudeLayer.Filth.AltitudeFor();
                 bool printed = false;
 
                 foreach (IntVec3 c in section.CellRect)
@@ -105,33 +114,38 @@ namespace AsAboveSoBelow
                     {
                         continue; // opaque by construction
                     }
-                    // AIR MASK FIRST, unconditionally.
-                    //
-                    // An open-air cell must NEVER be left with zero geometry. AB_OpenAir is
-                    // dontRender, so vanilla's terrain layer emits only a ShadowMask there;
-                    // if we then print nothing on top (because the cell below is fogged or
-                    // off-map) the cell has no opaque surface at all and renders as shader
-                    // garbage - the run #14 "red Unity error texture where the ground is
-                    // still fogged" report. Laying an opaque backdrop under everything also
-                    // gives fog-below its correct reading: a dark void seen from height,
-                    // not a hole in the world.
-                    AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
-                    printed = true;
-
                     IntVec3 below = new IntVec3(c.x, c.y, c.z - slot);
-                    if (!below.InBounds(map) || bands.InGutter(below))
+                    bool inBounds = below.InBounds(map) && !bands.InGutter(below);
+                    bool foggedBelow = inBounds && fog.IsFogged(below);
+
+                    if (!inBounds || foggedBelow)
                     {
-                        continue;
-                    }
-                    // Mirror vanilla: never reveal what the colony has not explored. The
-                    // air mask above is what the player sees instead.
-                    if (fog.IsFogged(below))
-                    {
+                        // Nothing legible beneath. An open-air cell must NEVER be left with
+                        // zero geometry - AB_OpenAir is dontRender, so vanilla's terrain
+                        // layer emits only a ShadowMask, and with nothing on top the cell
+                        // renders as shader garbage (the run #14 red-error report).
+                        //
+                        // For UNEXPLORED ground we then lay vanilla's own fog-of-war
+                        // material over the backdrop, so a mountain the colony has not dug
+                        // into reads as solid fog from above exactly as it does from the
+                        // surface, instead of as a hole in the world.
+                        AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
+                        if (foggedBelow)
+                        {
+                            AddQuad(GetSubMesh(MatBases.FogOfWar), c, fogAlt, OpaqueWhite);
+                        }
+                        printed = true;
                         continue;
                     }
 
                     if (PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt))
                     {
+                        printed = true;
+                    }
+                    else
+                    {
+                        // Below terrain is itself dontRender: still needs a backdrop.
+                        AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
                         printed = true;
                     }
 
