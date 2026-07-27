@@ -155,11 +155,19 @@ namespace AsAboveSoBelow
                 else
                 {
                     // Clear first, then let the sky generator lay a real mountain over it.
+                    //
+                    // UNFOG as we go. V1's sky is a pocket map whose generator def has no
+                    // GenStep_Fog at all, so it is born unfogged. A V2 banded map is built
+                    // by the ordinary player-settlement generator, which fogs EVERY cell -
+                    // including the sky band - leaving the whole level black behind vanilla
+                    // fog of war (run #16). The sky is meant to be seen; only the deep rock
+                    // interior gets re-fogged, which ABSkyBandGen does after it classifies.
                     foreach (IntVec3 c in rect)
                     {
                         if (c.InBounds(map))
                         {
                             ClearCellHard(map, c);
+                            map.fogGrid.Unfog(c);
                         }
                     }
                     ABSkyBandGen.Generate(map, bands, band, rocks, noises);

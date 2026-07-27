@@ -35,12 +35,17 @@ namespace AsAboveSoBelow
         /// <summary>Below content is tinted down so depth reads at a glance.
         ///
         /// NEUTRAL on purpose: an earlier value of (165,165,175) was blue-biased, which
-        /// turned the warm tan rock and soil of the surface into a cold grey when seen
-        /// from the sky and made the below view look like a different map rather than the
-        /// same one, dimmer.</summary>
-        private static readonly Color32 BelowTint = new Color32(170, 170, 170, 255);
+        /// turned the warm tan rock and soil of the surface into a cold grey and made the
+        /// below view look like a different map rather than the same one, dimmer.
+        ///
+        /// Kept LIGHT (0.8) on purpose too: the sky level's own lighting overlay already
+        /// dims this content a second time, so a heavy tint here compounds into an
+        /// unreadable murk (run #16 "way too dark").</summary>
+        private const byte BelowTintByte = 204;
 
-        private const float BelowTintFactor = 170f / 255f;
+        private static readonly Color32 BelowTint = new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 255);
+
+        private const float BelowTintFactor = BelowTintByte / 255f;
 
         /// <summary>The opaque air mask: what an open-air cell shows when there is nothing
         /// legible beneath it (unexplored fog below, or off-map).</summary>
