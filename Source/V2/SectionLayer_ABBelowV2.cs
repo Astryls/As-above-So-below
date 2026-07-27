@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 
@@ -10,55 +11,68 @@ namespace AsAboveSoBelow
     /// <summary>
     /// V2 see-below: through every open-air cell of a band, show the band underneath.
     ///
-    /// The V1 version of this feature needed `SectionLayer_ABBelowThings` PLUS
-    /// `DrawPosOffsetPatcher` - hundreds of DrawPos getters patched on ParallelPreDraw
-    /// worker threads - purely because the level below lived on a different Map and every
-    /// draw position had to be lied about. None of that exists here.
+    /// V1 needed `SectionLayer_ABBelowThings` PLUS `DrawPosOffsetPatcher` - hundreds of
+    /// DrawPos getters patched on ParallelPreDraw worker threads - purely because the level
+    /// below lived on a different Map and every draw position had to be lied about. None of
+    /// that exists here: the level below is the same Map, one Slot down, so below content
+    /// is printed normally and the vertices it emitted are TRANSLATED afterwards. Nothing
+    /// is lied to; triangles are moved after they are generated.
     ///
-    /// In V2 the level below is the same Map, one band down, so the whole feature is:
-    /// print the below cell's content normally (it prints at its own real position, in the
-    /// band below), then TRANSLATE the vertices this print just emitted up by one Slot.
-    /// Nothing is lied to; we simply move triangles after they are generated. That is the
-    /// same contained trick V1 already used for its below-thing shrink, applied to
-    /// position instead of scale.
+    /// Composition, in draw order per open-air cell:
+    ///   1. air mask      - opaque backdrop, SolidColorBehind (never leave a cell empty)
+    ///   2. fog of war    - vanilla's own material, when the ground below is unexplored
+    ///   3. below terrain - a faithful port of vanilla's terrain print, edge fades included
+    ///   4. below things  - printed, then translated and dimmed
     ///
-    /// Masking is by construction: only cells whose own terrain is AB_OpenAir print
+    /// Masking is by construction: only cells whose OWN terrain is AB_OpenAir print
     /// anything, so rooftops and mountain caps are opaque and can never lose a
     /// render-queue contest against below content (V1's hardest-won rendering lesson).
     /// </summary>
     [StaticConstructorOnStartup]
     public class SectionLayer_ABBelowV2 : SectionLayer
     {
+        /// <summary>Below content is tinted down so depth reads at a glance.
+        ///
+        /// NEUTRAL on purpose: an earlier blue-biased value turned the warm tan rock and
+        /// soil of the surface cold grey, making the below view look like a different map
+        /// rather than the same one dimmer. LIGHT on purpose too (0.8): the sky level's own
+        /// lighting overlay dims this content a second time, so a heavy tint compounds into
+        /// unreadable murk.</summary>
+        private const byte BelowTintByte = 204;
+
+        private static readonly Color32 BelowTint =
+            new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 255);
+
+        /// <summary>Transparent counterpart of BelowTint. Terrain edge fades encode their
+        /// coverage in vertex ALPHA, so the dim must touch RGB only.</summary>
+        private static readonly Color32 BelowTintClear =
+            new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 0);
+
+        private const float BelowTintFactor = BelowTintByte / 255f;
+
+        private static readonly Color32 OpaqueWhite = new Color32(255, 255, 255, 255);
+
+        /// <summary>The opaque air mask: what an open-air cell shows when there is nothing
+        /// legible beneath it.
+        ///
+        /// SolidColorBehind, not SimpleSolidColorMaterial: the plain solid-colour material
+        /// sits in a LATE render queue and painted straight over below terrain that had
+        /// already been emitted in the geometry queue, leaving a black field with only
+        /// plants and buildings floating on it. Draw order inside a SectionLayer is decided
+        /// by material render QUEUE, not by the altitude handed to the verts.</summary>
+        private static readonly Material AirMaskMat =
+            SolidColorMaterials.NewSolidColorMaterial(new Color(0.05f, 0.05f, 0.06f, 1f),
+                ShaderDatabase.SolidColorBehind);
+
         private readonly List<int> vertCountsBefore = new List<int>();
 
         private readonly List<int> colorCountsBefore = new List<int>();
 
-        /// <summary>Below content is tinted down so depth reads at a glance.
-        ///
-        /// NEUTRAL on purpose: an earlier value of (165,165,175) was blue-biased, which
-        /// turned the warm tan rock and soil of the surface into a cold grey and made the
-        /// below view look like a different map rather than the same one, dimmer.
-        ///
-        /// Kept LIGHT (0.8) on purpose too: the sky level's own lighting overlay already
-        /// dims this content a second time, so a heavy tint here compounds into an
-        /// unreadable murk (run #16 "way too dark").</summary>
-        private const byte BelowTintByte = 204;
+        private readonly CellTerrain[] adjTerrain = new CellTerrain[8];
 
-        private static readonly Color32 BelowTint = new Color32(BelowTintByte, BelowTintByte, BelowTintByte, 255);
+        private readonly bool[] edgeReach = new bool[8];
 
-        private const float BelowTintFactor = BelowTintByte / 255f;
-
-        /// <summary>The opaque air mask: what an open-air cell shows when there is nothing
-        /// legible beneath it (unexplored fog below, or off-map).
-        ///
-        /// SolidColorBehind, not SimpleSolidColorMaterial: the plain solid-colour material
-        /// sits in a LATE render queue, so it painted straight over the below terrain that
-        /// had already been emitted in the geometry queue - leaving a black field with only
-        /// plants and buildings floating on it (run #17). Draw order inside a SectionLayer
-        /// is decided by material render queue, NOT by the altitude we hand the verts.</summary>
-        private static readonly Material AirMaskMat =
-            SolidColorMaterials.NewSolidColorMaterial(new Color(0.05f, 0.05f, 0.06f, 1f),
-                ShaderDatabase.SolidColorBehind);
+        private readonly HashSet<CellTerrain> edgeSet = new HashSet<CellTerrain>();
 
         public SectionLayer_ABBelowV2(Section section) : base(section)
         {
@@ -92,8 +106,6 @@ namespace AsAboveSoBelow
                 ThingGrid thingGrid = map.thingGrid;
                 float scale = Mathf.Clamp(ABMod.Settings?.belowThingScale ?? 0.85f, 0.5f, 1f);
                 bool doScale = scale < 0.999f;
-                // Mask sits just under the below-terrain, which in turn sits under
-                // everything the sky level itself draws.
                 float maskAlt = AltitudeLayer.Terrain.AltitudeFor();
                 float terrainAlt = AltitudeLayer.TerrainScatter.AltitudeFor();
                 float fogAlt = AltitudeLayer.Filth.AltitudeFor();
@@ -114,6 +126,7 @@ namespace AsAboveSoBelow
                     {
                         continue; // opaque by construction
                     }
+
                     IntVec3 below = new IntVec3(c.x, c.y, c.z - slot);
                     bool inBounds = below.InBounds(map) && !bands.InGutter(below);
                     bool foggedBelow = inBounds && fog.IsFogged(below);
@@ -121,14 +134,13 @@ namespace AsAboveSoBelow
                     if (!inBounds || foggedBelow)
                     {
                         // Nothing legible beneath. An open-air cell must NEVER be left with
-                        // zero geometry - AB_OpenAir is dontRender, so vanilla's terrain
+                        // zero geometry: AB_OpenAir is dontRender, so vanilla's terrain
                         // layer emits only a ShadowMask, and with nothing on top the cell
-                        // renders as shader garbage (the run #14 red-error report).
+                        // renders as shader garbage.
                         //
-                        // For UNEXPLORED ground we then lay vanilla's own fog-of-war
-                        // material over the backdrop, so a mountain the colony has not dug
-                        // into reads as solid fog from above exactly as it does from the
-                        // surface, instead of as a hole in the world.
+                        // For UNEXPLORED ground, vanilla's own fog-of-war material goes over
+                        // the backdrop, so a mountain the colony has not dug into reads as
+                        // solid fog from above exactly as it does from the surface.
                         AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
                         if (foggedBelow)
                         {
@@ -138,16 +150,12 @@ namespace AsAboveSoBelow
                         continue;
                     }
 
-                    if (PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt))
-                    {
-                        printed = true;
-                    }
-                    else
+                    if (!PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt))
                     {
                         // Below terrain is itself dontRender: still needs a backdrop.
                         AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
-                        printed = true;
                     }
+                    printed = true;
 
                     List<Thing> things = thingGrid.ThingsListAtFast(below);
                     for (int i = 0; i < things.Count; i++)
@@ -172,7 +180,6 @@ namespace AsAboveSoBelow
                             t.Print(this);
                             TransformNewVerts(t.TrueCenter(), slot, scale, doScale && CanScale(t));
                             TintNewColors();
-                            printed = true;
                         }
                         catch (Exception e)
                         {
@@ -192,26 +199,8 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>
-        /// One below-terrain quad, built EXACTLY the way vanilla SectionLayer_Terrain
-        /// builds its own: four corner verts, vertex colours, two tris, and NO uvs.
-        ///
-        /// The uvs are the crux. RimWorld's terrain shaders derive their sampling from
-        /// WORLD POSITION, so vanilla never writes uvs for a terrain quad. The first cut of
-        /// this layer used Printer_Plane, which DOES write 0..1 uvs per quad, and the below
-        /// terrain came out as a dark muddy smear - the run #8 "lower level textures don't
-        /// look right" report.
-        ///
-        /// The material must come from TerrainGrid.GetMaterial (which honours the cell's
-        /// paint colour and pollution variant), NOT from def.graphic.MatSingle.
-        ///
-        /// Verts are emitted at the ABOVE cell's coordinates directly, so unlike the thing
-        /// prints this needs no vertex translation afterwards.
-        /// </summary>
-        private static readonly Color32 OpaqueWhite = new Color32(255, 255, 255, 255);
-
-        /// <summary>One cell-sized quad, vanilla terrain-mesh shape (verts + colors + tris,
-        /// deliberately no uvs).</summary>
+        /// <summary>One cell-sized quad in the vanilla terrain-mesh shape (verts + colors +
+        /// tris, deliberately no uvs).</summary>
         private void AddQuad(LayerSubMesh sub, IntVec3 c, float y, Color32 color)
         {
             if (sub == null)
@@ -235,6 +224,24 @@ namespace AsAboveSoBelow
             sub.tris.Add(n + 3);
         }
 
+        /// <summary>
+        /// A FAITHFUL PORT of vanilla SectionLayer_Terrain.Regenerate's per-cell work,
+        /// sampling one band DOWN and emitting one band UP.
+        ///
+        /// This replaces a hand-rolled single quad. That quad drew the right texture but
+        /// none of what vanilla layers on top of it - terrain EDGE BLENDING above all, plus
+        /// snow and sand coverage, the pollution variant, and the Underwall substitution
+        /// under wall-covered floors - so the below view read as hard tiled squares rather
+        /// than terrain.
+        ///
+        /// Two details that must not drift from vanilla:
+        ///  - NO uvs. RimWorld terrain shaders sample from WORLD POSITION; writing 0..1 uvs
+        ///    per quad (as Printer_Plane does) produces a muddy smear.
+        ///  - The fade verts sit at y = 0 while the base quad sits at the terrain altitude.
+        ///    That reads as a bug but is vanilla's own arrangement: ordering between base
+        ///    and fades is settled by material render QUEUE (renderPrecedence), not by
+        ///    altitude.
+        /// </summary>
         private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
             IntVec3 above, float altitude)
         {
@@ -243,12 +250,9 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            Material mat = terrainGrid.GetMaterial(def, false, terrainGrid.ColorAt(below));
-            if (mat == null)
-            {
-                return false;
-            }
-            LayerSubMesh sub = GetSubMesh(mat);
+            CellTerrain self = CellTerrainAt(map, terrainGrid, below);
+            Material baseMat = MaterialFor(map, self);
+            LayerSubMesh sub = baseMat != null ? GetSubMesh(baseMat) : null;
             if (sub == null)
             {
                 return false;
@@ -258,17 +262,132 @@ namespace AsAboveSoBelow
             sub.verts.Add(new Vector3(above.x, altitude, above.z + 1));
             sub.verts.Add(new Vector3(above.x + 1, altitude, above.z + 1));
             sub.verts.Add(new Vector3(above.x + 1, altitude, above.z));
-            sub.colors.Add(BelowTint);
-            sub.colors.Add(BelowTint);
-            sub.colors.Add(BelowTint);
-            sub.colors.Add(BelowTint);
+            for (int i = 0; i < 4; i++)
+            {
+                sub.colors.Add(BelowTint);
+            }
             sub.tris.Add(count);
             sub.tris.Add(count + 1);
             sub.tris.Add(count + 2);
             sub.tris.Add(count);
             sub.tris.Add(count + 2);
             sub.tris.Add(count + 3);
+
+            PrintBelowTerrainEdges(map, terrainGrid, below, above, self);
             return true;
+        }
+
+        /// <summary>Vanilla's edge-fade pass: every distinct neighbouring terrain allowed to
+        /// bleed over this cell gets a 9-vertex fan whose alpha marks which of the eight
+        /// perimeter points it reaches.</summary>
+        private void PrintBelowTerrainEdges(Map map, TerrainGrid terrainGrid, IntVec3 below,
+            IntVec3 above, CellTerrain self)
+        {
+            edgeSet.Clear();
+            IntVec3[] around = GenAdj.AdjacentCellsAroundBottom;
+            for (int i = 0; i < 8; i++)
+            {
+                IntVec3 n = below + around[i];
+                if (!n.InBounds(map))
+                {
+                    adjTerrain[i] = self;
+                    continue;
+                }
+                CellTerrain ct = CellTerrainAt(map, terrainGrid, n);
+                Thing edifice = n.GetEdifice(map);
+                if (edifice != null && edifice.def.coversFloor)
+                {
+                    ct.def = TerrainDefOf.Underwall;
+                }
+                adjTerrain[i] = ct;
+                if (!ct.Equals(self)
+                    && ct.def != null
+                    && ct.def.edgeType != TerrainDef.TerrainEdgeType.Hard
+                    && terrainGrid.FoundationAt(below) == null
+                    && terrainGrid.FoundationAt(n) == null
+                    && ct.def.renderPrecedence >= self.def.renderPrecedence)
+                {
+                    edgeSet.Add(ct);
+                }
+            }
+            if (edgeSet.Count == 0)
+            {
+                return;
+            }
+            float x = above.x;
+            float z = above.z;
+            foreach (CellTerrain other in edgeSet)
+            {
+                Material mat = MaterialFor(map, other);
+                LayerSubMesh sub = mat != null ? GetSubMesh(mat) : null;
+                if (sub == null)
+                {
+                    continue;
+                }
+                int count = sub.verts.Count;
+                sub.verts.Add(new Vector3(x + 0.5f, 0f, z));
+                sub.verts.Add(new Vector3(x, 0f, z));
+                sub.verts.Add(new Vector3(x, 0f, z + 0.5f));
+                sub.verts.Add(new Vector3(x, 0f, z + 1f));
+                sub.verts.Add(new Vector3(x + 0.5f, 0f, z + 1f));
+                sub.verts.Add(new Vector3(x + 1f, 0f, z + 1f));
+                sub.verts.Add(new Vector3(x + 1f, 0f, z + 0.5f));
+                sub.verts.Add(new Vector3(x + 1f, 0f, z));
+                sub.verts.Add(new Vector3(x + 0.5f, 0f, z + 0.5f));
+                for (int j = 0; j < 8; j++)
+                {
+                    edgeReach[j] = false;
+                }
+                for (int k = 0; k < 8; k++)
+                {
+                    if (!adjTerrain[k].Equals(other))
+                    {
+                        continue;
+                    }
+                    if (k % 2 == 0)
+                    {
+                        edgeReach[(k - 1 + 8) % 8] = true;
+                        edgeReach[k] = true;
+                        edgeReach[(k + 1) % 8] = true;
+                    }
+                    else
+                    {
+                        edgeReach[k] = true;
+                    }
+                }
+                for (int l = 0; l < 8; l++)
+                {
+                    sub.colors.Add(edgeReach[l] ? BelowTint : BelowTintClear);
+                }
+                sub.colors.Add(BelowTintClear);
+                for (int m = 0; m < 8; m++)
+                {
+                    sub.tris.Add(count + m);
+                    sub.tris.Add(count + (m + 1) % 8);
+                    sub.tris.Add(count + 8);
+                }
+            }
+            edgeSet.Clear();
+        }
+
+        private static CellTerrain CellTerrainAt(Map map, TerrainGrid terrainGrid, IntVec3 c)
+        {
+            return new CellTerrain(terrainGrid.TerrainAt(c), c.IsPolluted(map),
+                map.snowGrid.GetDepth(c), c.GetSandDepth(map), terrainGrid.ColorAt(c));
+        }
+
+        /// <summary>Mirrors SectionLayer_Terrain.GetMaterialFor, which is an instance method
+        /// on a class we do not derive from.</summary>
+        private static Material MaterialFor(Map map, CellTerrain ct)
+        {
+            if (ct.def == null)
+            {
+                return null;
+            }
+            bool polluted = ct.polluted && ct.snowCoverage < 0.4f && ct.sandCoverage < 0.4f
+                && ct.def.graphicPolluted != BaseContent.BadGraphic
+                && !WorldComponent_GravshipController.DisableDrawingPollution;
+            return map.terrainGrid.GetMaterial(ct.def, polluted, ct.color);
         }
 
         /// <summary>Multi-cell things print exactly once, from the first occupied cell
@@ -328,9 +447,9 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Dims the vertex colours the last print emitted, so below THINGS are
-        /// shaded to match below TERRAIN. Without this the terrain quads were tinted but
-        /// trees, walls and rock printed at full brightness, so the level below read as a
-        /// bright object floating on a dark plate instead of one coherent scene underneath.</summary>
+        /// shaded to match below TERRAIN. Without it the terrain was tinted while trees,
+        /// walls and rock printed at full brightness, so the level below read as bright
+        /// objects floating on a dark plate instead of one coherent scene underneath.</summary>
         private void TintNewColors()
         {
             List<LayerSubMesh> subs = subMeshes;
