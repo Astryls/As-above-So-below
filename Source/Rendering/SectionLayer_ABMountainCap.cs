@@ -318,7 +318,13 @@ namespace AsAboveSoBelow
         {
             ClearSubMeshes(MeshParts.All);
             Map map = section.map;
-            if (!ABGuard.On(ABGuard.Rendering) || map.Level() != 1)
+            // V2 banded maps reuse this layer wholesale. The atlas / link-mask / corner
+            // filler machinery below is map-agnostic; only two things are coupled to V1's
+            // pocket-map model - the "am I the sky level" test and where the GROUND cell
+            // lives. On a banded map the ground is the SAME map, one Slot down in z, so it
+            // resolves to a constant cell offset instead of a different Map.
+            bool banded = ABBands.Banded(map);
+            if (!ABGuard.On(ABGuard.Rendering) || (!banded && map.Level() != 1))
             {
                 return;
             }
@@ -327,12 +333,32 @@ namespace AsAboveSoBelow
                 EnsureQueue();
                 TerrainGrid grid = map.terrainGrid;
                 TerrainDef cap = ABDefOf.AB_MountainTop;
-                Map ground = map.LowerMap();
+                Map ground;
+                IntVec3 groundOffset;
+                int skyBand = 0;
+                if (banded)
+                {
+                    ABBandMap bands = ABBands.CompOf(map);
+                    ground = map;
+                    groundOffset = new IntVec3(0, 0, -bands.Slot);
+                    skyBand = bands.surfaceBand + 1;
+                }
+                else
+                {
+                    ground = map.LowerMap();
+                    groundOffset = IntVec3.Zero;
+                }
                 ThingDef fallbackRock = FallbackRock(map);
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
                 bool emitted = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
+                    // Banded: only the sky band caps. Mined-rock leave-terrain also exists
+                    // in the BASEMENT band, which must not grow a mountain top.
+                    if (banded && ABBands.BandOf(map, c) != skyBand)
+                    {
+                        continue;
+                    }
                     TerrainDef t = grid.TerrainAt(c);
                     bool minedFloor = LevelSync.TryGetMinedRockDef(t, out ThingDef minedRock);
                     if (t != cap && !minedFloor)
@@ -357,7 +383,7 @@ namespace AsAboveSoBelow
                     // limestone patches over a slate mountain). Ground-sourced typing
                     // also merges large regions into one material = one seamless
                     // submesh. The mined-floor mapping stays for ELIGIBILITY only.
-                    ThingDef rock = GroundRockAt(ground, c) ?? fallbackRock;
+                    ThingDef rock = GroundRockAt(ground, c + groundOffset) ?? fallbackRock;
                     // Variant mode (Better Mountains): when the rock's graphic
                     // is not a linked atlas (BM swaps rocks to Graphic_Random,
                     // painterly 2x2 variants, no atlas), the atlas machinery

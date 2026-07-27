@@ -30,8 +30,17 @@ namespace AsAboveSoBelow
     {
         private readonly List<int> vertCountsBefore = new List<int>();
 
-        /// <summary>Below content is tinted down so depth reads at a glance.</summary>
-        private static readonly Color32 BelowTint = new Color32(165, 165, 175, 255);
+        private readonly List<int> colorCountsBefore = new List<int>();
+
+        /// <summary>Below content is tinted down so depth reads at a glance.
+        ///
+        /// NEUTRAL on purpose: an earlier value of (165,165,175) was blue-biased, which
+        /// turned the warm tan rock and soil of the surface into a cold grey when seen
+        /// from the sky and made the below view look like a different map rather than the
+        /// same one, dimmer.</summary>
+        private static readonly Color32 BelowTint = new Color32(170, 170, 170, 255);
+
+        private const float BelowTintFactor = 170f / 255f;
 
         public SectionLayer_ABBelowV2(Section section) : base(section)
         {
@@ -121,6 +130,7 @@ namespace AsAboveSoBelow
                             SnapshotVertCounts();
                             t.Print(this);
                             TransformNewVerts(t.TrueCenter(), slot, scale, doScale && CanScale(t));
+                            TintNewColors();
                             printed = true;
                         }
                         catch (Exception e)
@@ -240,10 +250,35 @@ namespace AsAboveSoBelow
         private void SnapshotVertCounts()
         {
             vertCountsBefore.Clear();
+            colorCountsBefore.Clear();
             List<LayerSubMesh> subs = subMeshes;
             for (int i = 0; i < subs.Count; i++)
             {
                 vertCountsBefore.Add(subs[i].verts.Count);
+                colorCountsBefore.Add(subs[i].colors.Count);
+            }
+        }
+
+        /// <summary>Dims the vertex colours the last print emitted, so below THINGS are
+        /// shaded to match below TERRAIN. Without this the terrain quads were tinted but
+        /// trees, walls and rock printed at full brightness, so the level below read as a
+        /// bright object floating on a dark plate instead of one coherent scene underneath.</summary>
+        private void TintNewColors()
+        {
+            List<LayerSubMesh> subs = subMeshes;
+            for (int i = 0; i < subs.Count; i++)
+            {
+                List<Color32> colors = subs[i].colors;
+                int from = i < colorCountsBefore.Count ? colorCountsBefore[i] : 0;
+                for (int j = from; j < colors.Count; j++)
+                {
+                    Color32 col = colors[j];
+                    colors[j] = new Color32(
+                        (byte)(col.r * BelowTintFactor),
+                        (byte)(col.g * BelowTintFactor),
+                        (byte)(col.b * BelowTintFactor),
+                        col.a);
+                }
             }
         }
 
