@@ -25,7 +25,7 @@ namespace AsAboveSoBelow
             resolved = true;
             try
             {
-                if (!ABDetect.Active("sk.dmbb"))
+                if (!ABCompat.Detect("sk.dmbb", "Declutter"))
                 {
                     return;
                 }

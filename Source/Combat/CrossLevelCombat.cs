@@ -46,6 +46,14 @@ namespace AsAboveSoBelow
         /// and clears its entry on first tick, then scribes its own reference.</summary>
         internal static readonly Dictionary<int, Thing> PendingTargets = new Dictionary<int, Thing>();
 
+        /// <summary>Cleared on new-game/load (refactor R1): pending job-target
+        /// handoffs hold Thing references from the previous session.</summary>
+        [ABGameReset]
+        internal static void ResetForNewGame()
+        {
+            PendingTargets.Clear();
+        }
+
         /// <summary>Scratch buffer for firing-cell search. Main-thread only (float-menu
         /// build / job start), so a shared list is safe and avoids per-search allocs.</summary>
         private static readonly List<IntVec3> tmpCandidates = new List<IntVec3>();

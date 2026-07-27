@@ -52,7 +52,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active(PackageId))
+                if (!ABCompat.Detect(PackageId, "Better Architect"))
                 {
                     return;
                 }

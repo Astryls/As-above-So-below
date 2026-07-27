@@ -642,10 +642,26 @@ namespace AsAboveSoBelow
             string label = (dest.Level() > pawn.Map.Level()
                 ? "AB_GoUpVia".Translate(stairs.LabelShort)
                 : "AB_GoDownVia".Translate(stairs.LabelShort)).CapitalizeFirst();
-            // Duplicate guard: revalidation regenerates the list each frame.
+            // Duplicate guard. The stairwell's own GetFloatMenuOptions
+            // (Building_ABStairs.BuildUseOptions) already emits a clean
+            // "Go up/down the stairs" order - plus greyed reasons for
+            // not-linked/forbidden/no-path - whenever the building is under the
+            // cursor. Adding "go up via X" on top is the double menu the player
+            // sees, most obvious on stuffed stairs whose label carries the
+            // material name. Yield to the base option so exactly one shows; this
+            // "via" option survives only as the fallback for when the base one
+            // didn't fire (e.g. the stairwell sat just outside the thing-select
+            // radius). Also self-dedups against revalidation re-runs (label ==).
+            string goUp = "AB_GoUp".Translate();
+            string goDown = "AB_GoDown".Translate();
             for (int i = 0; i < options.Count; i++)
             {
-                if (options[i] != null && options[i].Label == label)
+                string existing = options[i]?.Label;
+                if (existing.NullOrEmpty())
+                {
+                    continue;
+                }
+                if (existing == label || existing.StartsWith(goUp) || existing.StartsWith(goDown))
                 {
                     return;
                 }

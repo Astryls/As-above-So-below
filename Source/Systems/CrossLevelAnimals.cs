@@ -69,6 +69,7 @@ namespace AsAboveSoBelow
             }
         }
 
+        [ABGameReset]
         internal static void ClearAll()
         {
             leaveAfter.Clear();
@@ -193,6 +194,7 @@ namespace AsAboveSoBelow
         /// the level it was left on, so no new migration record ever forms
         /// and nothing ever sends it back. Parallel value lists because the
         /// record is a two-field struct.</summary>
+        [ABGameExpose]
         internal static void ExposePetTrips()
         {
             List<int> ids = null;

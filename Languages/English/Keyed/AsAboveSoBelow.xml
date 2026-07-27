@@ -211,7 +211,7 @@
   <AB_LevelSky>Sky level</AB_LevelSky>
   <AB_LevelSurface>Surface</AB_LevelSurface>
   <AB_LevelBasement>Basement</AB_LevelBasement>
-  <AB_LevelWidgetTip>You can also press Page Up and Page Down.</AB_LevelWidgetTip>
+  <AB_LevelWidgetTip>You can also press Page Up and Page Down, or hold Left Ctrl and scroll the mouse wheel over the map.</AB_LevelWidgetTip>
   <AB_ShowLevelWidget>Show level view buttons</AB_ShowLevelWidget>
   <AB_ShowLevelWidgetTip>Adds view level above and view level below buttons next to the other view toggles in the bottom right.</AB_ShowLevelWidgetTip>
   <AB_OneColonistBar>Merge each column into one colonist bar group</AB_OneColonistBar>
@@ -230,6 +230,8 @@
   <AB_CameraLockKeybindTip>Enables the camera level lock hotkey (End by default, rebindable under Options - Keyboard configuration). While the lock is on, the camera stays on the level you are viewing: it will not ride along when a selected pawn takes the stairs. Manual level switching always works.</AB_CameraLockKeybindTip>
   <AB_CameraLockOn>Camera level lock ON: the view stays on this level. Press the hotkey again to release.</AB_CameraLockOn>
   <AB_CameraLockOff>Camera level lock off: the camera follows pawns through stairs again.</AB_CameraLockOff>
+  <AB_ScrollLevelKeybind>Ctrl + scroll changes level</AB_ScrollLevelKeybind>
+  <AB_ScrollLevelKeybindTip>Hold Left Ctrl and scroll the mouse wheel over the map to move the view up (scroll up) or down (scroll down) through the column's levels, instead of zooming. Works like Page Up and Page Down. Turn this off to keep Ctrl + scroll free for other uses.</AB_ScrollLevelKeybindTip>
 
   <AB_BasementEnv>Basement environment</AB_BasementEnv>
   <AB_BasementEnvTip>What newly generated basements become. Solid rock is the default mineable fill. Other options appear when their mod is loaded: a Biomes! Caverns living cavern, an Ancient urban ruins buried facility, or a curated foreign biome carved as a cave. Existing basements keep the look they were generated with. Note: foreign biomes use their own fixed temperature, so some run hot or cold.</AB_BasementEnvTip>

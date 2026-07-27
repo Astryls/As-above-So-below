@@ -32,9 +32,9 @@ namespace AsAboveSoBelow
                     // Sentinel flag, not a null check: the def is legitimately
                     // absent without Giddy-Up and must not be re-looked-up per call.
                     resolved = true;
-                    if (ABDetect.Active("MemeGoddess.GiddyUp")
-                        || ABDetect.Active("Owlchemist.GiddyUp")
-                        || ABDetect.Active("Roolo.GiddyUpCore"))
+                    if (ABCompat.Detect("MemeGoddess.GiddyUp", "Giddy-Up (MemeGoddess)")
+                        || ABCompat.Detect("Owlchemist.GiddyUp", "Giddy-Up (Owlchemist)")
+                        || ABCompat.Detect("Roolo.GiddyUpCore", "Giddy-Up Core"))
                     {
                         mountedDef = DefDatabase<JobDef>.GetNamedSilentFail("Mounted");
                     }

@@ -119,8 +119,8 @@ namespace AsAboveSoBelow
         {
             // Ordered cheapest-first: this postfix sees every job-giver
             // evaluation of every pawn.
-            if (!NeedMigration.Any || __result.Job != null || inVirtualScan
-                || CrossLevelWork.VirtualScanActive)
+            if (!NeedMigration.Any || !LevelCensus.AnyLevelColumns || __result.Job != null
+                || inVirtualScan || CrossLevelWork.VirtualScanActive)
             {
                 return;
             }

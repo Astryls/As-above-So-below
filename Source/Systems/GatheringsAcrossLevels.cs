@@ -28,7 +28,7 @@ namespace AsAboveSoBelow
 
         private static void Postfix(Pawn pawn, ThinkNode __instance, ref ThinkResult __result)
         {
-            if (__result.Job != null || !ABGuard.On(ABGuard.Movement))
+            if (__result.Job != null || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }

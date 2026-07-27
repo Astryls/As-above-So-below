@@ -60,6 +60,7 @@ namespace AsAboveSoBelow
             return ids.Count > 0 && t != null && ids.Contains(t.thingIDNumber);
         }
 
+        [ABGameReset]
         internal static void ClearAll()
         {
             ids.Clear();

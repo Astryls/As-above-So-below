@@ -65,7 +65,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("Orion.Hospitality"))
+                if (!ABCompat.Detect("Orion.Hospitality", "Hospitality"))
                 {
                     return;
                 }
@@ -113,6 +113,7 @@ namespace AsAboveSoBelow
             return s != null && s.hospitalityRoaming;
         }
 
+        [ABGameReset]
         internal static void ClearAll()
         {
             roamedAt.Clear();
@@ -130,6 +131,7 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Cadenced roam + return scan; one counter read when idle.</summary>
+        [ABGameTick(50)]
         internal static void Tick()
         {
             if (!Enabled())

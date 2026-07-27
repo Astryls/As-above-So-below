@@ -29,7 +29,7 @@ namespace AsAboveSoBelow
     {
         static PerspectiveOresCompat()
         {
-            if (!ABDetect.Active("Owlchemist.PerspectiveOres"))
+            if (!ABCompat.Detect("Owlchemist.PerspectiveOres", "Perspective: Ores"))
             {
                 return;
             }

@@ -34,7 +34,8 @@ namespace AsAboveSoBelow
 
         private static void Postfix(Pawn pawn, ref Job __result)
         {
-            if (__result != null || !ModsConfig.BiotechActive || !ABGuard.On(ABGuard.Logistics))
+            if (__result != null || !LevelCensus.AnyLevelColumns || !ModsConfig.BiotechActive
+                || !ABGuard.On(ABGuard.Logistics))
             {
                 return;
             }

@@ -33,7 +33,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("Fluffy.AnimalTab"))
+                if (!ABCompat.Detect("Fluffy.AnimalTab", "Animal Tab"))
                 {
                     return;
                 }

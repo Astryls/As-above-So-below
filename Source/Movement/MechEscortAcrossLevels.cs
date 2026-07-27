@@ -37,7 +37,7 @@ namespace AsAboveSoBelow
 
         private static void Postfix(Pawn pawn, ref Job __result)
         {
-            if (__result != null || !ABGuard.On(ABGuard.Movement))
+            if (__result != null || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }

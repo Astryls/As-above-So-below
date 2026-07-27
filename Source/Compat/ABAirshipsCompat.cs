@@ -37,9 +37,9 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("joeownage.automatic.airships")
-                    && !ABDetect.Active("joeownage.automatic.traderships")
-                    && !ABDetect.Active("automatic.traderships"))
+                if (!ABCompat.Detect("joeownage.automatic.airships", "Airships")
+                    && !ABCompat.Detect("joeownage.automatic.traderships", "Trader Ships (joeownage)")
+                    && !ABCompat.Detect("automatic.traderships", "Trader Ships"))
                 {
                     return;
                 }

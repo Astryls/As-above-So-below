@@ -32,7 +32,8 @@ namespace AsAboveSoBelow
 
         private static void Postfix(Pawn pawn, ref Job __result, JobGiver_GetJoy __instance)
         {
-            if (__result != null || inVirtualScan || !ABGuard.On(ABGuard.Logistics))
+            if (__result != null || !LevelCensus.AnyLevelColumns || inVirtualScan
+                || !ABGuard.On(ABGuard.Logistics))
             {
                 return;
             }

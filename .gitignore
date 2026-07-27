@@ -1,2 +1,5 @@
 Source/obj/
 Source/bin/
+
+# Regenerable whole-codebase snapshot (docs/generate-helicopter-view.sh)
+docs/HELICOPTER_VIEW.md

@@ -40,7 +40,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Pawn pawn, Hediff_PsychicBond bondHediff, ref bool __result)
         {
-            if (__result || !ABGuard.On(ABGuard.Social))
+            if (__result || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Social))
             {
                 return;
             }
@@ -97,7 +97,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Map __instance, ref bool __result)
         {
-            if (__result || !ABGuard.On(ABGuard.Social))
+            if (__result || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Social))
             {
                 return;
             }

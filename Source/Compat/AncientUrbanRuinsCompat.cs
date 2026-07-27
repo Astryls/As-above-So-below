@@ -45,7 +45,7 @@ namespace AsAboveSoBelow
 
         /// <summary>True when Ancient urban ruins is loaded (postfix-insensitive,
         /// so a local copy of the workshop mod still counts).</summary>
-        public static bool Active => active ?? (active = ABDetect.Active(PackageId)).Value;
+        public static bool Active => active ?? (active = ABCompat.Detect(PackageId, "Ancient Urban Ruins")).Value;
 
         private static Type SubmapParentType
         {

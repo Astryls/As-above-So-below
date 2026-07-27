@@ -59,7 +59,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("Haplo.Miscellaneous.Robots"))
+                if (!ABCompat.Detect("Haplo.Miscellaneous.Robots", "Misc. Robots"))
                 {
                     return;
                 }

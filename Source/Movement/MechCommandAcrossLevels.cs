@@ -25,7 +25,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Pawn mech, LocalTargetInfo target, ref bool __result)
         {
-            if (__result || !ABGuard.On(ABGuard.Movement))
+            if (__result || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }

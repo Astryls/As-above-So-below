@@ -30,7 +30,8 @@ namespace AsAboveSoBelow
     {
         private static void Postfix()
         {
-            if (Event.current.type != EventType.Repaint || !ABGuard.On(ABGuard.Ui))
+            if (Event.current.type != EventType.Repaint || !LevelCensus.AnyLevelColumns
+                || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }

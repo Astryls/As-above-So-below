@@ -24,7 +24,7 @@ namespace AsAboveSoBelow
     {
         static DBHAirconPatch()
         {
-            if (!ABDetect.Active("Dubwise.DubsBadHygiene"))
+            if (!ABCompat.Detect("Dubwise.DubsBadHygiene", "Dubs Bad Hygiene"))
             {
                 return;
             }

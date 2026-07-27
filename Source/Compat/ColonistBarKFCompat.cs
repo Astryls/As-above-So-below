@@ -46,7 +46,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("Mlie.ColonistBarKF"))
+                if (!ABCompat.Detect("Mlie.ColonistBarKF", "Colonist Bar KF"))
                 {
                     return;
                 }
@@ -290,7 +290,7 @@ namespace AsAboveSoBelow
             {
                 if (ltoActive < 0)
                 {
-                    ltoActive = ABDetect.Active("DerekBickley.LTOColonyGroupsFinal") ? 1 : 0;
+                    ltoActive = ABCompat.Detect("DerekBickley.LTOColonyGroupsFinal", "LTO Colony Groups") ? 1 : 0;
                 }
                 return ltoActive == 1;
             }

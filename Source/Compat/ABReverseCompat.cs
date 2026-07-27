@@ -38,7 +38,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                Active = ABDetect.Active("brrainz.reversecommands");
+                Active = ABCompat.Detect("brrainz.reversecommands", "Reverse Commands");
                 if (!Active)
                 {
                     return;

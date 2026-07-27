@@ -373,7 +373,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (respawningAfterLoad || PodTransit.InTransfer || !LevelComp.AnySkyLevels)
+                if (respawningAfterLoad || PodTransit.InTransfer || !LevelCensus.AnySkyLevels)
                 {
                     return;
                 }

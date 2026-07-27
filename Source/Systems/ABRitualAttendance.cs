@@ -215,6 +215,7 @@ namespace AsAboveSoBelow
 
         internal static bool AnyPending => pending.Count > 0;
 
+        [ABGameReset]
         internal static void ClearAll()
         {
             pending.Clear();
@@ -291,6 +292,7 @@ namespace AsAboveSoBelow
         /// <summary>Called every tick from the game comp; first line is a count read.
         /// A pending ritual starts the moment every living participant stands on the
         /// ritual map; it cancels on timeout or when the target dies.</summary>
+        [ABGameTick(10)]
         internal static void Tick()
         {
             if (pending.Count == 0)

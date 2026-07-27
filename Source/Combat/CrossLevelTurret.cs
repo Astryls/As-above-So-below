@@ -190,6 +190,7 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Drop every stored order and retry gate (game load/start).</summary>
+        [ABGameReset]
         internal static void ClearAll()
         {
             entries.Clear();

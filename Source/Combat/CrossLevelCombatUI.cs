@@ -40,6 +40,14 @@ namespace AsAboveSoBelow
         /// game load; draw-time filtering self-heals any stale entry.</summary>
         internal static readonly HashSet<Pawn> ActiveShooters = new HashSet<Pawn>();
 
+        /// <summary>Cleared on new-game/load (refactor R1): active cross-level
+        /// shooter set holds Pawn references from the previous session.</summary>
+        [ABGameReset]
+        internal static void ResetForNewGame()
+        {
+            ActiveShooters.Clear();
+        }
+
         private static readonly List<Pawn> tmpStale = new List<Pawn>();
 
         /// <summary>Per-frame engagement visuals for the viewed map. Called from
@@ -240,7 +248,7 @@ namespace AsAboveSoBelow
     {
         private static bool Prefix(Targeter __instance)
         {
-            if (!ABGuard.On(ABGuard.Ui))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return true;
             }
@@ -282,7 +290,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Targeter __instance)
         {
-            if (!ABGuard.On(ABGuard.Ui))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }

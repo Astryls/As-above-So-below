@@ -47,7 +47,7 @@ namespace AsAboveSoBelow
 
         private static void Postfix(ColonistBar __instance, bool __state)
         {
-            if (!__state || !ABGuard.On(ABGuard.Ui))
+            if (!__state || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }

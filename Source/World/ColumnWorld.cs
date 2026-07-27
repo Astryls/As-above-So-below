@@ -56,7 +56,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (!ABGuard.On(ABGuard.World))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.World))
             {
                 return;
             }
@@ -79,7 +79,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Map __instance, ref float __result)
         {
-            if (!ABGuard.On(ABGuard.World))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.World))
             {
                 return;
             }
@@ -120,7 +120,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Map __instance, ref IEnumerable<Pawn> __result)
         {
-            if (!ABGuard.On(ABGuard.World))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.World))
             {
                 return;
             }

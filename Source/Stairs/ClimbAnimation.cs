@@ -203,6 +203,7 @@ namespace AsAboveSoBelow
         /// finished emerge animations. A pawn that started a new climb before
         /// its clear tick keeps that climb (state was overwritten, current
         /// animation is the climb def - both checks below skip it).</summary>
+        [ABGameTick(20)]
         public static void Tick()
         {
             if (pendingClears.Count == 0)

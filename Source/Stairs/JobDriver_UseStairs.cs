@@ -147,6 +147,7 @@ namespace AsAboveSoBelow
         /// Re-runs a replayed order once, but only if the pawn is still idle
         /// on the arrival map - so a first run that succeeded is never
         /// clobbered and an order that nulled at transfer time still fires.</summary>
+        [ABGameTick(40)]
         public static void Tick()
         {
             if (retries.Count == 0)

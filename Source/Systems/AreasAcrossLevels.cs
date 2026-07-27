@@ -247,7 +247,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Pawn_PlayerSettings __instance, ref Area __result)
         {
-            if (!ABGuard.On(ABGuard.Areas))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Areas))
             {
                 return;
             }
@@ -306,7 +306,7 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                ABGuard.Disable(ABGuard.Areas, e, "area getter resolve");
+                ABGuard.Disable(ABGuard.Areas, e, "area getter resolve gated");
             }
         }
     }
@@ -328,7 +328,7 @@ namespace AsAboveSoBelow
     {
         private static bool Prefix(IntVec3 c, Pawn forPawn, ref bool __result)
         {
-            if (!ABGuard.On(ABGuard.Areas))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Areas))
             {
                 return true;
             }
@@ -373,7 +373,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(Pawn pawn, ref Area __result)
         {
-            if (__result == null || !ABGuard.On(ABGuard.Areas))
+            if (__result == null || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Areas))
             {
                 return;
             }
@@ -398,7 +398,7 @@ namespace AsAboveSoBelow
 
         private static void Postfix(Pawn pawn, ref Job __result)
         {
-            if (__result != null || !ABGuard.On(ABGuard.Areas))
+            if (__result != null || !LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Areas))
             {
                 return;
             }

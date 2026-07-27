@@ -36,6 +36,9 @@ namespace AsAboveSoBelow
         public bool oneColonistBar = true;
         public bool cameraFollowStairs = true;
         public bool cameraLockKeybind = true;
+        // Second level-switch input: hold Left Control and scroll the wheel
+        // over the map to move up/down through the column (instead of zooming).
+        public bool scrollLevelKeybind = true;
         public bool climbAnimations = true;
         // Depth-cue removal (2026-07-22, user direction): the below view
         // renders PLUMB (no south shift, no camera parallax) with a low base
@@ -499,6 +502,7 @@ namespace AsAboveSoBelow
             listing.CheckboxLabeled("AB_OneColonistBar".Translate(), ref oneColonistBar, "AB_OneColonistBarTip".Translate());
             listing.CheckboxLabeled("AB_CameraFollowStairs".Translate(), ref cameraFollowStairs, "AB_CameraFollowStairsTip".Translate());
             listing.CheckboxLabeled("AB_CameraLockKeybind".Translate(), ref cameraLockKeybind, "AB_CameraLockKeybindTip".Translate());
+            listing.CheckboxLabeled("AB_ScrollLevelKeybind".Translate(), ref scrollLevelKeybind, "AB_ScrollLevelKeybindTip".Translate());
             listing.CheckboxLabeled("AB_ClimbAnimations".Translate(), ref climbAnimations, "AB_ClimbAnimationsTip".Translate());
         }
 
@@ -812,6 +816,7 @@ namespace AsAboveSoBelow
             oneColonistBar = true;
             cameraFollowStairs = true;
             cameraLockKeybind = true;
+            scrollLevelKeybind = true;
             climbAnimations = true;
             DirtyBelowThingsLayers();
         }
@@ -896,6 +901,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref oneColonistBar, "oneColonistBar", true);
             Scribe_Values.Look(ref cameraFollowStairs, "cameraFollowStairs", true);
             Scribe_Values.Look(ref cameraLockKeybind, "cameraLockKeybind", true);
+            Scribe_Values.Look(ref scrollLevelKeybind, "scrollLevelKeybind", true);
             Scribe_Values.Look(ref climbAnimations, "climbAnimations", true);
             Scribe_Values.Look(ref climbTimeMultiplier, "climbTimeMultiplier", 1f);
             // Key renamed (belowDimLight -> belowDimHeight) with the height

@@ -39,7 +39,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("UnlimitedHugs.AllowTool"))
+                if (!ABCompat.Detect("UnlimitedHugs.AllowTool", "Allow Tool"))
                 {
                     return;
                 }

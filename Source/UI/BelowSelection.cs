@@ -798,7 +798,7 @@ namespace AsAboveSoBelow
         private static bool Prefix(object obj, out bool __state)
         {
             __state = false;
-            if (!ABGuard.On(ABGuard.Ui) || !(obj is Thing thing))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui) || !(obj is Thing thing))
             {
                 return true;
             }

@@ -20,7 +20,8 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(JobGiver_Work __instance, Pawn pawn, ref ThinkResult __result)
         {
-            if (CrossLevelWork.VirtualScanActive || !ABGuard.On(ABGuard.Movement))
+            if (!LevelCensus.AnyLevelColumns || CrossLevelWork.VirtualScanActive
+                || !ABGuard.On(ABGuard.Movement))
             {
                 return;
             }
@@ -109,7 +110,7 @@ namespace AsAboveSoBelow
 
         private static List<Gizmo> Build(Pawn pawn)
         {
-            if (!ABGuard.On(ABGuard.Movement) || !pawn.Spawned)
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Movement) || !pawn.Spawned)
             {
                 return null;
             }

@@ -15,46 +15,36 @@ namespace AsAboveSoBelow
         {
         }
 
+        // Frame stamp so the multiple OnGUI passes per frame drive at most one
+        // shift+wheel level switch. Session state, not scribed.
+        private int lastScrollLevelFrame = -1;
+
         public override void FinalizeInit()
         {
             base.FinalizeInit();
             ABGuard.Reset();
-            // Static combat state never crosses into a freshly loaded/started game:
-            // pending job-target handoffs and turret bombardment orders both hold
-            // Thing references from the previous session.
-            CrossLevelCombat.PendingTargets.Clear();
-            CrossLevelTurret.ClearAll();
-            CrossGapProjectiles.ClearAll();
-            CrossLevelCombatUI.ActiveShooters.Clear();
-            CrossLevelAnimals.ClearAll();
-            ABRitualAttendance.ClearAll();
-            ABHospitalityCompat.ClearAll();
+            // Per-game static state (combat handoffs, turret orders, ritual/
+            // hospitality caches, etc.) is self-registered via [ABGameReset] and
+            // cleared here (refactor R1) — Core no longer lists each feature.
+            ABGameHooks.RunResets();
         }
 
         public override void ExposeData()
         {
             base.ExposeData();
-            // Pet food-trip records must survive save/load: a pet saved between
-            // its meal and the walk home would otherwise be stranded for good.
-            CrossLevelAnimals.ExposePetTrips();
+            // Scribe hooks self-register via [ABGameExpose] (refactor R1); e.g.
+            // pet food-trip records must survive save/load or a pet saved between
+            // its meal and the walk home would be stranded for good.
+            ABGameHooks.RunExposes();
         }
 
         public override void GameComponentTick()
         {
             base.GameComponentTick();
-            // Single static count read when no cross-level ritual gather is pending.
-            ABRitualAttendance.Tick();
-            // No-op unless an emerge animation is waiting to be cleared.
-            ClimbAnimation.Tick();
-            // No-op unless a bring-and-X arrival continuation queued a retry.
-            ABConstructSupply.Tick();
-            // No-op unless a routed order (right-click / Reverse Commands /
-            // caravan) armed a self-heal retry on arrival.
-            ABPendingOrders.Tick();
-            // Cadenced (900t) and detection-gated: Hospitality guest roaming.
-            ABHospitalityCompat.Tick();
-            // Cadenced (600t): stranded friendly NPCs walk back to the surface.
-            ABNeutralExit.Tick();
+            // Per-tick feature work is self-registered via [ABGameTick] and run
+            // here in a fixed order (refactor R1). Each callee self-guards and
+            // early-outs cheaply when idle, exactly as the old explicit list did.
+            ABGameHooks.RunTicks();
         }
 
         public override void GameComponentOnGUI()
@@ -86,6 +76,52 @@ namespace AsAboveSoBelow
                     if (down != null)
                     {
                         LevelCamera.JumpPreservingView(down);
+                    }
+                }
+
+                // Left Control + mouse wheel = move through levels instead of
+                // zooming. This is a SEPARATE check (not part of the KeyDown
+                // else-if chain) because it is driven by the wheel, not a key.
+                // Modifier is Ctrl, NOT Shift: the OS/Unity IMGUI reroutes
+                // Shift+wheel onto the horizontal axis, which zeroes the vertical
+                // wheel entirely (Event.current.delta.y AND, on some systems,
+                // Input.mouseScrollDelta.y) - that killed the earlier Shift
+                // version and is why Shift+wheel also stops the camera zooming.
+                // Ctrl+wheel is not rerouted, so the vertical wheel is intact.
+                // Read Input.mouseScrollDelta.y (raw device wheel, +up). Frame-
+                // stamped so the many OnGUI passes per frame switch at most once.
+                // Skipped when the cursor is over a window so window scroll views
+                // keep working. JumpPreservingView is a manual switch, so it
+                // works even under the camera level lock.
+                if (settings != null && settings.scrollLevelKeybind
+                    && Input.GetKey(KeyCode.LeftControl)
+                    && Find.WindowStack.GetWindowAt(UI.MousePositionOnUIInverted) == null)
+                {
+                    float wheel = Input.mouseScrollDelta.y;
+                    if (wheel != 0f)
+                    {
+                        if (Time.frameCount != lastScrollLevelFrame)
+                        {
+                            lastScrollLevelFrame = Time.frameCount;
+                            Map target = wheel > 0f
+                                ? Find.CurrentMap.UpperMap()
+                                : Find.CurrentMap.LowerMap();
+                            if (target != null)
+                            {
+                                LevelCamera.JumpPreservingView(target);
+                            }
+                            if (settings.verboseLogging)
+                            {
+                                Log.Message("[AB] ctrl+wheel " + wheel.ToString("0.##")
+                                    + " -> " + (target != null ? target.ToString() : "no level in that direction"));
+                            }
+                        }
+                        // Consume any IMGUI scroll event this pass so it cannot
+                        // also zoom or scroll something else.
+                        if (Event.current.type == EventType.ScrollWheel)
+                        {
+                            Event.current.Use();
+                        }
                     }
                 }
             }

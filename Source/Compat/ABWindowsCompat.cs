@@ -40,7 +40,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("JPT.OpenTheWindows"))
+                if (!ABCompat.Detect("JPT.OpenTheWindows", "Open The Windows"))
                 {
                     return;
                 }

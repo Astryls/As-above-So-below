@@ -47,7 +47,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("brrainz.achtung"))
+                if (!ABCompat.Detect("brrainz.achtung", "Achtung!"))
                 {
                     return;
                 }

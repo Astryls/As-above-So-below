@@ -24,7 +24,7 @@ namespace AsAboveSoBelow
         private static void Prefix(out bool __state)
         {
             __state = false;
-            if (!ABGuard.On(ABGuard.Ui))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }

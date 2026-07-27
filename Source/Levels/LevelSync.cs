@@ -136,7 +136,7 @@ namespace AsAboveSoBelow
 
         public static void OnLowerMeshDirty(Map map, IntVec3 c, ulong flags)
         {
-            if (!LevelComp.AnySkyLevels || !ABGuard.On(ABGuard.Rendering))
+            if (!LevelCensus.AnySkyLevels || !ABGuard.On(ABGuard.Rendering))
             {
                 return;
             }

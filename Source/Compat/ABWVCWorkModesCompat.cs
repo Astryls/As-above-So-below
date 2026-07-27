@@ -99,7 +99,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("wvc.sergkart.biotech.MoreMechanoidsWorkModes")
+                if (!ABCompat.Detect("wvc.sergkart.biotech.MoreMechanoidsWorkModes", "WVC More Mechanoids Work Modes")
                     || !ModsConfig.BiotechActive)
                 {
                     return;

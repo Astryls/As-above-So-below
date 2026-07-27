@@ -46,7 +46,7 @@ namespace AsAboveSoBelow
             // These postfixes ride two of the hottest vanilla getters; when the
             // game has no sky level at all, bail on static reads before touching
             // the per-map comp cache.
-            if (!LevelComp.AnySkyLevels)
+            if (!LevelCensus.AnySkyLevels)
             {
                 return null;
             }

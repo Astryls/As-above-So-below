@@ -47,7 +47,7 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABDetect.Active("SolarWeb.Stratum"))
+                if (!ABCompat.Detect("SolarWeb.Stratum", "Stratum"))
                 {
                     return;
                 }

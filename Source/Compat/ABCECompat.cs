@@ -52,6 +52,7 @@ namespace AsAboveSoBelow
                 if (!active.HasValue)
                 {
                     active = ModLister.GetActiveModWithIdentifier("CETeam.CombatExtended", true) != null;
+                    ABCompat.Note("CETeam.CombatExtended", "Combat Extended", active.Value);
                 }
                 return active.Value;
             }

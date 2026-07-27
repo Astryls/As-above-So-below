@@ -19,7 +19,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(MainTabWindow_PawnTable __instance, ref IEnumerable<Pawn> __result)
         {
-            if (!ABGuard.On(ABGuard.Ui))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }
@@ -69,7 +69,7 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(ref IEnumerable<Pawn> __result)
         {
-            if (!ABGuard.On(ABGuard.Ui))
+            if (!LevelCensus.AnyLevelColumns || !ABGuard.On(ABGuard.Ui))
             {
                 return;
             }

@@ -19,7 +19,7 @@ namespace AsAboveSoBelow
 
         static ABVehicleCompat()
         {
-            if (ABDetect.Active("SmashPhil.VehicleFramework"))
+            if (ABCompat.Detect("SmashPhil.VehicleFramework", "Vehicle Framework"))
             {
                 vehicleType = AccessTools.TypeByName("Vehicles.VehiclePawn");
                 if (vehicleType != null)

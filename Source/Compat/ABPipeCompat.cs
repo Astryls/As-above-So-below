@@ -33,9 +33,9 @@ namespace AsAboveSoBelow
         {
             // ABDetect: postfix-insensitive so local copies of these mods
             // (effective id "..._steam" splits) still enable the bridges.
-            DbhActive = ABDetect.Active("Dubwise.DubsBadHygiene");
-            VefActive = ABDetect.Active("OskarPotocki.VanillaFactionsExpanded.Core");
-            RimefellerActive = ABDetect.Active("Dubwise.Rimefeller");
+            DbhActive = ABCompat.Detect("Dubwise.DubsBadHygiene", "Dubs Bad Hygiene");
+            VefActive = ABCompat.Detect("OskarPotocki.VanillaFactionsExpanded.Core", "Vanilla Expanded Framework");
+            RimefellerActive = ABCompat.Detect("Dubwise.Rimefeller", "Rimefeller");
             if (DbhActive)
             {
                 ABLog.Dev("Dubs Bad Hygiene detected, direct water bridging enabled.");

@@ -30,7 +30,8 @@ namespace AsAboveSoBelow
 
         internal static bool Gate(Pawn pawn, Job result)
         {
-            if (result != null || CrossLevelWork.VirtualScanActive || !ABGuard.On(ABGuard.Logistics))
+            if (result != null || !LevelCensus.AnyLevelColumns || CrossLevelWork.VirtualScanActive
+                || !ABGuard.On(ABGuard.Logistics))
             {
                 return false;
             }

@@ -381,6 +381,7 @@ namespace AsAboveSoBelow
             new List<(Pawn pawn, Thing target, int tick)>();
 
         /// <summary>Called from ABGameComp; no-op unless a retry is queued.</summary>
+        [ABGameTick(30)]
         internal static void Tick()
         {
             if (retries.Count == 0)

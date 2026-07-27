@@ -48,7 +48,7 @@ namespace AsAboveSoBelow
             {
                 if (!active.HasValue)
                 {
-                    active = ABDetect.Active(PackageId);
+                    active = ABCompat.Detect(PackageId, "CAI 5000");
                 }
                 return active.Value;
             }

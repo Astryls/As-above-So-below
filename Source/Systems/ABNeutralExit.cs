@@ -59,6 +59,7 @@ namespace AsAboveSoBelow
             return null;
         }
 
+        [ABGameTick(60)]
         internal static void Tick()
         {
             if (!ABGuard.On(ABGuard.Social))

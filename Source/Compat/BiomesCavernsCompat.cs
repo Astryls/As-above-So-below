@@ -30,6 +30,7 @@ namespace AsAboveSoBelow
                 {
                     resolved = true;
                     activeCached = ModsConfig.IsActive(PackageId) || ModsConfig.IsActive(PackageId + "_steam");
+                    ABCompat.Note(PackageId, "Biomes! Caverns", activeCached);
                 }
                 return activeCached;
             }
