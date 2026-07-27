@@ -12,7 +12,11 @@
     <label>wormhole anchor</label>
     <description>V2 spike test fixture. Joins its position to its partner anchor elsewhere on the map, forming a single connectivity graph across two bands.</description>
     <thingClass>AsAboveSoBelow.Building_ABAnchor</thingClass>
-    <menuHidden>true</menuHidden>
+    <!-- Clears the designationCategory inherited from DoorBase so this spike
+         fixture never reaches the architect menu. The self-closing-tag idiom is
+         what Anomaly/Odyssey terrain defs use; there is no `menuHidden` field on
+         ThingDef in 1.6 (that was a run #4 XML error). -->
+    <designationCategory />
     <costStuffCount>1</costStuffCount>
     <statBases>
       <WorkToBuild>1</WorkToBuild>

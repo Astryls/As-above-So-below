@@ -154,18 +154,21 @@ namespace AsAboveSoBelow
                 }
                 else
                 {
-                    FillSky(map, rect);
+                    FillSky(map, rect, bands, rocks, noises);
                 }
             }
             CarveGutters(map, bands);
 
-            // Non-surface bands start unexplored; opening a band is what stairs do.
-            for (int band = 0; band < bands.bandCount; band++)
+            // Fog policy differs by direction, matching V1:
+            //  - BELOW the surface is solid rock, so it is fogged and revealed by mining,
+            //    exactly like a vanilla mountain.
+            //  - ABOVE the surface is open sky and mountain top. V1 fogs only the deep
+            //    rock interior and leaves the rest visible, because the whole point of the
+            //    sky level is seeing the colony from above. Blanket-fogging it (run #5)
+            //    produced a black screen with a single lit stair landing.
+            for (int band = 0; band < bands.surfaceBand; band++)
             {
-                if (band != bands.surfaceBand)
-                {
-                    map.fogGrid.Refog(bands.RectOfBand(band));
-                }
+                map.fogGrid.Refog(bands.RectOfBand(band));
             }
         }
 
@@ -188,10 +191,28 @@ namespace AsAboveSoBelow
                 Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f));
         }
 
-        private static void FillSky(Map map, CellRect rect)
+        /// <summary>
+        /// The sky band is a PROJECTION of the surface directly below it, not a void.
+        /// This is what makes the sky level read as "the top of the mountain" the way V1's
+        /// GenStep_ABSkyTerrain did:
+        ///   natural rock below   -> walkable mountain top (stone / gravel / soil by noise)
+        ///   constructed roof     -> rooftop you can walk and build on
+        ///   natural thin roof    -> mountain cap (overhang strip)
+        ///   nothing below        -> open air, so the surface stays visible from up here
+        ///
+        /// V2 gets this much cheaper than V1: the surface is in the SAME map, so the cell
+        /// below is one Translate away instead of a cross-map lookup and a sync mirror.
+        ///
+        /// NOT YET PORTED from V1: noise-driven peaks, ledges, outcrops, hidden valleys
+        /// and sky ore. This is the structural projection only.
+        /// </summary>
+        private static void FillSky(Map map, CellRect rect, ABBandMap bands,
+            List<ThingDef> rocks, List<Perlin> noises)
         {
             TerrainDef air = ABDefOf.AB_OpenAir;
             TerrainGrid terrain = map.terrainGrid;
+            Perlin soilNoise = new Perlin(0.05, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
+            RoofGrid roofs = map.roofGrid;
             foreach (IntVec3 c in rect)
             {
                 if (!c.InBounds(map))
@@ -199,8 +220,50 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 ClearCellHard(map, c);
-                terrain.SetTerrain(c, air);
-                map.roofGrid.SetRoof(c, null);
+                roofs.SetRoof(c, null);
+
+                IntVec3 below = bands.Translate(c, bands.surfaceBand);
+                if (!below.InBounds(map))
+                {
+                    terrain.SetTerrain(c, air);
+                    continue;
+                }
+                Building edifice = below.GetEdifice(map);
+                bool mountain = edifice != null && edifice.def.building != null
+                    && edifice.def.building.isNaturalRock;
+                RoofDef roofBelow = roofs.RoofAt(below);
+
+                if (mountain)
+                {
+                    float n = (float)(soilNoise.GetValue(c.x, 0.0, c.z) + 1.0) * 0.5f;
+                    TerrainDef t;
+                    if (n < 0.25f)
+                    {
+                        ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
+                        t = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
+                    }
+                    else if (n > 0.85f)
+                    {
+                        t = TerrainDefOf.Soil;
+                    }
+                    else
+                    {
+                        t = TerrainDefOf.Gravel;
+                    }
+                    terrain.SetTerrain(c, t);
+                }
+                else if (roofBelow != null && !roofBelow.isNatural)
+                {
+                    terrain.SetTerrain(c, ABDefOf.AB_RoofSurface);
+                }
+                else if (roofBelow != null && roofBelow.isNatural)
+                {
+                    terrain.SetTerrain(c, ABDefOf.AB_MountainTop);
+                }
+                else
+                {
+                    terrain.SetTerrain(c, air);
+                }
             }
         }
 
@@ -240,9 +303,16 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (t is Pawn pawn)
+                // Steam geysers (and anything else with destroyable=false) refuse
+                // Destroy() and log "Tried to destroy non-destroyable thing" - and worse,
+                // they SURVIVE, so the band fill would then spawn rock on top of them.
+                // DeSpawn removes them cleanly.
+                if (!t.def.destroyable)
                 {
-                    pawn.Destroy(DestroyMode.Vanish);
+                    if (t.Spawned)
+                    {
+                        t.DeSpawn(DestroyMode.Vanish);
+                    }
                     continue;
                 }
                 t.Destroy(DestroyMode.Vanish);
@@ -260,33 +330,66 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            IntVec3 target = surface.CenterCell;
-            if (!TryFindStartCell(map, surface, out IntVec3 found))
+            // Translate vanilla's own choice into the surface band rather than jumping to
+            // the band centre: it picked that COLUMN for terrain reasons that still hold,
+            // and the centre of the band is very often inside a mountain or a lake.
+            IntVec3 seed = spot.IsValid ? bands.Translate(spot, bands.surfaceBand) : surface.CenterCell;
+            if (!seed.InBounds(map) || !surface.Contains(seed))
             {
-                found = target;
+                seed = surface.CenterCell;
             }
+            IntVec3 found = TryFindStartCell(map, surface, seed, out IntVec3 c2) ? c2 : seed;
             MapGenerator.PlayerStartSpot = found;
             ABLog.Dev("V2: player start spot moved into the surface band at " + found + ".");
         }
 
-        private static bool TryFindStartCell(Map map, CellRect surface, out IntVec3 result)
+        /// <summary>Finds somewhere the starting colony can actually land: standable, dry,
+        /// unobstructed, and with a clear apron around it so drop pods and pawns fit.
+        ///
+        /// Deliberately does NOT test Fogged - by this point GenStep_Fog has fogged the
+        /// whole map, so a !Fogged test rejects every cell, the search fails, and the
+        /// colony gets dumped on the band's centre cell (frequently solid rock). That was
+        /// the run #4 "no colonists spawned" bug.</summary>
+        private static bool TryFindStartCell(Map map, CellRect surface, IntVec3 seed, out IntVec3 result)
         {
-            IntVec3 center = surface.CenterCell;
-            foreach (IntVec3 c in GenRadial.RadialCellsAround(center, 60f, useCenter: true))
+            // GenRadial's precomputed pattern tops out at MaxRadialPatternRadius (~79.8);
+            // asking for more logs "Not enough squares to get to radius N" and silently
+            // clamps. Stay inside it (run #7).
+            float radius = Mathf.Min(70f, GenRadial.MaxRadialPatternRadius - 1f);
+            foreach (IntVec3 c in GenRadial.RadialCellsAround(seed, radius, useCenter: true))
             {
                 if (!c.InBounds(map) || !surface.Contains(c))
                 {
                     continue;
                 }
-                if (c.Standable(map) && !c.Fogged(map) && c.GetEdifice(map) == null
-                    && !map.terrainGrid.TerrainAt(c).IsWater)
+                if (!c.Standable(map) || c.GetEdifice(map) != null
+                    || map.terrainGrid.TerrainAt(c).IsWater)
                 {
-                    result = c;
-                    return true;
+                    continue;
+                }
+                if (!ApronClear(map, surface, c))
+                {
+                    continue;
+                }
+                result = c;
+                return true;
+            }
+            result = seed;
+            return false;
+        }
+
+        private static bool ApronClear(Map map, CellRect surface, IntVec3 center)
+        {
+            CellRect apron = CellRect.CenteredOn(center, 2);
+            foreach (IntVec3 c in apron)
+            {
+                if (!c.InBounds(map) || !surface.Contains(c) || !c.Standable(map)
+                    || map.terrainGrid.TerrainAt(c).IsWater)
+                {
+                    return false;
                 }
             }
-            result = center;
-            return false;
+            return true;
         }
     }
 }
