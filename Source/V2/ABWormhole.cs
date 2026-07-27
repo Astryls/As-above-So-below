@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -39,10 +40,13 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABWormhole
     {
+        /// <summary>Ends are typed as Building_Door because that is what makes the cell a
+        /// RegionType.Portal region - the property the whole mechanism depends on. Both
+        /// the spike anchor and the V2 stairwell derive from it.</summary>
         private sealed class Pair
         {
-            public Building_ABAnchor a;
-            public Building_ABAnchor b;
+            public Building_Door a;
+            public Building_Door b;
             public RegionLink link;
         }
 
@@ -58,11 +62,11 @@ namespace AsAboveSoBelow
             return map != null && byMap.TryGetValue(map.uniqueID, out List<Pair> l) ? l.Count : 0;
         }
 
-        public static void Link(Building_ABAnchor a, Building_ABAnchor b)
+        public static void Link(Building_Door a, Building_Door b)
         {
             if (a == null || b == null || a.Map == null || a.Map != b.Map)
             {
-                Log.Warning(ABLog.Tag + " V2 spike: refusing to link anchors on different maps.");
+                Log.Warning(ABLog.Tag + " V2: refusing to link wormhole ends on different maps.");
                 return;
             }
             List<Pair> list = ListFor(a.Map);
@@ -74,12 +78,10 @@ namespace AsAboveSoBelow
                 }
             }
             list.Add(new Pair { a = a, b = b });
-            a.partner = b;
-            b.partner = a;
             RearmAll(a.Map);
         }
 
-        public static void Unlink(Building_ABAnchor anchor, Map map)
+        public static void Unlink(Building_Door anchor, Map map)
         {
             if (anchor == null || map == null || !byMap.TryGetValue(map.uniqueID, out List<Pair> list))
             {
@@ -93,8 +95,6 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 TearDown(p);
-                if (p.a != null) { p.a.partner = null; }
-                if (p.b != null) { p.b.partner = null; }
                 list.RemoveAt(i);
             }
             map.reachability.ClearCache();
@@ -207,7 +207,7 @@ namespace AsAboveSoBelow
         /// same whole-trip metric V1's StairRouter had to hand-roll - except here it is
         /// only an optimisation, because reachability is already correct.</summary>
         public static bool TryGetTransit(Map map, IntVec3 from, IntVec3 to,
-            out Building_ABAnchor near, out Building_ABAnchor far)
+            out Building_Door near, out Building_Door far)
         {
             near = null;
             far = null;
@@ -236,8 +236,8 @@ namespace AsAboveSoBelow
         }
 
         private static void Consider(Map map, IntVec3 from, IntVec3 to, int bandFrom, int bandTo,
-            Building_ABAnchor candNear, Building_ABAnchor candFar,
-            ref float best, ref Building_ABAnchor near, ref Building_ABAnchor far)
+            Building_Door candNear, Building_Door candFar,
+            ref float best, ref Building_Door near, ref Building_Door far)
         {
             if (ABBands.BandOf(map, candNear.Position) != bandFrom
                 || ABBands.BandOf(map, candFar.Position) != bandTo)

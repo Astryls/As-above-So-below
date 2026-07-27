@@ -34,6 +34,16 @@ namespace AsAboveSoBelow
             }
             try
             {
+                // V2 interlock: a banded map already IS the whole column, so growing
+                // V1 pocket levels on top of it would produce two competing level
+                // models. Everything else in V1 goes inert on a banded map by itself
+                // (its machinery keys off upperMap/lowerMap, which stay null), so this
+                // single guard is the whole interlock.
+                if (ABBands.Banded(currentMap))
+                {
+                    ABLog.Dev("Refused V1 level generation on a V2 banded map.");
+                    return null;
+                }
                 Map ground = currentMap.Level() == 0 ? currentMap : currentMap.GroundMap();
                 LevelComp controller = ground?.Levels();
                 if (controller == null)

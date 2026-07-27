@@ -98,6 +98,8 @@ namespace AsAboveSoBelow
             // Same consumer API as the real V2 stacked layout.
             ABBands.Register(map, ABBandLayout.TestRect(interior));
             ABWormhole.Link(inner, outerAnchor);
+            inner.partner = outerAnchor;
+            outerAnchor.partner = inner;
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             ABWormhole.RearmAll(map);
 
@@ -218,7 +220,7 @@ namespace AsAboveSoBelow
 
             // --- 4. movement segmentation resolves a transit --------------------
             bool transit = ABWormhole.TryGetTransit(map, outerCell + IntVec3.North, innerCell,
-                out Building_ABAnchor near, out Building_ABAnchor far);
+                out Building_Door near, out Building_Door far);
             Check("4. StartPath segmentation resolves a transit pair", transit && near != null && far != null,
                 transit ? "near=" + near.Position + " far=" + far.Position : "no transit resolved");
 

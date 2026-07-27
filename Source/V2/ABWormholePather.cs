@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using Verse;
 using Verse.AI;
 
@@ -31,8 +32,8 @@ namespace AsAboveSoBelow
         {
             public LocalTargetInfo realDest;
             public PathEndMode realPeMode;
-            public Building_ABAnchor near;
-            public Building_ABAnchor far;
+            public Building_Door near;
+            public Building_Door far;
         }
 
         private static readonly Dictionary<int, Transit> pending = new Dictionary<int, Transit>();
@@ -68,7 +69,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             if (!ABWormhole.TryGetTransit(map, pawn.Position, destCell,
-                out Building_ABAnchor near, out Building_ABAnchor far))
+                out Building_Door near, out Building_Door far))
             {
                 // No wormhole joins these bands. Let vanilla fail honestly rather than
                 // sending the pawn somewhere arbitrary.

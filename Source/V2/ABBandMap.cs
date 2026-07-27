@@ -38,9 +38,9 @@ namespace AsAboveSoBelow
         /// <summary>Bands the player has actually opened (stairs built into them).
         /// The surface is always open. Unopened bands exist physically but are fogged
         /// and inert.</summary>
-        private HashSet<int> openedBands = new HashSet<int>();
-
-        private List<int> tmpOpened;
+        /// <summary>A List rather than a HashSet: it holds at most bandCount entries, so
+        /// linear scan beats hashing, and Scribe_Collections handles it without ceremony.</summary>
+        private List<int> openedBands = new List<int>();
 
         public ABBandMap(Map map) : base(map)
         {
@@ -97,12 +97,21 @@ namespace AsAboveSoBelow
             return new IntVec3(c.x, c.y, toBand * Slot + within);
         }
 
-        public bool IsOpen(int band) => band == surfaceBand || openedBands.Contains(band);
+        public bool IsOpen(int band) => band == surfaceBand || (openedBands != null && openedBands.Contains(band));
 
         public void Open(int band)
         {
-            if (BandExists(band) && band != surfaceBand && openedBands.Add(band))
+            if (!BandExists(band) || band == surfaceBand)
             {
+                return;
+            }
+            if (openedBands == null)
+            {
+                openedBands = new List<int>();
+            }
+            if (!openedBands.Contains(band))
+            {
+                openedBands.Add(band);
                 ABLog.Dev("Band " + band + " (level " + (band - surfaceBand) + ") opened on map " + map.uniqueID + ".");
             }
         }
@@ -120,10 +129,10 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref bandCount, "AB2_bandCount", 1);
             Scribe_Values.Look(ref bandHeight, "AB2_bandHeight", 0);
             Scribe_Values.Look(ref surfaceBand, "AB2_surfaceBand", 0);
-            Scribe_Collections.Look(ref openedBands, "AB2_openedBands", LookMode.Value, ref tmpOpened);
+            Scribe_Collections.Look(ref openedBands, "AB2_openedBands", LookMode.Value);
             if (Scribe.mode == LoadSaveMode.PostLoadInit && openedBands == null)
             {
-                openedBands = new HashSet<int>();
+                openedBands = new List<int>();
             }
         }
     }
