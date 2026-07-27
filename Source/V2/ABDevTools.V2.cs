@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
+using HarmonyLib;
 using LudeonTK;
 using RimWorld;
 using Verse;
@@ -41,6 +43,84 @@ namespace AsAboveSoBelow
             }
             Log.Warning(ABLog.Tag + " V2 band info:\n" + sb);
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        [DebugAction("As above", "AB2: lighting report", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2LightingReport()
+        {
+            Map map = Find.CurrentMap;
+            if (map == null)
+            {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("banded: " + ABBands.Banded(map));
+            IntVec3 c = UI.MouseCell();
+            if (!c.InBounds(map))
+            {
+                Log.Warning(ABLog.Tag + " V2 lighting report:\n" + sb);
+                return;
+            }
+            ABBandMap b = ABBands.CompOf(map);
+            sb.AppendLine("cell " + c + " band=" + ABBands.BandOf(map, c)
+                + " level=" + ABBands.LevelOf(map, c)
+                + " terrain=" + map.terrainGrid.TerrainAt(c).defName);
+            sb.AppendLine("  glow here: " + map.glowGrid.VisualGlowAt(c));
+            if (b != null && b.Banded)
+            {
+                IntVec3 below = new IntVec3(c.x, 0, c.z - b.Slot);
+                if (below.InBounds(map))
+                {
+                    sb.AppendLine("  below " + below + " terrain="
+                        + map.terrainGrid.TerrainAt(below).defName
+                        + " fogged=" + map.fogGrid.IsFogged(below));
+                    sb.AppendLine("  glow below: " + map.glowGrid.VisualGlowAt(below));
+                }
+            }
+            // The decisive number: if vanilla's overlay is still Visible on a banded map,
+            // below content is being darkened twice.
+            int vanillaVisible = 0;
+            int oursVisible = 0;
+            foreach (Section sec in AllSectionsOf(map))
+            {
+                foreach (SectionLayer layer in SectionLayersOf(sec))
+                {
+                    if (layer is SectionLayer_LightingOverlay && layer.Visible)
+                    {
+                        vanillaVisible++;
+                    }
+                    else if (layer is SectionLayer_ABBelowLighting && layer.Visible)
+                    {
+                        oursVisible++;
+                    }
+                }
+            }
+            sb.AppendLine("vanilla lighting layers still visible: " + vanillaVisible
+                + "  (MUST be 0 on a banded map)");
+            sb.AppendLine("AB below-lighting layers visible: " + oursVisible);
+            Log.Warning(ABLog.Tag + " V2 lighting report:\n" + sb);
+            Messages.Message("AB2: lighting report written to log.", MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        private static IEnumerable<Section> AllSectionsOf(Map map)
+        {
+            Section[,] arr = (Section[,])AccessTools.Field(typeof(MapDrawer), "sections").GetValue(map.mapDrawer);
+            if (arr == null)
+            {
+                yield break;
+            }
+            foreach (Section s in arr)
+            {
+                if (s != null)
+                {
+                    yield return s;
+                }
+            }
+        }
+
+        private static List<SectionLayer> SectionLayersOf(Section sec)
+        {
+            return (List<SectionLayer>)AccessTools.Field(typeof(Section), "layers").GetValue(sec);
         }
 
         [DebugAction("As above", "AB2: open all bands", allowedGameStates = AllowedGameStates.PlayingOnMap)]
