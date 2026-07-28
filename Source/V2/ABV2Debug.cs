@@ -1,3 +1,5 @@
+using Verse;
+
 namespace AsAboveSoBelow
 {
     /// <summary>
@@ -20,6 +22,19 @@ namespace AsAboveSoBelow
         public static bool DrawBelowAirMask = true;
 
         public static bool DrawBelowLighting = true;
+
+        /// <summary>Traces every step of a cross-band transit. Off by default (it is noisy
+        /// and per-move); the stairs order is the one flow where seeing each step beats
+        /// reasoning about it.</summary>
+        public static bool LogTransit;
+
+        public static void Transit(string msg)
+        {
+            if (LogTransit)
+            {
+                Log.Warning(ABLog.Tag + " TRANSIT: " + msg);
+            }
+        }
 
         public static string StateSummary()
         {

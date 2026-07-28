@@ -68,8 +68,20 @@ namespace AsAboveSoBelow
                 Clear(pawn);
                 return false;
             }
-            if (!ABWormhole.TryGetTransit(map, pawn.Position, destCell,
-                out Building_Door near, out Building_Door far))
+            // ONE log call per attempt, carrying the whole outcome. Separate calls share an
+            // identical stack signature, so a log-grouping monitor folds them into a single
+            // class and only the first is ever seen - which is exactly what happened while
+            // chasing this: "wants ..." arrived and the outcome line never did.
+            bool got = ABWormhole.TryGetTransit(map, pawn.Position, destCell,
+                out Building_Door near, out Building_Door far);
+            ABV2Debug.Transit(pawn.LabelShort + " " + pawn.Position
+                + " (band " + ABBands.BandOf(map, pawn.Position) + ")"
+                + " -> " + destCell + " (band " + ABBands.BandOf(map, destCell) + ")"
+                + " | pairs=" + ABWormhole.PairCount(map)
+                + " | transit=" + (got
+                    ? ("YES via " + near.Position + " -> " + far.Position)
+                    : "NONE (pawn will try to walk it and fail)"));
+            if (!got)
             {
                 // No wormhole joins these bands. Let vanilla fail honestly rather than
                 // sending the pawn somewhere arbitrary.
@@ -104,8 +116,11 @@ namespace AsAboveSoBelow
             }
             if (pawn.Position != t.near.Position)
             {
+                ABV2Debug.Transit("ARRIVE-MISMATCH " + pawn.LabelShort + " at "
+                    + pawn.Position + " expected " + t.near.Position);
                 return false; // arrived somewhere else; not our transit
             }
+
 
             // Clear BEFORE re-dispatching: StartPath re-enters TrySegment, and after the
             // teleport the pawn is in the destination band, so it resolves as an
@@ -118,9 +133,13 @@ namespace AsAboveSoBelow
 
             if (t.realDest.IsValid && !pawn.Position.Equals(t.realDest.Cell))
             {
+                ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
+                    + " -> " + t.far.Position + "; resuming to " + t.realDest.Cell);
                 pather.StartPath(t.realDest, t.realPeMode);
                 return true;
             }
+            ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
+                + " -> " + t.far.Position + "; landed on destination");
             return false; // landed on the destination itself; let vanilla arrive
         }
     }

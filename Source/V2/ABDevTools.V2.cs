@@ -47,6 +47,15 @@ namespace AsAboveSoBelow
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);
         }
 
+        [DebugAction("As above", "AB2: toggle transit logging", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleTransitLog()
+        {
+            ABV2Debug.LogTransit = !ABV2Debug.LogTransit;
+            Messages.Message("AB2: transit logging " + (ABV2Debug.LogTransit ? "ON" : "OFF") + ".",
+                MessageTypeDefOf.TaskCompletion, false);
+            Log.Warning(ABLog.Tag + " transit logging " + (ABV2Debug.LogTransit ? "ON" : "OFF"));
+        }
+
         [DebugAction("As above", "AB2: bisect - toggle below terrain", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2ToggleBelowTerrain()
         {
