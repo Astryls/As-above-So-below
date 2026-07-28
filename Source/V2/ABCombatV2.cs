@@ -180,43 +180,64 @@ namespace AsAboveSoBelow
     /// own band gives the true horizontal bearing, so the pawn turns toward the hole it is
     /// firing through.
     /// </summary>
-    [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.FaceTarget))]
+    [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.Face))]
     public static class Patch_RotationTracker_ABCrossBandFacing
     {
+        /// <summary>Patches Face(Vector3), NOT FaceTarget.
+        ///
+        /// FaceTarget was the wrong hook: while a pawn is AIMING, UpdateRotation reads
+        /// stance_Busy.focusTarg directly and calls Face(thing.DrawPos) - FaceTarget is
+        /// never involved. That is why the body still snapped due south when shooting across
+        /// bands. Face is the common bottleneck for every rotation path, so localizing here
+        /// covers aiming, jobs and drafted orders alike.</summary>
         private static readonly AccessTools.FieldRef<Pawn_RotationTracker, Pawn> PawnRef =
             AccessTools.FieldRefAccess<Pawn_RotationTracker, Pawn>("pawn");
 
-        private static void Prefix(Pawn_RotationTracker __instance, ref LocalTargetInfo target)
+        private static void Prefix(Pawn_RotationTracker __instance, ref Vector3 p)
         {
             try
             {
-                if (!target.IsValid)
-                {
-                    return;
-                }
                 Pawn pawn = PawnRef(__instance);
                 if (pawn == null || !pawn.Spawned)
                 {
                     return;
                 }
-                ABBandMap bands = ABBands.CompOf(pawn.Map);
-                if (bands == null || !bands.Banded)
+                if (ABCombatGeometry.TryLocalize(pawn, p, out Vector3 local))
                 {
-                    return;
+                    p = local;
                 }
-                int bandPawn = bands.BandOf(pawn.Position);
-                IntVec3 targetCell = target.Cell;
-                if (bands.BandOf(targetCell) == bandPawn)
-                {
-                    return;
-                }
-                // Rewrite to a CELL target in our own band: a Thing target would resolve
-                // its position again and undo this.
-                target = new LocalTargetInfo(bands.Translate(targetCell, bandPawn));
             }
             catch
             {
                 // Facing is cosmetic; never let it break the rotation tracker.
+            }
+        }
+    }
+
+    /// <summary>Cell-based facing takes the same treatment: UpdateRotation calls FaceCell
+    /// when the focus target is a bare cell rather than a thing.</summary>
+    [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.FaceCell))]
+    public static class Patch_RotationTracker_ABCrossBandFaceCell
+    {
+        private static readonly AccessTools.FieldRef<Pawn_RotationTracker, Pawn> PawnRef =
+            AccessTools.FieldRefAccess<Pawn_RotationTracker, Pawn>("pawn");
+
+        private static void Prefix(Pawn_RotationTracker __instance, ref IntVec3 c)
+        {
+            try
+            {
+                Pawn pawn = PawnRef(__instance);
+                if (pawn == null || !pawn.Spawned)
+                {
+                    return;
+                }
+                if (ABCombatGeometry.TryLocalize(pawn, c, out IntVec3 local))
+                {
+                    c = local;
+                }
+            }
+            catch
+            {
             }
         }
     }

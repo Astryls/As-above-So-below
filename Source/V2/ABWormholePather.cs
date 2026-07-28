@@ -196,9 +196,21 @@ namespace AsAboveSoBelow
             everSegmented.Remove(pawn.thingIDNumber);
             pawn.Position = t.far.Position;
             pawn.Notify_Teleported(false, true);
-            if (t.realDest.IsValid && !pawn.Position.Equals(t.realDest.Cell))
+            // The real destination was captured when the trip STARTED, and the walk to the
+            // stairwell takes time - the target can die, be hauled away or be deconstructed
+            // in the meantime. Resuming onto a destroyed thing makes vanilla log
+            // "pathing to destroyed thing" and fail the pather.
+            bool destGone = t.realDest.HasThing
+                && (t.realDest.ThingDestroyed || !t.realDest.Thing.Spawned);
+            if (t.realDest.IsValid && !destGone && !pawn.Position.Equals(t.realDest.Cell))
             {
                 pawn.pather?.StartPath(t.realDest, t.realPeMode);
+            }
+            else if (destGone)
+            {
+                // Land at the far anchor and let the job re-evaluate from there.
+                ABV2Debug.Transit("  destination gone mid-transit; stopping at " + t.far.Position);
+                pawn.jobs?.EndCurrentJob(JobCondition.Incompletable);
             }
         }
 
