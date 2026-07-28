@@ -23,7 +23,7 @@ namespace AsAboveSoBelow
         new Type[] { typeof(GlobalTargetInfo), typeof(CameraJumper.MovementMode) })]
     public static class Patch_CameraJumper_ABBandJump
     {
-        private static void Prefix(GlobalTargetInfo target)
+        private static void Prefix(GlobalTargetInfo target, ref CameraJumper.MovementMode mode)
         {
             try
             {
@@ -53,10 +53,15 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // preserveXZ:false - the camera is about to be panned onto the target
-                // anyway, so keeping the old in-band position would just cause a visible
-                // double move.
+                // preserveXZ:false - the camera is about to be moved onto the target anyway,
+                // so keeping the old in-band position would just cause a visible double move.
                 ABBandView.SetBand(map, band, preserveXZ: false);
+
+                // CUT, never PAN, across bands. A pan animates the camera the whole way,
+                // and since bands are a Slot apart that is a 256-cell sweep through the
+                // gutter and the intervening level - seen as the screen "flashing" on a
+                // colonist bar double-click. A cut lands directly on the pawn.
+                mode = CameraJumper.MovementMode.Cut;
             }
             catch (Exception e)
             {

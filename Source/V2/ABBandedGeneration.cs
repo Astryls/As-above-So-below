@@ -280,7 +280,27 @@ namespace AsAboveSoBelow
             {
                 seed = surface.CenterCell;
             }
-            IntVec3 found = TryFindStartCell(map, surface, seed, out IntVec3 c2) ? c2 : seed;
+            // Two passes. The strict one wants a clear 5x5 apron so pods and pawns fit; if
+            // the surface band has no such spot (heavy forest, lakes, dense rock) the
+            // relaxed pass takes any standable dry cell. Falling straight through to the
+            // seed was the cause of BUG1 - colonists occasionally not spawning at all,
+            // because the seed could be rock or water and the scenario spawn silently failed.
+            IntVec3 found;
+            if (TryFindStartCell(map, surface, seed, requireApron: true, out IntVec3 strict))
+            {
+                found = strict;
+            }
+            else if (TryFindStartCell(map, surface, seed, requireApron: false, out IntVec3 relaxed))
+            {
+                ABLog.Dev("V2: no clear apron in the surface band; using a relaxed start cell.");
+                found = relaxed;
+            }
+            else
+            {
+                found = seed;
+                Log.Warning(ABLog.Tag + " V2: could not find any standable start cell in the"
+                    + " surface band; falling back to " + seed + ". Colonists may fail to spawn.");
+            }
             MapGenerator.PlayerStartSpot = found;
             ABLog.Dev("V2: player start spot moved into the surface band at " + found + ".");
         }
@@ -292,7 +312,8 @@ namespace AsAboveSoBelow
         /// whole map, so a !Fogged test rejects every cell, the search fails, and the
         /// colony gets dumped on the band's centre cell (frequently solid rock). That was
         /// the run #4 "no colonists spawned" bug.</summary>
-        private static bool TryFindStartCell(Map map, CellRect surface, IntVec3 seed, out IntVec3 result)
+        private static bool TryFindStartCell(Map map, CellRect surface, IntVec3 seed,
+            bool requireApron, out IntVec3 result)
         {
             // GenRadial's precomputed pattern tops out at MaxRadialPatternRadius (~79.8);
             // asking for more logs "Not enough squares to get to radius N" and silently
@@ -309,7 +330,7 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (!ApronClear(map, surface, c))
+                if (requireApron && !ApronClear(map, surface, c))
                 {
                     continue;
                 }
