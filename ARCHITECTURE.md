@@ -1,6 +1,13 @@
-# As above, So below — Architecture (V1 — SUPERSEDED)
+# As above, So below — Architecture (V1 — DELETED)
 
-> # ⚠ THIS DOCUMENT DESCRIBES V1 AND IS STALE
+> # ⚠ THIS DOCUMENT DESCRIBES CODE THAT NO LONGER EXISTS
+>
+> **V1 was deleted: 156 files / 40,713 LOC.** Nothing described below is on disk any more.
+> This file is retained ONLY for the reasoning it records about why V1 was replaced — treat
+> every class, file and mechanism it names as historical.
+>
+> Current documentation: **`docs/V2-HANDOFF.md`**, and the Schematic
+> (`.modmixer/schematic.json`), which is the living version.
 >
 > The mod was rearchitected. **V2 stacks three bands into ONE `Map`** joined by synthetic
 > `RegionLink` wormholes, instead of V1's three separate pocket maps bridged by ~130 Harmony

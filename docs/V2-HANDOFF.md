@@ -1,219 +1,281 @@
 # As above, So below II — V2 Handoff
 
-> **Read this first.** V2 is a ground-up rearchitecture of the mod. V1's ~42.5k LOC still
-> exists on disk (everything in `Source/` *outside* `Source/V2/`) but is **superseded and
-> inert on banded maps**. All new work goes in `Source/V2/`.
+> **Read this first in a fresh context.** The living version of this document is the
+> **Schematic** (`.modmixer/schematic.json`), which is kept current as work lands. This file
+> is the repo-side copy; if the two disagree, trust the Schematic.
 >
-> `ARCHITECTURE.md` in the repo root describes **V1** and is stale. It is kept for the
-> reasoning it records about why V1 was replaced.
+> `ARCHITECTURE.md` in the repo root describes **V1**, which no longer exists. Stale.
+> `docs/HELICOPTER_VIEW.md` is a regenerable whole-codebase snapshot
+> (`bash docs/generate-helicopter-view.sh`).
+
+**V1 is deleted** (156 files / 40,713 LOC). Current tree: **46 files / 9,070 LOC** — 37 in
+`Source/V2/`, 9 in `Source/Core/` (a shared tier, not V1: `ABGuard`, `ABLog`/`ABMod`,
+`ABDefOf`, `ABSettings`, `ABGameComp`, `ABGameHooks`, `ABBlame`, `ABPawnCooldown`,
+`HarmonyBoot`).
 
 ---
 
-## 1. The architecture
+## 1. Architecture
 
-One `Map`, size `(w, 1, bandCount × Slot)`. Bands stack along **+z**, each occupying a
-contiguous `CellIndices` range (row-major `z * sizeX + x`). `band = surfaceBand + level`, so
-bottom-to-top reads basement / surface / sky. An impassable, permanently-fogged **gutter**
-separates bands.
+One `Map`, size `(w, 1, bandCount × Slot)`. Bands stack along **+z**, each a contiguous
+`CellIndices` range; `band = surfaceBand + level`, bottom-to-top basement / surface / sky. An
+impassable, permanently-fogged **gutter** separates bands. Live layout: `200×768`, bandCount 3,
+bandHeight 200, slot 256, gutter 56, surfaceBand 1.
 
-`Slot` is rounded **up to a multiple of 64** (a 250-high band → slot 256, gutter 6). This is
-load-bearing, not cosmetic: RimWorld's terrain shaders sample from **world position**, so a
-non-aligned vertical offset makes identical terrain render with a different texture phase in
-the see-below view.
+`Slot` is rounded up to a multiple of **64** — terrain shaders sample from world position, so a
+non-aligned offset renders identical terrain at a different texture phase in the see-below view.
 
 ### The one insight everything rests on
 
-`Region.Neighbors` is **topological, not spatial**. Two spatially distant regions that share
-a `RegionLink` are adjacent as far as RimWorld is concerned. Both ends of a stairwell are
-`RegionType.Portal` (the stair is a `Building_Door` subclass), and `Portal` fails
-`RegionAndRoomUpdater.ShouldBeInTheSameRoom` — so the link **conducts connectivity without
-merging rooms, temperature or vacuum**.
+`Region.Neighbors` is **topological, not spatial**. Two distant regions sharing a `RegionLink`
+are adjacent as far as RimWorld is concerned. Both ends are `RegionType.Portal` (the stair
+subclasses `Building_Door`), and `Portal` fails `ShouldBeInTheSameRoom`, so the link conducts
+connectivity **without merging rooms, temperature or vacuum**. `Reachability.CanReach` is
+managed region-BFS and works unpatched, which transitively fixes `ClosestThingReachable`,
+`RegionTraverser`, storage search and every `WorkGiver_Scanner`.
 
-`Reachability.CanReach` is managed region-BFS, so it works **unpatched**, and that
-transitively fixes `GenClosest.ClosestThingReachable`, `RegionTraverser`, storage search and
-**every `WorkGiver_Scanner` in the game**.
+Verified in play: colonists cross bands for `HaulToContainer`, `HaulToCell`, `Ingest`, `Clean`,
+`BuildRoof`, `FinishFrame`, `LayDown`, `SocialRelax` — with no hauling code written.
 
-> **Proven in-game:** a colonist hauled steel out of a *sealed* chamber whose only connection
-> to the world was a synthetic `RegionLink`, with zero hauling code written.
+### ⚠ Portal regions are ONE CELL
 
-### The dividing line (learned the hard way)
+`RegionTypeUtility.IsOneCellRegion(Portal)` is **true**. Every door cell is its own Portal
+region, so a 2×2 stairwell is **four Portal regions per end** and a wormhole must link **every
+cell pair**. Linking only the building's `Position` leaves the rest of the footprint conducting
+nothing, and which cell a pawn enters decides whether the stairs work — the classic "works
+sometimes" bug. `ABWormhole.Pair` holds a `List<RegionLink>`; `AB2: band info` prints
+`links armed = N/M cells` with an explicit `<-- PARTIAL` warning.
 
-| Class | V2 outcome |
+`AllowsMultipleRegionsPerDistrict(Portal)` is **false**, and vanilla's largest door is 2×1
+(Ornate Door). The 3×3 grand staircase is 9 Portal regions — beyond anything vanilla ships.
+Watch the `N/M` line.
+
+### The dividing line
+
+| Class | Outcome |
 |---|---|
-| **Graph / logic** — reachability, storage, work scanning, hauling, needs, reservations | **Free** |
-| **Geometry / presentation** — LOS, range, targeting, path lines, ghosts, projectiles, labels, selection | **Not free.** Bands fake vertical adjacency with 256 cells of distance, and every 2D-cell-space computation has to be told |
+| Graph / logic — reachability, storage, work scanning, hauling, needs, reservations | **Free** |
+| Geometry / presentation — LOS, range, targeting, path lines, ghosts, projectiles, labels, selection | **Not free** |
 
-Each geometry surface is corrected **at its own draw/compute site**.
+Correct each geometry surface **at its own draw/compute site**. Never patch `Thing.DrawPos`
+globally — the see-below renderer prints below things at real positions and then translates the
+emitted vertices, so a pre-localized DrawPos double-shifts. That was V1's `DrawPosOffsetPatcher`.
 
-**Do NOT patch `Thing.DrawPos` globally** as a universal lever. The see-below renderer prints
-below things at their *real* positions and then translates the emitted vertices, so a
-pre-localized `DrawPos` would double-shift everything it draws. That trap is precisely what
-V1's `DrawPosOffsetPatcher` was.
+### A third category: reachability-as-proxy
 
-### Hard 1.6 constraint
+Some vanilla code uses `CanReach` to mean *"is this a sensible place"* rather than *"can I get
+there"*, and cross-band reachability leaks straight in. Confirmed in
+`WanderUtility.GetColonyWanderRoot`, which picks idle wander roots from gather spots, colonist
+buildings and colonist positions gated only on `CanReach` — so idle pawns **commuted across
+bands to stand somewhere**. (The 35-cell guard only protects the early return; the fallbacks are
+unbounded.) Fixed by clamping the root to the pawn's own band.
 
-The pathfinder is **jobified** — `PathFinderJob` (`IJob` over `NativeArray` +
-`NativePriorityQueue`) and `PathGridJob` (`IJobParallelFor`). A* neighbour expansion is **not
-patchable**. All custom traversal lives at `Pawn_PathFollower`. `PathRequest.ValidateInt`
-gates on `pawn.CanReach`, so reachability and path production must be widened together or you
-get silent `PawnPath.NotFound` loops.
+**Un-audited siblings:** joy/recreation spot choice (`SocialRelax` crossings observed),
+meditation focus, animal grazing and pen logic.
 
----
+### Hard 1.6 constraints
 
-## 2. What's built (`Source/V2/`, ~6.2k LOC, 30 files)
-
-**Core model**
-- `ABBandMap` — persisted layout, slot alignment, `Translate(cell, band)`
-- `ABBands` — allocation-free CWT-cached facade (`BandOf`, `SameBand`, `LevelOf`, `RectOfBand`)
-- **`ABWormhole`** — synthetic `RegionLink`, mandatory re-arm postfix on
-  `RegionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms`, `DebugDump`
-- `ABWormholePather` — `StartPath` segmentation + **per-tick position sweep** that completes transits
-
-**Generation**
-- `ABBandedGeneration` — size clamp → inflate `mapSize.z` → carve non-surface bands → fix player start spot
-- `ABSkyBandGen` — mountain: solid-mass projection, 8-way BFS edge distance, meadow-Perlin classification into ledge / wall / plateau
-- `ABMapSizeLimit` — 200×200 cap
-
-**Renderer**
-- `SectionLayer_ABBelowV2` — below terrain (faithful port of vanilla's per-cell print incl. edge fades, snow/sand, pollution, Underwall), things, air mask, fog
-- `SectionLayer_ABBelowLighting` — **one** overlay with the glow *source* substituted per cell
-- `SectionLayer_ABBelowShadows` — `staticSunShadowHeight` skirts
-- `ABBelowDynamicDraw` — below pawns via `Thing.DrawNowAt`
-
-**Interaction**
-- `Building_ABStairs2` (+ ladders, MORTON art) · `ABStairsOrders` (float menu)
-- `ABBelowClickThrough` (right-click + selection) · `ABBelowMultiSelect` (drag box + double-click)
-- `ABBelowOverlays` (labels) · `ABBelowSelectionDraw` (brackets, path lines, forbidden)
-- `ABBandView` (camera clamp) · `ABBandJump` (colonist bar) · `ABBandInput` (PageUp/Down, Ctrl+wheel)
-- `ABUIGeometry` (job lines, targeting cursor)
-
-**Combat**
-- `ABCombatV2` — shoot line: adjacent bands only, range via translated target +1, 12-cell drift cap, LOS through an open-air hole
-- `ABCombatGeometry` — accuracy (`ShotReport`) + weapon aim angle
-- `ABCombatAcquisition` — postfix on `AttackTargetFinder.BestShootTargetFromCurrentPosition`, **gated on a null result** so same-band targets always win
-
-**Debug** — `ABV2Debug` (bisect switches, transit/combat logging) · `ABDevTools.V2` ·
-`ABV2DefCleanup` (strips V1's nine vertical-link buildings from the architect menu)
-
-### V1 interlock
-
-V1 goes inert by itself on a banded map — all its machinery keys off
-`map.Levels()?.upperMap/lowerMap`, which stay null. One explicit guard added in
-`LevelMapGen.GetOrGenerate`. V1 self-tests fail on banded maps **by design** ("sky level
-exists" = false).
+- The pathfinder is **jobified** (`PathFinderJob` : `IJob`; `PathGridJob` : `IJobParallelFor`).
+  A* neighbour expansion is not patchable; custom traversal lives at `Pawn_PathFollower`.
+- `PathFinder` has **no `FindPath`**. The managed surface is `FindPathNow` and
+  `PathFinderTick`. Harmony cannot see inside the Burst job, so pathfinding cost is only
+  measurable end-to-end.
+- `PathUtility.BlocksDiagonalMovement` trips on **unwalkable** cells; doors are not
+  special-cased. Sky bands are full of impassable `AB_OpenAir`, so diagonal-only links are a
+  real hazard.
 
 ---
 
-## 3. Engine lessons (non-obvious; each cost hours)
+## 2. Measured performance
 
-1. **`dontRender` terrain silently suppresses shadows.** `SectionLayer_Terrain` swaps in
-   `MatBases.ShadowMask` — the void mask used outside the map. `AB_OpenAir` is `dontRender`,
-   so every see-through cell was a shadow dead zone. Fixed with a postfix disabling that
-   submesh on banded maps.
-2. **Terrain shaders use world-position UVs.** Vanilla writes *no* uvs for terrain quads;
-   `Printer_Plane` writes 0..1 uvs and produces a muddy smear. Build terrain quads by hand.
-3. **Never depend on `PatherArrived` firing at an exact cell.** The pather ends legs in many
-   ways (re-issued path, interrupting job, stopping short). Three fixes failed on that
-   assumption before switching to a per-tick position sweep.
-4. **Never `Clear` a transit record on same-band `StartPath`.** Segmentation rewrites the
-   destination *into* the pawn's own band, so that branch sees its own leg. Records expire on
-   a 4000-tick timeout instead.
-5. **Aiming uses `Face` / `FaceCell`, not `FaceTarget`.** `UpdateRotation` reads
-   `stance_Busy.focusTarg` directly.
-6. **Vanilla emits THREE sun-shadow skirts** (west/east/south), no north skirt, and **each
-   uses a different triangle winding**. A generic helper produces jagged sawtooth.
-7. **Lighting: two complementary bakes cause vignetting.** Overlay vertices are shared
-   between adjacent cells, so each mesh contaminates the other's quads. One bake with the
-   glow source substituted per cell is the correct shape.
-8. Misc — `menuHidden` doesn't exist on `ThingDef` (use `<designationCategory />`) · steam
-   geysers are `destroyable=false` (DeSpawn, don't Destroy) · `GenStep_Fog` fogs the whole
-   map so the sky band must be explicitly unfogged · `GenRadial` caps at ~79.8 ·
-   `MapDrawLayer.map` is private, reach the map via `SectionLayer.section`.
+Driven through **Modern Dev Suite** (`astryl.ModernDevSuite`) over its loopback API —
+`POST 127.0.0.1:8787/api/v1/commands` with `startRun` / `stopRun`. Runs land in
+`<savedata>/ModernDevSuite/Runs/*.json`. Only **Live tab → Run full sweep** needs a human.
 
-### Process lesson
+| Stage | Total mod cost / 2000 frames |
+|---|---|
+| Baseline | **3,791 ms** (58 patches) |
+| Overlay + re-arm gate + V1 delete | **740.9 ms** (22 patches) |
+| Event re-arm + lighting bake | **122.4 ms** |
+| Same build, 17 colonists | **215.8 ms** — fps 59.2, f95 16.69 ms |
 
-**Measuring beat reasoning every single time.** The `ShadowMask` discovery, the lighting
-double-darkening and the transit-record clearing were each found by a diagnostic *after*
-multiple failed rounds of reading source. Reach for a dev action early.
+1. **`OverlayDrawer.DrawAllOverlays`: 1.406 → 0.0018 ms/frame.** Was sweeping every cell of the
+   translated view rect with a `ThingsListAtFast` per open-air cell; now iterates vanilla's own
+   `overlayHandles` dictionary (never cleared, so a postfix reads it safely).
+2. **Wormhole re-arm: 0.339 ms/frame → 0, and no longer a patch.** Was a postfix on
+   `TryRebuildDirtyRegionsAndRooms` (~4,500 calls/frame, early-outs on `!AnyDirty`). Gating it
+   with a prefix recovered only 22%, because the gate *added a second patch to a very hot
+   method*. Now subscribes to `MapEvents.RegionsRoomsChanged`, invoked on the last line of that
+   method on the only path that actually rebuilt.
+3. **Vanilla `SectionLayer_LightingOverlay` bake: 25 calls → 0.** Suppressing `Visible` stops
+   the draw but not the bake — `Section.TryUpdate` does not check `Visible`, only
+   `RegenerateDirtyLayers` does.
+4. **V1 deleted.** It was never inert, only idle: its patches stayed live on
+   `WorldObject.get_Tile` (2.6M calls), `Map.get_IsPlayerHome` (532k),
+   `ThinkNode_JobGiver.TryIssueJobPackage` (111k), `PawnRenderer.ParallelGetPreRenderResults`
+   and `Thing.get_DrawPos`.
 
-Also: **emit one self-contained log message per event.** Separate `Log` calls from the same
-helper share a stack signature and get folded by the log monitor, which hides everything
-after the first — that cost two full rounds on its own.
+Measured **not** a problem: `SectionLayer_ABBelowV2.Regenerate` ≈ **0.9 µs/call**. Stripping
+below-layers from basement/gutter sections is a memory-only win.
 
-### Diagnostics (all present, all earned their keep)
+### Pathfinding — the original open question, answered
+
+| Scenario | Banded | Vanilla control | Ratio |
+|---|---|---|---|
+| `ai.pathfind` | **556.6 µs** (188/200 found) | 944.6 µs | **0.59×** |
+| `ai.reachability` | 1.152 µs (4999/5000) | 0.393 µs | 2.9× |
+| `world.regions` | 0.339 µs (19995/20000) | 0.071 µs | 4.8× |
+
+**There is no per-path regression** — banded is consistently faster per path across three runs.
+The real banded tax is reachability and region lookup, roughly proportional to 3× the
+regions/cells. Caveat: this measures path *requests*; `PathGridJob`'s grid rebuild is a separate
+cost this does not isolate.
+
+---
+
+## 3. Lessons that cost real time
+
+1. **Classify by behaviour, not directory.** `SectionLayer_ABMountainCap` (803 LOC) lived in
+   V1's `Source/Rendering/` but is live V2 code. Deleting it removed the sky band's
+   mountain-mass rendering. **`Section` instantiates every `SectionLayer` subclass reflectively,
+   so deleting one is invisible to the compiler — a green build proves nothing.** Before any
+   prune: grep candidates for `ABBands`/`Banded`, then separately check every `SectionLayer`
+   subclass.
+2. **A benchmark that surprises you is usually broken.** MDS's `ai.pathfind` lied three ways in
+   succession: diluted by no-op iterations, contaminated by in-loop sampling, then truncated by
+   `break` instead of `continue` (723 of 20,000 samples). Sample outside the stopwatch; divide
+   by effective iterations.
+3. **Nested instrumentation inflates outer timings.** A run arming 227 methods reported
+   `ABBelowV2.Regenerate` 154× higher than one arming 29. Low-target run for layer cost,
+   high-target run for attribution; never compare absolutes across differently-armed runs.
+4. **`PawnRenderer.GetBodyPos` discards `drawLoc`** for a humanlike pawn in a bed and recomputes
+   from `pawn.Position` — sleeping colonists rendered perfectly, one band away, off screen.
+   Lying animals were fine (the else-branch uses `drawLoc`), which made it look bed-specific.
+   Fixed with a postfix gated on exactly that branch; a blanket postfix double-shifts standing
+   pawns.
+5. **`RenderPawnAt` self-heals only when `!results.valid`.** Below pawns are culled so never get
+   `EnsureInitialized`/`ParallelPreDraw`, yet `results.valid` stays true from when they were
+   last on screen. Run all three `DynamicDrawPhaseAt` phases at the translated location.
+6. **A malformed `About.xml` silently drops a mod.** RimWorld logs
+   `XmlException: Data at the root level is invalid`, falls back to default metadata, and the
+   packageId then fails to match ModsConfig. No "failed to find mod" error. Check the log's
+   first 30 lines when a companion mod is mysteriously absent.
+7. **Never mutate a collection you are enumerating from a callback.** `TickTransits` called
+   `Carry` inside `foreach (pending)`; `Carry` → `StartPath` → `TrySegment` → adds to `pending`
+   → `InvalidOperationException` out of `GameComponentTick`, killing the whole sweep and
+   stranding every other transit. Now three phases: decide / remove / carry.
+8. **A diagnostic missing its discriminating field costs cycles.** Transit lines without `job=`
+   could not separate "idle pawn commuting to wander" (bug) from "pawn crossing to haul"
+   (feature). One field settled it. Worse, a verdict line that printed a conclusion the data
+   contradicted actively misled.
+9. Misc: `menuHidden` doesn't exist on `ThingDef` · steam geysers are `destroyable=false`
+   (DeSpawn, don't Destroy) · `GenStep_Fog` fogs the whole map · `GenRadial` caps at ~79.8 ·
+   `MapDrawLayer.map` is private, reach the map via `SectionLayer.section` · emit ONE
+   self-contained log message per event, because separate `Log` calls from one helper share a
+   stack signature and get folded by the monitor.
+
+**Process: measure, don't reason.** Pre-measurement the suspected hot spots were the see-below
+layers; they turned out nearly free. The stairs had *four* distinct causes and every guess cost
+a cycle. Reach for a probe early.
+
+---
+
+## 4. Diagnostics
 
 | Action | Answers |
 |---|---|
-| `AB2: band info` | layout + full wormhole state incl. `CanReach` |
-| `AB2: below layer report` | per-submesh verts / tris / queue / material |
-| `AB2: lighting report` | glow values + whether vanilla's overlay is suppressed |
-| `AB2: toggle transit logging` | every step of a cross-band trip |
-| `AB2: toggle combat logging` | shoot line + projectile origin translation |
-| `AB2: bisect - toggle below terrain/things/air mask/lighting` | isolates which layer occludes what |
-| `AB2: spike - build wormhole chamber` | sealed-room parity test |
-| `AB2: open all bands`, `AB2: place stairs up/down here` | setup helpers |
+| `AB2: band info` | layout, wormhole state, `links armed = N/M cells` |
+| `AB2: transit health` | in-flight transits: age, job, distToNear, near-anchor band |
+| `AB2: below pawn report` | per-pawn DRAW/SKIP verdict with reason, posture, inBed, drawPos.y |
+| `AB2: why is this pawn stuck` | selected pawn: `CanReach` vs `FindPathNow`, all 8 neighbours |
+| **`ABStuckWatchdog`** | automatic; unmoved 180 ticks near an anchor while `pather.Moving`. Classifies CONNECTIVITY / RE-TARGETING / BLOCKED and names the next-cell occupant or door state |
+| `AB2: toggle transit logging` | every step of a crossing, including `job=` |
+| `AB2: below layer report` · `AB2: lighting report` · bisect toggles | render isolation |
+
+Transit logging and the watchdog **reset on every launch** — re-arm them each run.
 
 ---
 
-## 4. Open work
+## 5. Vertical links
+
+| Def | Footprint | Cardinal approaches |
+|---|---|---|
+| `AB2_LadderDown/Up` | 1×1 | 4 |
+| `AB2_StairsDown/Up` | 2×2 | 8 |
+| `AB2_GrandStairsDown/Up` | 3×3 | 12 |
+
+Transit is a **teleport** (`Carry`), so there is no travel time for quality to scale — "grand"
+buys throughput, not speed.
+
+All inherit `AB2_LinkBase` (`DoorBase` + `Building_ABStairs2`), which overrides `blueprintClass`
+to `Blueprint_Build` and sets `useBlueprintGraphicAsGhost`; each def supplies its own
+`blueprintGraphicData`. **Without that override they inherit `Blueprint_Door` plus the
+`Door_Blueprint` texture and every link renders as a generic door while being placed.**
+
+`LandingCell` prefers the anchor cell when free (vanilla door behaviour: occupy briefly, walk
+on) and steps aside only when occupied. `ArriveRadius = LandingRadius + 1`, tied together
+deliberately: a pawn blocked by a just-landed pawn must still count as arrived.
+
+---
+
+## 6. Open work
 
 ### Bugs
-- **Combat (highest priority).** Cross-band shots: pawn "fires straight down", projectile
-  doesn't hit. Shoot line, accuracy, aim angle and projectile origin are all patched, but the
-  result is still wrong. **Combat logging is instrumented and unread** — run
-  `AB2: toggle combat logging` and check whether `shootline OK` and `projectile origin` both
-  appear with sane numbers. If they do, the leading hypothesis is that **projectiles in the
-  band below are not drawn from above** (the below-draw pass covers pawns only).
-- **Colonists sometimes don't spawn on generation.** The start-spot search now has
-  strict → relaxed → seed passes with a loud warning on the last. Unconfirmed whether fixed.
+- **Transient stall near stairwells.** Watchdog verdict **BLOCKED**: `still for 204 ticks |
+  job=GotoWander | dest 1 cell away | CanReach=True | path=FOUND (2 nodes) | destChanges=1 |
+  pendingTransit=False`. Not connectivity, not transit, not re-targeting. Self-resolves in
+  seconds. The watchdog now reports `nextCell` occupant/door state — **read that line next.**
+  The new 2×2/3×3 footprints may fix it outright by widening approaches.
+- **Combat (highest priority, untouched recently).** Cross-band shots: pawn "fires straight
+  down", projectile doesn't hit. **Two separate problems** — (a) *visual*:
+  `ABBelowDynamicDraw` iterates pawns only, so projectiles below are confirmed never drawn from
+  above; (b) *hit*: impact resolves in `Projectile.Tick`, independent of draw, so fixing (a)
+  makes it look right while still missing.
+- **Colonists sometimes don't spawn on generation.** Unconfirmed.
 
-### Audits requested
-- Performance testing via **Modern Dev Suite**
-- **Quadruple-pass** performance/optimization audit of V2 code
-- **Map-generation** optimization audit (currently ~3× slower: vanilla generates over the
-  whole tall map, then bands are carved)
-- **Compatibility/compliance audit:** MissileGirl, PrePatcher, Faster Game Loading,
-  Performance Esmolas, Performance Optimizer, Clean Pathfinding 2, Kingfisher
-- **Deep pathfinding performance audit.** `PathGridJob` is `IJobParallelFor` over **all**
-  cells, so a banded map costs ~3× versus V1 (where only maps with pathing pawns paid at
-  all). **This is the one place V2 is measurably worse, and it is still unmeasured.** The
-  200×200 cap is a mitigation, not a fix.
-
-### Deferred features
-- **Delete V1** (~42.5k LOC / 165 files) — was gated on combat parity
+### Deferred, with reasons
+- **Elevator (3-level shaft).** Requested. Needs TWO counterparts on one building — a second
+  scribed reference plus a rework of `TryEstablish`'s single-`counterpart` assumption.
+  Deliberately not bundled with the region-linking rewrite so a regression stays attributable.
 - **Transplant** — generate a normal map at full vanilla fidelity and move it into band 1.
-  Fixes the coastline caveat (map-edge features can land in a carved band, so **use inland
-  tiles for now**), save migration, and true-lazy banding
-- Turret cross-band targeting · drafted move ghost · per-band biome consumers (wild animals,
-  ambient sound, disease MTB) · sky richness (outcrops, hidden valleys) · V1's
-  `SectionLayer_ABWallFacade` / `WallReveal` cliff faces
+  Fixes the coastline caveat (**use inland tiles for now**), save migration, true-lazy banding.
+- Turret cross-band targeting · drafted move ghost · per-band biome consumers · sky richness.
+
+### Perf backlog
+Map generation ~3× slower · isolate `PathGridJob` grid-rebuild cost · compatibility audit not
+started (MissileGirl, PrePatcher, Faster Game Loading, Performance Esmolas, Performance
+Optimizer, Clean Pathfinding 2, Kingfisher).
+
+### `ABBandEnv` — read before touching biomes
+V2's one genuine regression versus V1: `Map.Biome` is get-only and derived from the world tile,
+so per-band biome must be fed to each consumer explicitly (done for `WildPlantSpawner` density,
+`GenTemperature`, and two `CellFinder` edge-cell patches). **A contextual `map.Biome` getter
+driven by an ambient "current cell" latch is deliberately rejected** — it is the
+lying-to-vanilla-behind-a-global-latch pattern that made V1 unmaintainable.
 
 ---
 
-## 5. Publishing state
+## 7. Publishing state
 
-**Disconnected from the original Workshop upload.** `About/PublishedFileId.txt` (was
-`3767572810`) is **deleted**, so this publishes as a new item. Renamed
-**"As above, So below II"**, packageId **`astryl.AsAboveSoBelow2`**, and marked
-`incompatibleWith` the original `astryl.AsAboveSoBelow` — two competing level models on one
-colony.
+Disconnected from the original Workshop upload: `About/PublishedFileId.txt` deleted, renamed
+**"As above, So below II"**, packageId **`astryl.AsAboveSoBelow2`**, marked `incompatibleWith`
+the original.
 
 ### ⚠ Before publishing
-1. **`About.xml` `<description>` is still V1's** and describes the pocket-map architecture
-   ("nothing ever wanders a pocket level forever") plus performance claims that do not yet
-   hold. It is user-owned copy and needs a rewrite.
-2. **V1 code still ships in the assembly.** Delete it first.
-3. `About/known-issues.json` is V1's.
+1. **`About.xml` `<description>` is still V1's** and makes **false functional claims** — it
+   promises elevators, vertical conduit/water/duct/chem shafts, psycast cross-level targeting,
+   caravans, Hospitality guest tours, trader airships and "zero recurring cost until you build a
+   level". A store-page accuracy problem, not a copy edit. User-owned text.
+2. `About/known-issues.json` is V1's (18 entries).
+3. `ARCHITECTURE.md` and `docs/HELICOPTER_VIEW.md` describe V1.
 
 ### Settings
-Map size capped at **200×200** by default. A toggle above the tabs unlocks it and reveals a
-bold red performance warning. Oversized options in the new-colony dialog are locked using
-vanilla's own `disabled` radio-button styling, with a tooltip pointing at mod settings.
-Enforced **twice** — chooser *and* generation — so nothing can bypass it.
+`ABSettings` was rewritten V2-only: 9 fields, each with a live caller. Map size capped at
+**200×200**, unlock toggle behind a bold red warning, enforced at the chooser *and* at
+generation.
 
 ### Testing rule
-`isolated=true` always. Companion **`astryl.ModernDevTools`**; **not** Melee Animation.
+`isolated=true` always. Companions **`astryl.ModernDevSuite` + `astryl.ModernDevTools`**.
 Palette pins get culled for `Playing`-gated debug actions — use the Debug Actions menu.
-**V2 banding happens at generation, so testing needs a NEW colony** (quicktest qualifies).
-Map generation is ~3× slower — expected, not a hang. **Use inland tiles until transplant
-lands.**
+**Banding happens at generation, so testing needs a NEW colony** (quicktest qualifies). Map
+generation is ~3× slower — expected, not a hang. **Use inland tiles until transplant lands.**
