@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -29,6 +30,16 @@ namespace AsAboveSoBelow
     {
         /// <summary>Drawn per frame, so keep the scan tight: only pawns whose cell is
         /// inside the translated view rect are considered.</summary>
+        /// <summary>Set by the "AB2: below pawn report" dev action for ONE pass, so the
+        /// per-pawn verdict is captured without spamming every frame.</summary>
+        public static bool ReportNextPass;
+
+        /// <summary>Band offset armed ONLY around a single below-pawn draw call, read by
+        /// Patch_PawnRenderer_ABBelowBodyPos. Non-zero exclusively inside that call.</summary>
+        public static float BelowDrawOffsetZ;
+
+        private static readonly System.Text.StringBuilder report = new System.Text.StringBuilder();
+
         public static void DrawBelowPawns(Map map)
         {
             if (map == null || !ABGuard.On(ABGuard.Rendering))
@@ -63,18 +74,45 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 IntVec3 pos = p.Position;
-                if (!belowView.Contains(pos) || fog.IsFogged(pos))
+
+                // Every rejection is recorded with its REASON when probing. A pawn that is
+                // filtered out before the draw call and a pawn that draws but is then
+                // occluded look IDENTICAL on screen, and they need opposite fixes - one is a
+                // masking bug, the other a draw-order bug. Guessing between them has already
+                // cost one wrong fix (running the pawn through all three DynamicDrawPhases,
+                // which was a real staleness bug but not this one).
+                bool probing = ReportNextPass;
+                if (!belowView.Contains(pos))
                 {
+                    if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
+                        + " - outside translated view rect " + belowView);
+                    continue;
+                }
+                if (fog.IsFogged(pos))
+                {
+                    if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos + " - fogged");
                     continue;
                 }
                 IntVec3 above = new IntVec3(pos.x, 0, pos.z + slot);
                 if (!above.InBounds(map) || bands.InGutter(above))
                 {
+                    if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
+                        + " - cell above out of bounds / in gutter");
                     continue;
                 }
                 if (terrain.TerrainAt(above) != air)
                 {
-                    continue; // covered from up here
+                    if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
+                        + " - covered from above by " + terrain.TerrainAt(above).defName);
+                    continue;
+                }
+                if (probing)
+                {
+                    report.AppendLine("  DRAW " + p.LabelShortCap + " " + pos
+                        + " posture=" + p.GetPosture()
+                        + " inBed=" + (p.CurrentBed() != null)
+                        + " drawPos.y=" + p.DrawPos.y.ToString("0.000")
+                        + " job=" + (p.CurJob?.def?.defName ?? "none"));
                 }
                 try
                 {
@@ -97,15 +135,38 @@ namespace AsAboveSoBelow
                     // Main thread, called serially: this is the safe way to invoke
                     // ParallelPreDraw - the thread hazard is in postfixing what the job
                     // workers call, not in calling it here.
-                    p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
-                    p.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
-                    p.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                    // Armed across all three phases: the bed branch of GetBodyPos is reached
+                    // from ParallelPreDraw as well as Draw, so arming only the draw call
+                    // leaves the cached results holding the untranslated position.
+                    BelowDrawOffsetZ = slot;
+                    try
+                    {
+                        p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
+                        p.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
+                        p.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                    }
+                    finally
+                    {
+                        // Cleared in a finally so a throw mid-draw cannot leave every pawn on
+                        // the map rendering a band too high.
+                        BelowDrawOffsetZ = 0f;
+                    }
                 }
                 catch (Exception e)
                 {
                     Log.WarningOnce(ABLog.Tag + " V2 below pawn draw failed for "
                         + p.LabelShortCap + ": " + e.Message, p.thingIDNumber ^ 762195872);
                 }
+            }
+
+            if (ReportNextPass)
+            {
+                ReportNextPass = false;
+                Log.Warning(ABLog.Tag + " V2 below pawn report (view band "
+                    + ABBandView.CurrentBand(map) + ", slot " + slot + ", "
+                    + pawns.Count + " pawns on map):\n"
+                    + (report.Length == 0 ? "  (no pawns considered)" : report.ToString()));
+                report.Length = 0;
             }
         }
     }

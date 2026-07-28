@@ -47,6 +47,18 @@ namespace AsAboveSoBelow
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);
         }
 
+        /// <summary>Per-pawn verdict from ONE below-pawn draw pass: drawn, or skipped and
+        /// why. Run it from the band ABOVE the pawn you cannot see - if the pawn is listed
+        /// DRAW then the masking is fine and the problem is draw order or altitude; if it is
+        /// listed SKIP the reason names the filter that rejected it.</summary>
+        [DebugAction("As above", "AB2: below pawn report", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2BelowPawnReport()
+        {
+            ABBelowDynamicDraw.ReportNextPass = true;
+            Messages.Message("AB2: below pawn report armed for the next frame - see log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         /// <summary>Point-in-time view of every in-flight transit. Use when pawns or animals
         /// look stuck at a stairwell: an ageing record whose distToNear is not shrinking is a
         /// stuck pawn, a young record with a large distance is one still walking.</summary>

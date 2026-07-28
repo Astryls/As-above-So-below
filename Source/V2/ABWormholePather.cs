@@ -205,6 +205,17 @@ namespace AsAboveSoBelow
             }
             int now = Find.TickManager.TicksGame;
             tmpDone.Clear();
+            tmpCarry.Clear();
+
+            // PHASE 1 - decide only. Nothing in this loop may touch `pending`, directly or
+            // indirectly.
+            //
+            // Carry() calls pather.StartPath, which re-enters TrySegment, which can ADD a
+            // record - mutating the dictionary while we are enumerating it. That throws
+            // "InvalidOperationException: Collection was modified" out of GameComponentTick,
+            // killing the whole sweep for that tick and stranding every other pending
+            // transit. Landing pawns ON the anchor made it far more likely, because the
+            // resumed path now starts from a door cell and re-segments more often.
             foreach (KeyValuePair<int, Transit> kv in pending)
             {
                 Transit t = kv.Value;
@@ -225,17 +236,38 @@ namespace AsAboveSoBelow
                 if (pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
                 {
                     tmpDone.Add(kv.Key);
-                    Carry(pawn, t);
+                    tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
                 }
             }
+
+            // PHASE 2 - remove first, so a record re-added by StartPath below survives.
             for (int i = 0; i < tmpDone.Count; i++)
             {
                 pending.Remove(tmpDone[i]);
             }
+
+            // PHASE 3 - now safe to re-enter TrySegment.
+            for (int i = 0; i < tmpCarry.Count; i++)
+            {
+                try
+                {
+                    Carry(tmpCarry[i].Key, tmpCarry[i].Value);
+                }
+                catch (Exception e)
+                {
+                    Log.Error(ABLog.Tag + " V2: carry threw for "
+                        + tmpCarry[i].Key.LabelShortCap + ": " + e);
+                }
+            }
+            tmpCarry.Clear();
             tmpDone.Clear();
         }
 
         private static readonly List<int> tmpDone = new List<int>();
+
+        /// <summary>Carries deferred out of the enumeration - see TickTransits phase 1.</summary>
+        private static readonly List<KeyValuePair<Pawn, Transit>> tmpCarry =
+            new List<KeyValuePair<Pawn, Transit>>();
 
         private static Pawn FindPawn(IReadOnlyList<Pawn> list, int thingId)
         {
@@ -259,10 +291,19 @@ namespace AsAboveSoBelow
         /// next arrival and any normal traffic through the stairwell. A single drafted pawn
         /// never showed it, which is exactly why it survived this long.
         ///
-        /// Prefer any free standable cell within a couple of tiles, constrained to the SAME
-        /// BAND so a landing can never be placed into the gutter or through a seam. Falling
-        /// back to the anchor when nothing is free keeps the old behaviour as a last resort:
-        /// a stacked pawn is bad, a failed transit is worse.
+        /// PREFER THE ANCHOR ITSELF whenever it is free, and only step aside when it is not.
+        ///
+        /// The first version of this did the opposite - it excluded the anchor outright to
+        /// stop pawns stacking - and that made things worse. The anchor is a Building_Door,
+        /// which can only be entered from its four CARDINAL neighbours, so landing pawns
+        /// beside it drops them straight into the approach lane. Two or three arrivals
+        /// standing there wall the stairwell off, and following pawns jam on a corner and
+        /// re-path the same failing route indefinitely.
+        ///
+        /// Landing ON the door is what vanilla door traffic does: a pawn occupies the cell
+        /// for a moment and immediately walks on, because Carry re-issues its path. Stacking
+        /// is only a risk while the cell is genuinely occupied, which is exactly the case the
+        /// fallback handles.
         /// </summary>
         private static IntVec3 LandingCell(Pawn pawn, Building_Door far)
         {
@@ -272,6 +313,12 @@ namespace AsAboveSoBelow
             {
                 return anchor;
             }
+            if (anchor.GetFirstPawn(map) == null)
+            {
+                return anchor;
+            }
+            // Occupied: step aside, but stay in the same band so a landing can never be
+            // placed into the gutter or through a seam.
             if (CellFinder.TryFindRandomCellNear(anchor, map, LandingRadius,
                     c => c.InBounds(map)
                          && c != anchor
