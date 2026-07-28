@@ -80,7 +80,26 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = p.DrawPos;
                     loc.z += slot;
-                    p.DrawNowAt(loc);
+
+                    // Run the SAME three phases vanilla runs for a visible pawn, at our
+                    // translated location - do not just call DrawNowAt.
+                    //
+                    // DrawNowAt only issues DrawPhase.Draw, and RenderPawnAt recomputes
+                    // ONLY when `!results.valid`. A below pawn is culled from the camera's
+                    // view rect, so DynamicDrawManager never gives it EnsureInitialized or
+                    // ParallelPreDraw - yet its results stay flagged valid from whenever it
+                    // was last genuinely on screen. Anything that changes its appearance
+                    // while culled is therefore never picked up: the pawn keeps rendering in
+                    // its old pose. Lying down to sleep is the visible case (a sleeping pawn
+                    // simply never appeared from above), but the same staleness applies to
+                    // rotation, apparel and carried things.
+                    //
+                    // Main thread, called serially: this is the safe way to invoke
+                    // ParallelPreDraw - the thread hazard is in postfixing what the job
+                    // workers call, not in calling it here.
+                    p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
+                    p.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
+                    p.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
                 }
                 catch (Exception e)
                 {

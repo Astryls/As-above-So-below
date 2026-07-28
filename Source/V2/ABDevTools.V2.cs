@@ -47,6 +47,21 @@ namespace AsAboveSoBelow
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);
         }
 
+        /// <summary>Point-in-time view of every in-flight transit. Use when pawns or animals
+        /// look stuck at a stairwell: an ageing record whose distToNear is not shrinking is a
+        /// stuck pawn, a young record with a large distance is one still walking.</summary>
+        [DebugAction("As above", "AB2: transit health", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2TransitHealth()
+        {
+            Map map = Find.CurrentMap;
+            if (map == null)
+            {
+                return;
+            }
+            Log.Warning(ABLog.Tag + " V2 transit health:\n" + ABWormholePather.HealthReport(map));
+            Messages.Message("AB2: transit health written to log.", MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: toggle transit logging", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2ToggleTransitLog()
         {

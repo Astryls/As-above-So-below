@@ -58,6 +58,53 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<int, Transit> pending = new Dictionary<int, Transit>();
 
+        /// <summary>
+        /// Snapshot of every in-flight transit, for the "AB2: transit health" dev action.
+        ///
+        /// A PROBE, not a fix. "Pawns get stuck at the stairs" has now had three different
+        /// causes (stacked landings, mismatched arrival radii, cross-band wander roots), and
+        /// each was diagnosed only after a wrong guess. The distinguishing facts are always
+        /// the same four: how OLD the record is, what JOB owns it, how far the pawn still is
+        /// from its near anchor, and whether that anchor is even in the pawn's band. A record
+        /// ageing without the distance shrinking is a stuck pawn; a young record with a large
+        /// distance is just a pawn still walking.
+        /// </summary>
+        public static string HealthReport(Map map)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("pending transits: " + pending.Count);
+            if (map == null)
+            {
+                return sb.ToString();
+            }
+            int now = Find.TickManager.TicksGame;
+            IReadOnlyList<Pawn> spawned = map.mapPawns.AllPawnsSpawned;
+            foreach (KeyValuePair<int, Transit> kv in pending)
+            {
+                Pawn pawn = FindPawn(spawned, kv.Key);
+                Transit t = kv.Value;
+                int age = TransitTimeoutTicks - (t.expiresAtTick - now);
+                if (pawn == null)
+                {
+                    sb.AppendLine("  [id " + kv.Key + "] pawn not on this map; age=" + age);
+                    continue;
+                }
+                float dist = t.near != null
+                    ? pawn.Position.DistanceTo(t.near.Position)
+                    : -1f;
+                sb.AppendLine("  " + pawn.LabelShortCap
+                    + " (" + (pawn.RaceProps != null && pawn.RaceProps.Animal ? "animal" : "humanlike") + ")"
+                    + " at " + pawn.Position + " band " + ABBands.BandOf(map, pawn.Position)
+                    + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
+                    + " | age=" + age + "/" + TransitTimeoutTicks
+                    + " | distToNear=" + dist.ToString("0.0") + " (need <=" + ArriveRadius + ")"
+                    + " | near=" + (t.near != null ? t.near.Position.ToString() : "null")
+                    + " band " + (t.near != null ? ABBands.BandOf(map, t.near.Position) : -1)
+                    + " | moving=" + (pawn.pather != null && pawn.pather.Moving));
+            }
+            return sb.ToString();
+        }
+
         /// <summary>Pawns that have been segmented at least once. Arrival diagnostics are
         /// scoped to these, otherwise every arrival of every pawn on the map logs a line and
         /// the one that matters is buried.</summary>
@@ -104,9 +151,14 @@ namespace AsAboveSoBelow
             // chasing this: "wants ..." arrived and the outcome line never did.
             bool got = ABWormhole.TryGetTransit(map, pawn.Position, destCell,
                 out Building_Door near, out Building_Door far);
+            // The JOB is the single most useful field here and was missing. Without it a
+            // transit line cannot be told apart from an idle pawn commuting across a band to
+            // wander - which is a bug - versus a pawn crossing to haul or eat, which is the
+            // feature working. Both look identical as bare coordinates.
             ABV2Debug.Transit(pawn.LabelShort + " " + pawn.Position
                 + " (band " + ABBands.BandOf(map, pawn.Position) + ")"
                 + " -> " + destCell + " (band " + ABBands.BandOf(map, destCell) + ")"
+                + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
                 + " | pairs=" + ABWormhole.PairCount(map)
                 + " | transit=" + (got
                     ? ("YES via " + near.Position + " -> " + far.Position)
@@ -302,9 +354,26 @@ namespace AsAboveSoBelow
             // which trigger happened to fire first.
             if (!pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
             {
-                ABV2Debug.Transit("ARRIVE-MISMATCH " + pawn.LabelShort + " at "
-                    + pawn.Position + " expected within " + ArriveRadius
-                    + " of " + t.near.Position);
+                // Print BOTH anchors and BOTH bands. A pure distance miss and a stale record
+                // whose near anchor is in the band the pawn already left look identical when
+                // only one coordinate is logged - and they need completely different fixes.
+                Map m = pawn.Map;
+                ABV2Debug.Transit("ARRIVE-MISMATCH " + pawn.LabelShort
+                    + " at " + pawn.Position + " (band " + ABBands.BandOf(m, pawn.Position) + ")"
+                    + " expected within " + ArriveRadius + " of near " + t.near.Position
+                    + " (band " + ABBands.BandOf(m, t.near.Position) + ")"
+                    + ", far " + t.far.Position
+                    + " (band " + ABBands.BandOf(m, t.far.Position) + ")"
+                    + " | job=" + (pawn.CurJob?.def?.defName ?? "none"));
+
+                // A record whose NEAR anchor is not in the pawn's own band can never complete:
+                // the pawn is past it. Drop it rather than let it linger for the full 4000-tick
+                // timeout re-failing every arrival.
+                if (!ABBands.SameBand(m, pawn.Position, t.near.Position))
+                {
+                    ABV2Debug.Transit("  stale record dropped (near anchor is in another band)");
+                    Clear(pawn);
+                }
                 return false; // arrived somewhere else; not our transit
             }
 
