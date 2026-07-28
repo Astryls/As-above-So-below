@@ -64,6 +64,30 @@ namespace AsAboveSoBelow
             return map != null && byMap.TryGetValue(map.uniqueID, out List<Pair> l) ? l.Count : 0;
         }
 
+        /// <summary>True when the cell is within <paramref name="radius"/> of either end of any
+        /// wormhole on this map. Used to scope the stuck watchdog to stairwell traffic instead
+        /// of every pawn on the map.</summary>
+        public static bool NearAnyAnchor(Map map, IntVec3 cell, int radius)
+        {
+            if (map == null || !byMap.TryGetValue(map.uniqueID, out List<Pair> list))
+            {
+                return false;
+            }
+            for (int i = 0; i < list.Count; i++)
+            {
+                Pair p = list[i];
+                if (p.a != null && p.a.Spawned && cell.InHorDistOf(p.a.Position, radius))
+                {
+                    return true;
+                }
+                if (p.b != null && p.b.Spawned && cell.InHorDistOf(p.b.Position, radius))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>Full state of every wormhole on this map: whether each end resolved to a
         /// Portal region, whether the synthetic link is actually present in BOTH regions'
         /// link lists, and whether vanilla reachability agrees the ends connect.

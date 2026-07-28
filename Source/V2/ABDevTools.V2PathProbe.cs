@@ -63,11 +63,13 @@ namespace AsAboveSoBelow
                 sb.AppendLine("  CanReach = " + canReach);
 
                 PawnPath path = null;
+                bool found = false;
                 try
                 {
                     path = map.pathFinder.FindPathNow(pawn.Position, dest,
                         TraverseParms.For(pawn), null, PathEndMode.OnCell);
-                    sb.AppendLine("  FindPathNow = " + (path != null && path.Found
+                    found = path != null && path.Found;
+                    sb.AppendLine("  FindPathNow = " + (found
                         ? "FOUND (" + path.NodesLeftCount + " nodes)"
                         : "NOT FOUND"));
                 }
@@ -77,11 +79,21 @@ namespace AsAboveSoBelow
                     if (path != null) path.ReleaseToPool();
                 }
 
-                if (canReach)
+                // Gated on BOTH conditions. An earlier version printed this whenever CanReach
+                // was true, so it fired on a perfectly healthy pawn with a found path and
+                // asserted a conclusion the data did not support - a diagnostic that lies is
+                // worse than none.
+                if (canReach && !found)
                 {
-                    sb.AppendLine("  >> CanReach=True with NOT FOUND means the region graph is"
+                    sb.AppendLine("  >> CanReach=True with NOT FOUND: the region graph is"
                         + " connected but no walkable route exists (usually a diagonal-only"
                         + " link past an impassable cell). That is the re-issue loop.");
+                }
+                else if (found)
+                {
+                    sb.AppendLine("  >> A path EXISTS, so this is not a connectivity failure."
+                        + " If the pawn is not advancing along it, the problem is movement or"
+                        + " repeated re-targeting, not reachability.");
                 }
             }
             else
