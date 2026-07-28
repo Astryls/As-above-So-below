@@ -34,7 +34,15 @@ namespace AsAboveSoBelow
             public PathEndMode realPeMode;
             public Building_Door near;
             public Building_Door far;
+            public int expiresAtTick;
         }
+
+        /// <summary>A transit record lives this long before being abandoned. Long enough to
+        /// cross a band on foot, short enough that a stranded record cannot linger.</summary>
+        private const int TransitTimeoutTicks = 4000;
+
+        /// <summary>How close the pawn must get to the near anchor to be carried across.</summary>
+        private const int ArriveRadius = 2;
 
         private static readonly Dictionary<int, Transit> pending = new Dictionary<int, Transit>();
 
@@ -68,21 +76,14 @@ namespace AsAboveSoBelow
             IntVec3 destCell = dest.Cell;
             if (ABBands.SameBand(map, pawn.Position, destCell))
             {
-                // Same band - but NOT necessarily a re-task.
+                // Same band: nothing to segment. The record is deliberately LEFT ALONE.
                 //
-                // This method rewrites the destination to the NEAR anchor, which is in the
-                // pawn's own band. Anything that re-issues StartPath while the pawn is
-                // walking that leg (job re-entry, ResetToCurrentPosition, a repeated order)
-                // therefore arrives back here with a same-band destination and, before this
-                // guard, wiped the in-flight record. The pawn then reached the stairs with
-                // no pending transit and simply stopped - segmentation logged YES and the
-                // arrival was never consumed.
-                if (pending.TryGetValue(pawn.thingIDNumber, out Transit inFlight)
-                    && inFlight.near != null && inFlight.near.Position == destCell)
-                {
-                    return false; // our own leg; leave the record alone
-                }
-                Clear(pawn);
+                // Clearing here was wrong. This method rewrites the destination to the near
+                // anchor - in the pawn's own band - so every re-issue of that leg comes back
+                // through this branch, as does any incidental short path the pawn takes on
+                // the way. Clearing on any of them wiped the in-flight transit and the pawn
+                // arrived at the stairs with nothing pending. Records now expire on a
+                // timeout instead (see the tick sweep), which cannot misfire.
                 return false;
             }
             // ONE log call per attempt, carrying the whole outcome. Separate calls share an
@@ -111,11 +112,94 @@ namespace AsAboveSoBelow
                 realDest = dest,
                 realPeMode = peMode,
                 near = near,
-                far = far
+                far = far,
+                expiresAtTick = Find.TickManager.TicksGame + TransitTimeoutTicks
             };
             dest = near;
             peMode = PathEndMode.OnCell;
             return true;
+        }
+
+        /// <summary>
+        /// Per-tick sweep: carry across any pawn that has reached its near anchor.
+        ///
+        /// This, not PatherArrived, is now the primary trigger. Hanging the transit off the
+        /// pather's arrival callback meant it only fired if the pawn finished a leg exactly
+        /// on (or beside) the anchor, and the pather has many ways to end a leg somewhere
+        /// else - a re-issued path, an interrupting job, stopping short. Sins ended four
+        /// cells away and the transit never ran.
+        ///
+        /// Position is the honest condition: if the pawn is standing at the stairwell with a
+        /// transit pending, take it. Cheap - the dictionary is empty almost always.
+        /// </summary>
+        [ABGameTick(70)]
+        public static void TickTransits()
+        {
+            if (pending.Count == 0)
+            {
+                return;
+            }
+            int now = Find.TickManager.TicksGame;
+            tmpDone.Clear();
+            foreach (KeyValuePair<int, Transit> kv in pending)
+            {
+                Transit t = kv.Value;
+                if (now > t.expiresAtTick || t.near == null || t.far == null
+                    || !t.near.Spawned || !t.far.Spawned)
+                {
+                    tmpDone.Add(kv.Key);
+                    continue;
+                }
+                Pawn pawn = t.near.Map?.mapPawns?.AllPawnsSpawned is IReadOnlyList<Pawn> list
+                    ? FindPawn(list, kv.Key)
+                    : null;
+                if (pawn == null || !pawn.Spawned)
+                {
+                    tmpDone.Add(kv.Key);
+                    continue;
+                }
+                if (pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
+                {
+                    tmpDone.Add(kv.Key);
+                    Carry(pawn, t);
+                }
+            }
+            for (int i = 0; i < tmpDone.Count; i++)
+            {
+                pending.Remove(tmpDone[i]);
+            }
+            tmpDone.Clear();
+        }
+
+        private static readonly List<int> tmpDone = new List<int>();
+
+        private static Pawn FindPawn(IReadOnlyList<Pawn> list, int thingId)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].thingIDNumber == thingId)
+                {
+                    return list[i];
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Move the pawn to the far anchor and resume toward the real destination.</summary>
+        private static void Carry(Pawn pawn, Transit t)
+        {
+            ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
+                + " -> " + t.far.Position + "; resuming to " + t.realDest.Cell);
+            // Stop tracking: the pawn's NEXT arrival (at the real destination, just after
+            // this) would otherwise trip the ARRIVED-NO-PENDING diagnostic and read as a
+            // failure when it is simply the journey finishing normally.
+            everSegmented.Remove(pawn.thingIDNumber);
+            pawn.Position = t.far.Position;
+            pawn.Notify_Teleported(false, true);
+            if (t.realDest.IsValid && !pawn.Position.Equals(t.realDest.Cell))
+            {
+                pawn.pather?.StartPath(t.realDest, t.realPeMode);
+            }
         }
 
         /// <summary>Called from the PatherArrived prefix. Returns true when it consumed
