@@ -1,6 +1,22 @@
-# As above, So below — Architecture
+# As above, So below — Architecture (V1 — SUPERSEDED)
 
-> **Living document.** This is the map of the system. Update it in the *same commit* as any
+> # ⚠ THIS DOCUMENT DESCRIBES V1 AND IS STALE
+>
+> The mod was rearchitected. **V2 stacks three bands into ONE `Map`** joined by synthetic
+> `RegionLink` wormholes, instead of V1's three separate pocket maps bridged by ~130 Harmony
+> patches. V2 lives in `Source/V2/`; everything described below is the V1 model.
+>
+> **→ Current architecture and handoff: [`docs/V2-HANDOFF.md`](docs/V2-HANDOFF.md)**
+>
+> This file is kept deliberately. Sections 1–8 are still the best record of *what V1 did*,
+> and §9 plus the diagnosis that opens the handoff explain *why it was replaced* — the
+> ambiguity of `IntVec3` across maps, `Thing.Map` being a single `sbyte`, and the
+> decision-versus-execution split that produced the ping-pong bugs. Do not follow it as
+> guidance for new work.
+
+---
+
+> **Living document (V1 era).** This is the map of the V1 system. Update it in the *same commit* as any
 > structural change — a new module folder, a new tick hub, a new cross-cutting pattern, a
 > renamed public API. If a diagram below no longer matches the code, the diagram is the bug.
 >

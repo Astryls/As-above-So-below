@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ModMetaData>
-  <name>As above, So below</name>
-  <packageId>astryl.AsAboveSoBelow</packageId>
+  <name>As above, So below II</name>
+  <packageId>astryl.AsAboveSoBelow2</packageId>
   <author>astryl</author>
   <description>Build upward and dig deeper. As above, So below adds one sky level above your colony and one solid rock basement below it. Every level is a real, fully simulated map, and your pawns treat the whole column as a single base.
 
@@ -107,6 +107,10 @@ Caravans form across levels, traders see the whole column's goods, storyteller w
     <li>Krkr.rule56</li>
   </loadAfter>
   <incompatibleWith>
+    <!-- The original As above, So below. This is a ground-up rearchitecture of the
+         same idea (one banded map instead of stacked pocket maps); running both
+         would give you two competing level models on the same colony. -->
+    <li>astryl.AsAboveSoBelow</li>
     <li>telardo.MultiFloors</li>
     <li>ZLevels1.1</li>
     <li>AzraelGodKing.Strata</li>
