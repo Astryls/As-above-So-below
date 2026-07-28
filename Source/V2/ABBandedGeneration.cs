@@ -59,6 +59,27 @@ namespace AsAboveSoBelow
 
         private static PendingLayout pending;
 
+        /// <summary>The surface band's rect for a map that is CURRENTLY being generated.
+        ///
+        /// Needed because ABBandMap.Setup only runs in the GenerateMap postfix, so for the
+        /// whole duration of map generation <c>bands.Banded</c> is still false and every
+        /// band helper answers as if the map were ordinary. Anything that has to be
+        /// band-correct DURING generation has to read the pending layout instead.
+        /// </summary>
+        internal static bool TryPendingSurfaceRect(Map map, out CellRect surface, out int slot)
+        {
+            surface = default(CellRect);
+            slot = 0;
+            PendingLayout p = pending;
+            if (p == null || map == null)
+            {
+                return false;
+            }
+            slot = ABBandMap.SlotFor(p.bandHeight);
+            surface = new CellRect(0, p.surfaceBand * slot, map.Size.x, p.bandHeight);
+            return true;
+        }
+
         private static bool ShouldBand(MapParent parent, bool isPocketMap)
         {
             if (!ABV2.Enabled || isPocketMap || parent == null)
@@ -131,12 +152,130 @@ namespace AsAboveSoBelow
                         return;
                     }
                     bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
+                    RescueStrandedColonists(__result, bands);
                     Carve(__result, bands);
                     FixPlayerStartSpot(__result, bands);
                 }
                 catch (Exception e)
                 {
                     Log.Error(ABLog.Tag + " V2: band carve failed: " + e);
+                }
+            }
+        }
+
+        /// <summary>
+        /// THE ROOT-CAUSE FIX for "colonists sometimes don't spawn".
+        ///
+        /// The old code corrected MapGenerator.PlayerStartSpot in the GenerateMap POSTFIX,
+        /// on the stated assumption that "scenario pawns spawn AFTER generation". That is
+        /// wrong. ScenPart_PlayerPawnsArriveMethod spawns them from GenerateIntoMap, which
+        /// is driven by the ScenParts GenStep - and the vanilla genstep order is
+        /// FindPlayerStartSpot (40) then ScenParts (41), both well inside generation. So
+        /// the real sequence was:
+        ///
+        ///   1. FindPlayerStartSpot picks a cell anywhere in the WHOLE inflated map.
+        ///   2. ScenParts immediately drops the colonists on it.
+        ///   3. our postfix carves the non-surface bands, and ClearCellHard / FillRock
+        ///      call Destroy(DestroyMode.Vanish) on everything standing there.
+        ///   4. our postfix then moved the start spot - long after the pawns were gone.
+        ///
+        /// Hence the intermittency: CellFinderLoose.TryFindCentralCell starts at the map
+        /// centre, which for a 3-band map with surfaceBand 1 happens to land INSIDE the
+        /// surface band most of the time. It is only when the central cells fail the
+        /// validator and the search wanders into the gutter or another band that the
+        /// colony is silently deleted. No error is logged, because from vanilla's point of
+        /// view nothing went wrong.
+        ///
+        /// Clamping here - after vanilla has chosen, before anything consumes the choice -
+        /// also fixes every other in-generation consumer of the spot for free: GenStep_Fog
+        /// unfogs around it, and GenStep_Scatterer falls back to it.
+        /// </summary>
+        [HarmonyPatch(typeof(GenStep_FindPlayerStartSpot), nameof(GenStep_FindPlayerStartSpot.Generate))]
+        public static class Patch_GenStep_FindPlayerStartSpot_ABSurfaceBand
+        {
+            /// <summary>Keep the spot this far from the band's z edges. DropCellFinder
+            /// scatters pods well away from the requested centre, so a spot that merely
+            /// clears the band boundary can still throw a pod across the gutter into the
+            /// next band - where carving would destroy it.</summary>
+            private const int PodScatterMargin = 24;
+
+            private static void Postfix(Map map)
+            {
+                try
+                {
+                    if (!TryPendingSurfaceRect(map, out CellRect surface, out int slot))
+                    {
+                        return; // not a banded generation
+                    }
+                    IntVec3 spot = MapGenerator.PlayerStartSpotValid
+                        ? MapGenerator.PlayerStartSpot
+                        : IntVec3.Invalid;
+
+                    CellRect safe = new CellRect(surface.minX,
+                        surface.minZ + PodScatterMargin, surface.Width,
+                        Mathf.Max(1, surface.Height - 2 * PodScatterMargin));
+
+                    if (spot.IsValid && safe.Contains(spot) && spot.Standable(map))
+                    {
+                        return; // vanilla's pick was already fine
+                    }
+
+                    // Translate vanilla's own pick into the surface band rather than jumping
+                    // to the centre: it chose that spot for terrain reasons that still hold,
+                    // and band centres are very often mountain or lake.
+                    //
+                    // The band stride is SLOT (band height PLUS gutter), not the band
+                    // height - taking the modulo by height instead silently skews the
+                    // in-band offset by a growing multiple of the gutter.
+                    IntVec3 seed;
+                    if (spot.IsValid && slot > 0)
+                    {
+                        int withinSlot = ((spot.z % slot) + slot) % slot;
+                        seed = new IntVec3(spot.x, 0,
+                            surface.minZ + Mathf.Clamp(withinSlot, 0, surface.Height - 1));
+                    }
+                    else
+                    {
+                        seed = safe.CenterCell;
+                    }
+                    if (!safe.Contains(seed))
+                    {
+                        // Keep the column, pull the row into the safe strip.
+                        seed = new IntVec3(
+                            Mathf.Clamp(seed.x, safe.minX, safe.maxX), 0,
+                            Mathf.Clamp(seed.z, safe.minZ, safe.maxZ));
+                    }
+
+                    IntVec3 found;
+                    if (TryFindStartCell(map, safe, seed, requireApron: true, out IntVec3 strict))
+                    {
+                        found = strict;
+                    }
+                    else if (TryFindStartCell(map, safe, seed, requireApron: false, out IntVec3 relaxed))
+                    {
+                        found = relaxed;
+                    }
+                    else if (TryFindStartCell(map, surface, seed, requireApron: false, out IntVec3 wide))
+                    {
+                        // The margin is a preference, not a requirement - better a start
+                        // spot near the band edge than one inside rock.
+                        found = wide;
+                    }
+                    else
+                    {
+                        found = safe.CenterCell;
+                        Log.Warning(ABLog.Tag + " V2: no standable start cell in the surface"
+                            + " band; falling back to " + found + ".");
+                    }
+
+                    MapGenerator.PlayerStartSpot = found;
+                    ABLog.Dev("V2: start spot clamped into the surface band at " + found
+                        + " (was " + (spot.IsValid ? spot.ToString() : "invalid")
+                        + ", surface " + surface + ") before ScenParts spawns the colony.");
+                }
+                catch (Exception e)
+                {
+                    Log.Error(ABLog.Tag + " V2: start-spot clamp failed: " + e);
                 }
             }
         }
@@ -277,9 +416,77 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Scenario pawns spawn AFTER generation at MapGenerator.PlayerStartSpot
-        /// (Game.InitNewGame calls Find.Scenario.PostMapGenerate once GenerateMap returns),
-        /// so nudging the spot here is enough to land the starting colony on the surface.</summary>
+        /// <summary>
+        /// Last-resort rescue for anything of the player's that ended up outside the
+        /// surface band before carving destroys it.
+        ///
+        /// This is the safety net for the "colonists sometimes don't spawn" bug. The root
+        /// cause is fixed upstream (see Patch_GenStep_FindPlayerStartSpot_ABSurfaceBand),
+        /// but the drop-pod finder scatters pods up to ~30 cells from the start spot, so a
+        /// start spot legitimately inside the surface band can still throw a pod across the
+        /// gutter into the band above or below. Carve then runs ClearCellHard / FillRock
+        /// over those bands, which calls Destroy(DestroyMode.Vanish) - and a starting
+        /// colonist quietly ceases to exist, with no error and no missing-pawn warning.
+        ///
+        /// Moving rather than destroying is the whole point: the pawn is already fully
+        /// generated with relations, possessions and a scenario role, so losing one is not
+        /// recoverable later. Also covers gravship starts and any modded ScenPart that
+        /// spawns its own pawns during generation.
+        /// </summary>
+        private static void RescueStrandedColonists(Map map, ABBandMap bands)
+        {
+            CellRect surface = bands.RectOfBand(bands.surfaceBand);
+            List<Pawn> stranded = null;
+            foreach (Pawn p in map.mapPawns.AllPawnsSpawned)
+            {
+                if (p == null || !p.Spawned)
+                {
+                    continue;
+                }
+                // Player pawns and anything they brought along (tamed animals included).
+                if (p.Faction == null || !p.Faction.IsPlayer)
+                {
+                    continue;
+                }
+                if (surface.Contains(p.Position))
+                {
+                    continue;
+                }
+                (stranded ?? (stranded = new List<Pawn>())).Add(p);
+            }
+            if (stranded == null)
+            {
+                return;
+            }
+
+            // Aim at the band-local equivalent column so the rescued group stays together
+            // and near whatever terrain the generator picked for them.
+            for (int i = 0; i < stranded.Count; i++)
+            {
+                Pawn p = stranded[i];
+                IntVec3 target = bands.Translate(p.Position, bands.surfaceBand);
+                if (!target.InBounds(map) || !surface.Contains(target))
+                {
+                    target = surface.CenterCell;
+                }
+                if (!TryFindStartCell(map, surface, target, requireApron: false, out IntVec3 landing))
+                {
+                    landing = target;
+                }
+                p.Position = landing;
+                p.Notify_Teleported(false, false);
+            }
+            // Warning, not Dev: this firing means the upstream clamp let something through,
+            // and it is the only trace that would otherwise exist.
+            Log.Warning(ABLog.Tag + " V2: rescued " + stranded.Count + " player pawn(s) that"
+                + " generated outside the surface band; they would have been destroyed by"
+                + " band carving. Start spot was " + (MapGenerator.PlayerStartSpotValid
+                    ? MapGenerator.PlayerStartSpot.ToString() : "invalid") + ".");
+        }
+
+        /// <summary>Post-generation correction of the start spot, kept as a safety net now
+        /// that the spot is clamped before ScenParts runs. Still load-bearing for consumers
+        /// that read it AFTER generation - Game.InitNewGame jumps the camera to it.</summary>
         private static void FixPlayerStartSpot(Map map, ABBandMap bands)
         {
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
