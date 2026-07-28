@@ -151,7 +151,11 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!LevelCensus.AnyLevelColumns && !ABBands.Banded(__instance?.caster?.Map))
+                // Was `!LevelCensus.AnyLevelColumns && !ABBands.Banded(map)`. The census half
+                // was V1's "does any pocket-level column exist" gate; with V1 deleted the band
+                // check is the whole answer, and it is the cheaper of the two anyway (a CWT
+                // lookup, no map iteration).
+                if (!ABBands.Banded(__instance?.caster?.Map))
                 {
                     return true;
                 }

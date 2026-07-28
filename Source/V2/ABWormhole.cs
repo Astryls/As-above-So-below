@@ -326,8 +326,42 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<RegionAndRoomUpdater, Map> MapRef =
             AccessTools.FieldRefAccess<RegionAndRoomUpdater, Map>("map");
 
-        private static void Postfix(RegionAndRoomUpdater __instance)
+        /// <summary>
+        /// Gate the re-arm on a rebuild ACTUALLY being due.
+        ///
+        /// TryRebuildDirtyRegionsAndRooms is called constantly and early-outs on
+        /// !regionDirtyer.AnyDirty - measured at 4,763,123 calls over a 2000-frame window
+        /// (~2381 per frame). Re-arming on every one of those no-op calls cost 0.34 ms/frame,
+        /// 18% of the mod's entire profiled cost, to redo work nothing had undone.
+        ///
+        /// AnythingToRebuild is vanilla's own public predicate for the same question
+        /// (AnyDirty || !initialized), so it covers the first-time RebuildAllRegionsAndRooms
+        /// path as well - that one also wipes synthetic links despite AnyDirty being false.
+        /// Sampled in a PREFIX because the method calls SetAllClean() before returning, so by
+        /// postfix time the answer is always false.
+        ///
+        /// Deliberately permissive: re-arming when no rebuild happened is merely wasteful
+        /// (RearmAll is idempotent), while missing a rebuild silently severs every wormhole.
+        /// </summary>
+        private static void Prefix(RegionAndRoomUpdater __instance, out bool __state)
         {
+            __state = false;
+            try
+            {
+                __state = __instance.AnythingToRebuild;
+            }
+            catch
+            {
+                __state = true; // unsure -> re-arm, never risk a severed link
+            }
+        }
+
+        private static void Postfix(RegionAndRoomUpdater __instance, bool __state)
+        {
+            if (!__state)
+            {
+                return;
+            }
             try
             {
                 ABWormhole.RearmAll(MapRef(__instance));

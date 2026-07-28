@@ -9,49 +9,23 @@ using Verse.Noise;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Fills the basement with solid mineable rock matching the surface tile's
-    /// natural rock types, blended with per-map Perlin noise. The engine already
-    /// roofed every cell with thick rock (MapGeneratorDef.isUnderground), we add
-    /// the walls, the rough terrain under them, and full fog.
+    /// Rock and ore placement shared by V2's band generation.
+    ///
+    /// RESCUED FROM V1. These two helpers were the only things V2 still needed from the
+    /// 42.6k-line V1 tree - they lived inside Levels/GenStep_ABSolidRock.cs next to a GenStep
+    /// that V2 does not use, so deleting V1 wholesale would have taken them with it. Moved
+    /// here verbatim (visibility widened from internal to public is unnecessary - same
+    /// assembly - so they stay internal).
+    ///
+    /// Callers: ABBandedGeneration (basement fill) and ABSkyBandGen (mountain stone), both of
+    /// which want the surface tile's real geology rather than a single rock type.
     /// </summary>
-    public class GenStep_ABSolidRock : GenStep
-    {
-        public override int SeedPart => 762195841;
-
-        public override void Generate(Map map, GenStepParams parms)
-        {
-            List<ThingDef> rocks = Find.World.NaturalRockTypesIn(map.Tile).ToList();
-            if (rocks.Count == 0)
-            {
-                rocks.Add(ThingDefOf.Sandstone);
-            }
-
-            List<Perlin> noises = ABRockGen.MakeNoises(rocks.Count);
-
-            TerrainGrid terrainGrid = map.terrainGrid;
-            foreach (IntVec3 c in map.AllCells)
-            {
-                ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
-                TerrainDef terrain = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
-                terrainGrid.SetTerrain(c, terrain);
-                GenSpawn.Spawn(rock, c, map);
-            }
-
-            map.fogGrid.Refog(CellRect.WholeMap(map));
-
-            // Ore veins throughout the fill so the basement is worth mining.
-            // Density from settings (applies to newly generated basements).
-            ABOreGen.ScatterOres(map, null,
-                Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f));
-        }
-    }
-
-    /// <summary>Scatters mineable ore lumps into natural rock, weighted by each
-    /// ore's vanilla scatter commonality so modded ores participate
-    /// automatically. Only ever replaces natural rock edifices: stairs,
-    /// landings, and already-placed lumps are untouched. Null candidates means
-    /// the whole map (the basement fill); the sky pass hands in its mountain
-    /// wall cells.</summary>
+    /// <remarks>
+    /// Ore lumps are weighted by each ore's vanilla scatter commonality so modded ores
+    /// participate automatically. Only ever replaces natural rock edifices: stairs, landings
+    /// and already-placed lumps are untouched. Null candidates means the whole map (the
+    /// basement fill); the sky pass hands in its mountain wall cells.
+    /// </remarks>
     internal static class ABOreGen
     {
         internal static void ScatterOres(Map map, List<IntVec3> candidates, float lumpsPer10kCells)
