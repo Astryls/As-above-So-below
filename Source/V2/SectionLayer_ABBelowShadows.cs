@@ -1,11 +1,68 @@
 using System;
 using System.Collections.Generic;
+using HarmonyLib;
 using RimWorld;
 using UnityEngine;
 using Verse;
 
 namespace AsAboveSoBelow
 {
+    /// <summary>
+    /// THE reason below-shadows were invisible, and it was never in our own layers.
+    ///
+    /// SectionLayer_Terrain does this:
+    ///     GetSubMesh(terrainDef.dontRender ? MatBases.ShadowMask : GetMaterialFor(...))
+    ///
+    /// ShadowMask is the material MapDrawLayer_ExteriorLightingOverlay stamps over the void
+    /// OUTSIDE the map - it suppresses shadow and lighting rendering. The only vanilla
+    /// terrain that is dontRender is Odyssey's Space, where that behaviour is exactly
+    /// right: no shadows should fall on the void.
+    ///
+    /// AB_OpenAir is also dontRender (that is what makes it see-through), so vanilla was
+    /// stamping a shadow-suppressing mask over EVERY open-air cell - precisely the cells
+    /// the see-below view draws into. The shadow geometry was present the whole time
+    /// (verified: 220 verts, finalized, render queue 3175, above terrain and plants) and
+    /// was being masked out at composite time.
+    ///
+    /// Diagnosis note: this survived five rounds of fixes because every symptom pointed
+    /// inward. It was only isolated by toggling all of our own below layers off and finding
+    /// shadows STILL absent, which cleared our code entirely.
+    /// </summary>
+    [HarmonyPatch(typeof(SectionLayer_Terrain), nameof(SectionLayer_Terrain.Regenerate))]
+    public static class Patch_SectionLayer_Terrain_ABUnmaskShadows
+    {
+        private static readonly AccessTools.FieldRef<SectionLayer, Section> SectionRef =
+            AccessTools.FieldRefAccess<SectionLayer, Section>("section");
+
+        private static void Postfix(SectionLayer_Terrain __instance)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Rendering))
+                {
+                    return;
+                }
+                Map map = SectionRef(__instance)?.map;
+                if (map == null || !ABBands.Banded(map))
+                {
+                    return;
+                }
+                List<LayerSubMesh> subs = __instance.subMeshes;
+                for (int i = 0; i < subs.Count; i++)
+                {
+                    if (subs[i].material == MatBases.ShadowMask)
+                    {
+                        subs[i].disabled = true;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: shadow-unmask postfix threw: " + e, 762195874);
+            }
+        }
+    }
+
     /// <summary>
     /// V2 see-below: the sun's cast shadows from the band underneath.
     ///
@@ -105,28 +162,30 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        // NOTE: deliberately NOT masked on "is this cell see-through".
+                        // Masked on "is this cell, or any neighbour, see-through".
                         //
-                        // A shadow is emitted at its CASTER and stretched by the shader, so
-                        // masking on the caster's cell hides exactly the shadows that matter
-                        // most: mountain rock sits under an opaque mountain cap, but the
-                        // shadow it throws lands on open ground that IS visible from above.
-                        // Requiring the caster to be see-through meant no mountain shadow
-                        // ever reached the sky view.
+                        // Neither extreme works. Requiring the CASTER's own cell to be
+                        // see-through kills every mountain shadow, because mountain rock
+                        // sits under an opaque cap while the shadow it throws lands on open
+                        // ground. Dropping the mask entirely makes every rock face inside
+                        // the mass cast too - most visibly the walls of CAVES, whose skirts
+                        // then hatch diagonal streaks all over the mountain cap.
                         //
-                        // The cost is that a shadow cast under a rooftop or cap can bleed
-                        // onto it. Landing-cell masking is not possible while the shader
-                        // owns the displacement.
+                        // The neighbour test splits them correctly: rock at the mountain's
+                        // outer edge touches open ground and casts, while cave walls and
+                        // deep interior rock are surrounded by cap and stay silent. It also
+                        // matches how the geometry behaves - AddSkirt only emits a side
+                        // whose neighbour is shorter, so a caster with no see-through
+                        // neighbour has nothing visible to contribute anyway.
+                        if (!AnySeeThroughAround(map, bands, terrain, air, here))
+                        {
+                            continue;
+                        }
                         IntVec3 below = new IntVec3(x, 0, z - slot);
                         if (!below.InBounds(map) || bands.InGutter(below) || fog.IsFogged(below))
                         {
                             continue;
                         }
-                        // Things carrying their own shadowData (trees, bushes, most items)
-                        // cast via Printer_Shadow rather than the staticSunShadowHeight
-                        // path below. Emit them here, at the translated centre.
-                        EmitThingShadows(map, below, slot, ref emitted);
-
                         Building b = edifices[indices.CellToIndex(below)];
                         if (b == null || !(b.def.staticSunShadowHeight > 0f))
                         {
@@ -176,43 +235,24 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Re-emits shadowData shadows for the things one band down.
-        ///
-        /// Vanilla prints these from inside each thing's own Print (Plant.Print ends with a
-        /// Printer_Shadow call, Graphic.Print does the same via ShadowGraphic), which is
-        /// why they land in whichever layer printed the thing. Doing it explicitly here
-        /// keeps below shadows in the dedicated shadow layer where the whole-map boundary
-        /// and per-draw bounds refresh apply to them.</summary>
-        private void EmitThingShadows(Map map, IntVec3 below, int slot, ref bool emitted)
+        /// <summary>True when this cell or any of its eight neighbours is open air on this
+        /// band - i.e. somewhere the shadow could actually be seen from up here.</summary>
+        private static bool AnySeeThroughAround(Map map, ABBandMap bands, TerrainGrid terrain,
+            TerrainDef air, IntVec3 c)
         {
-            List<Thing> things = map.thingGrid.ThingsListAtFast(below);
-            for (int i = 0; i < things.Count; i++)
+            for (int i = 0; i < 9; i++)
             {
-                Thing t = things[i];
-                ShadowData shadow = t.def?.graphicData?.shadowData;
-                if (shadow == null || t.Position != below)
+                IntVec3 n = i == 8 ? c : c + GenAdj.AdjacentCells[i];
+                if (!n.InBounds(map) || bands.InGutter(n) || bands.BandOf(n) <= 0)
                 {
                     continue;
                 }
-                DrawerType drawer = t.def.drawerType;
-                if (drawer != DrawerType.MapMeshOnly && drawer != DrawerType.MapMeshAndRealTime)
+                if (terrain.TerrainAt(n) == air)
                 {
-                    continue;
+                    return true;
                 }
-                // Plants scale their shadow with growth, exactly as Plant.Print does.
-                float scale = 1f;
-                if (t is Plant plant && plant.def.plant != null)
-                {
-                    scale = plant.def.plant.visualSizeRange.LerpThroughRange(plant.Growth);
-                }
-                Vector3 center = t.TrueCenter() + shadow.offset * scale;
-                center.z += slot;
-                center.y = AltitudeLayer.Shadows.AltitudeFor();
-                // PrintShadow takes the LAYER (it resolves the SunShadowFade submesh
-                // itself), not the submesh we built the staticSunShadowHeight geometry in.
-                Printer_Shadow.PrintShadow(this, center, shadow.volume * scale, Rot4.North);
-                emitted = true;
             }
+            return false;
         }
 
         private static void AddSkirt(LayerSubMesh sub, Map map, Building[] edifices,
