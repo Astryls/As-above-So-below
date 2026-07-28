@@ -75,8 +75,13 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // ClearSubMeshes, not sub.Clear: this layer ends up owning TWO submeshes -
+            // SunShadow for the staticSunShadowHeight geometry built here, and SunShadowFade
+            // which Printer_Shadow creates for shadowData things. FinalizeMesh finalizes
+            // every submesh, so clearing only one leaves the other already-finalized on the
+            // next regeneration, logging "Finalizing mesh which is already finalized".
+            ClearSubMeshes(MeshParts.All);
             LayerSubMesh sub = GetSubMesh(MatBases.SunShadow);
-            sub.Clear(MeshParts.All);
             try
             {
                 int slot = bands.Slot;
@@ -100,10 +105,18 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        if (terrain.TerrainAt(here) != air)
-                        {
-                            continue; // opaque from up here
-                        }
+                        // NOTE: deliberately NOT masked on "is this cell see-through".
+                        //
+                        // A shadow is emitted at its CASTER and stretched by the shader, so
+                        // masking on the caster's cell hides exactly the shadows that matter
+                        // most: mountain rock sits under an opaque mountain cap, but the
+                        // shadow it throws lands on open ground that IS visible from above.
+                        // Requiring the caster to be see-through meant no mountain shadow
+                        // ever reached the sky view.
+                        //
+                        // The cost is that a shadow cast under a rooftop or cap can bleed
+                        // onto it. Landing-cell masking is not possible while the shader
+                        // owns the displacement.
                         IntVec3 below = new IntVec3(x, 0, z - slot);
                         if (!below.InBounds(map) || bands.InGutter(below) || fog.IsFogged(below))
                         {
