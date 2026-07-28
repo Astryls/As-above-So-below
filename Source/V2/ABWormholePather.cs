@@ -41,8 +41,20 @@ namespace AsAboveSoBelow
         /// cross a band on foot, short enough that a stranded record cannot linger.</summary>
         private const int TransitTimeoutTicks = 4000;
 
-        /// <summary>How close the pawn must get to the near anchor to be carried across.</summary>
-        private const int ArriveRadius = 2;
+        /// <summary>How far from the far anchor a transiting pawn may be set down.</summary>
+        private const int LandingRadius = 2;
+
+        /// <summary>How close the pawn must get to the near anchor to be carried across.
+        ///
+        /// Deliberately LandingRadius + 1, not an independent number. Pawns that have already
+        /// crossed are set down within LandingRadius of the anchor, so they occupy exactly the
+        /// cells the next pawn wants to walk through - which makes that pawn come to rest up
+        /// to LandingRadius cells short. An arrival test tighter than that rejects a pawn that
+        /// is standing as close as it can physically get, the transit never completes, the job
+        /// re-issues, and the stairwell jams. Observed as:
+        ///   ARRIVE-MISMATCH Chewy at (92, 0, 659) expected (90, 0, 661)
+        /// where the pawn was 2.83 cells away - blocked by a pawn that had just landed.</summary>
+        private const int ArriveRadius = LandingRadius + 1;
 
         private static readonly Dictionary<int, Transit> pending = new Dictionary<int, Transit>();
 
@@ -185,16 +197,54 @@ namespace AsAboveSoBelow
             return null;
         }
 
-        /// <summary>Move the pawn to the far anchor and resume toward the real destination.</summary>
+        /// <summary>
+        /// Where a transiting pawn should land on the far side.
+        ///
+        /// NOT simply the far anchor's own cell. Every transit used to teleport onto that one
+        /// cell, so whenever two or more pawns crossed at around the same time they stacked on
+        /// top of each other and read as a "clump" at the stairs - and because the anchor is a
+        /// Building_Door subclass, a pawn parked on it is standing in a doorway, blocking the
+        /// next arrival and any normal traffic through the stairwell. A single drafted pawn
+        /// never showed it, which is exactly why it survived this long.
+        ///
+        /// Prefer any free standable cell within a couple of tiles, constrained to the SAME
+        /// BAND so a landing can never be placed into the gutter or through a seam. Falling
+        /// back to the anchor when nothing is free keeps the old behaviour as a last resort:
+        /// a stacked pawn is bad, a failed transit is worse.
+        /// </summary>
+        private static IntVec3 LandingCell(Pawn pawn, Building_Door far)
+        {
+            IntVec3 anchor = far.Position;
+            Map map = far.Map;
+            if (map == null)
+            {
+                return anchor;
+            }
+            if (CellFinder.TryFindRandomCellNear(anchor, map, LandingRadius,
+                    c => c.InBounds(map)
+                         && c != anchor
+                         && c.Standable(map)
+                         && c.GetFirstPawn(map) == null
+                         && ABBands.SameBand(map, c, anchor),
+                    out IntVec3 spot))
+            {
+                return spot;
+            }
+            return anchor;
+        }
+
+        /// <summary>Move the pawn to the far side and resume toward the real destination.</summary>
         private static void Carry(Pawn pawn, Transit t)
         {
+            IntVec3 landing = LandingCell(pawn, t.far);
             ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
-                + " -> " + t.far.Position + "; resuming to " + t.realDest.Cell);
+                + " -> " + landing + " (anchor " + t.far.Position + ")"
+                + "; resuming to " + t.realDest.Cell);
             // Stop tracking: the pawn's NEXT arrival (at the real destination, just after
             // this) would otherwise trip the ARRIVED-NO-PENDING diagnostic and read as a
             // failure when it is simply the journey finishing normally.
             everSegmented.Remove(pawn.thingIDNumber);
-            pawn.Position = t.far.Position;
+            pawn.Position = landing;
             pawn.Notify_Teleported(false, true);
             // The real destination was captured when the trip STARTED, and the walk to the
             // stairwell takes time - the target can die, be hauled away or be deconstructed
@@ -246,28 +296,36 @@ namespace AsAboveSoBelow
             // consumed, vanilla completed the leg, the job re-issued StartPath toward the
             // far anchor, segmentation ran again - and the pawn walked into the stairs over
             // and over without ever going up.
-            if (pawn.Position != t.near.Position
-                && !pawn.Position.AdjacentTo8WayOrInside(t.near))
+            // Same radius the tick sweep uses. These two MUST agree: they are the same
+            // question asked from two different triggers, and when they disagreed the sweep
+            // accepted pawns this path rejected, so whether a transit completed depended on
+            // which trigger happened to fire first.
+            if (!pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
             {
                 ABV2Debug.Transit("ARRIVE-MISMATCH " + pawn.LabelShort + " at "
-                    + pawn.Position + " expected " + t.near.Position);
+                    + pawn.Position + " expected within " + ArriveRadius
+                    + " of " + t.near.Position);
                 return false; // arrived somewhere else; not our transit
             }
-
 
             // Clear BEFORE re-dispatching: StartPath re-enters TrySegment, and after the
             // teleport the pawn is in the destination band, so it resolves as an
             // ordinary same-band path.
             Clear(pawn);
 
-            pawn.Position = t.far.Position;
+            // Same landing rule as the tick sweep - this path had its own copy of the
+            // teleport and kept dropping every pawn onto the anchor cell itself, so half the
+            // transits still stacked even after the sweep was fixed.
+            IntVec3 landing = LandingCell(pawn, t.far);
+            pawn.Position = landing;
             // endCurrentJob:false - the job is mid-flight and must survive the hop.
             pawn.Notify_Teleported(false, true);
 
             if (t.realDest.IsValid && !pawn.Position.Equals(t.realDest.Cell))
             {
                 ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
-                    + " -> " + t.far.Position + "; resuming to " + t.realDest.Cell);
+                    + " -> " + landing + " (anchor " + t.far.Position + ")"
+                    + "; resuming to " + t.realDest.Cell);
                 pather.StartPath(t.realDest, t.realPeMode);
                 return true;
             }
