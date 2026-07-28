@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AsAboveSoBelow
 {
@@ -60,6 +61,54 @@ namespace AsAboveSoBelow
         public static int PairCount(Map map)
         {
             return map != null && byMap.TryGetValue(map.uniqueID, out List<Pair> l) ? l.Count : 0;
+        }
+
+        /// <summary>Full state of every wormhole on this map: whether each end resolved to a
+        /// Portal region, whether the synthetic link is actually present in BOTH regions'
+        /// link lists, and whether vanilla reachability agrees the ends connect.
+        ///
+        /// The last line is the one that matters: if CanReach is false the link is not
+        /// armed, and every cross-band order will be rejected before it starts - a pawn told
+        /// to use the stairs simply stands there.</summary>
+        public static string DebugDump(Map map)
+        {
+            if (map == null)
+            {
+                return "no map";
+            }
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            if (!byMap.TryGetValue(map.uniqueID, out List<Pair> list) || list.Count == 0)
+            {
+                sb.AppendLine("NO WORMHOLE PAIRS REGISTERED on this map.");
+                return sb.ToString();
+            }
+            sb.AppendLine("wormhole pairs: " + list.Count);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Pair p = list[i];
+                sb.AppendLine("  [" + i + "] a=" + (p.a != null ? p.a.Position.ToString() : "null")
+                    + " spawned=" + (p.a != null && p.a.Spawned)
+                    + "  b=" + (p.b != null ? p.b.Position.ToString() : "null")
+                    + " spawned=" + (p.b != null && p.b.Spawned));
+                if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
+                {
+                    continue;
+                }
+                Region ra = map.regionGrid.GetValidRegionAt_NoRebuild(p.a.Position);
+                Region rb = map.regionGrid.GetValidRegionAt_NoRebuild(p.b.Position);
+                sb.AppendLine("      regionA=" + (ra != null ? ra.type.ToString() : "NULL")
+                    + "  regionB=" + (rb != null ? rb.type.ToString() : "NULL")
+                    + "   (both MUST be Portal)");
+                bool armed = p.link != null && ra != null && rb != null
+                    && ra.links.Contains(p.link) && rb.links.Contains(p.link);
+                sb.AppendLine("      link armed = " + armed);
+                bool reach = map.reachability.CanReach(p.a.Position, p.b.Position,
+                    PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors, Danger.Deadly));
+                sb.AppendLine("      CanReach across = " + reach + "   (MUST be true)");
+                sb.AppendLine("      isDoorA=" + (p.a.Position.GetDoor(map) != null)
+                    + " isDoorB=" + (p.b.Position.GetDoor(map) != null));
+            }
+            return sb.ToString();
         }
 
         public static void Link(Building_Door a, Building_Door b)

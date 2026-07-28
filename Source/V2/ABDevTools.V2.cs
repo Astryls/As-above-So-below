@@ -41,7 +41,7 @@ namespace AsAboveSoBelow
                 }
                 sb.AppendLine("current view band: " + ABBandView.CurrentBand(map)
                     + " (level " + ABBandView.CurrentLevel(map) + ")");
-                sb.AppendLine("wormhole pairs: " + ABWormhole.PairCount(map));
+                sb.Append(ABWormhole.DebugDump(map));
             }
             Log.Warning(ABLog.Tag + " V2 band info:\n" + sb);
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);

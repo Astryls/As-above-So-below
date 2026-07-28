@@ -171,6 +171,57 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
+    /// Where the shooter LOOKS.
+    ///
+    /// Facing is derived from the target's real cell, which for a cross-band target is a
+    /// whole Slot (256 cells) away in +z or -z. The pawn therefore snaps to face straight
+    /// north or south regardless of where the target actually is relative to the shaft -
+    /// the "shoots straight down" report. Facing the target TRANSLATED into the shooter's
+    /// own band gives the true horizontal bearing, so the pawn turns toward the hole it is
+    /// firing through.
+    /// </summary>
+    [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.FaceTarget))]
+    public static class Patch_RotationTracker_ABCrossBandFacing
+    {
+        private static readonly AccessTools.FieldRef<Pawn_RotationTracker, Pawn> PawnRef =
+            AccessTools.FieldRefAccess<Pawn_RotationTracker, Pawn>("pawn");
+
+        private static void Prefix(Pawn_RotationTracker __instance, ref LocalTargetInfo target)
+        {
+            try
+            {
+                if (!target.IsValid)
+                {
+                    return;
+                }
+                Pawn pawn = PawnRef(__instance);
+                if (pawn == null || !pawn.Spawned)
+                {
+                    return;
+                }
+                ABBandMap bands = ABBands.CompOf(pawn.Map);
+                if (bands == null || !bands.Banded)
+                {
+                    return;
+                }
+                int bandPawn = bands.BandOf(pawn.Position);
+                IntVec3 targetCell = target.Cell;
+                if (bands.BandOf(targetCell) == bandPawn)
+                {
+                    return;
+                }
+                // Rewrite to a CELL target in our own band: a Thing target would resolve
+                // its position again and undo this.
+                target = new LocalTargetInfo(bands.Translate(targetCell, bandPawn));
+            }
+            catch
+            {
+                // Facing is cosmetic; never let it break the rotation tracker.
+            }
+        }
+    }
+
+    /// <summary>
     /// Projectile visuals. Without this the bullet is launched from the shooter's real
     /// position and has to physically cross a whole band - 256 cells of gutter and terrain -
     /// which both looks absurd and takes seconds to arrive.
