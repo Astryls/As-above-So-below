@@ -15,10 +15,6 @@ namespace AsAboveSoBelow
         {
         }
 
-        // Frame stamp so the multiple OnGUI passes per frame drive at most one
-        // shift+wheel level switch. Session state, not scribed.
-        private int lastScrollLevelFrame = -1;
-
         public override void FinalizeInit()
         {
             base.FinalizeInit();

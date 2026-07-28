@@ -21,11 +21,8 @@
     <defaultKeyCodeA>PageDown</defaultKeyCodeA>
   </KeyBindingDef>
 
-  <KeyBindingDef>
-    <defName>AB_CameraLevelLock</defName>
-    <category>AB_Keys</category>
-    <label>toggle camera level lock</label>
-    <defaultKeyCodeA>End</defaultKeyCodeA>
-  </KeyBindingDef>
+  <!-- AB_CameraLevelLock removed with V1: the camera lock existed because pocket levels
+       were separate Maps and switching one could yank the view. V2's camera is clamped to
+       the current band by ABBandView, so there is nothing to lock. -->
 
 </Defs>

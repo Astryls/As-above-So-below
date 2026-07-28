@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Dedicated dirty flag for the sky-side below-things layer: lower-map
-       thing/building changes mirror to exactly this flag on the sky drawer,
-       so only SectionLayer_ABBelowThings regenerates (never the sky map's
-       own content layers). -->
+  <!-- Dirty flag consumed by SectionLayer_ABMountainCap's relevantChangeTypes.
+       Originally introduced for V1's sky-side below-things layer; the mountain cap
+       still lists it so a mirrored below-content change can repaint the cap without
+       dirtying every other layer in the section. -->
   <MapMeshFlagDef>
     <defName>AB_BelowThings</defName>
   </MapMeshFlagDef>
