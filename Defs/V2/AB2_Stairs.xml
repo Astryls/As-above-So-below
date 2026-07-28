@@ -43,14 +43,33 @@
       <Flammability>0</Flammability>
       <Mass>35</Mass>
     </statBases>
+    <building>
+      <!-- DoorBase sets blueprintClass=Blueprint_Door plus a Door_Blueprint texture, so
+           every vertical link rendered as a generic door outline while being placed - the
+           2x2 staircase art only appeared once the thing was built. Blueprint_Build is the
+           ordinary building blueprint; each def below supplies its own graphic, and
+           useBlueprintGraphicAsGhost makes the placement ghost match too. Same shape vanilla
+           uses for the 2x1 Ornate Door. -->
+      <blueprintClass>Blueprint_Build</blueprintClass>
+    </building>
+    <useBlueprintGraphicAsGhost>true</useBlueprintGraphicAsGhost>
   </ThingDef>
 
   <!-- ============================ stairs ============================ -->
 
+  <!-- SIZE MATCHES THE ART.
+
+       These were drawSize (2,2) with no <size>, so a 2x2 staircase sat on a ONE CELL
+       footprint. A Building_Door is enterable only from its four cardinal neighbours, so the
+       visual overhang covered cells that were solid to the pathfinder: whether a pawn got
+       through depended on which side it approached from, which is why the stairs worked
+       "sometimes". A real 2x2 footprint gives eight cardinal approach cells instead of four
+       and makes the walkable shape match what the player sees. -->
   <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_StairsDown</defName>
     <label>stairs down</label>
     <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <size>(2,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
@@ -59,6 +78,13 @@
         <enabled>false</enabled>
       </damageData>
     </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_StairsDown</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(2,2)</drawSize>
+      </blueprintGraphicData>
+    </building>
     <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
@@ -72,6 +98,7 @@
     <defName>AB2_StairsUp</defName>
     <label>stairs up</label>
     <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <size>(2,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
@@ -80,11 +107,99 @@
         <enabled>false</enabled>
       </damageData>
     </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_StairsUp</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(2,2)</drawSize>
+      </blueprintGraphicData>
+    </building>
     <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_StairsDown</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <!-- ======================= grand staircase ======================= -->
+
+  <!-- The wide option, and the answer to stairwell congestion. At 3x3 it presents TWELVE
+       cardinal approach cells against the plain staircase's eight and the ladder's four, so
+       arriving and departing pawns stop contending for the same tile.
+
+       Transit itself is instantaneous (the wormhole teleports), so "grand" buys throughput
+       and looks the part - it does not buy speed. V1's version scaled travel time with
+       quality; there is no travel time to scale here.
+
+       NOTE: V1 shipped this at size (2,2) under (3,3) art - the same footprint/art mismatch
+       that made the plain staircase unreliable, just less severe. Matched properly here.
+       9 door cells is also well beyond vanilla's largest door (the 2x1 Ornate Door), so if
+       many-Portal-regions-per-district ever misbehaves this is where it will show; the
+       "links armed = N/M cells" line in AB2: band info reports it directly. -->
+  <ThingDef ParentName="AB2_LinkBase" Name="AB2_GrandBase" Abstract="True">
+    <size>(3,3)</size>
+    <costStuffCount>300</costStuffCount>
+    <statBases>
+      <WorkToBuild>12000</WorkToBuild>
+      <Flammability>0</Flammability>
+      <Mass>120</Mass>
+    </statBases>
+  </ThingDef>
+
+  <ThingDef ParentName="AB2_GrandBase">
+    <defName>AB2_GrandStairsDown</defName>
+    <label>grand staircase down</label>
+    <description>A broad staircase leading down. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the basement level below and creates a matching staircase there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_GrandStairsDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(3,3)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_GrandStairsDown</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(3,3)</drawSize>
+      </blueprintGraphicData>
+    </building>
+    <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABBandStairsExt">
+        <levelDelta>-1</levelDelta>
+        <counterpartDef>AB2_GrandStairsUp</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB2_GrandBase">
+    <defName>AB2_GrandStairsUp</defName>
+    <label>grand staircase up</label>
+    <description>A broad staircase leading up. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the sky level above and creates a matching staircase there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_GrandStairsUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(3,3)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_GrandStairsUp</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(3,3)</drawSize>
+      </blueprintGraphicData>
+    </building>
+    <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABBandStairsExt">
+        <levelDelta>1</levelDelta>
+        <counterpartDef>AB2_GrandStairsDown</counterpartDef>
       </li>
     </modExtensions>
   </ThingDef>
@@ -102,7 +217,10 @@
   <ThingDef ParentName="AB2_LadderBase">
     <defName>AB2_LadderDown</defName>
     <label>ladder down</label>
-    <description>A cheap ladder leading down. Completing it opens the basement level below and creates a matching ladder there.</description>
+    <description>A cheap ladder leading down. Completing it opens the basement level below and creates a matching ladder there. Cramped: only one cell wide, so traffic queues.</description>
+    <!-- Genuinely 1x1, and its art already matches - the ladder was never affected by the
+         size mismatch. Left explicit so the contrast with the staircases is deliberate. -->
+    <size>(1,1)</size>
     <graphicData>
       <texPath>Things/Building/AB_LadderDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
@@ -111,6 +229,13 @@
         <enabled>false</enabled>
       </damageData>
     </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_LadderDown</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(1,1)</drawSize>
+      </blueprintGraphicData>
+    </building>
     <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
@@ -123,7 +248,8 @@
   <ThingDef ParentName="AB2_LadderBase">
     <defName>AB2_LadderUp</defName>
     <label>ladder up</label>
-    <description>A cheap ladder leading up. Completing it opens the sky level above and creates a matching ladder there.</description>
+    <description>A cheap ladder leading up. Completing it opens the sky level above and creates a matching ladder there. Cramped: only one cell wide, so traffic queues.</description>
+    <size>(1,1)</size>
     <graphicData>
       <texPath>Things/Building/AB_LadderUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
@@ -132,6 +258,13 @@
         <enabled>false</enabled>
       </damageData>
     </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_LadderUp</texPath>
+        <graphicClass>Graphic_Multi</graphicClass>
+        <drawSize>(1,1)</drawSize>
+      </blueprintGraphicData>
+    </building>
     <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">

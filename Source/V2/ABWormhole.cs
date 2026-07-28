@@ -49,7 +49,17 @@ namespace AsAboveSoBelow
         {
             public Building_Door a;
             public Building_Door b;
-            public RegionLink link;
+
+            /// <summary>ONE LINK PER CELL PAIR, not one per building.
+            ///
+            /// RegionTypeUtility.IsOneCellRegion(Portal) is true: every door cell becomes its
+            /// OWN one-cell Portal region. A 2x1 stairwell is therefore two Portal regions at
+            /// each end, and linking only the building's Position cell leaves the other cell
+            /// conducting nothing - a pawn that happens to walk into that half finds no
+            /// connection, while the identical-looking cell beside it works. That is exactly
+            /// the "sometimes the stairs work" symptom, and it gets worse the larger the
+            /// footprint, so it had to be fixed before any multi-cell variant could exist.</summary>
+            public readonly List<RegionLink> links = new List<RegionLink>();
         }
 
         private static readonly Dictionary<int, List<Pair>> byMap = new Dictionary<int, List<Pair>>();
@@ -124,9 +134,22 @@ namespace AsAboveSoBelow
                 sb.AppendLine("      regionA=" + (ra != null ? ra.type.ToString() : "NULL")
                     + "  regionB=" + (rb != null ? rb.type.ToString() : "NULL")
                     + "   (both MUST be Portal)");
-                bool armed = p.link != null && ra != null && rb != null
-                    && ra.links.Contains(p.link) && rb.links.Contains(p.link);
-                sb.AppendLine("      link armed = " + armed);
+                // Reports links armed vs cells occupied. A multi-cell stairwell must have
+                // ONE link per cell pair; "3/4" means a quarter of the footprint conducts
+                // nothing and pawns entering that cell will find no connection.
+                int cells = p.a.OccupiedRect().Area;
+                int live = 0;
+                for (int li = 0; li < p.links.Count; li++)
+                {
+                    RegionLink l = p.links[li];
+                    if (l != null && l.RegionA != null && l.RegionB != null
+                        && l.RegionA.links.Contains(l) && l.RegionB.links.Contains(l))
+                    {
+                        live++;
+                    }
+                }
+                sb.AppendLine("      links armed = " + live + "/" + cells + " cells"
+                    + (live == cells ? "" : "   <-- PARTIAL, some cells conduct nothing"));
                 bool reach = map.reachability.CanReach(p.a.Position, p.b.Position,
                     PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors, Danger.Deadly));
                 sb.AppendLine("      CanReach across = " + reach + "   (MUST be true)");
@@ -186,13 +209,17 @@ namespace AsAboveSoBelow
 
         private static void TearDown(Pair p)
         {
-            if (p.link == null)
+            for (int i = 0; i < p.links.Count; i++)
             {
-                return;
+                RegionLink l = p.links[i];
+                if (l == null)
+                {
+                    continue;
+                }
+                l.RegionA?.links.Remove(l);
+                l.RegionB?.links.Remove(l);
             }
-            p.link.RegionA?.links.Remove(p.link);
-            p.link.RegionB?.links.Remove(p.link);
-            p.link = null;
+            p.links.Clear();
         }
 
         /// <summary>Re-create every synthetic link on this map whose regions have been
@@ -232,12 +259,74 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>The cell pairs joining two anchors, matched by position WITHIN each
+        /// building's own rect so rotation and multi-cell footprints line up. Returns false
+        /// when the two ends disagree on shape, which would otherwise silently link the wrong
+        /// cells together.</summary>
+        private static bool TryCellPairs(Pair p, List<KeyValuePair<IntVec3, IntVec3>> into)
+        {
+            into.Clear();
+            CellRect ra = p.a.OccupiedRect();
+            CellRect rb = p.b.OccupiedRect();
+            if (ra.Area != rb.Area)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: wormhole ends differ in size ("
+                    + ra.Area + " vs " + rb.Area + "); linking the first cell only.",
+                    762195901);
+                into.Add(new KeyValuePair<IntVec3, IntVec3>(p.a.Position, p.b.Position));
+                return true;
+            }
+            // Both rects walked in the same order, so cell i of one end maps to cell i of the
+            // other. Counterparts are spawned translated with matching rotation, so this is a
+            // straight positional correspondence.
+            List<IntVec3> ca = new List<IntVec3>(ra.Area);
+            foreach (IntVec3 c in ra) ca.Add(c);
+            int i = 0;
+            foreach (IntVec3 c in rb)
+            {
+                into.Add(new KeyValuePair<IntVec3, IntVec3>(ca[i], c));
+                i++;
+            }
+            return into.Count > 0;
+        }
+
+        private static readonly List<KeyValuePair<IntVec3, IntVec3>> tmpPairs =
+            new List<KeyValuePair<IntVec3, IntVec3>>();
+
         private static bool Rearm(Map map, Pair p)
         {
             if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
             {
                 return false;
             }
+            if (!TryCellPairs(p, tmpPairs))
+            {
+                return false;
+            }
+
+            // Still armed? Every cell pair must still hold a valid link in BOTH regions.
+            // Checked wholesale: a partially armed anchor is the failure mode this exists to
+            // prevent, so anything less than fully armed is torn down and rebuilt.
+            bool allArmed = p.links.Count == tmpPairs.Count;
+            if (allArmed)
+            {
+                for (int i = 0; i < p.links.Count; i++)
+                {
+                    RegionLink l = p.links[i];
+                    if (l == null || l.RegionA == null || !l.RegionA.valid
+                        || l.RegionB == null || !l.RegionB.valid
+                        || !l.RegionA.links.Contains(l) || !l.RegionB.links.Contains(l))
+                    {
+                        allArmed = false;
+                        break;
+                    }
+                }
+            }
+            if (allArmed)
+            {
+                return false;
+            }
+
             // NoRebuild: this runs INSIDE the region rebuild postfix, so asking for a
             // rebuild here would recurse.
             Region ra = map.regionGrid.GetValidRegionAt_NoRebuild(p.a.Position);
@@ -245,13 +334,6 @@ namespace AsAboveSoBelow
             if (ra == null || rb == null || ra == rb)
             {
                 return false;
-            }
-            if (p.link != null
-                && p.link.RegionA != null && p.link.RegionA.valid
-                && p.link.RegionB != null && p.link.RegionB.valid
-                && ra.links.Contains(p.link) && rb.links.Contains(p.link))
-            {
-                return false; // still armed
             }
             // REFUSE to arm unless both ends are Portal regions.
             //
@@ -274,17 +356,33 @@ namespace AsAboveSoBelow
 
             TearDown(p);
 
-            RegionLink link = new RegionLink();
-            // Synthetic span. Never handed to RegionLinkDatabase, so the hash cannot
-            // collide with a real edge link; it exists only so RegionCostCalculator and
-            // debug drawing have something non-degenerate to read.
-            link.span = new EdgeSpan(p.a.Position, SpanDirection.North, 1);
-            link.RegionA = ra;
-            link.RegionB = rb;
-            ra.links.Add(link);
-            rb.links.Add(link);
-            p.link = link;
-            return true;
+            for (int i = 0; i < tmpPairs.Count; i++)
+            {
+                IntVec3 ca = tmpPairs[i].Key;
+                IntVec3 cb = tmpPairs[i].Value;
+                Region rca = map.regionGrid.GetValidRegionAt_NoRebuild(ca);
+                Region rcb = map.regionGrid.GetValidRegionAt_NoRebuild(cb);
+                if (rca == null || rcb == null || rca == rcb)
+                {
+                    continue;
+                }
+                // Each cell must be its own Portal region; anything else would merge rooms.
+                if (rca.type != RegionType.Portal || rcb.type != RegionType.Portal)
+                {
+                    continue;
+                }
+                RegionLink link = new RegionLink();
+                // Synthetic span. Never handed to RegionLinkDatabase, so the hash cannot
+                // collide with a real edge link; it exists only so RegionCostCalculator and
+                // debug drawing have something non-degenerate to read.
+                link.span = new EdgeSpan(ca, SpanDirection.North, 1);
+                link.RegionA = rca;
+                link.RegionB = rcb;
+                rca.links.Add(link);
+                rcb.links.Add(link);
+                p.links.Add(link);
+            }
+            return p.links.Count > 0;
         }
 
         /// <summary>Best transit pair for travelling from one band to another. Minimises
