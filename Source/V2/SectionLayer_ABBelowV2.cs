@@ -136,22 +136,31 @@ namespace AsAboveSoBelow
                         // For UNEXPLORED ground, vanilla's own fog-of-war material goes over
                         // the backdrop, so a mountain the colony has not dug into reads as
                         // solid fog from above exactly as it does from the surface.
-                        AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
-                        if (foggedBelow)
+                        if (ABV2Debug.DrawBelowAirMask)
                         {
-                            AddQuad(GetSubMesh(MatBases.FogOfWar), c, fogAlt, OpaqueWhite);
+                            AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
+                            if (foggedBelow)
+                            {
+                                AddQuad(GetSubMesh(MatBases.FogOfWar), c, fogAlt, OpaqueWhite);
+                            }
+                            printed = true;
                         }
-                        printed = true;
                         continue;
                     }
 
-                    if (!PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt))
+                    if (ABV2Debug.DrawBelowTerrain
+                        && !PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt)
+                        && ABV2Debug.DrawBelowAirMask)
                     {
                         // Below terrain is itself dontRender: still needs a backdrop.
                         AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
                     }
                     printed = true;
 
+                    if (!ABV2Debug.DrawBelowThings)
+                    {
+                        continue;
+                    }
                     List<Thing> things = thingGrid.ThingsListAtFast(below);
                     for (int i = 0; i < things.Count; i++)
                     {

@@ -47,6 +47,105 @@ namespace AsAboveSoBelow
             Messages.Message("AB2: band info written to log.", MessageTypeDefOf.TaskCompletion, false);
         }
 
+        [DebugAction("As above", "AB2: bisect - toggle below terrain", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowTerrain()
+        {
+            ABV2Debug.DrawBelowTerrain = !ABV2Debug.DrawBelowTerrain;
+            V2ApplyBisect();
+        }
+
+        [DebugAction("As above", "AB2: bisect - toggle below things", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowThings()
+        {
+            ABV2Debug.DrawBelowThings = !ABV2Debug.DrawBelowThings;
+            V2ApplyBisect();
+        }
+
+        [DebugAction("As above", "AB2: bisect - toggle below air mask", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowAirMask()
+        {
+            ABV2Debug.DrawBelowAirMask = !ABV2Debug.DrawBelowAirMask;
+            V2ApplyBisect();
+        }
+
+        [DebugAction("As above", "AB2: bisect - toggle below lighting", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowLighting()
+        {
+            ABV2Debug.DrawBelowLighting = !ABV2Debug.DrawBelowLighting;
+            V2ApplyBisect();
+        }
+
+        private static void V2ApplyBisect()
+        {
+            Map map = Find.CurrentMap;
+            map?.mapDrawer?.RegenerateEverythingNow();
+            Messages.Message("AB2 bisect: " + ABV2Debug.StateSummary(),
+                MessageTypeDefOf.TaskCompletion, false);
+            Log.Warning(ABLog.Tag + " AB2 bisect: " + ABV2Debug.StateSummary());
+        }
+
+        [DebugAction("As above", "AB2: below layer report", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2BelowLayerReport()
+        {
+            Map map = Find.CurrentMap;
+            if (map == null)
+            {
+                return;
+            }
+            IntVec3 c = UI.MouseCell();
+            if (!c.InBounds(map))
+            {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("cell " + c + " band=" + ABBands.BandOf(map, c)
+                + " terrain=" + map.terrainGrid.TerrainAt(c).defName);
+            sb.AppendLine("DebugViewSettings.drawShadows=" + DebugViewSettings.drawShadows);
+
+            Section target = null;
+            foreach (Section sec in AllSectionsOf(map))
+            {
+                if (sec.CellRect.Contains(c))
+                {
+                    target = sec;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                sb.AppendLine("no section found for that cell");
+                Log.Warning(ABLog.Tag + " V2 below layer report:\n" + sb);
+                return;
+            }
+            sb.AppendLine("section botLeft=" + target.botLeft);
+            foreach (SectionLayer layer in SectionLayersOf(target))
+            {
+                string name = layer.GetType().Name;
+                bool ours = name.StartsWith("SectionLayer_ABBelow");
+                bool shadowy = name.Contains("Shadow");
+                if (!ours && !shadowy)
+                {
+                    continue;
+                }
+                sb.AppendLine(name + "  visible=" + layer.Visible
+                    + "  subMeshes=" + layer.subMeshes.Count);
+                for (int i = 0; i < layer.subMeshes.Count; i++)
+                {
+                    LayerSubMesh sm = layer.subMeshes[i];
+                    string mat = sm.material != null ? sm.material.name : "null";
+                    sb.AppendLine("    [" + i + "] verts=" + sm.verts.Count
+                        + " tris=" + sm.tris.Count
+                        + " finalized=" + sm.finalized
+                        + " disabled=" + sm.disabled
+                        + " queue=" + (sm.material != null ? sm.material.renderQueue.ToString() : "?")
+                        + " mat=" + mat);
+                }
+            }
+            Log.Warning(ABLog.Tag + " V2 below layer report:\n" + sb);
+            Messages.Message("AB2: below layer report written to log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: lighting report", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2LightingReport()
         {

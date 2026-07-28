@@ -48,7 +48,9 @@ namespace AsAboveSoBelow
                 | (ulong)MapMeshFlagDefOf.Terrain;
         }
 
-        public override bool Visible => ABGuard.On(ABGuard.Rendering) && DebugViewSettings.drawLightingOverlay;
+        public override bool Visible => ABGuard.On(ABGuard.Rendering)
+            && ABV2Debug.DrawBelowLighting
+            && DebugViewSettings.drawLightingOverlay;
 
         public override void Regenerate()
         {
