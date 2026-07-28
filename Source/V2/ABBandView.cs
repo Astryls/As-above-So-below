@@ -190,10 +190,19 @@ namespace AsAboveSoBelow
                     cachedFrame = Time.frameCount;
                     cachedActive = false;
                     Map map = Find.CurrentMap;
-                    // Gravship rendering encapsulates its own bounds into the view
-                    // downstream of this; leave that path alone rather than clipping a rect
-                    // it is about to extend for a different purpose.
-                    if (map != null && !WorldComponent_GravshipController.GravshipRenderInProgess
+                    // ONLY clip when free panning is actually enabled.
+                    //
+                    // With the band clamp active the camera can never leave the band, so the
+                    // clip is a guaranteed no-op - but it would still be feeding a rewritten
+                    // rect to every consumer of CurrentViewRect (sun shadows, the Burst cull
+                    // job, CameraDriver.IsVisible, mote and sound culling). There is no
+                    // reason to carry that risk for players who never turn the setting on.
+                    if (map != null
+                        && ABMod.Settings != null && ABMod.Settings.freeCameraPan
+                        // Gravship rendering encapsulates its own bounds into the view
+                        // downstream of this; leave that path alone rather than clipping a
+                        // rect it is about to extend for a different purpose.
+                        && !WorldComponent_GravshipController.GravshipRenderInProgess
                         && ABBandView.TryBandBounds(map, out float minZ, out float maxZ))
                     {
                         cachedActive = true;
@@ -211,13 +220,30 @@ namespace AsAboveSoBelow
                 {
                     return; // already inside the band - the common case, and free
                 }
+                // NEVER hand back an empty or inverted rect.
+                //
+                // The first version collapsed a fully off-band view to `maxZ = minZ - 1`,
+                // i.e. Height 0. That rect does not stay contained: MapDrawer feeds it
+                // through ExpandedBy(1), and SectionLayer_SunShadows.GetSunShadowsViewRect
+                // shifts its edges by the light vector and re-clips - so a degenerate rect
+                // propagates into vanilla geometry and the Burst cull job rather than
+                // simply drawing nothing. Clamping to a single valid row at the band edge
+                // draws just as little and stays a well-formed rect everywhere downstream.
                 CellRect r = __result;
-                r.minZ = Mathf.Max(r.minZ, lo2);
-                r.maxZ = Mathf.Min(r.maxZ, hi2);
-                // A fully off-band view must collapse to nothing, not invert.
-                if (r.maxZ < r.minZ)
+                if (r.maxZ < lo2)
                 {
-                    r.maxZ = r.minZ - 1;
+                    r.minZ = lo2;
+                    r.maxZ = lo2;
+                }
+                else if (r.minZ > hi2)
+                {
+                    r.minZ = hi2;
+                    r.maxZ = hi2;
+                }
+                else
+                {
+                    r.minZ = Mathf.Max(r.minZ, lo2);
+                    r.maxZ = Mathf.Min(r.maxZ, hi2);
                 }
                 __result = r;
             }
