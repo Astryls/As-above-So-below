@@ -64,6 +64,18 @@ namespace AsAboveSoBelow
         {
         }
 
+        /// <summary>Fires after the map is fully constructed on both new-game and load, which
+        /// is where the wormhole re-arm handler is attached. Registration is idempotent and
+        /// only meaningful on a banded map - an ordinary map has no synthetic links to lose.</summary>
+        public override void FinalizeInit()
+        {
+            base.FinalizeInit();
+            if (Banded)
+            {
+                ABWormholeRearmHook.Register(map);
+            }
+        }
+
         public bool Banded => bandCount > 1 && bandHeight > 0;
 
         /// <summary>Rows consumed per band including its gutter.</summary>

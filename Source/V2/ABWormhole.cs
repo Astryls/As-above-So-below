@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -316,60 +317,59 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
-    /// Synthetic links are wiped by RegionDirtyer on every region rebuild, so they are
-    /// re-armed immediately after the rebuild that destroyed them. This postfix is the
-    /// single point that keeps the wormhole alive.
+    /// Synthetic links are wiped by RegionDirtyer on every region rebuild, so they must be
+    /// re-armed immediately after the rebuild that destroyed them.
+    ///
+    /// NOT A HARMONY PATCH ANY MORE. This was a postfix on
+    /// RegionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms, which is called ~4,500 times per
+    /// frame and early-outs on !regionDirtyer.AnyDirty. Re-arming on every no-op call cost
+    /// 0.34 ms/frame. Gating it with a prefix that sampled AnythingToRebuild only recovered
+    /// 22% (0.339 -> 0.266 ms/frame), because the gate ADDED a second patch to an extremely
+    /// hot method and the residue was Harmony dispatch, not work.
+    ///
+    /// vanilla already publishes exactly the signal we want: MapEvents.RegionsRoomsChanged
+    /// is invoked on the LAST line of TryRebuildDirtyRegionsAndRooms, on the only path that
+    /// actually rebuilt (after SetAllClean and initialized = true). Subscribing costs nothing
+    /// on the millions of no-op calls and fires precisely when links have been wiped.
     /// </summary>
-    [HarmonyPatch(typeof(RegionAndRoomUpdater), nameof(RegionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms))]
-    public static class Patch_RegionAndRoomUpdater_ABRearmWormholes
+    public static class ABWormholeRearmHook
     {
-        private static readonly AccessTools.FieldRef<RegionAndRoomUpdater, Map> MapRef =
-            AccessTools.FieldRefAccess<RegionAndRoomUpdater, Map>("map");
+        /// <summary>Maps we have already subscribed, so a re-entrant or repeated
+        /// FinalizeInit cannot stack duplicate handlers on one map's event.</summary>
+        private static readonly ConditionalWeakTable<Map, object> hooked =
+            new ConditionalWeakTable<Map, object>();
 
-        /// <summary>
-        /// Gate the re-arm on a rebuild ACTUALLY being due.
-        ///
-        /// TryRebuildDirtyRegionsAndRooms is called constantly and early-outs on
-        /// !regionDirtyer.AnyDirty - measured at 4,763,123 calls over a 2000-frame window
-        /// (~2381 per frame). Re-arming on every one of those no-op calls cost 0.34 ms/frame,
-        /// 18% of the mod's entire profiled cost, to redo work nothing had undone.
-        ///
-        /// AnythingToRebuild is vanilla's own public predicate for the same question
-        /// (AnyDirty || !initialized), so it covers the first-time RebuildAllRegionsAndRooms
-        /// path as well - that one also wipes synthetic links despite AnyDirty being false.
-        /// Sampled in a PREFIX because the method calls SetAllClean() before returning, so by
-        /// postfix time the answer is always false.
-        ///
-        /// Deliberately permissive: re-arming when no rebuild happened is merely wasteful
-        /// (RearmAll is idempotent), while missing a rebuild silently severs every wormhole.
-        /// </summary>
-        private static void Prefix(RegionAndRoomUpdater __instance, out bool __state)
+        public static void Register(Map map)
         {
-            __state = false;
-            try
+            if (map?.events == null)
             {
-                __state = __instance.AnythingToRebuild;
+                return;
             }
-            catch
-            {
-                __state = true; // unsure -> re-arm, never risk a severed link
-            }
-        }
-
-        private static void Postfix(RegionAndRoomUpdater __instance, bool __state)
-        {
-            if (!__state)
+            if (hooked.TryGetValue(map, out _))
             {
                 return;
             }
             try
             {
-                ABWormhole.RearmAll(MapRef(__instance));
+                hooked.Add(map, new object());
             }
-            catch (Exception e)
+            catch (ArgumentException)
             {
-                Log.Error(ABLog.Tag + " V2 spike: rearm postfix threw: " + e);
+                return; // benign race; already registered
             }
+            // Captures the map, and MapEvents dies with the map, so there is nothing to
+            // unsubscribe - the handler becomes unreachable together with its map.
+            map.events.RegionsRoomsChanged += delegate
+            {
+                try
+                {
+                    ABWormhole.RearmAll(map);
+                }
+                catch (Exception e)
+                {
+                    Log.Error(ABLog.Tag + " V2: wormhole re-arm threw: " + e);
+                }
+            };
         }
     }
 }
