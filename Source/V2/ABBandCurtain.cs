@@ -41,10 +41,51 @@ namespace AsAboveSoBelow
         /// outside the current band - so a high altitude cannot hide real content.</summary>
         private static readonly float Altitude = AltitudeLayer.MetaOverlays.AltitudeFor();
 
+        /// <summary>Render queue, and the reason the curtain needed one.
+        ///
+        /// ALTITUDE IS NOT DRAW ORDER. MetaOverlays is already the highest AltitudeLayer
+        /// there is, yet the curtain still came out a different shade from RimWorld's own
+        /// out-of-map backdrop, and a different shade again at night. Sorting between
+        /// materials is decided by render QUEUE first; the y coordinate only breaks ties
+        /// within a queue. The lighting overlay sits at 3100 and the darkness/fog overlays
+        /// above that, so a curtain in the default transparent queue (~3000) was being
+        /// painted over by every one of them - it was picking up the map's night tint while
+        /// the engine backdrop, which is not part of the map, kept its flat colour.
+        ///
+        /// 3800 puts it after the lighting, darkness and fog overlays but still below UI,
+        /// so #1e1e1e stays exactly #1e1e1e at any hour.</summary>
+        private const int CurtainQueue = 3800;
+
+        /// <summary>#1e1e1e — deliberately NOT pure black.
+        ///
+        /// RimWorld already paints the area outside the map bounds with its own dark grey
+        /// backdrop. A pure-black curtain therefore reads as a distinct panel butted up
+        /// against that backdrop, and the seam between them is clearly visible whenever
+        /// both are on screen at once (which is most of the time when panning off a level).
+        /// Matching the engine's colour makes "off the edge of this level" and "off the
+        /// edge of the map" look like the same nothing, which is the intended read.</summary>
+        private static readonly Color CurtainColor = new Color32(30, 30, 30, 255);
+
         private static Material curtainMat;
 
-        private static Material Mat =>
-            curtainMat ?? (curtainMat = SolidColorMaterials.SimpleSolidColorMaterial(Color.black, true));
+        private static Material Mat
+        {
+            get
+            {
+                if (curtainMat == null)
+                {
+                    // Our own instance, not a shared cached one - the render queue is
+                    // overridden below and that must not leak into anything else using the
+                    // same colour. Plain solid colour, NOT the vertex-colour variant: the
+                    // quad's vertex colours are whatever MeshPool.plane10 ships with, and
+                    // multiplying by them is exactly how a "fixed" colour stops being fixed.
+                    curtainMat = SolidColorMaterials.NewSolidColorMaterial(
+                        CurtainColor, ShaderDatabase.MetaOverlay);
+                    curtainMat.renderQueue = CurtainQueue;
+                }
+                return curtainMat;
+            }
+        }
 
         public static void Draw(Map map)
         {
