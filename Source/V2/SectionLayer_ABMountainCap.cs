@@ -323,8 +323,10 @@ namespace AsAboveSoBelow
             // pocket-map model - the "am I the sky level" test and where the GROUND cell
             // lives. On a banded map the ground is the SAME map, one Slot down in z, so it
             // resolves to a constant cell offset instead of a different Map.
+            // V1's pocket-map branch is gone: there is no Map.Level()/LowerMap() any more, so
+            // the layer is banded-only. On an unbanded map it simply emits nothing.
             bool banded = ABBands.Banded(map);
-            if (!ABGuard.On(ABGuard.Rendering) || (!banded && map.Level() != 1))
+            if (!ABGuard.On(ABGuard.Rendering) || !banded)
             {
                 return;
             }
@@ -333,21 +335,16 @@ namespace AsAboveSoBelow
                 EnsureQueue();
                 TerrainGrid grid = map.terrainGrid;
                 TerrainDef cap = ABDefOf.AB_MountainTop;
-                Map ground;
-                IntVec3 groundOffset;
-                int skyBand = 0;
-                if (banded)
+                // The ground is the SAME map, one Slot down in z - a constant cell offset
+                // rather than a different Map.
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null)
                 {
-                    ABBandMap bands = ABBands.CompOf(map);
-                    ground = map;
-                    groundOffset = new IntVec3(0, 0, -bands.Slot);
-                    skyBand = bands.surfaceBand + 1;
+                    return;
                 }
-                else
-                {
-                    ground = map.LowerMap();
-                    groundOffset = IntVec3.Zero;
-                }
+                Map ground = map;
+                IntVec3 groundOffset = new IntVec3(0, 0, -bands.Slot);
+                int skyBand = bands.surfaceBand + 1;
                 ThingDef fallbackRock = FallbackRock(map);
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
                 bool emitted = false;
@@ -360,7 +357,7 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     TerrainDef t = grid.TerrainAt(c);
-                    bool minedFloor = LevelSync.TryGetMinedRockDef(t, out ThingDef minedRock);
+                    bool minedFloor = ABMinedRockLookup.TryGetMinedRockDef(t, out ThingDef minedRock);
                     if (t != cap && !minedFloor)
                     {
                         continue;
@@ -550,7 +547,7 @@ namespace AsAboveSoBelow
         private static Color SkirtTone(ThingDef rock)
         {
             TerrainDef leave = rock?.building?.leaveTerrain;
-            if (leave != null && LevelSync.TryGetMinedRockColor(leave, out Color tone))
+            if (leave != null && ABMinedRockLookup.TryGetMinedRockColor(leave, out Color tone))
             {
                 return tone;
             }
@@ -636,7 +633,7 @@ namespace AsAboveSoBelow
                 return true;
             }
             TerrainDef t = grid.TerrainAt(c);
-            return t == cap || LevelSync.TryGetMinedRockDef(t, out _);
+            return t == cap || ABMinedRockLookup.TryGetMinedRockDef(t, out _);
         }
 
         /// <summary>The GROUND map's rock def at (or beside) the column: the standing
@@ -653,7 +650,7 @@ namespace AsAboveSoBelow
             {
                 return ed.def;
             }
-            if (LevelSync.TryGetMinedRockDef(ground.terrainGrid.TerrainAt(c), out ThingDef mined))
+            if (ABMinedRockLookup.TryGetMinedRockDef(ground.terrainGrid.TerrainAt(c), out ThingDef mined))
             {
                 return mined;
             }
