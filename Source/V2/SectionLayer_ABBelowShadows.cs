@@ -212,16 +212,75 @@ namespace AsAboveSoBelow
                         sub.tris.Add(baseIdx + 3);
                         emitted = true;
 
-                        // Side skirts, only where the neighbour below casts a shorter (or
-                        // no) shadow - otherwise adjacent blocks double up their edges.
-                        AddSkirt(sub, map, edifices, indices, below, IntVec3.West, height, tall,
-                            baseIdx + 1, baseIdx, new Vector3(x, y, z), new Vector3(x, y, z + 1));
-                        AddSkirt(sub, map, edifices, indices, below, IntVec3.East, height, tall,
-                            baseIdx + 2, baseIdx + 3, new Vector3(x + 1, y, z + 1), new Vector3(x + 1, y, z));
-                        AddSkirt(sub, map, edifices, indices, below, IntVec3.South, height, tall,
-                            baseIdx, baseIdx + 3, new Vector3(x, y, z), new Vector3(x + 1, y, z));
-                        AddSkirt(sub, map, edifices, indices, below, IntVec3.North, height, tall,
-                            baseIdx + 1, baseIdx + 2, new Vector3(x, y, z + 1), new Vector3(x + 1, y, z + 1));
+                        // Side skirts, ported VERBATIM from vanilla SectionLayer_SunShadows.
+                        //
+                        // Vanilla emits THREE skirts - west, east and south - and each uses a
+                        // DIFFERENT triangle winding. An earlier generic AddSkirt helper
+                        // applied the west winding to all four directions (and invented a
+                        // north skirt vanilla never emits), which produced malformed tris
+                        // and the jagged sawtooth peaks. Kept as explicit blocks so it stays
+                        // obvious that the windings are not interchangeable.
+                        Building n;
+
+                        // west
+                        if (below.x > 0)
+                        {
+                            n = edifices[indices.CellToIndex(below.x - 1, below.z)];
+                            if (n == null || n.def.staticSunShadowHeight < height)
+                            {
+                                int c3 = sub.verts.Count;
+                                sub.verts.Add(new Vector3(x, y, z));
+                                sub.verts.Add(new Vector3(x, y, z + 1));
+                                sub.colors.Add(tall);
+                                sub.colors.Add(tall);
+                                sub.tris.Add(baseIdx + 1);
+                                sub.tris.Add(baseIdx);
+                                sub.tris.Add(c3);
+                                sub.tris.Add(c3);
+                                sub.tris.Add(c3 + 1);
+                                sub.tris.Add(baseIdx + 1);
+                            }
+                        }
+
+                        // east
+                        if (below.x < map.Size.x - 1)
+                        {
+                            n = edifices[indices.CellToIndex(below.x + 1, below.z)];
+                            if (n == null || n.def.staticSunShadowHeight < height)
+                            {
+                                int c4 = sub.verts.Count;
+                                sub.verts.Add(new Vector3(x + 1, y, z + 1));
+                                sub.verts.Add(new Vector3(x + 1, y, z));
+                                sub.colors.Add(tall);
+                                sub.colors.Add(tall);
+                                sub.tris.Add(baseIdx + 2);
+                                sub.tris.Add(c4);
+                                sub.tris.Add(c4 + 1);
+                                sub.tris.Add(c4 + 1);
+                                sub.tris.Add(baseIdx + 3);
+                                sub.tris.Add(baseIdx + 2);
+                            }
+                        }
+
+                        // south
+                        if (below.z > 0)
+                        {
+                            n = edifices[indices.CellToIndex(below.x, below.z - 1)];
+                            if (n == null || n.def.staticSunShadowHeight < height)
+                            {
+                                int c5 = sub.verts.Count;
+                                sub.verts.Add(new Vector3(x, y, z));
+                                sub.verts.Add(new Vector3(x + 1, y, z));
+                                sub.colors.Add(tall);
+                                sub.colors.Add(tall);
+                                sub.tris.Add(baseIdx);
+                                sub.tris.Add(baseIdx + 3);
+                                sub.tris.Add(c5);
+                                sub.tris.Add(baseIdx + 3);
+                                sub.tris.Add(c5 + 1);
+                                sub.tris.Add(c5);
+                            }
+                        }
                     }
                 }
                 if (emitted)
@@ -255,31 +314,5 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        private static void AddSkirt(LayerSubMesh sub, Map map, Building[] edifices,
-            CellIndices indices, IntVec3 belowCell, IntVec3 dir, float height, Color32 tall,
-            int cornerA, int cornerB, Vector3 vertA, Vector3 vertB)
-        {
-            IntVec3 n = belowCell + dir;
-            if (!n.InBounds(map))
-            {
-                return;
-            }
-            Building nb = edifices[indices.CellToIndex(n)];
-            if (nb != null && nb.def.staticSunShadowHeight >= height)
-            {
-                return;
-            }
-            int idx = sub.verts.Count;
-            sub.verts.Add(vertA);
-            sub.verts.Add(vertB);
-            sub.colors.Add(tall);
-            sub.colors.Add(tall);
-            sub.tris.Add(cornerA);
-            sub.tris.Add(cornerB);
-            sub.tris.Add(idx);
-            sub.tris.Add(idx);
-            sub.tris.Add(idx + 1);
-            sub.tris.Add(cornerA);
-        }
     }
 }
