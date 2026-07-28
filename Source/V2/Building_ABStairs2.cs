@@ -97,8 +97,10 @@ namespace AsAboveSoBelow
                 return;
             }
 
-            CarveLanding(map, bands, farCell, targetBand);
-
+            // Resolve the counterpart BEFORE carving: the pocket has to be sized from the
+            // far building's actual FOOTPRINT, and until we know its def we do not know how
+            // big that is. (Carving first, with a fixed rect around the centre cell, is what
+            // walled pawns in - see CarveLanding.)
             ThingDef cpDef = CounterpartDef();
             if (cpDef == null)
             {
@@ -106,6 +108,11 @@ namespace AsAboveSoBelow
                 return;
             }
             Building_ABStairs2 cp = farCell.GetFirstThing<Building_ABStairs2>(map);
+            CellRect farFootprint = cp != null
+                ? cp.OccupiedRect()
+                : GenAdj.OccupiedRect(farCell, Rot4.North, cpDef.Size);
+            CarveLanding(map, bands, farFootprint, targetBand);
+
             if (cp == null)
             {
                 spawningCounterpart = true;
@@ -142,13 +149,29 @@ namespace AsAboveSoBelow
             return DefDatabase<ThingDef>.GetNamedSilentFail(name);
         }
 
-        /// <summary>Makes the far cell (and a small apron around it) usable: clears rock
-        /// below, lays a platform above, unfogs, and leaves the roof alone below so the
-        /// basement stays a roofed interior exactly as a mined-out shaft would.</summary>
-        private static void CarveLanding(Map map, ABBandMap bands, IntVec3 center, int targetBand)
+        /// <summary>Makes the far END (and an apron around it) usable: clears rock below,
+        /// lays a platform above, unfogs, and leaves the roof alone below so the basement
+        /// stays a roofed interior exactly as a mined-out shaft would.
+        ///
+        /// TAKES THE FOOTPRINT, NOT THE CENTRE CELL. The original carved
+        /// <c>CellRect.CenteredOn(center, 1)</c> - a fixed 3x3 around the building's
+        /// Position - which is only correct for the 1x1 ladder. The arithmetic for the
+        /// larger links is brutal:
+        ///   - 2x2 stairs: the footprint runs from Position to Position+1, so the 3x3 apron
+        ///     leaves NO margin past the far edge - clearance on two sides only.
+        ///   - 3x3 grand stairs: the footprint IS Position +/- 1, i.e. exactly the apron.
+        ///     Zero approach cells were carved and the arriving pawn was sealed in solid
+        ///     rock on every side. Observed as a colonist stranded on the stairs.
+        ///
+        /// The margin is ABWormholePather.LandingRadius, and the two MUST agree: LandingCell
+        /// sets a transiting pawn down anywhere within LandingRadius of the anchor, so a
+        /// pocket smaller than that can drop a pawn straight into unmined rock. Carving one
+        /// cell more than strictly needed also gives arrivals room to step aside instead of
+        /// stacking on the anchor, which is the congestion that caused earlier stair jams.</summary>
+        private static void CarveLanding(Map map, ABBandMap bands, CellRect footprint, int targetBand)
         {
             bool sky = targetBand > bands.surfaceBand;
-            CellRect apron = CellRect.CenteredOn(center, 1).ClipInsideMap(map);
+            CellRect apron = footprint.ExpandedBy(ABWormholePather.LandingRadius).ClipInsideMap(map);
             CellRect bandRect = bands.RectOfBand(targetBand);
             foreach (IntVec3 c in apron)
             {

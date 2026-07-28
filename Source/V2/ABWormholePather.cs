@@ -42,7 +42,7 @@ namespace AsAboveSoBelow
         private const int TransitTimeoutTicks = 4000;
 
         /// <summary>How far from the far anchor a transiting pawn may be set down.</summary>
-        private const int LandingRadius = 2;
+        internal const int LandingRadius = 2;
 
         /// <summary>How close the pawn must get to the near anchor to be carried across.
         ///
