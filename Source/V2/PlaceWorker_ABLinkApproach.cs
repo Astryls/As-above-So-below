@@ -1,0 +1,152 @@
+using System.Collections.Generic;
+using RimWorld;
+using UnityEngine;
+using Verse;
+
+namespace AsAboveSoBelow
+{
+    /// <summary>
+    /// Refuses to place a vertical link that pawns could not actually walk into.
+    ///
+    /// THE BUG THIS CLOSES. Pawns stalled near stairwells for seconds at a time, retrying
+    /// endlessly. The cause is placement geometry, not the link: a stairwell flush against
+    /// walls can be left with only DIAGONAL approaches, and
+    /// <c>PathUtility.BlocksDiagonalMovement</c> trips on unwalkable cells and does NOT
+    /// special-case doors. The pawn paths to the anchor, cannot take the final step,
+    /// <c>Pawn_PathFollower.ResetToCurrentPosition()</c> fires (its signature is
+    /// <c>nextCell == pawn.Position</c>, which is exactly what the stuck watchdog reported),
+    /// the path is requested again, and it loops until something else moves.
+    ///
+    /// The links themselves are NOT the blocker and were ruled out by reading the code:
+    /// <c>Building_ABStairs2</c> overrides <c>FreePassage => true</c> and
+    /// <c>PawnCanOpen => true</c>, and <c>Building_Door.BlocksPawn</c> is
+    /// <c>openInt ? false : !PawnCanOpen(p)</c> - so it returns false unconditionally and a
+    /// pawn can never be blocked BY a link. Only the cells around it can do that.
+    ///
+    /// So this is a placement-time guard rather than a pather fix: catch the bad geometry
+    /// when the player draws it, at the one moment they can trivially move it one cell.
+    ///
+    /// WHAT COUNTS AS AN APPROACH. Any cardinal neighbour of any footprint cell that a pawn
+    /// could stand in. Deliberately generous in two directions:
+    ///  - Cells under a MINE designation count. Placing a ladder inside a mountain you are
+    ///    about to hollow out is normal play, and rejecting it would be infuriating.
+    ///  - Only ONE approach is required. Two is better and the footprints are sized for it
+    ///    (1x1 = 4, 2x2 = 8, 3x3 = 12 cardinal approaches), but demanding more would reject
+    ///    legitimate corridor and doorway placements.
+    ///
+    /// Pending blueprints and frames of impassable things are treated as blocking, copying
+    /// PlaceWorker_Cooler: sealing a stairwell in with planned walls is precisely the
+    /// mistake that produced the bug, and it should be caught while it is still a plan.
+    ///
+    /// The FAR side is deliberately not validated. The counterpart lands in a band that is
+    /// usually still solid rock - opening it is the entire point of building the link - so
+    /// requiring clear approaches over there would reject the normal case.
+    /// </summary>
+    public class PlaceWorker_ABLinkApproach : PlaceWorker
+    {
+        public override AcceptanceReport AllowsPlacing(BuildableDef def, IntVec3 center,
+            Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
+        {
+            if (map == null || def == null)
+            {
+                return true;
+            }
+            CellRect footprint = GenAdj.OccupiedRect(center, rot, def.Size);
+            if (AnyApproach(footprint, map, thingToIgnore))
+            {
+                return true;
+            }
+            return new AcceptanceReport("AB_LinkNeedsApproach".Translate());
+        }
+
+        /// <summary>Outlines the cells a pawn will be able to walk in from, so a bad spot is
+        /// visible before the click rather than only after the rejection message.</summary>
+        public override void DrawGhost(ThingDef def, IntVec3 center, Rot4 rot, Color ghostCol,
+            Thing thing = null)
+        {
+            Map map = Find.CurrentMap;
+            if (map == null || def == null)
+            {
+                return;
+            }
+            CellRect footprint = GenAdj.OccupiedRect(center, rot, def.Size);
+            List<IntVec3> open = new List<IntVec3>();
+            foreach (IntVec3 c in ApproachCells(footprint))
+            {
+                if (IsUsableApproach(c, map, thing))
+                {
+                    open.Add(c);
+                }
+            }
+            if (open.Count > 0)
+            {
+                GenDraw.DrawFieldEdges(open, Color.white);
+            }
+        }
+
+        private static bool AnyApproach(CellRect footprint, Map map, Thing thingToIgnore)
+        {
+            foreach (IntVec3 c in ApproachCells(footprint))
+            {
+                if (IsUsableApproach(c, map, thingToIgnore))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Every cardinal neighbour of the footprint, excluding the footprint
+        /// itself. Diagonals are excluded ON PURPOSE - a diagonal-only approach is the exact
+        /// geometry that causes the stall, so counting it would defeat the check.</summary>
+        private static IEnumerable<IntVec3> ApproachCells(CellRect footprint)
+        {
+            foreach (IntVec3 c in footprint)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    IntVec3 n = c + GenAdj.CardinalDirections[i];
+                    if (!footprint.Contains(n))
+                    {
+                        yield return n;
+                    }
+                }
+            }
+        }
+
+        private static bool IsUsableApproach(IntVec3 c, Map map, Thing thingToIgnore)
+        {
+            if (!c.InBounds(map))
+            {
+                return false;
+            }
+            // Rock the player has already marked for mining is about to become floor.
+            if (map.designationManager.DesignationAt(c, DesignationDefOf.Mine) != null)
+            {
+                return true;
+            }
+            if (c.Impassable(map))
+            {
+                return false;
+            }
+            // Planned walls block just as surely as built ones - and catching it now is the
+            // whole point, because once they are built the stairwell is already jammed.
+            if (PlannedImpassable(c.GetFirstThing<Blueprint>(map), thingToIgnore)
+                || PlannedImpassable(c.GetFirstThing<Frame>(map), thingToIgnore))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private static bool PlannedImpassable(Thing t, Thing thingToIgnore)
+        {
+            if (t == null || t == thingToIgnore)
+            {
+                return false;
+            }
+            ThingDef built = (t.def?.entityDefToBuild) as ThingDef;
+            return built != null && built.passability == Traversability.Impassable;
+        }
+    }
+}

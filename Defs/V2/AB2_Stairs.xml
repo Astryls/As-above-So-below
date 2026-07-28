@@ -22,6 +22,16 @@
 
   <ThingDef ParentName="DoorBase" Name="AB2_LinkBase" Abstract="True">
     <thingClass>AsAboveSoBelow.Building_ABStairs2</thingClass>
+    <!-- Rejects placements with no CARDINAL approach - a link flush against walls can be
+         left reachable only diagonally, and PathUtility.BlocksDiagonalMovement trips on
+         unwalkable cells (doors are not special-cased), which is what made pawns stall at
+         stairwells. NOTE: this list REPLACES the one inherited from DoorBase, so
+         PlaceWorker_DoorLearnOpeningSpeed is restated here deliberately - dropping it
+         would silently remove the door-speed learning helper. -->
+    <placeWorkers>
+      <li>PlaceWorker_DoorLearnOpeningSpeed</li>
+      <li>AsAboveSoBelow.PlaceWorker_ABLinkApproach</li>
+    </placeWorkers>
     <drawerType>MapMeshOnly</drawerType>
     <rotatable>true</rotatable>
     <defaultPlacingRot>South</defaultPlacingRot>
