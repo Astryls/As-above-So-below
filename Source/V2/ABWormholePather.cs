@@ -38,6 +38,11 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<int, Transit> pending = new Dictionary<int, Transit>();
 
+        /// <summary>Pawns that have been segmented at least once. Arrival diagnostics are
+        /// scoped to these, otherwise every arrival of every pawn on the map logs a line and
+        /// the one that matters is buried.</summary>
+        private static readonly HashSet<int> everSegmented = new HashSet<int>();
+
         public static bool HasPending(Pawn p) => p != null && pending.ContainsKey(p.thingIDNumber);
 
         public static void Clear(Pawn p)
@@ -63,8 +68,20 @@ namespace AsAboveSoBelow
             IntVec3 destCell = dest.Cell;
             if (ABBands.SameBand(map, pawn.Position, destCell))
             {
-                // Same band: nothing to do. Any stale record is dead - the pawn either
-                // arrived or was re-tasked mid-transit.
+                // Same band - but NOT necessarily a re-task.
+                //
+                // This method rewrites the destination to the NEAR anchor, which is in the
+                // pawn's own band. Anything that re-issues StartPath while the pawn is
+                // walking that leg (job re-entry, ResetToCurrentPosition, a repeated order)
+                // therefore arrives back here with a same-band destination and, before this
+                // guard, wiped the in-flight record. The pawn then reached the stairs with
+                // no pending transit and simply stopped - segmentation logged YES and the
+                // arrival was never consumed.
+                if (pending.TryGetValue(pawn.thingIDNumber, out Transit inFlight)
+                    && inFlight.near != null && inFlight.near.Position == destCell)
+                {
+                    return false; // our own leg; leave the record alone
+                }
                 Clear(pawn);
                 return false;
             }
@@ -88,6 +105,7 @@ namespace AsAboveSoBelow
                 Clear(pawn);
                 return false;
             }
+            everSegmented.Add(pawn.thingIDNumber);
             pending[pawn.thingIDNumber] = new Transit
             {
                 realDest = dest,
@@ -105,16 +123,35 @@ namespace AsAboveSoBelow
         /// must NOT be told it arrived - the journey is not over.</summary>
         public static bool TryConsumeArrival(Pawn_PathFollower pather, Pawn pawn)
         {
-            if (pawn == null || !pending.TryGetValue(pawn.thingIDNumber, out Transit t))
+            if (pawn == null)
             {
+                return false;
+            }
+            if (!pending.TryGetValue(pawn.thingIDNumber, out Transit t))
+            {
+                if (everSegmented.Contains(pawn.thingIDNumber))
+                {
+                    ABV2Debug.Transit("ARRIVED-NO-PENDING " + pawn.LabelShort + " at " + pawn.Position
+                        + " - record was cleared before arrival");
+                }
                 return false;
             }
             if (t.near == null || t.far == null || !t.near.Spawned || !t.far.Spawned)
             {
+                ABV2Debug.Transit("ARRIVED-ANCHOR-GONE " + pawn.LabelShort + " at " + pawn.Position);
                 Clear(pawn);
                 return false;
             }
-            if (pawn.Position != t.near.Position)
+            // ON the anchor cell OR adjacent to it both count as "reached the stairwell".
+            //
+            // Requiring the exact cell caused an infinite shuffle: the pawn is pathing to a
+            // Building (the anchor), and depending on how PathEndMode resolves it can come
+            // to rest one cell short. Arrival then failed to match, the transit was not
+            // consumed, vanilla completed the leg, the job re-issued StartPath toward the
+            // far anchor, segmentation ran again - and the pawn walked into the stairs over
+            // and over without ever going up.
+            if (pawn.Position != t.near.Position
+                && !pawn.Position.AdjacentTo8WayOrInside(t.near))
             {
                 ABV2Debug.Transit("ARRIVE-MISMATCH " + pawn.LabelShort + " at "
                     + pawn.Position + " expected " + t.near.Position);
