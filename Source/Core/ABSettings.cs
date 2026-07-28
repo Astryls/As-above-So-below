@@ -32,6 +32,14 @@ namespace AsAboveSoBelow
         /// bands plus gutters tall, so width is paid three times over.</summary>
         public bool unclampMapSize;
 
+        // ---- camera ---------------------------------------------------------
+
+        /// <summary>Let the camera pan and zoom past the edges of the current level
+        /// instead of being clamped inside it. The other levels stay hidden either way -
+        /// the view rect is clipped to the current band - so overhanging the edge just
+        /// shows empty space rather than the level above or below.</summary>
+        public bool freeCameraPan;
+
         // ---- sky band generation -------------------------------------------
 
         /// <summary>Meadow-Perlin peaks (varied ledges and plateaus) rather than a plain
@@ -104,6 +112,7 @@ namespace AsAboveSoBelow
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
+            Scribe_Values.Look(ref freeCameraPan, "freeCameraPan", false);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
             Scribe_Values.Look(ref skyBiomeInherit, "skyBiomeInherit", true);
             Scribe_Values.Look(ref peakSoilFraction, "peakSoilFraction", 0.15f);
@@ -150,6 +159,14 @@ namespace AsAboveSoBelow
             DrawMapSizeCap(list);
             list.GapLine();
 
+            Text.Font = GameFont.Medium;
+            list.Label("AB_CameraHeading".Translate());
+            Text.Font = GameFont.Small;
+
+            list.CheckboxLabeled("AB_FreeCameraPan".Translate(), ref freeCameraPan,
+                "AB_FreeCameraPanTip".Translate());
+
+            list.GapLine();
             Text.Font = GameFont.Medium;
             list.Label("AB_SkyHeading".Translate());
             Text.Font = GameFont.Small;

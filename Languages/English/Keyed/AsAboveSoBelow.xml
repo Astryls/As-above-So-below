@@ -17,6 +17,11 @@
   <AB_CavernFormations>Rock formations: {0}</AB_CavernFormations>
 
   <AB_SkyVegetationDensity>Summit vegetation: {0}x</AB_SkyVegetationDensity>
+
+  <!-- Camera -->
+  <AB_CameraHeading>Camera</AB_CameraHeading>
+  <AB_FreeCameraPan>Free camera panning</AB_FreeCameraPan>
+  <AB_FreeCameraPanTip>Lets the camera pan and zoom past the edges of the level you are on, instead of being held inside it. The other levels stay hidden either way, so panning past the edge shows empty space rather than the level above or below.</AB_FreeCameraPanTip>
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>

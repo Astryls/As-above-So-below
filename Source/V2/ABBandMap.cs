@@ -64,6 +64,20 @@ namespace AsAboveSoBelow
         /// a week later. Read through ABBandEnv.BiomeOf, never directly.</summary>
         public BiomeDef basementBiome;
 
+        /// <summary>Which band the camera is currently looking at. -1 means "not chosen",
+        /// which resolves to the surface.
+        ///
+        /// DELIBERATELY NOT SCRIBED, and deliberately not static. It used to live in a
+        /// static Dictionary keyed by map.uniqueID in ABBandView, which leaked across
+        /// games: uniqueID restarts at 0 for every new game, so starting or loading a
+        /// colony inherited the band the PREVIOUS colony was last viewed at, and the player
+        /// opened their new map looking at the sky (or at black, for an unopened band).
+        /// Per-map state belongs on the map component.
+        ///
+        /// Not scribed because loading a save should always put you back on the ground
+        /// floor, which is what FinalizeInit enforces below.</summary>
+        public int viewBand = -1;
+
         /// <summary>Bands the player has actually opened (stairs built into them).
         /// The surface is always open. Unopened bands exist physically but are fogged
         /// and inert.</summary>
@@ -81,9 +95,42 @@ namespace AsAboveSoBelow
         public override void FinalizeInit()
         {
             base.FinalizeInit();
-            if (Banded)
+            if (!Banded)
             {
-                ABWormholeRearmHook.Register(map);
+                return;
+            }
+            ABWormholeRearmHook.Register(map);
+
+            // Always open on the ground floor. Runs for a new colony AND for a loaded save,
+            // so a save taken while looking at the sky or the basement still comes back to
+            // the surface. The camera has to be moved explicitly rather than left to the
+            // band clamp: with free camera panning enabled there IS no clamp, so a restored
+            // camera position one band away would otherwise leave the player staring at
+            // black space with no obvious way back.
+            viewBand = surfaceBand;
+            try
+            {
+                CameraDriver cam = Find.CameraDriver;
+                if (cam == null)
+                {
+                    return;
+                }
+                Vector3 p = cam.MapPosition.ToVector3();
+                IntVec3 look = new IntVec3(Mathf.RoundToInt(p.x), 0, Mathf.RoundToInt(p.z));
+                if (!look.InBounds(map) || BandOf(look) == surfaceBand)
+                {
+                    return;
+                }
+                IntVec3 moved = Translate(look, surfaceBand);
+                if (moved.InBounds(map))
+                {
+                    cam.SetRootPosAndSize(new Vector3(moved.x + 0.5f, 0f, moved.z + 0.5f),
+                        cam.ZoomRootSize);
+                }
+            }
+            catch
+            {
+                // Camera positioning is cosmetic; never let it break map init.
             }
         }
 
