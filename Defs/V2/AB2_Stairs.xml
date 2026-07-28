@@ -1,51 +1,142 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- V2 stairwells. Both inherit DoorBase so their cell becomes a
-       RegionType.Portal region - the mechanism that lets ABWormhole join two
-       bands without merging their rooms or temperatures.
-       Art reuses vanilla door textures for now; the MORTON stair pack can be
-       grafted on once V2's geometry is settled. -->
+  <!-- V2 vertical links, using the MORTON art pack (same textures V1 ships).
 
-  <ThingDef ParentName="DoorBase" Name="AB2_StairsBase" Abstract="True">
+       All inherit DoorBase so the cell becomes a RegionType.Portal region - the
+       mechanism that lets ABWormhole join two bands without merging their rooms
+       or temperatures. Several DoorBase defaults have to be overridden, because
+       a stairwell is a hole rather than a sliding door:
+
+         drawerType    RealtimeOnly -> MapMeshOnly   (print the graphic like a
+                       normal building; also makes stairwells visible in the sky
+                       level's see-below view, which RealtimeOnly things are not)
+         rotatable     false -> true                 (MORTON art is directional)
+         altitudeLayer DoorMoveable -> Building
+         blockLight    true -> false                 (a shaft is not a wall)
+         fillPercent   1 -> 0.4
+
+       useHitPoints false is inherited behaviour from V1 and deliberate: raiders
+       otherwise trash the only player structure on an otherwise empty level and
+       sever the column. Removal is via deconstruct. -->
+
+  <ThingDef ParentName="DoorBase" Name="AB2_LinkBase" Abstract="True">
     <thingClass>AsAboveSoBelow.Building_ABStairs2</thingClass>
+    <drawerType>MapMeshOnly</drawerType>
+    <rotatable>true</rotatable>
+    <defaultPlacingRot>South</defaultPlacingRot>
+    <altitudeLayer>Building</altitudeLayer>
+    <blockLight>false</blockLight>
+    <fillPercent>0.40</fillPercent>
+    <useHitPoints>false</useHitPoints>
     <designationCategory>Structure</designationCategory>
-    <costStuffCount>40</costStuffCount>
+    <terrainAffordanceNeeded>Medium</terrainAffordanceNeeded>
+    <tickerType>Never</tickerType>
+    <stuffCategories>
+      <li>Metallic</li>
+      <li>Woody</li>
+      <li>Stony</li>
+    </stuffCategories>
+    <costStuffCount>75</costStuffCount>
     <statBases>
-      <WorkToBuild>1200</WorkToBuild>
-      <MaxHitPoints>240</MaxHitPoints>
+      <WorkToBuild>3200</WorkToBuild>
+      <Flammability>0</Flammability>
+      <Mass>35</Mass>
     </statBases>
+  </ThingDef>
+
+  <!-- ============================ stairs ============================ -->
+
+  <ThingDef ParentName="AB2_LinkBase">
+    <defName>AB2_StairsDown</defName>
+    <label>stairs down</label>
+    <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
     <graphicData>
-      <texPath>Things/Building/Door/DoorSimple_Mover</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <texPath>Things/Building/AB_StairsDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(2,2)</drawSize>
       <damageData>
         <enabled>false</enabled>
       </damageData>
     </graphicData>
-    <uiIconPath>Things/Building/Door/DoorSimple_MenuIcon</uiIconPath>
-    <building>
-      <isStuffableAirtight>true</isStuffableAirtight>
-    </building>
-  </ThingDef>
-
-  <ThingDef ParentName="AB2_StairsBase">
-    <defName>AB2_StairsDown</defName>
-    <label>stairs down</label>
-    <description>A shaft descending to the level below. Building it opens the basement level and joins it to this one: colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>-1</levelDelta>
+        <counterpartDef>AB2_StairsUp</counterpartDef>
       </li>
     </modExtensions>
   </ThingDef>
 
-  <ThingDef ParentName="AB2_StairsBase">
+  <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_StairsUp</defName>
     <label>stairs up</label>
-    <description>A shaft climbing to the level above. Building it opens the sky level and joins it to this one: colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_StairsUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(2,2)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
+        <counterpartDef>AB2_StairsDown</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <!-- ============================ ladders ============================ -->
+
+  <ThingDef ParentName="AB2_LinkBase" Name="AB2_LadderBase" Abstract="True">
+    <costStuffCount>25</costStuffCount>
+    <statBases>
+      <WorkToBuild>900</WorkToBuild>
+      <Mass>12</Mass>
+    </statBases>
+  </ThingDef>
+
+  <ThingDef ParentName="AB2_LadderBase">
+    <defName>AB2_LadderDown</defName>
+    <label>ladder down</label>
+    <description>A cheap ladder leading down. Completing it opens the basement level below and creates a matching ladder there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_LadderDown</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABBandStairsExt">
+        <levelDelta>-1</levelDelta>
+        <counterpartDef>AB2_LadderUp</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB2_LadderBase">
+    <defName>AB2_LadderUp</defName>
+    <label>ladder up</label>
+    <description>A cheap ladder leading up. Completing it opens the sky level above and creates a matching ladder there.</description>
+    <graphicData>
+      <texPath>Things/Building/AB_LadderUp</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABBandStairsExt">
+        <levelDelta>1</levelDelta>
+        <counterpartDef>AB2_LadderDown</counterpartDef>
       </li>
     </modExtensions>
   </ThingDef>

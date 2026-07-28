@@ -38,6 +38,9 @@ namespace AsAboveSoBelow
             }
             try
             {
+                // Counterparts spawn themselves when the near end is built, so only the
+                // player-facing side of each pair belongs in the architect menu. Leaving
+                // both in invites building an "up" and a "down" on the same column.
                 HashSet<BuildableDef> removed = new HashSet<BuildableDef>();
                 for (int i = 0; i < V1LinkDefs.Length; i++)
                 {

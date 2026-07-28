@@ -22,9 +22,27 @@ namespace AsAboveSoBelow
     /// </summary>
     public class ABBandMap : MapComponent
     {
-        /// <summary>Impassable rows between adjacent bands. Two is enough to stop any
-        /// 1-cell adjacency or region span crossing the seam.</summary>
-        public const int Gutter = 2;
+        /// <summary>Minimum impassable rows between adjacent bands. Two is enough to stop
+        /// any 1-cell adjacency or region span crossing the seam; the real gutter is
+        /// usually wider because Slot is rounded up (see SlotAlignment).</summary>
+        public const int MinGutter = 2;
+
+        /// <summary>Slot is rounded UP to a multiple of this.
+        ///
+        /// Not arbitrary: RimWorld's terrain shaders sample their texture from WORLD
+        /// POSITION, so drawing the surface's terrain one Slot higher samples a different
+        /// phase of the tiling texture and the ground appears to "randomise" between the
+        /// level and its see-below view. Terrain textures tile over a power-of-two number
+        /// of cells, so making the vertical offset a multiple of 64 lands the sampling on
+        /// exactly the same phase and the two views match.</summary>
+        public const int SlotAlignment = 64;
+
+        /// <summary>Rows consumed per band including its gutter, for a given band height.</summary>
+        public static int SlotFor(int bandHeight)
+        {
+            int min = bandHeight + MinGutter;
+            return Mathf.CeilToInt(min / (float)SlotAlignment) * SlotAlignment;
+        }
 
         /// <summary>1 means "not banded" - an ordinary vanilla map.</summary>
         public int bandCount = 1;
@@ -49,7 +67,10 @@ namespace AsAboveSoBelow
         public bool Banded => bandCount > 1 && bandHeight > 0;
 
         /// <summary>Rows consumed per band including its gutter.</summary>
-        public int Slot => bandHeight + Gutter;
+        public int Slot => SlotFor(bandHeight);
+
+        /// <summary>Actual gutter height after slot alignment.</summary>
+        public int GutterRows => Slot - bandHeight;
 
         public int BandOf(IntVec3 c)
         {

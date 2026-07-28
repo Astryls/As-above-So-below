@@ -8,6 +8,10 @@ namespace AsAboveSoBelow
     public class ABBandStairsExt : DefModExtension
     {
         public int levelDelta = -1;
+
+        /// <summary>defName of the building spawned at the far end. Lets ladders pair with
+        /// ladders and stairs with stairs instead of everything collapsing to one type.</summary>
+        public string counterpartDef;
     }
 
     /// <summary>
@@ -45,6 +49,12 @@ namespace AsAboveSoBelow
         public override bool FreePassage => true;
 
         public override bool PawnCanOpen(Pawn p) => true;
+
+        /// <summary>No sliding door halves. The def uses MapMeshOnly so the graphic is
+        /// PRINTED like any other building - which also means a stairwell on the surface
+        /// shows up in the sky level's see-below view, where a RealtimeOnly door would
+        /// not.</summary>
+        protected override bool CanDrawMovers => false;
 
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
@@ -123,8 +133,12 @@ namespace AsAboveSoBelow
 
         private ThingDef CounterpartDef()
         {
-            // The far end travels the opposite way.
-            string name = LevelDelta < 0 ? "AB2_StairsUp" : "AB2_StairsDown";
+            string name = Ext?.counterpartDef;
+            if (string.IsNullOrEmpty(name))
+            {
+                // The far end travels the opposite way.
+                name = LevelDelta < 0 ? "AB2_StairsUp" : "AB2_StairsDown";
+            }
             return DefDatabase<ThingDef>.GetNamedSilentFail(name);
         }
 

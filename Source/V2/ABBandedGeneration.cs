@@ -90,9 +90,10 @@ namespace AsAboveSoBelow
                         bandHeight = h,
                         surfaceBand = ABV2.SurfaceBand
                     };
-                    mapSize = new IntVec3(mapSize.x, mapSize.y, ABV2.BandCount * (h + ABBandMap.Gutter));
+                    int slot = ABBandMap.SlotFor(h);
+                    mapSize = new IntVec3(mapSize.x, mapSize.y, ABV2.BandCount * slot);
                     ABLog.Dev("V2: banding new colony map -> " + mapSize + " (" + ABV2.BandCount
-                        + " bands of " + h + " + " + ABBandMap.Gutter + " gutter).");
+                        + " bands of " + h + " + " + (slot - h) + " gutter, slot " + slot + ").");
                 }
                 catch (Exception e)
                 {
@@ -215,7 +216,8 @@ namespace AsAboveSoBelow
             for (int band = 0; band < bands.bandCount; band++)
             {
                 int gutterStartZ = band * bands.Slot + bands.bandHeight;
-                for (int z = gutterStartZ; z < gutterStartZ + ABBandMap.Gutter; z++)
+                int gutterEndZ = (band + 1) * bands.Slot;
+                for (int z = gutterStartZ; z < gutterEndZ; z++)
                 {
                     if (z >= map.Size.z)
                     {

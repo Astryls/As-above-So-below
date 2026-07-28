@@ -31,7 +31,9 @@ namespace AsAboveSoBelow
             else
             {
                 sb.AppendLine("bandCount=" + b.bandCount + " bandHeight=" + b.bandHeight
-                    + " gutter=" + ABBandMap.Gutter + " slot=" + b.Slot + " surfaceBand=" + b.surfaceBand);
+                    + " gutter=" + b.GutterRows + " slot=" + b.Slot
+                    + " (aligned to " + ABBandMap.SlotAlignment + ")"
+                    + " surfaceBand=" + b.surfaceBand);
                 for (int i = 0; i < b.bandCount; i++)
                 {
                     sb.AppendLine("  band " + i + " (level " + (i - b.surfaceBand) + ") rect=" + b.RectOfBand(i)
