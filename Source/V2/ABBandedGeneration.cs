@@ -164,6 +164,10 @@ namespace AsAboveSoBelow
                 if (band < bands.surfaceBand)
                 {
                     FillRock(map, rect, rocks, noises);
+                    // Then optionally hollow it back out into a living cave system.
+                    // Runs on the filled rock deliberately: the carve reads and destroys
+                    // the rock it opens, and the untouched remainder becomes the walls.
+                    ABCavernGen.Generate(map, bands, band);
                 }
                 else
                 {

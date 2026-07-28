@@ -16,15 +16,18 @@ namespace AsAboveSoBelow
     /// tile - so per-band biome has to be resolved explicitly and fed to the consumers
     /// that care.
     ///
-    /// The good news is that most biome consumers are asked WITH A CELL IN HAND (plant
-    /// spawning, terrain, fertility), so a band-aware answer is a postfix away. The bad
-    /// news is third-party biome-aware mods read map.Biome directly and will see the
-    /// surface biome everywhere; those need bridges, exactly as BiomesCavernsCompat
-    /// already is.
+    /// RESOLVED 2026-07-28: the "feed each consumer explicitly" plan is superseded. 1.6
+    /// ships a per-CELL biome API (map.BiomeAt -> MixedBiomeMapComponent.GetBiomeAt) that
+    /// vanilla itself routes plant spawning, animal spawning and generation terrain
+    /// through. ABBandBiome patches that single cell-parameterized choke point and calls
+    /// BiomeOf below, so those consumers are now correct by construction rather than one
+    /// bespoke patch at a time. This function is the single source of truth for "what
+    /// biome is this cell in".
     ///
-    /// DELIBERATELY NOT DONE: a contextual map.Biome getter override driven by an ambient
-    /// "current cell" latch. It would catch third-party code for free and it is precisely
-    /// the lying-to-vanilla-behind-a-global-latch pattern that made V1 unmaintainable.
+    /// STILL DELIBERATELY NOT DONE: a contextual map.Biome getter override driven by an
+    /// ambient "current cell" latch. It would additionally catch third-party code that
+    /// reads map.Biome directly, and it is precisely the lying-to-vanilla-behind-a-global
+    /// pattern that made V1 unmaintainable. A cell-parameterized query is not that.
     ///
     /// What V2 gets RIGHT that V1 had to fake: "the basement has no weather and no
     /// plants" is not a biome property here - the basement is roofed solid rock, so the
@@ -56,6 +59,15 @@ namespace AsAboveSoBelow
             }
             if (level < 0)
             {
+                // A basement carved by ABCavernGen carries a real cave biome, scribed on
+                // the band component so it survives save/load - this is the V2 stand-in
+                // for V1's pocketTileInfo.PrimaryBiome assignment. Uncarved basements
+                // fall through to plain solid rock.
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands?.basementBiome != null)
+                {
+                    return bands.basementBiome;
+                }
                 return undergroundBiome
                     ?? (undergroundBiome = DefDatabase<BiomeDef>.GetNamedSilentFail("AB_Underground"))
                     ?? map.Biome;
@@ -81,41 +93,23 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// Wild plants: a banded map has 3x the cells, so leaving this alone would triple
-    /// colony-wide plant spawning. Non-surface bands want their band biome's density
-    /// (zero for solid rock), not the surface's.
-    /// </summary>
-    [HarmonyPatch(typeof(WildPlantSpawner), nameof(WildPlantSpawner.GetBaseDesiredPlantsCountAt))]
-    public static class Patch_WildPlantSpawner_ABBandDensity
-    {
-        private static void Postfix(IntVec3 c, ref float __result, Map ___map)
-        {
-            try
-            {
-                if (__result <= 0f || ___map == null || !ABBands.Banded(___map))
-                {
-                    return;
-                }
-                int level = ABBands.LevelOf(___map, c);
-                if (level == 0)
-                {
-                    return;
-                }
-                if (level < 0)
-                {
-                    __result = 0f; // solid rock
-                    return;
-                }
-                BiomeDef sky = ABBandEnv.BiomeOf(___map, c);
-                __result *= sky != null ? Mathf.Clamp01(sky.plantDensity) : 0f;
-            }
-            catch
-            {
-                // Cosmetic system; never let it break generation or ticking.
-            }
-        }
-    }
+    // REMOVED 2026-07-28: Patch_WildPlantSpawner_ABBandDensity.
+    //
+    // It postfixed GetBaseDesiredPlantsCountAt to scale by the band biome's plantDensity
+    // and to hard-zero the basement. Both jobs are now done correctly upstream by
+    // ABBandBiome, and keeping it would actively cause bugs:
+    //
+    //  - DOUBLE COUNTING. GetBaseDesiredPlantsCountAt is FERTILITY only (it returns
+    //    fertilityGrid.FertilityAt). Vanilla applies biome density separately, in
+    //    CalculateDesiredPlants, as `map.BiomeAt(forCell).plantDensity * ...`. Once
+    //    BiomeAt is band-aware that multiply is already band-correct, so scaling here too
+    //    squared the density factor.
+    //  - THE BASEMENT HARD-ZERO blocked the whole point of cavern support: flora would be
+    //    seeded at generation and could then never regrow. Plain rock still yields no
+    //    plants without it, from two independent directions - rough stone terrain has zero
+    //    fertility, and AB_Underground has plantDensity 0.
+    //
+    // Net: one fewer patch, and the sky band's vegetation now regrows on its own.
 
     /// <summary>
     /// Per-band outdoor temperature. Only affects cells that are actually outdoors on a

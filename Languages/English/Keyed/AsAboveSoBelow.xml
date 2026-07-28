@@ -7,6 +7,16 @@
 
   <AB_BasementHeading>Basement band</AB_BasementHeading>
   <AB_BasementOreDensity>Basement ore density: {0} lumps per 10k cells</AB_BasementOreDensity>
+
+  <!-- Biomes! Caverns basement support. These only appear when that mod is loaded. -->
+  <AB_BasementBiome>Basement biome: {0}</AB_BasementBiome>
+  <AB_BasementBiomeRandom>Random cavern</AB_BasementBiomeRandom>
+  <AB_BasementBiomeNone>Solid rock (no caverns)</AB_BasementBiomeNone>
+  <AB_CavernOpenness>Cavern openness: {0}</AB_CavernOpenness>
+  <AB_CavernChamberFreq>Chamber frequency: {0}</AB_CavernChamberFreq>
+  <AB_CavernFormations>Rock formations: {0}</AB_CavernFormations>
+
+  <AB_SkyVegetationDensity>Summit vegetation: {0}x</AB_SkyVegetationDensity>
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>

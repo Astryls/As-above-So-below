@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -52,6 +53,16 @@ namespace AsAboveSoBelow
 
         /// <summary>Which band index is the surface (level 0).</summary>
         public int surfaceBand;
+
+        /// <summary>The biome the basement was carved as, or null for plain solid rock.
+        ///
+        /// This is V2's stand-in for V1's <c>map.pocketTileInfo.PrimaryBiome</c>. V1 got
+        /// persistence for free because vanilla deep-scribes the pocket tile; here the
+        /// choice has to be scribed ourselves or a reloaded save would quietly revert the
+        /// basement to solid rock - plant regrowth, wildlife and ambience all silently
+        /// changing behaviour on load, which is exactly the sort of bug that only shows up
+        /// a week later. Read through ABBandEnv.BiomeOf, never directly.</summary>
+        public BiomeDef basementBiome;
 
         /// <summary>Bands the player has actually opened (stairs built into them).
         /// The surface is always open. Unopened bands exist physically but are fogged
@@ -156,12 +167,21 @@ namespace AsAboveSoBelow
             this.surfaceBand = surfaceBand;
         }
 
+        /// <summary>Drop the per-band biome memo so an abandoned map is not pinned alive by
+        /// it (and can never be answered from a stale component).</summary>
+        public override void MapRemoved()
+        {
+            base.MapRemoved();
+            Patch_MixedBiome_ABBandBiomeAt.Forget();
+        }
+
         public override void ExposeData()
         {
             base.ExposeData();
             Scribe_Values.Look(ref bandCount, "AB2_bandCount", 1);
             Scribe_Values.Look(ref bandHeight, "AB2_bandHeight", 0);
             Scribe_Values.Look(ref surfaceBand, "AB2_surfaceBand", 0);
+            Scribe_Defs.Look(ref basementBiome, "AB2_basementBiome");
             Scribe_Collections.Look(ref openedBands, "AB2_openedBands", LookMode.Value);
             if (Scribe.mode == LoadSaveMode.PostLoadInit && openedBands == null)
             {

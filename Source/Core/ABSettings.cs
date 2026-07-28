@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -51,12 +53,48 @@ namespace AsAboveSoBelow
         /// <summary>Deepest walkable edge band, in cells.</summary>
         public int peakTerraceMax = 4;
 
+        /// <summary>Multiplier on the plateau's starting vegetation. 0 leaves the summit
+        /// bare (the pre-2026-07-28 behaviour, which was not a choice so much as a
+        /// missing feature).</summary>
+        public float skyVegetationDensity = 1f;
+
         // ---- basement generation -------------------------------------------
 
         /// <summary>Ore lumps per 10k basement cells.</summary>
         public float basementOreDensity = 6f;
 
+        /// <summary>Which Biomes! Caverns biome the basement is carved as: a defName,
+        /// "Random" for a weighted pick, or "None" for plain solid rock. Ignored entirely
+        /// when Biomes! Caverns is not loaded.</summary>
+        public string basementBiomeChoice = BiomesCavernsCompat.RandomChoice;
+
+        /// <summary>How much of the basement the tunnel network opens up.</summary>
+        public float cavernOpenness = 0.3f;
+
+        /// <summary>Chance per worm step of widening into a chamber.</summary>
+        public float cavernChamberFreq = 0.02f;
+
+        /// <summary>How many passes of Biomes! Caverns' stalagmite scatterer to run.</summary>
+        public float cavernFormations = 1f;
+
         // --------------------------------------------------------------------
+
+        /// <summary>Display label for the current basement-biome choice, resolving a stored
+        /// defName to its in-game label so the button never shows a raw defName.</summary>
+        private string LabelForBiomeChoice()
+        {
+            if (basementBiomeChoice == BiomesCavernsCompat.NoneChoice)
+            {
+                return "AB_BasementBiomeNone".Translate();
+            }
+            if (string.IsNullOrEmpty(basementBiomeChoice)
+                || basementBiomeChoice == BiomesCavernsCompat.RandomChoice)
+            {
+                return "AB_BasementBiomeRandom".Translate();
+            }
+            BiomeDef def = DefDatabase<BiomeDef>.GetNamedSilentFail(basementBiomeChoice);
+            return def != null ? def.LabelCap.ToString() : basementBiomeChoice;
+        }
 
         private static readonly Color WarnRed = new Color(1f, 0.25f, 0.25f);
         private static readonly Color NoteDim = new Color(1f, 1f, 1f, 0.62f);
@@ -72,7 +110,13 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref peakMeadowCutoff, "peakMeadowCutoff", 0.60f);
             Scribe_Values.Look(ref peakMeadowScale, "peakMeadowScale", 0.024f);
             Scribe_Values.Look(ref peakTerraceMax, "peakTerraceMax", 4);
+            Scribe_Values.Look(ref skyVegetationDensity, "skyVegetationDensity", 1f);
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
+            Scribe_Values.Look(ref basementBiomeChoice, "basementBiomeChoice",
+                BiomesCavernsCompat.RandomChoice);
+            Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.3f);
+            Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
+            Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
         }
 
         /// <summary>The map-size cap banner. Kept at the very top rather than filed under a
@@ -130,6 +174,9 @@ namespace AsAboveSoBelow
                 peakTerraceMax = Mathf.RoundToInt(list.Slider(peakTerraceMax, 1f, 12f));
             }
 
+            list.Label("AB_SkyVegetationDensity".Translate(skyVegetationDensity.ToString("0.0")));
+            skyVegetationDensity = list.Slider(skyVegetationDensity, 0f, 2f);
+
             list.GapLine();
             Text.Font = GameFont.Medium;
             list.Label("AB_BasementHeading".Translate());
@@ -137,6 +184,42 @@ namespace AsAboveSoBelow
 
             list.Label("AB_BasementOreDensity".Translate(basementOreDensity.ToString("0.#")));
             basementOreDensity = list.Slider(basementOreDensity, 0f, 12f);
+
+            // Cavern options only exist when Biomes! Caverns is actually loaded - showing
+            // dead sliders would imply the mod does something it cannot.
+            if (BiomesCavernsCompat.Active)
+            {
+                list.Gap(6f);
+                if (list.ButtonText("AB_BasementBiome".Translate(LabelForBiomeChoice())))
+                {
+                    List<FloatMenuOption> opts = new List<FloatMenuOption>
+                    {
+                        new FloatMenuOption("AB_BasementBiomeRandom".Translate(),
+                            () => basementBiomeChoice = BiomesCavernsCompat.RandomChoice),
+                        new FloatMenuOption("AB_BasementBiomeNone".Translate(),
+                            () => basementBiomeChoice = BiomesCavernsCompat.NoneChoice)
+                    };
+                    foreach (BiomeDef b in BiomesCavernsCompat.CavernBiomes())
+                    {
+                        BiomeDef local = b;
+                        opts.Add(new FloatMenuOption(local.LabelCap,
+                            () => basementBiomeChoice = local.defName));
+                    }
+                    Find.WindowStack.Add(new FloatMenu(opts));
+                }
+
+                if (basementBiomeChoice != BiomesCavernsCompat.NoneChoice)
+                {
+                    list.Label("AB_CavernOpenness".Translate(cavernOpenness.ToString("0.00")));
+                    cavernOpenness = list.Slider(cavernOpenness, 0.1f, 0.6f);
+
+                    list.Label("AB_CavernChamberFreq".Translate(cavernChamberFreq.ToString("0.000")));
+                    cavernChamberFreq = list.Slider(cavernChamberFreq, 0.01f, 0.05f);
+
+                    list.Label("AB_CavernFormations".Translate(cavernFormations.ToString("0.0")));
+                    cavernFormations = list.Slider(cavernFormations, 0f, 2f);
+                }
+            }
 
             list.GapLine();
             list.CheckboxLabeled("AB_VerboseLogging".Translate(), ref verboseLogging,

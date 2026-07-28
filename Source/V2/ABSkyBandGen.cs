@@ -77,6 +77,7 @@ namespace AsAboveSoBelow
             TerrainDef arable = ArableTerrainFor(map.Biome);
             List<IntVec3> oreCells = new List<IntVec3>();
             List<IntVec3> fogCells = new List<IntVec3>();
+            List<IntVec3> plateauCells = new List<IntVec3>();
 
             for (int z = 0; z < h; z++)
             {
@@ -132,6 +133,7 @@ namespace AsAboveSoBelow
                                 t = TerrainDefOf.Gravel;
                             }
                             grid.SetTerrain(c, t);
+                            plateauCells.Add(c);
                             continue;
                         }
                     }
@@ -164,6 +166,72 @@ namespace AsAboveSoBelow
                 ABOreGen.ScatterOres(map, oreCells,
                     Mathf.Clamp(settings?.basementOreDensity ?? 6f, 0f, 12f) * 0.5f);
             }
+            SeedFlora(map, plateauCells, settings);
+        }
+
+        /// <summary>
+        /// Starting vegetation for the plateau.
+        ///
+        /// Without this the sky band generated completely barren: nothing here spawned a
+        /// single plant, so the only vegetation was whatever WildPlantSpawner trickled in
+        /// over subsequent in-game months. A player climbing to a brand-new summit found
+        /// bare soil and gravel.
+        ///
+        /// The species list comes from ABBandEnv.BiomeOf, which for the sky band resolves
+        /// to the SURFACE biome - a plateau above a boreal forest should read boreal. The
+        /// filtering that keeps that honest is per-cell and already vanilla's own: a plant
+        /// is only placed where terrain fertility clears its fertilityMin, so lowland and
+        /// water species simply have nowhere to land on soil and gravel, and open air and
+        /// roof surfaces are never candidates because they are not plateau cells at all.
+        /// </summary>
+        private static void SeedFlora(Map map, List<IntVec3> plateauCells, ABSettings settings)
+        {
+            if (plateauCells == null || plateauCells.Count == 0)
+            {
+                return;
+            }
+            float density = Mathf.Clamp(settings?.skyVegetationDensity ?? 1f, 0f, 2f);
+            if (density <= 0f)
+            {
+                return;
+            }
+            BiomeDef biome = ABBandEnv.BiomeOf(map, plateauCells[0]);
+            // AllWildPlants is already a List here and is only read, so no copy is needed.
+            List<ThingDef> plants = biome?.AllWildPlants;
+            if (plants == null || plants.Count == 0)
+            {
+                return;
+            }
+
+            // Scaled by the biome's own plantDensity so a desert summit stays sparse and a
+            // temperate one comes in thick, then by the player's setting.
+            float chanceBase = 0.16f * Mathf.Max(0.15f, biome.plantDensity) * density;
+            int placed = 0;
+            for (int i = 0; i < plateauCells.Count; i++)
+            {
+                IntVec3 c = plateauCells[i];
+                TerrainDef t = c.GetTerrain(map);
+                if (t.fertility <= 0.01f || !c.Standable(map) || c.GetPlant(map) != null
+                    || c.GetEdifice(map) != null || !Rand.Chance(chanceBase * t.fertility))
+                {
+                    continue;
+                }
+                ThingDef plantDef = plants.RandomElementByWeight(p => biome.CommonalityOfPlant(p));
+                if (plantDef?.plant == null || plantDef.plant.fertilityMin > t.fertility)
+                {
+                    continue;
+                }
+                Plant plant = GenSpawn.Spawn(plantDef, c, map, WipeMode.Vanish) as Plant;
+                if (plant != null)
+                {
+                    // Staggered growth so the summit does not look planted all at once.
+                    plant.Growth = Rand.Range(0.15f, 0.95f);
+                    placed++;
+                }
+            }
+            ABLog.Dev("Sky flora: " + placed + " plants seeded across " + plateauCells.Count
+                + " plateau cells (biome " + (biome.defName ?? "?") + ", density "
+                + density.ToString("0.0") + ").");
         }
 
         /// <summary>Edge-distance BFS then meadow/terrace classification. Band-local
