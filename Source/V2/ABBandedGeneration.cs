@@ -83,6 +83,18 @@ namespace AsAboveSoBelow
                     {
                         return;
                     }
+                    // Cap the BAND size before inflating. Enforced here as well as in the
+                    // chooser so a scenario, another mod or an old config cannot slip a
+                    // 325-wide colony past it - that would be ~317k cells through the
+                    // pathfinding grid job every request.
+                    int capped = ABMapSizeLimit.Clamp(mapSize.z);
+                    int cappedX = ABMapSizeLimit.Clamp(mapSize.x);
+                    if (capped != mapSize.z || cappedX != mapSize.x)
+                    {
+                        ABLog.Dev("V2: clamped colony map from " + mapSize.x + "x" + mapSize.z
+                            + " to " + cappedX + "x" + capped + " (unclamp in mod settings).");
+                        mapSize = new IntVec3(cappedX, mapSize.y, capped);
+                    }
                     int h = mapSize.z;
                     pending = new PendingLayout
                     {

@@ -157,6 +157,8 @@ namespace AsAboveSoBelow
                 }
                 if (ABCombatV2.TryCrossBandShot(__instance, root, targ, out ShootLine line))
                 {
+                    ABV2Debug.Combat("shootline OK " + __instance.caster.LabelShortCap
+                        + " " + root + " -> " + targ.Cell);
                     resultingLine = line;
                     __result = true;
                     return false;
@@ -281,7 +283,10 @@ namespace AsAboveSoBelow
                     return;
                 }
                 float within = origin.z - bandFrom * bands.Slot;
+                Vector3 before = origin;
                 origin = new Vector3(origin.x, origin.y, bandTo * bands.Slot + within);
+                ABV2Debug.Combat("projectile origin " + before + " (band " + bandFrom + ") -> "
+                    + origin + " (band " + bandTo + ") target " + usedTarget.Cell);
             }
             catch (Exception e)
             {

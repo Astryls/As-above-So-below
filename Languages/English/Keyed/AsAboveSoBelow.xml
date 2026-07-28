@@ -306,4 +306,10 @@
   <AB_HospitalityRoaming>Hospitality guests roam all levels</AB_HospitalityRoaming>
   <AB_HospitalityRoamingTip>Requires the Hospitality mod. During a visit, idle guests occasionally tour linked levels that have guest beds or vending machines, and walk back when their group leaves. Full guest services (shopping, bed claims) stay on the level their group arrived on.</AB_HospitalityRoamingTip>
 
+  <!-- V2 map-size cap -->
+  <AB_UnclampMapSize>Allow colony maps larger than {0}x{0}</AB_UnclampMapSize>
+  <AB_UnclampMapSizeTip>As above, So below stacks three playable levels into one map. A {0}x{0} colony is already three times that many cells to simulate. Larger sizes are locked unless you enable this.</AB_UnclampMapSizeTip>
+  <AB_UnclampMapSizeWarning>WARNING: large maps will hurt performance badly. Every level multiplies the cells RimWorld must path over — a 325x325 colony is roughly 317,000 cells. Expect slowdowns and long map generation.</AB_UnclampMapSizeWarning>
+  <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>
+  <AB_MapSizeLockedTip>Locked by As above, So below. Each colony holds three stacked levels, so map sizes above {0}x{0} cost roughly three times their usual performance. Enable larger maps in the As above, So below mod settings.</AB_MapSizeLockedTip>
 </LanguageData>

@@ -36,6 +36,18 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>Traces cross-band shots. Same reason as transit logging: reasoning about
+        /// which patch did or did not fire has repeatedly lost to just measuring it.</summary>
+        public static bool LogCombat;
+
+        public static void Combat(string msg)
+        {
+            if (LogCombat)
+            {
+                Log.Warning(ABLog.Tag + " COMBAT: " + msg);
+            }
+        }
+
         public static string StateSummary()
         {
             return "terrain=" + DrawBelowTerrain

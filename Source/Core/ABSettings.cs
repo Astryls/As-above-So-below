@@ -100,6 +100,11 @@ namespace AsAboveSoBelow
         // New sky levels take the surface map's biome (greenery, regrowth,
         // weather); off = the stark high-altitude AB_OpenSky placeholder.
         public bool skyBiomeInherit = true;
+
+        /// <summary>V2 only. Off by default: colony maps are capped at 200x200 because a
+        /// banded map is three of them stacked, and RimWorld's pathfinding grid job runs
+        /// over EVERY cell of the map. At 200 that is ~120k cells; at 325 it is ~317k.</summary>
+        public bool unclampMapSize;
         public float peakSoilFraction = 0.15f;
         public float peakVegetation = 1f;
         // 2026-07-22 settings rework: generation knobs, applied when a level
@@ -144,6 +149,36 @@ namespace AsAboveSoBelow
         private static readonly Color OkGreen = new Color(0.4f, 0.85f, 0.4f);
         private static readonly Color NoteDim = new Color(1f, 1f, 1f, 0.62f);
 
+        /// <summary>The map-size cap banner. Drawn above the tabs rather than inside one,
+        /// because it changes how every new colony generates and is the single setting most
+        /// likely to be blamed for bad performance if a player flips it and forgets.</summary>
+        private void DrawMapSizeCap(ref Rect content)
+        {
+            Rect row = new Rect(content.x, content.y, content.width, 28f);
+            bool before = unclampMapSize;
+            Widgets.CheckboxLabeled(row, "AB_UnclampMapSize".Translate(ABMapSizeLimit.Cap),
+                ref unclampMapSize);
+            TooltipHandler.TipRegion(row, "AB_UnclampMapSizeTip".Translate(ABMapSizeLimit.Cap));
+            content.yMin += 30f;
+
+            if (unclampMapSize)
+            {
+                Rect warn = new Rect(content.x, content.y, content.width, 44f);
+                GameFont oldFont = Text.Font;
+                Color oldColor = GUI.color;
+                Text.Font = GameFont.Small;
+                GUI.color = new Color(1f, 0.25f, 0.25f);
+                Widgets.Label(warn, "AB_UnclampMapSizeWarning".Translate());
+                GUI.color = oldColor;
+                Text.Font = oldFont;
+                content.yMin += 46f;
+            }
+            if (before != unclampMapSize)
+            {
+                Write();
+            }
+        }
+
         public void DoWindowContents(Rect inRect)
         {
             // Deferred landmark-list expansion (same pass-stability rule as
@@ -165,6 +200,7 @@ namespace AsAboveSoBelow
             }
             Widgets.DrawMenuSection(content);
             TabDrawer.DrawTabs(content, tabs);
+            DrawMapSizeCap(ref content);
             Rect outRect = content.ContractedBy(9f);
             if (curTab == 0)
             {
@@ -949,6 +985,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.35f);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
             Scribe_Values.Look(ref skyBiomeInherit, "skyBiomeInherit", true);
+            Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
             Scribe_Values.Look(ref peakSoilFraction, "peakSoilFraction", 0.15f);
             Scribe_Values.Look(ref peakVegetation, "peakVegetation", 1f);
             Scribe_Values.Look(ref peakMeadowCutoff, "peakMeadowCutoff", 0.60f);
