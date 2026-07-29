@@ -103,7 +103,10 @@ namespace AsAboveSoBelow
                 ThingGrid thingGrid = map.thingGrid;
                 float maskAlt = AltitudeLayer.Terrain.AltitudeFor();
                 float terrainAlt = AltitudeLayer.TerrainScatter.AltitudeFor();
-                float fogAlt = AltitudeLayer.Filth.AltitudeFor();
+                // Vanilla's own fog altitude: above every below print, so the fog skirt
+                // can never lose a depth-test tie against a depth-writing cutout wall
+                // sprite printed underneath it. Ordering vs terrain is queue-decided.
+                float fogAlt = AltitudeLayer.FogOfWar.AltitudeFor();
                 bool printed = false;
 
                 foreach (IntVec3 c in section.CellRect)
@@ -135,13 +138,17 @@ namespace AsAboveSoBelow
                         //
                         // For UNEXPLORED ground, vanilla's own fog-of-war material goes over
                         // the backdrop, so a mountain the colony has not dug into reads as
-                        // solid fog from above exactly as it does from the surface.
+                        // solid fog from above exactly as it does from the surface. The fan
+                        // (not a hard quad) matters for the fully-fogged cell too: vanilla's
+                        // border softness lives in the EXPLORED neighbours' partial fans,
+                        // and this cell must use the identical vertex layout so the two
+                        // meshes seam invisibly.
                         if (ABV2Debug.DrawBelowAirMask)
                         {
                             AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
                             if (foggedBelow)
                             {
-                                AddQuad(GetSubMesh(MatBases.FogOfWar), c, fogAlt, OpaqueWhite);
+                                EmitBelowFogFan(map, bands, fog, below, c, fogAlt);
                             }
                             printed = true;
                         }
@@ -156,6 +163,16 @@ namespace AsAboveSoBelow
                         AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
                     }
                     printed = true;
+
+                    // Explored ground bordering unexplored: vanilla's fog boundary reaches
+                    // INTO the first explored cell with a corner-smoothed skirt (the
+                    // "vanilla style border" around every unmined rock mass). The old
+                    // hard per-cell quads stopped dead at the fogged cell's edge, which
+                    // is exactly the "black square textures around minable rock" report.
+                    if (ABV2Debug.DrawBelowAirMask)
+                    {
+                        EmitBelowFogFan(map, bands, fog, below, c, fogAlt);
+                    }
 
                     if (!ABV2Debug.DrawBelowThings)
                     {
@@ -200,6 +217,52 @@ namespace AsAboveSoBelow
             {
                 ABGuard.Disable(ABGuard.Rendering, e, "V2 below layer");
             }
+        }
+
+        private readonly bool[] fogCovered = new bool[9];
+
+        /// <summary>A below cell counts as fogged-for-view when it is genuinely fogged OR
+        /// not legible at all (off-map, gutter): the veil then runs seamlessly to the
+        /// band edge instead of leaving a lit seam against the air mask.</summary>
+        private static bool FoggedForView(Map map, ABBandMap bands, FogGrid fog, IntVec3 b)
+        {
+            return !b.InBounds(map) || bands.InGutter(b) || fog.IsFogged(b);
+        }
+
+        /// <summary>
+        /// Vanilla SectionLayer_FogOfWar's per-cell corner smoothing, sampled one band
+        /// DOWN and emitted one band UP. A fogged cell covers all nine points; an
+        /// explored cell is covered only where fogged neighbours reach it (cardinal =
+        /// that edge's three points, diagonal = the corner point). Returns true when
+        /// anything was emitted.
+        /// </summary>
+        private bool EmitBelowFogFan(Map map, ABBandMap bands, FogGrid fog, IntVec3 below,
+            IntVec3 above, float y)
+        {
+            bool[] covered = fogCovered;
+            if (FoggedForView(map, bands, fog, below))
+            {
+                ABNineFan.CoverAll(covered);
+            }
+            else
+            {
+                ABNineFan.Cover(covered,
+                    FoggedForView(map, bands, fog, below + IntVec3.North),
+                    FoggedForView(map, bands, fog, below + IntVec3.South),
+                    FoggedForView(map, bands, fog, below + IntVec3.East),
+                    FoggedForView(map, bands, fog, below + IntVec3.West),
+                    FoggedForView(map, bands, fog, below + IntVec3.South + IntVec3.West),
+                    FoggedForView(map, bands, fog, below + IntVec3.North + IntVec3.West),
+                    FoggedForView(map, bands, fog, below + IntVec3.North + IntVec3.East),
+                    FoggedForView(map, bands, fog, below + IntVec3.South + IntVec3.East));
+                if (!ABNineFan.Any(covered))
+                {
+                    return false;
+                }
+            }
+            ABNineFan.AddFan(GetSubMesh(MatBases.FogOfWar), above.x, above.z, y, covered,
+                OpaqueWhite, BelowTintClear);
+            return true;
         }
 
         /// <summary>One cell-sized quad in the vanilla terrain-mesh shape (verts + colors +

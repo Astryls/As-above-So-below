@@ -315,4 +315,324 @@ namespace AsAboveSoBelow
         }
 
     }
+
+    /// <summary>
+    /// V2 see-below: vanilla's ambient edge shadows for the band underneath.
+    ///
+    /// The below view prints walls and rock faithfully, but the soft dark border vanilla
+    /// draws around every castEdgeShadows edifice (SectionLayer_EdgeShadows,
+    /// MatBases.EdgeShadow, 0.45-cell reach) regenerates at the edifice's OWN cells - one
+    /// band down, where the camera never looks. Without it the printed rock sits flat on
+    /// the below terrain, which is half of the "missing vanilla border" look (the other
+    /// half was the fog fan). This is that layer's geometry, sampled one band down and
+    /// emitted at the above cell's coordinates, masked by ShowsBelow like the rest of the
+    /// see-below stack so nothing paints onto rooftops or mountain caps.
+    ///
+    /// The corner emission is ported VERBATIM from vanilla - same GenAdj direction
+    /// tables, same non-symmetric per-corner blocks, same 0.45 reach. Generalizing the
+    /// four blocks into a loop is exactly the trap the sun-shadow port above already
+    /// documented (each block's winding and offset signs differ).
+    /// </summary>
+    public class SectionLayer_ABBelowEdgeShadows : SectionLayer
+    {
+        private const float InDist = 0.45f;
+
+        private static readonly Color32 Shadowed = new Color32(195, 195, 195, byte.MaxValue);
+
+        private static readonly Color32 Lit = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
+
+        private readonly bool[] cornerShadowed = new bool[4];
+
+        private readonly bool[] cardinalCaster = new bool[4];
+
+        private readonly bool[] diagonalOnly = new bool[4];
+
+        public SectionLayer_ABBelowEdgeShadows(Section section) : base(section)
+        {
+            // Buildings: casters below appear and disappear. Terrain: the ShowsBelow mask
+            // above changes when rooftops and caps are laid or removed.
+            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.Terrain;
+        }
+
+        public override bool Visible
+        {
+            get
+            {
+                if (!ABGuard.On(ABGuard.Rendering) || !DebugViewSettings.drawShadows)
+                {
+                    return false;
+                }
+                return section.map?.Biome?.disableShadows != true;
+            }
+        }
+
+        public override void Regenerate()
+        {
+            ClearSubMeshes(MeshParts.All);
+            if (!ABGuard.On(ABGuard.Rendering))
+            {
+                return;
+            }
+            Map map = section.map;
+            ABBandMap bands = ABBands.CompOf(map);
+            if (bands == null || !bands.Banded)
+            {
+                return;
+            }
+            try
+            {
+                int slot = bands.Slot;
+                TerrainGrid terrain = map.terrainGrid;
+                Building[] edifices = map.edificeGrid.InnerArray;
+                CellIndices indices = map.cellIndices;
+                float y = AltitudeLayer.Shadows.AltitudeFor();
+                CellRect rect = new CellRect(section.botLeft.x, section.botLeft.z, 17, 17);
+                rect.ClipInsideMap(map);
+                LayerSubMesh sm = GetSubMesh(MatBases.EdgeShadow);
+                bool[] corner = cornerShadowed;
+                bool[] cardinal = cardinalCaster;
+                bool[] diagOnly = diagonalOnly;
+
+                // Vanilla's connective triangles, as local functions so the four corner
+                // blocks read exactly like the decompiled source.
+                void ConnectCorner(int idx)
+                {
+                    sm.tris.Add(sm.verts.Count - 2);
+                    sm.tris.Add(idx);
+                    sm.tris.Add(sm.verts.Count - 1);
+                    sm.tris.Add(sm.verts.Count - 1);
+                    sm.tris.Add(idx);
+                    sm.tris.Add(idx + 1);
+                }
+                void CloseCornerTri()
+                {
+                    sm.colors.Add(Shadowed);
+                    sm.colors.Add(Lit);
+                    sm.colors.Add(Lit);
+                    sm.tris.Add(sm.verts.Count - 3);
+                    sm.tris.Add(sm.verts.Count - 2);
+                    sm.tris.Add(sm.verts.Count - 1);
+                }
+
+                for (int i = rect.minX; i <= rect.maxX; i++)
+                {
+                    for (int j = rect.minZ; j <= rect.maxZ; j++)
+                    {
+                        IntVec3 above = new IntVec3(i, 0, j);
+                        if (bands.BandOf(above) <= 0 || bands.InGutter(above)
+                            || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                        {
+                            continue;
+                        }
+                        IntVec3 below = new IntVec3(i, 0, j - slot);
+                        if (!below.InBounds(map) || bands.InGutter(below))
+                        {
+                            continue;
+                        }
+                        Thing thing = edifices[indices.CellToIndex(below)];
+                        if (thing != null && thing.def.castEdgeShadows)
+                        {
+                            // The caster's own cell: vanilla's full ambient quad.
+                            sm.verts.Add(new Vector3(i, y, j));
+                            sm.verts.Add(new Vector3(i, y, j + 1));
+                            sm.verts.Add(new Vector3(i + 1, y, j + 1));
+                            sm.verts.Add(new Vector3(i + 1, y, j));
+                            sm.colors.Add(Shadowed);
+                            sm.colors.Add(Shadowed);
+                            sm.colors.Add(Shadowed);
+                            sm.colors.Add(Shadowed);
+                            int count = sm.verts.Count;
+                            sm.tris.Add(count - 4);
+                            sm.tris.Add(count - 3);
+                            sm.tris.Add(count - 2);
+                            sm.tris.Add(count - 4);
+                            sm.tris.Add(count - 2);
+                            sm.tris.Add(count - 1);
+                            continue;
+                        }
+
+                        for (int k = 0; k < 4; k++)
+                        {
+                            corner[k] = false;
+                            cardinal[k] = false;
+                            diagOnly[k] = false;
+                        }
+                        IntVec3[] cardinals = GenAdj.CardinalDirectionsAround;
+                        for (int k = 0; k < 4; k++)
+                        {
+                            if (Caster(map, bands, edifices, indices, below + cardinals[k]))
+                            {
+                                cardinal[k] = true;
+                                corner[(k + 3) % 4] = true;
+                                corner[k] = true;
+                            }
+                        }
+                        IntVec3[] diagonals = GenAdj.DiagonalDirectionsAround;
+                        for (int l = 0; l < 4; l++)
+                        {
+                            if (corner[l])
+                            {
+                                continue;
+                            }
+                            if (Caster(map, bands, edifices, indices, below + diagonals[l]))
+                            {
+                                corner[l] = true;
+                                diagOnly[l] = true;
+                            }
+                        }
+
+                        float dx;
+                        float dz;
+                        int count2 = sm.verts.Count;
+                        if (corner[0])
+                        {
+                            if (cardinal[0] || cardinal[1])
+                            {
+                                dx = 0f;
+                                dz = 0f;
+                                if (cardinal[0])
+                                {
+                                    dz = InDist;
+                                }
+                                if (cardinal[1])
+                                {
+                                    dx = InDist;
+                                }
+                                sm.verts.Add(new Vector3(i, y, j));
+                                sm.colors.Add(Shadowed);
+                                sm.verts.Add(new Vector3(i + dx, y, j + dz));
+                                sm.colors.Add(Lit);
+                                if (corner[1] && !diagOnly[1])
+                                {
+                                    ConnectCorner(sm.verts.Count);
+                                }
+                            }
+                            else
+                            {
+                                sm.verts.Add(new Vector3(i, y, j));
+                                sm.verts.Add(new Vector3(i, y, j + InDist));
+                                sm.verts.Add(new Vector3(i + InDist, y, j));
+                                CloseCornerTri();
+                            }
+                        }
+                        if (corner[1])
+                        {
+                            if (cardinal[1] || cardinal[2])
+                            {
+                                dx = 0f;
+                                dz = 0f;
+                                if (cardinal[1])
+                                {
+                                    dx = InDist;
+                                }
+                                if (cardinal[2])
+                                {
+                                    dz = 0f - InDist;
+                                }
+                                sm.verts.Add(new Vector3(i, y, j + 1));
+                                sm.colors.Add(Shadowed);
+                                sm.verts.Add(new Vector3(i + dx, y, j + 1 + dz));
+                                sm.colors.Add(Lit);
+                                if (corner[2] && !diagOnly[2])
+                                {
+                                    ConnectCorner(sm.verts.Count);
+                                }
+                            }
+                            else
+                            {
+                                sm.verts.Add(new Vector3(i, y, j + 1));
+                                sm.verts.Add(new Vector3(i + InDist, y, j + 1));
+                                sm.verts.Add(new Vector3(i, y, j + 1 - InDist));
+                                CloseCornerTri();
+                            }
+                        }
+                        if (corner[2])
+                        {
+                            if (cardinal[2] || cardinal[3])
+                            {
+                                dx = 0f;
+                                dz = 0f;
+                                if (cardinal[2])
+                                {
+                                    dz = 0f - InDist;
+                                }
+                                if (cardinal[3])
+                                {
+                                    dx = 0f - InDist;
+                                }
+                                sm.verts.Add(new Vector3(i + 1, y, j + 1));
+                                sm.colors.Add(Shadowed);
+                                sm.verts.Add(new Vector3(i + 1 + dx, y, j + 1 + dz));
+                                sm.colors.Add(Lit);
+                                if (corner[3] && !diagOnly[3])
+                                {
+                                    ConnectCorner(sm.verts.Count);
+                                }
+                            }
+                            else
+                            {
+                                sm.verts.Add(new Vector3(i + 1, y, j + 1));
+                                sm.verts.Add(new Vector3(i + 1, y, j + 1 - InDist));
+                                sm.verts.Add(new Vector3(i + 1 - InDist, y, j + 1));
+                                CloseCornerTri();
+                            }
+                        }
+                        if (!corner[3])
+                        {
+                            continue;
+                        }
+                        if (cardinal[3] || cardinal[0])
+                        {
+                            dx = 0f;
+                            dz = 0f;
+                            if (cardinal[3])
+                            {
+                                dx = 0f - InDist;
+                            }
+                            if (cardinal[0])
+                            {
+                                dz = InDist;
+                            }
+                            sm.verts.Add(new Vector3(i + 1, y, j));
+                            sm.colors.Add(Shadowed);
+                            sm.verts.Add(new Vector3(i + 1 + dx, y, j + dz));
+                            sm.colors.Add(Lit);
+                            if (corner[0] && !diagOnly[0])
+                            {
+                                ConnectCorner(count2);
+                            }
+                        }
+                        else
+                        {
+                            sm.verts.Add(new Vector3(i + 1, y, j));
+                            sm.verts.Add(new Vector3(i + 1 - InDist, y, j));
+                            sm.verts.Add(new Vector3(i + 1, y, j + InDist));
+                            CloseCornerTri();
+                        }
+                    }
+                }
+                if (sm.verts.Count > 0)
+                {
+                    sm.FinalizeMesh(MeshParts.Verts | MeshParts.Tris | MeshParts.Colors);
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Rendering, e, "V2 below edge shadows");
+            }
+        }
+
+        /// <summary>An edge-shadow caster at this below cell. Off-map and gutter cells
+        /// cast nothing, so no phantom border appears along the band seam.</summary>
+        private static bool Caster(Map map, ABBandMap bands, Building[] edifices,
+            CellIndices indices, IntVec3 belowNeighbor)
+        {
+            if (!belowNeighbor.InBounds(map) || bands.InGutter(belowNeighbor))
+            {
+                return false;
+            }
+            Thing t = edifices[indices.CellToIndex(belowNeighbor)];
+            return t != null && t.def.castEdgeShadows;
+        }
+    }
 }
