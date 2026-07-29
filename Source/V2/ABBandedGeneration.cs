@@ -587,6 +587,16 @@ namespace AsAboveSoBelow
                 }
             }
 
+            // Reset before the full sweep so the census describes the BAND exactly once.
+            // Leaving the radial tallies in double-counted the overlap and produced totals
+            // larger than the band itself (55,373 counted in a 200x200 = 40,000 cell band),
+            // which makes the one number a reader checks first obviously untrustworthy.
+            considered = 0;
+            water = 0;
+            edifice = 0;
+            unstandable = 0;
+            noApron = 0;
+
             // Pass 2: the whole band. Slower, but it is the difference between "we looked
             // everywhere" and "we looked in a circle".
             foreach (IntVec3 c in surface)

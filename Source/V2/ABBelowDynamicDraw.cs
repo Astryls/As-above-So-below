@@ -233,6 +233,15 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = t.DrawPos;
                     loc.z += slot;
+                    // All three phases, unconditionally. A phase-skipping optimisation was
+                    // tried here and REVERTED: it caused a visible regression and was never
+                    // worth it - it removed two virtual calls that immediately return and
+                    // replaced them with a dictionary lookup, so the expected saving was
+                    // approximately nothing. Below things are culled from the camera's view
+                    // rect, so vanilla never gives them EnsureInitialized or ParallelPreDraw
+                    // while their cached render results stay flagged valid; skipping either
+                    // phase is how a below thing ends up drawn stale. Do not re-attempt
+                    // without a measured reason.
                     t.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
                     t.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
                     t.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
