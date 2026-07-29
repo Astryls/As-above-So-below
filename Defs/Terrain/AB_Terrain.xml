@@ -45,8 +45,12 @@
     <defName>AB_WallTop</defName>
     <label>wall top</label>
     <description>The narrow top of a wall on the level below. Too narrow to walk along, but solid enough to build on - stack another wall here to raise the structure.</description>
-    <texturePath>Terrain/AB_MountainTop</texturePath>
-    <color>(0.42, 0.41, 0.39)</color>
+    <!-- NOT Terrain/AB_MountainTop. That texture is deliberately near-black because the
+         mountain-cap layer shades it as solid rock mass; borrowed here it just renders as
+         an opaque black slab across the wall. Reuse the rooftop tile with a warmer stone
+         tint so a wall ledge reads as masonry and stays distinct from a rooftop. -->
+    <texturePath>Terrain/Surfaces/GenericFloorTile</texturePath>
+    <color>(0.46, 0.44, 0.40)</color>
     <edgeType>Hard</edgeType>
     <renderPrecedence>232</renderPrecedence>
     <layerable>false</layerable>

@@ -19,14 +19,18 @@ namespace AsAboveSoBelow
     /// it was not carried into V2.
     ///
     /// THE RULE, in precedence order, applied to the cell one Slot above `below`:
-    ///   1. impassable edifice below  -> AB_WallTop     (buildable, NOT walkable)
-    ///   2. constructed roof below    -> AB_RoofSurface (buildable AND walkable)
+    ///   1. constructed roof below    -> AB_RoofSurface (buildable AND walkable)
+    ///   2. impassable edifice below  -> AB_WallTop     (buildable, NOT walkable)
     ///   3. natural roof below        -> AB_MountainTop
     ///   4. otherwise                 -> AB_OpenAir
     ///
-    /// Edifice beats roof deliberately. RimWorld roofs a wall along with the room it
-    /// encloses, so testing the roof first would turn every wall top into a walkable
-    /// rooftop. A wall top is a ledge you build on, not a floor you stroll along.
+    /// ROOF BEATS EDIFICE, and the order was wrong the first time. Testing the edifice
+    /// first gave every wall a non-walkable ledge even when the building it belonged to was
+    /// fully roofed - so a finished, roofed structure had walkable rooftop over its interior
+    /// and impassable strips along all four walls, which is not a roof anyone can use.
+    /// A roof is a continuous surface INCLUDING the walls it rests on. AB_WallTop is
+    /// therefore only for walls with no roof over them: a free-standing wall, or the outer
+    /// ring of an unroofed compound, where a bare ledge is exactly right.
     ///
     /// ⚠ ONLY DERIVED CELLS ARE TOUCHED. The sky band also holds generated mountain and
     /// plateau terrain and any floor the player has laid up there, none of which is a
@@ -92,16 +96,24 @@ namespace AsAboveSoBelow
 
         private static TerrainDef Resolve(Map map, IntVec3 below)
         {
+            RoofDef roof = map.roofGrid.RoofAt(below);
+            if (roof != null && !roof.isNatural)
+            {
+                // A constructed roof covers its walls too - the whole footprint is one
+                // continuous surface to walk on.
+                return ABDefOf.AB_RoofSurface;
+            }
             Building edifice = below.GetEdifice(map);
             if (edifice != null && edifice.def != null
                 && edifice.def.passability == Traversability.Impassable)
             {
+                // An UNROOFED wall: build on it to raise the structure, but there is nothing
+                // up here to walk along.
                 return ABDefOf.AB_WallTop;
             }
-            RoofDef roof = map.roofGrid.RoofAt(below);
             if (roof != null)
             {
-                return roof.isNatural ? ABDefOf.AB_MountainTop : ABDefOf.AB_RoofSurface;
+                return ABDefOf.AB_MountainTop; // natural roof = mountain mass
             }
             return ABDefOf.AB_OpenAir;
         }
