@@ -18,6 +18,8 @@
 
   <AB_SkyVegetationDensity>Summit vegetation: {0}x</AB_SkyVegetationDensity>
 
+  <AB_GoToLevel>{0} (level {1})</AB_GoToLevel>
+
   <AB_LinkNeedsApproach>Must have at least one open cell directly beside it (not diagonal) for pawns to step in from.</AB_LinkNeedsApproach>
 
   <!-- Camera -->

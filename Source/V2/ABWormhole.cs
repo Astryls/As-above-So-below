@@ -180,9 +180,20 @@ namespace AsAboveSoBelow
             List<Pair> list = ListFor(a.Map);
             for (int i = 0; i < list.Count; i++)
             {
-                if (list[i].a == a || list[i].b == a || list[i].a == b || list[i].b == b)
+                // Dedupe the PAIR AS A SET - not "either member appears anywhere".
+                //
+                // The original check returned when either building was in ANY existing
+                // pair, which encoded the single-counterpart assumption: one building, one
+                // pair. The elevator broke it silently and precisely: it links bottom-up,
+                // so surface<->basement was added first, and then Link(surface, sky) found
+                // the surface car in that pair and bailed - as did the full-mesh
+                // Link(basement, sky). Diagnosed from `AB2: band info` reading
+                // "wormhole pairs: 1" on a three-car shaft whose bands were all open:
+                // every car established, one edge in the graph. CanReach to the sky was
+                // false with nothing visibly wrong - "the elevator only works going down".
+                if ((list[i].a == a && list[i].b == b) || (list[i].a == b && list[i].b == a))
                 {
-                    return; // already paired
+                    return; // this exact pair already exists
                 }
             }
             list.Add(new Pair { a = a, b = b });

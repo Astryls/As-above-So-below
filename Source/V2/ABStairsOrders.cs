@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RimWorld;
 using Verse;
 using Verse.AI;
@@ -26,60 +27,80 @@ namespace AsAboveSoBelow
 
         protected override bool Multiselect => true;
 
-        protected override FloatMenuOption GetSingleOptionFor(Thing clickedThing, FloatMenuContext context)
+        /// <summary>
+        /// One option PER far end, not one option total.
+        ///
+        /// The original override was GetSingleOptionFor, which structurally cannot offer
+        /// two directions - and the elevator has two or more ends. Its "best counterpart"
+        /// fallback returned the FIRST end, and TryEstablish adds ends bottom-up, so a
+        /// surface elevator's first end is always the BASEMENT: the float menu offered
+        /// "go down" and nothing else. Reported as "the elevator only works going down" -
+        /// the up transit was fine; the player was never given a way to order it.
+        /// </summary>
+        public override IEnumerable<FloatMenuOption> GetOptionsFor(Thing clickedThing, FloatMenuContext context)
         {
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
             try
             {
                 if (!ABGuard.On(ABGuard.Movement))
                 {
-                    return null;
+                    return options;
                 }
                 Building_ABStairs2 stairs = clickedThing as Building_ABStairs2;
                 if (stairs == null || !stairs.Spawned)
                 {
-                    return null;
+                    return options;
                 }
                 Pawn pawn = context.FirstSelectedPawn;
                 if (pawn == null || pawn.Map != stairs.Map)
                 {
-                    return null;
-                }
-                // Multiple ends (the elevator): prefer the one on the band the player is
-                // viewing - they are looking at where they want the pawn to go.
-                Building_ABStairs2 far = stairs.BestCounterpartFor(
-                    ABBandView.CurrentBand(stairs.Map));
-                if (far == null || !far.Spawned)
-                {
-                    return null;
+                    return options;
                 }
                 ABBandMap bands = ABBands.CompOf(stairs.Map);
                 if (bands == null || !bands.Banded)
                 {
-                    return null;
+                    return options;
                 }
-                int delta = bands.BandOf(far.Position) - bands.BandOf(stairs.Position);
-                string label = delta > 0
-                    ? "AB_GoUp".Translate()
-                    : "AB_GoDown".Translate();
+                bool reachable = pawn.CanReach(stairs, PathEndMode.OnCell, Danger.Deadly);
+                int myBand = bands.BandOf(stairs.Position);
+                bool multi = stairs.Counterparts.Count > 1;
 
-                if (!pawn.CanReach(stairs, PathEndMode.OnCell, Danger.Deadly))
+                for (int i = 0; i < stairs.Counterparts.Count; i++)
                 {
-                    return new FloatMenuOption(label + " (" + "NoPath".Translate() + ")", null);
-                }
-                IntVec3 dest = far.Position;
-                return FloatMenuUtility.DecoratePrioritizedTask(
-                    new FloatMenuOption(label, delegate
+                    Building_ABStairs2 far = stairs.Counterparts[i];
+                    if (far == null || !far.Spawned)
                     {
-                        Job job = JobMaker.MakeJob(JobDefOf.Goto, dest);
-                        job.locomotionUrgency = LocomotionUrgency.Jog;
-                        pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
-                    }), pawn, dest);
+                        continue;
+                    }
+                    int delta = bands.BandOf(far.Position) - myBand;
+                    string label = delta > 0 ? "AB_GoUp".Translate() : "AB_GoDown".Translate();
+                    if (multi)
+                    {
+                        // Two ends can share a direction (a sky elevator goes down to the
+                        // surface AND down to the basement) - the level disambiguates.
+                        label = "AB_GoToLevel".Translate(label,
+                            ABBands.LevelOf(stairs.Map, far.Position));
+                    }
+                    if (!reachable)
+                    {
+                        options.Add(new FloatMenuOption(label + " (" + "NoPath".Translate() + ")", null));
+                        continue;
+                    }
+                    IntVec3 dest = far.Position;
+                    options.Add(FloatMenuUtility.DecoratePrioritizedTask(
+                        new FloatMenuOption(label, delegate
+                        {
+                            Job job = JobMaker.MakeJob(JobDefOf.Goto, dest);
+                            job.locomotionUrgency = LocomotionUrgency.Jog;
+                            pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+                        }), pawn, dest));
+                }
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "V2 stairs float menu");
-                return null;
             }
+            return options;
         }
     }
 }

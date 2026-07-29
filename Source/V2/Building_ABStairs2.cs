@@ -297,6 +297,33 @@ namespace AsAboveSoBelow
                 }
             }
             map.fogGrid.Unfog(farCell);
+
+            // FLOOD the fog away, don't just poke holes in it. CarveLanding unfogs its
+            // apron cell-by-cell, and a per-cell Unfog never propagates - so when a new
+            // link's landing broke into a pre-existing open space (a Biomes! Caverns
+            // cavern above all), the connected area stayed black even though the pawn
+            // standing on the landing could see straight into it. Vanilla reveals a
+            // breached cavern with FloodFillerFog.FloodUnfog when the last wall is mined;
+            // this is the same event by another door, so it gets the same treatment.
+            // Flooding from a standable apron cell spreads through everything connected
+            // and stops at walls and fog blockers exactly like a mining breach.
+            try
+            {
+                CellRect around = (cp != null ? cp.OccupiedRect()
+                    : GenAdj.OccupiedRect(farCell, Rotation, def.Size)).ExpandedBy(1);
+                foreach (IntVec3 c in around)
+                {
+                    if (c.InBounds(map) && c.Standable(map))
+                    {
+                        FloodFillerFog.FloodUnfog(c, map);
+                        break;
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                ABLog.Dev("V2: landing flood-unfog failed (ignored): " + e.Message);
+            }
             return cp;
         }
 
