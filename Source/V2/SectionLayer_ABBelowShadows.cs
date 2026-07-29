@@ -306,7 +306,7 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (terrain.TerrainAt(n) == air)
+                if (ABBands.ShowsBelow(terrain.TerrainAt(n)))
                 {
                     return true;
                 }

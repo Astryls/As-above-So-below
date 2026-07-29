@@ -100,7 +100,7 @@ namespace AsAboveSoBelow
                         + " - cell above out of bounds / in gutter");
                     continue;
                 }
-                if (terrain.TerrainAt(above) != air)
+                if (!ABBands.ShowsBelow(terrain.TerrainAt(above)))
                 {
                     if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
                         + " - covered from above by " + terrain.TerrainAt(above).defName);
@@ -216,7 +216,7 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 IntVec3 above = new IntVec3(pos.x, 0, pos.z + slot);
-                if (!above.InBounds(map) || terrain.TerrainAt(above) != air)
+                if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
                 {
                     continue; // roofed or capped from above, exactly like the mesh layer
                 }

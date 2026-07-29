@@ -117,7 +117,7 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    if (terrainGrid.TerrainAt(c) != air)
+                    if (!ABBands.ShowsBelow(terrainGrid.TerrainAt(c)))
                     {
                         continue; // opaque by construction
                     }
@@ -414,7 +414,7 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    if (terrainGrid.TerrainAt(above) == air)
+                    if (ABBands.ShowsBelow(terrainGrid.TerrainAt(above)))
                     {
                         return q.x == belowCell.x && q.z == belowCell.z;
                     }

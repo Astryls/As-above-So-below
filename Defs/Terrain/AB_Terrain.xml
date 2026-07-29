@@ -45,12 +45,16 @@
     <defName>AB_WallTop</defName>
     <label>wall top</label>
     <description>The narrow top of a wall on the level below. Too narrow to walk along, but solid enough to build on - stack another wall here to raise the structure.</description>
-    <!-- NOT Terrain/AB_MountainTop. That texture is deliberately near-black because the
-         mountain-cap layer shades it as solid rock mass; borrowed here it just renders as
-         an opaque black slab across the wall. Reuse the rooftop tile with a warmer stone
-         tint so a wall ledge reads as masonry and stays distinct from a rooftop. -->
-    <texturePath>Terrain/Surfaces/GenericFloorTile</texturePath>
-    <color>(0.46, 0.44, 0.40)</color>
+    <!-- dontRender, exactly like AB_OpenAir, and for the same reason: the top of a wall
+         seen from the level above IS the wall, so this cell must show the building below
+         rather than paint over it. Two earlier attempts both painted something here and
+         both looked broken - Terrain/AB_MountainTop (near-black, because the mountain-cap
+         layer shades it) gave an opaque black slab, and a tinted floor tile gave a flat
+         grey square where a wooden wall should be. The terrain exists purely to carry
+         passability and affordance; ABBands.ShowsBelow lets the see-below renderer draw
+         straight through it. -->
+    <texturePath>Terrain/AB_OpenAir</texturePath>
+    <dontRender>true</dontRender>
     <edgeType>Hard</edgeType>
     <renderPrecedence>232</renderPrecedence>
     <layerable>false</layerable>
