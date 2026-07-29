@@ -1,3 +1,10 @@
+> ⚠ **SUPERSEDED (2026-07-28).** This snapshot predates a full day of work: per-band biomes
+> via `BiomeAt`, Biomes! Caverns basements, sky vegetation, the camera/curtain system, the
+> sky-sync (wall stacking / rooftops), all three stair-stall fixes, curated map sizes, the
+> generation profiler and its ~4× carve optimization, and the mountain-base start. **The
+> Schematic (`.modmixer/schematic.json`) is the only current document.** Sections below may
+> be actively wrong — e.g. combat is "implemented, never verified", not untouched.
+
 # As above, So below II — V2 Handoff
 
 > **Read this first in a fresh context.** The living version of this document is the

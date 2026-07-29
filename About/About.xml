@@ -3,84 +3,62 @@
   <name>As above, So below II</name>
   <packageId>astryl.AsAboveSoBelow2</packageId>
   <author>astryl</author>
-  <description>Build upward and dig deeper. As above, So below adds one sky level above your colony and one solid rock basement below it. Every level is a real, fully simulated map, and your pawns treat the whole column as a single base.
+  <description>Build upward and dig deeper. As above, So below II adds one sky level above your colony and one solid rock basement below it — three stacked levels living inside a single map, so your pawns treat the whole column as one base.
+
+This is a ground-up rearchitecture of the original As above, So below. Instead of separate pocket maps stitched together with hundreds of patches, the levels are bands of one real map connected through the engine's own region system. Vanilla RimWorld does not know the levels exist — it just finds a path. That is why cross-level behavior works without special-case code, and why this version is dramatically simpler, faster and more stable than its predecessor.
 
 [h1]Three Levels, One Colony[/h1]
 [list]
-[*][b]The sky level[/b]: open air over your roofs. Build on rooftops and watch the surface through the gaps.
+[*][b]The sky level[/b]: open air over your roofs. Where a mountain rises past the surface, real summit terrain generates — plateaus, meadows, bare stone, ore — seeded with vegetation from your biome that regrows naturally.
 [*][b]The surface[/b]: your normal map, untouched.
-[*][b]The basement[/b]: dig below. Solid rock at a steady 12C by default, or a whole other environment (see below). Bring miners, carve out a bunker, a fridge, or a prison.
+[*][b]The basement[/b]: solid mineable rock. Carve out a bunker, a freezer, a prison — or with Biomes! Caverns installed, generate it as a living cave system with cave flora, wildlife, stalagmites and crystals, sealed in the dark until you break through.
 [/list]
+
+[h1]One Workforce, No Micromanagement[/h1]
+Pawns cross levels on their own for hauling, construction, meals, rest, cleaning, medical treatment and recreation. Storage reaches across the column: a stockpile upstairs pulls goods up the stairs like any other stockpile. This is not scripted — connectivity is real to the engine, so anything that asks &quot;can I reach it?&quot; simply can.
 
 [h1]A Living View Below[/h1]
-From the sky level you look down through open air at the real surface: live pawns, gunfights, weather, even rivers rendered with the vanilla water shader. Unexplored ground stays hidden, and a depth dim slider sets the mood. Combat works through the gaps too: a sniper on the rim can fire down at raiders on the surface, and they can shoot right back. Group orders cross the gap as well: hold right click and drag a formation, and every selected pawn shows its ghost at its own destination cell, even when the group is split across levels. Psycasts can target a pawn or a patch of ground on the level below, and the caster walks over and casts.
+From the sky you look down through open air at the actual surface: live pawns, buildings, items, even construction in progress, drawn with the game's own materials. Roof a room and its rooftop becomes a walkable, buildable surface above. Stack a wall on top of a wall to raise structures floor by floor. Unexplored ground stays hidden.
 
-[h1]Sky Terrain Worth Climbing[/h1]
-Where a mountain peak rises past the surface, the sky level generates real summit terrain: open plateaus, meadows, rocky outcrops, small tarns, and sometimes a hidden valley that has been sealed away since the planet cooled. With the Odyssey DLC, landmarks can appear up there as well. The mod settings include a live generation preview, so you can tune openness, water, soil, ore, and vegetation and see a sample before you ever climb.
-
-[h1]Basements With Character[/h1]
-Your basement does not have to be plain rock. One setting picks what new basements generate as, and the choices grow with your mod list:
+[h1]Getting Between Levels[/h1]
 [list]
-[*][b]Solid rock[/b]: the default. Mineable stone at a steady temperature, ready for a bunker, a deep freezer, or a prison.
-[*][b]Living cavern[/b]: with Biomes! Caverns, a connected cave system floored with cave terrain, seeded with cave flora, wildlife, stalagmites and crystals, sealed until you break in.
-[*][b]Buried facility[/b]: with Ancient urban ruins, a ruined underground complex is embedded in the rock at the center of the level. Mine your way in for the loot. Its old entrances and exits are removed, so your own stairs are the only way down, and you choose whether its original occupants are still home.
-[*][b]Alien caves[/b]: with Alpha Biomes, carve the basement as a mycotic jungle, a gelatinous superorganism, the forsaken crags, or the tar pits.
-[/list]
-New basements can reveal on load, so the whole level is visible at once, or you can leave the fog on and explore the dark the normal way.
-
-[h1]One Workforce[/h1]
-Pawns cross levels on their own for work, hauling, food, rest, recreation, medical treatment, rescue, and even mental breaks: a beer binge will find the basement stash, a berserker will come down the stairs after a victim. Storage, bills, resource counts, alerts, and the colonist bar treat the column as one colony. Priorities count across levels too: when a job with higher priority waits on another floor, pawns take the stairs for it instead of settling for busywork where they stand. Storage priority reaches across the column as well, so a stockpile you set to critical on another floor pulls its goods up or down the stairs ahead of ordinary local hauling. Food choice weighs the whole column exactly like one big map, so a proper meal in the upstairs fridge wins over berries by the door. Handlers lead roped animals to a pen on another level when no local pen fits, psycasters climb to the strongest meditation focus in the column, and rituals summon every participant, secure prisoners and the sacrifice animal included. Reinstalling a building on a different floor is one order: place the ghost and your colonists handle the uninstall, the ferry, and the rebuild.
-
-[h1]Stairs, Ladders, Elevators[/h1]
-[list]
-[*][b]Stairs[/b]: the baseline.
-[*][b]Ladder[/b]: cheap and slow.
-[*][b]Grand staircase[/b]: fast, and it scales with quality.
-[*][b]Elevator[/b]: fastest, links all three levels through one shaft.
-[*]Every link can be forbidden like a door. Colonists and pets respect the toggle, raiders ignore it.
+[*][b]Ladder[/b] (1x1): cheap, one at a time.
+[*][b]Staircase[/b] (2x2): the baseline.
+[*][b]Grand staircase[/b] (3x3): wide approaches for heavy traffic.
+[*]Placement shows you exactly which cells pawns can enter from, and refuses spots that would jam.
 [/list]
 
-[h1]Utilities Straight Through The Floor[/h1]
-Dedicated shafts connect networks level to level as if they were one net. No batteries or tanks required on either side.
+[h1]Camera[/h1]
+Switch levels with Ctrl+scroll or keybinds — the camera lands on the exact spot one level up or down. An optional free-panning mode lets you sweep past the edge of a level and see it floating in the void.
+
+[h1]Honest Performance[/h1]
 [list]
-[*][b]Vertical conduit[/b]: vanilla power flows directly, brownouts and battery charging behave exactly like one grid. Rimatomics electricity crosses too, since it runs on vanilla power nets.
-[*][b]Vertical water pipe[/b]: Dubs Bad Hygiene water, tankless levels just work.
-[*][b]Vertical duct[/b]: every Vanilla Expanded pipe resource, including Vanilla Pipes Expanded, Helixien gas, and Vanilla Temperature Expanded.
-[*][b]Vertical chem pipe[/b]: Rimefeller oil and chemfuel.
+[*]Measured, not promised: about 2% of frame budget on a 96-colonist test colony, holding 60 fps.
+[*]No patches on reachability, pathfinding or region code — the systems performance mods care about are untouched.
+[*]Map sizes are curated to the engine's efficient boundaries, labeled with the true stacked cell cost.
+[*]Map generation takes a few seconds longer than vanilla — three levels are generated, after all.
+[*]Per-system kill switches: if anything errors, that one subsystem turns itself off and logs why; the rest keeps working.
 [/list]
 
-[h1]Threats, If You Want Them[/h1]
-Off by default: infestations can tunnel into your basement and drop pods can hit the sky level. Diverted raiders find their way down the stairs to reach you, and nothing ever wanders a pocket level forever.
-
-[h1]Part Of The World[/h1]
-Caravans form across levels, traders see the whole column's goods, storyteller wealth counts every level, and abandoning the settlement warns you about pawns left above or below. Visitor and traveler groups sometimes arrive on your sky plateaus when a walkable opening touches the map edge, Hospitality guests tour any level with guest beds or a vendor and rejoin their group before it leaves, and trader airships land on a rooftop landing zone if you paint one up there.
-
-[h1]Built For Performance[/h1]
+[h1]Known Limitations (read before subscribing)[/h1]
 [list]
-[*]Event driven, with zero recurring cost until you build a level.
-[*]Levels you are not looking at throttle their visual updates and catch up the instant you switch view.
-[*]Heavy work is time sliced or moved off the main thread the engine safe way.
-[*]Cross level work checks are cached, budgeted, and reuse results until something actually changes, so a big colony stays smooth.
-[*]Per system kill switches: if anything ever errors, that subsystem shuts itself off and the rest keeps working.
-[*]Tested running alongside Performance Optimizer, Missile Girl, Performance Esmolas, Slower Pawn Tick Rate, and Dubs Performance Analyzer with no conflicts.
+[*][b]Cross-level combat is experimental.[/b] Shooting down through openings is implemented but still being verified; shooting upward does not render yet.
+[*][b]No elevator yet.[/b] Ladders and stairs only for now; the elevator is planned.
+[*][b]No vertical utility shafts yet[/b] (power/water/gas between levels). Planned.
+[*][b]Prefer inland tiles.[/b] Coastlines can generate incompletely on the banded map. On fully mountainous tiles the colony starts in a carved pocket — an intentional mountain-base start.
+[*]Only NEW colonies get levels. Safe to add to an existing save, but existing maps stay vanilla.
 [/list]
 
 [h1]Compatibility[/h1]
 [list]
-[*]Integrated: Dubs Bad Hygiene, Vanilla Expanded pipes, Rimefeller, Combat Extended, Vehicle Framework, Hospitality, Allow Tool, Pick Up And Haul, Hauler's Dream, Achtung, Common Sense, Giddy-Up, Reverse Commands, Misc. Robots, Medieval Trader Airships, Biomes! Caverns, Alpha Biomes, Ancient urban ruins, Better Mountains, Medieval Overhaul, and more.
-[*]Modders: an open API for cross level jobs, custom vertical links, and incident policy.
-[*]Not compatible: MultiFloors, it solves the same problem its own way.
-[*]Requires Harmony. Built for RimWorld 1.6. Safe to add to an existing save; to remove it, empty and dismantle your extra levels first.
-[/list]
-
-[h1]Incompatibilities[/h1]
-[list]
-[*]Not compatible: MultiFloors &amp; Strata, they have their own vertical stacking mechanism that can never be made compatible with AASB.
+[*]Requires Harmony. Built for RimWorld 1.6.
+[*]Biomes! Caverns: living cavern basements, fully integrated.
+[*]Not compatible: the original As above, So below (this replaces it), MultiFloors, Z-Levels, Strata — different vertical-stacking mechanisms that cannot coexist.
+[*]Broad mod compatibility is a design goal (see Honest Performance) but the formal compatibility audit is ongoing — please report issues.
 [/list]
 
 [h3] My Quality Commitment:[/h3]
 [list]
-[*] [b]Fully Tested:[/b] Every feature and line of code has been thoroughly tested in-game to ensure it functions as intended and integrates smoothly.
 [*] [b]Active Support:[/b] I am fully committed to maintaining this mod. If you encounter any bugs, compatibility issues, or unintended behavior, please report them in the comments or a dedicated discussion thread.
 [*] [b]No Abandonware:[/b] I will actively patch, refine, and update this mod to keep it working and up to standard.
 [*] [b]No Coffee:[/b] I will never ask for donations for AI created / assisted mods. I share these in the hopes they spark joy for someone, making AI generated content and then begging for money that could go to artists and people more deserving is NOT responsible AI usage.
