@@ -34,6 +34,31 @@
     </affordances>
   </TerrainDef>
 
+  <!-- The top of a wall on the level below: you may BUILD on it (so walls stack into a
+       tower) but you may not WALK on it. Impassable + full affordances is exactly how
+       vanilla treats deep water under a bridge - construction only needs the builder to
+       reach an ADJACENT cell, not to stand on the target - so the two properties are not
+       in conflict.
+       Kept distinct from AB_RoofSurface on purpose: a roof is a floor you can walk out
+       onto, a wall top is a ledge you can only build on. -->
+  <TerrainDef>
+    <defName>AB_WallTop</defName>
+    <label>wall top</label>
+    <description>The narrow top of a wall on the level below. Too narrow to walk along, but solid enough to build on - stack another wall here to raise the structure.</description>
+    <texturePath>Terrain/AB_MountainTop</texturePath>
+    <color>(0.42, 0.41, 0.39)</color>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>232</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Impassable</passability>
+    <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
   <TerrainDef>
     <defName>AB_MountainTop</defName>
     <label>mountain top</label>

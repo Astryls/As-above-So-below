@@ -159,6 +159,8 @@ namespace AsAboveSoBelow
                 }
             }
 
+            DrawBelowRealtimeThings(map, belowView, slot, terrain, fog, air);
+
             if (ReportNextPass)
             {
                 ReportNextPass = false;
@@ -167,6 +169,70 @@ namespace AsAboveSoBelow
                     + pawns.Count + " pawns on map):\n"
                     + (report.Length == 0 ? "  (no pawns considered)" : report.ToString()));
                 report.Length = 0;
+            }
+        }
+
+        /// <summary>
+        /// Non-pawn REALTIME things: construction frames above all.
+        ///
+        /// SectionLayer_ABBelowV2 carries the level below by printing things into the map
+        /// mesh, and it deliberately skips anything realtime:
+        ///     if (drawer != MapMeshOnly &amp;&amp; drawer != MapMeshAndRealTime) continue;
+        /// because realtime things simply are not in that mesh. Until now the only realtime
+        /// things drawn from above were pawns, so everything else in that category was
+        /// invisible from the level above:
+        ///   * FRAMES are DrawerType.RealtimeOnly (ThingDefGenerator_Buildings.BaseFrameDef),
+        ///     so anything under construction vanished when viewed from the sky.
+        ///   * DOOR blueprints are forced RealtimeOnly too, so those disappeared while every
+        ///     other blueprint (which inherits its target's drawer type) showed fine - which
+        ///     is what made the bug look arbitrary.
+        ///   * Projectiles are in this category as well, so cross-band shots were never
+        ///     drawn either. Same root cause, closed by the same loop.
+        ///
+        /// Source is DynamicDrawManager.DrawThings - vanilla's own registry of realtime
+        /// drawables. That is exactly the complement of what the mesh layer carries, so the
+        /// two passes tile the whole map with no overlap and no gaps. Sweeping cells with
+        /// ThingsListAtFast instead would repeat the OverlayDrawer mistake that cost
+        /// 1.4 ms/frame.
+        /// </summary>
+        private static void DrawBelowRealtimeThings(Map map, CellRect belowView, int slot,
+            TerrainGrid terrain, FogGrid fog, TerrainDef air)
+        {
+            IReadOnlyList<Thing> things = map.dynamicDrawManager?.DrawThings;
+            if (things == null)
+            {
+                return;
+            }
+            for (int i = 0; i < things.Count; i++)
+            {
+                Thing t = things[i];
+                if (t == null || !t.Spawned || t is Pawn)
+                {
+                    continue; // pawns already handled above, with their bed-pose special case
+                }
+                IntVec3 pos = t.Position;
+                if (!belowView.Contains(pos) || fog.IsFogged(pos))
+                {
+                    continue;
+                }
+                IntVec3 above = new IntVec3(pos.x, 0, pos.z + slot);
+                if (!above.InBounds(map) || terrain.TerrainAt(above) != air)
+                {
+                    continue; // roofed or capped from above, exactly like the mesh layer
+                }
+                try
+                {
+                    Vector3 loc = t.DrawPos;
+                    loc.z += slot;
+                    t.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
+                    t.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
+                    t.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                }
+                catch (Exception e)
+                {
+                    Log.WarningOnce(ABLog.Tag + " V2 below realtime draw failed for "
+                        + t.LabelCap + ": " + e.Message, t.thingIDNumber ^ 762195874);
+                }
             }
         }
     }

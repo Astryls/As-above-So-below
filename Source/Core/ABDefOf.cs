@@ -31,6 +31,10 @@ namespace AsAboveSoBelow
         /// <summary>Peak surface generated where a mountain rises into the sky band.</summary>
         public static TerrainDef AB_MountainTop;
 
+        /// <summary>Top of a wall on the band below: buildable so walls can stack, but
+        /// impassable so it is not a walkway. Maintained by ABSkySync.</summary>
+        public static TerrainDef AB_WallTop;
+
         /// <summary>Dirty flag in SectionLayer_ABMountainCap's relevantChangeTypes, so a
         /// below-content change can repaint the cap without dirtying every other layer.</summary>
         public static MapMeshFlagDef AB_BelowThings;
