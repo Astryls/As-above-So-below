@@ -62,7 +62,18 @@ namespace AsAboveSoBelow
             public readonly List<RegionLink> links = new List<RegionLink>();
         }
 
-        private static readonly Dictionary<int, List<Pair>> byMap = new Dictionary<int, List<Pair>>();
+        /// <summary>Pairs per map, keyed by the Map OBJECT, not map.uniqueID.
+        ///
+        /// This was a Dictionary&lt;int, List&lt;Pair&gt;&gt; keyed by uniqueID, and that broke
+        /// every reload: loading a save neither clears statics nor fires MapRemoved for the
+        /// torn-down session, and the loaded map carries the SAME uniqueID as its dead
+        /// predecessor - so ListFor handed the fresh map a list still full of stale Pairs
+        /// whose buildings belong to unspawned objects on a dead Map. uniqueIDs also restart
+        /// at 0 for every NEW game, so a different colony could inherit them too. Identical
+        /// to the viewBand lesson: per-map state must be keyed by the Map object. A CWT also
+        /// lets dead maps' lists be collected instead of pinned forever.</summary>
+        private static readonly ConditionalWeakTable<Map, List<Pair>> byMap =
+            new ConditionalWeakTable<Map, List<Pair>>();
 
         /// <summary>Re-entrancy latch: rearming must never trigger a region rebuild
         /// (we only use NoRebuild accessors, but the latch makes that guarantee
@@ -71,7 +82,7 @@ namespace AsAboveSoBelow
 
         public static int PairCount(Map map)
         {
-            return map != null && byMap.TryGetValue(map.uniqueID, out List<Pair> l) ? l.Count : 0;
+            return map != null && byMap.TryGetValue(map, out List<Pair> l) ? l.Count : 0;
         }
 
         /// <summary>True when the cell is within <paramref name="radius"/> of either end of any
@@ -79,7 +90,7 @@ namespace AsAboveSoBelow
         /// of every pawn on the map.</summary>
         public static bool NearAnyAnchor(Map map, IntVec3 cell, int radius)
         {
-            if (map == null || !byMap.TryGetValue(map.uniqueID, out List<Pair> list))
+            if (map == null || !byMap.TryGetValue(map, out List<Pair> list))
             {
                 return false;
             }
@@ -112,7 +123,7 @@ namespace AsAboveSoBelow
                 return "no map";
             }
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            if (!byMap.TryGetValue(map.uniqueID, out List<Pair> list) || list.Count == 0)
+            if (!byMap.TryGetValue(map, out List<Pair> list) || list.Count == 0)
             {
                 sb.AppendLine("NO WORMHOLE PAIRS REGISTERED on this map.");
                 return sb.ToString();
@@ -180,7 +191,7 @@ namespace AsAboveSoBelow
 
         public static void Unlink(Building_Door anchor, Map map)
         {
-            if (anchor == null || map == null || !byMap.TryGetValue(map.uniqueID, out List<Pair> list))
+            if (anchor == null || map == null || !byMap.TryGetValue(map, out List<Pair> list))
             {
                 return;
             }
@@ -199,10 +210,10 @@ namespace AsAboveSoBelow
 
         private static List<Pair> ListFor(Map map)
         {
-            if (!byMap.TryGetValue(map.uniqueID, out List<Pair> list))
+            if (!byMap.TryGetValue(map, out List<Pair> list))
             {
                 list = new List<Pair>();
-                byMap[map.uniqueID] = list;
+                byMap.Add(map, list);
             }
             return list;
         }
@@ -227,13 +238,26 @@ namespace AsAboveSoBelow
         /// two grid lookups and two list scans.</summary>
         public static void RearmAll(Map map)
         {
-            if (map == null || rearming || !byMap.TryGetValue(map.uniqueID, out List<Pair> list) || list.Count == 0)
+            if (map == null || rearming || !byMap.TryGetValue(map, out List<Pair> list) || list.Count == 0)
             {
                 return;
             }
             rearming = true;
             try
             {
+                // Prune pairs whose ends are gone. Normal teardown goes through DeSpawn ->
+                // Unlink, but map teardown and load-ordering edge cases can strand a pair,
+                // and a stranded pair silently fails every rearm from then on.
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    Pair p = list[i];
+                    if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned
+                        || p.a.Map != map || p.b.Map != map)
+                    {
+                        TearDown(p);
+                        list.RemoveAt(i);
+                    }
+                }
                 bool changed = false;
                 for (int i = 0; i < list.Count; i++)
                 {
@@ -401,7 +425,7 @@ namespace AsAboveSoBelow
         {
             near = null;
             far = null;
-            if (map == null || !byMap.TryGetValue(map.uniqueID, out List<Pair> list) || list.Count == 0)
+            if (map == null || !byMap.TryGetValue(map, out List<Pair> list) || list.Count == 0)
             {
                 return false;
             }

@@ -95,6 +95,10 @@ namespace AsAboveSoBelow
         public override void FinalizeInit()
         {
             base.FinalizeInit();
+            // FIRST, unconditionally: this instance is the authoritative component, so
+            // repair any cache that latched a mid-load placeholder (see RebindAfterLoad).
+            ABBands.RebindAfterLoad(map, this);
+            Patch_MixedBiome_ABBandBiomeAt.Forget();
             if (!Banded)
             {
                 return;
@@ -108,30 +112,50 @@ namespace AsAboveSoBelow
             // camera position one band away would otherwise leave the player staring at
             // black space with no obvious way back.
             viewBand = surfaceBand;
-            try
+
+            // The camera move MUST be deferred to the main thread. FinalizeInit runs on a
+            // LongEvent WORKER thread during load, and CameraDriver.MapPosition reads the
+            // Unity transform - a cross-thread Unity API call that throws. The first
+            // version did this inline inside a silent catch, so on every LOAD the exception
+            // was swallowed and the camera was never moved: with free panning enabled there
+            // is no clamp to rescue it either, so the restored camera sat in the old band's
+            // coordinates while viewBand said 'surface', the view-rect clip drew only the
+            // surface band, and the player loaded into empty void - reported as "camera
+            // clamping breaks on reload". ExecuteWhenFinished runs after load on the main
+            // thread, which is the standard pattern for exactly this.
+            Map m = map;
+            LongEventHandler.ExecuteWhenFinished(delegate
             {
-                CameraDriver cam = Find.CameraDriver;
-                if (cam == null)
+                try
                 {
-                    return;
+                    if (m == null || Find.Maps == null || !Find.Maps.Contains(m)
+                        || Find.CurrentMap != m)
+                    {
+                        return; // map gone, or not the one on screen - nothing to fix
+                    }
+                    CameraDriver cam = Find.CameraDriver;
+                    if (cam == null)
+                    {
+                        return;
+                    }
+                    Vector3 p = cam.MapPosition.ToVector3();
+                    IntVec3 look = new IntVec3(Mathf.RoundToInt(p.x), 0, Mathf.RoundToInt(p.z));
+                    if (!look.InBounds(m) || BandOf(look) == surfaceBand)
+                    {
+                        return;
+                    }
+                    IntVec3 moved = Translate(look, surfaceBand);
+                    if (moved.InBounds(m))
+                    {
+                        cam.SetRootPosAndSize(new Vector3(moved.x + 0.5f, 0f, moved.z + 0.5f),
+                            cam.ZoomRootSize);
+                    }
                 }
-                Vector3 p = cam.MapPosition.ToVector3();
-                IntVec3 look = new IntVec3(Mathf.RoundToInt(p.x), 0, Mathf.RoundToInt(p.z));
-                if (!look.InBounds(map) || BandOf(look) == surfaceBand)
+                catch
                 {
-                    return;
+                    // Camera positioning is cosmetic; never let it break load.
                 }
-                IntVec3 moved = Translate(look, surfaceBand);
-                if (moved.InBounds(map))
-                {
-                    cam.SetRootPosAndSize(new Vector3(moved.x + 0.5f, 0f, moved.z + 0.5f),
-                        cam.ZoomRootSize);
-                }
-            }
-            catch
-            {
-                // Camera positioning is cosmetic; never let it break map init.
-            }
+            });
         }
 
         public bool Banded => bandCount > 1 && bandHeight > 0;

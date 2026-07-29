@@ -34,7 +34,11 @@ namespace AsAboveSoBelow
     {
         private static readonly ConditionalWeakTable<Map, ABBandMap> cache = new ConditionalWeakTable<Map, ABBandMap>();
 
-        private static readonly Dictionary<int, ABBandLayout> spikeLayouts = new Dictionary<int, ABBandLayout>();
+        /// <summary>Dev-spike layouts, keyed by the Map OBJECT. Was keyed by map.uniqueID,
+        /// which leaks across loads (same id, dead session's layout) and across games (ids
+        /// restart at 0) - the same defect that broke wormholes on reload.</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Map, ABBandLayout> spikeLayouts =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Map, ABBandLayout>();
 
         /// <summary>
         /// One-entry front cache for CompOf, held as a single immutable object.
@@ -68,11 +72,50 @@ namespace AsAboveSoBelow
             memo = null;
         }
 
+        /// <summary>Re-point every cache at the authoritative component instance.
+        ///
+        /// Called from ABBandMap.FinalizeInit, and it is load-bearing for LOAD. On loading
+        /// a save, Map.ExposeData first runs ConstructComponents() - creating a fresh,
+        /// EMPTY ABBandMap - and only later replaces it with the deserialized instance that
+        /// carries the real band data. Loading from a running game keeps the main thread
+        /// rendering during that window, so CameraDriver.Update -> band clamp -> CompOf
+        /// could run against the half-loaded map, get the empty instance (non-null!), and
+        /// cache it. Every subsequent lookup then returned the poisoned empty component:
+        /// Banded == false on a fully banded map - the camera clamp died and every stair
+        /// reported "this map has no bands". FinalizeInit runs on the REAL instance, so
+        /// rebinding here heals any such poisoning no matter how it happened.</summary>
+        public static void RebindAfterLoad(Map map, ABBandMap comp)
+        {
+            memo = null;
+            if (map == null || comp == null)
+            {
+                return;
+            }
+            cache.Remove(map);
+            try
+            {
+                cache.Add(map, comp);
+            }
+            catch (System.ArgumentException)
+            {
+                // Benign race.
+            }
+            memo = new CompMemo(map, comp);
+        }
+
         public static ABBandMap CompOf(Map map)
         {
             if (map == null)
             {
                 return null;
+            }
+            // NEVER cache while a save is loading or being written. During load the
+            // components list transiently holds a freshly constructed EMPTY component (see
+            // RebindAfterLoad) - caching it poisons every later lookup. Answer live and
+            // uncached until the Scribe is quiet.
+            if (Scribe.mode != LoadSaveMode.Inactive)
+            {
+                return map.GetComponent<ABBandMap>();
             }
             // Measured motivation: GenTemperature.TryGetTemperatureForCell drove 719,002
             // calls through here in 2,000 frames and MixedBiomeMapComponent.GetBiomeAt
@@ -111,7 +154,8 @@ namespace AsAboveSoBelow
         {
             if (map != null)
             {
-                spikeLayouts[map.uniqueID] = layout;
+                spikeLayouts.Remove(map);
+                spikeLayouts.Add(map, layout);
             }
         }
 
@@ -119,7 +163,7 @@ namespace AsAboveSoBelow
         {
             if (map != null)
             {
-                spikeLayouts.Remove(map.uniqueID);
+                spikeLayouts.Remove(map);
             }
         }
 
@@ -129,7 +173,7 @@ namespace AsAboveSoBelow
             {
                 return null;
             }
-            return spikeLayouts.TryGetValue(map.uniqueID, out ABBandLayout l) ? l : null;
+            return spikeLayouts.TryGetValue(map, out ABBandLayout l) ? l : null;
         }
 
         // ---- primary API ---------------------------------------------------
