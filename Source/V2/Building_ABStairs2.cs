@@ -56,9 +56,44 @@ namespace AsAboveSoBelow
         /// not.</summary>
         protected override bool CanDrawMovers => false;
 
+        /// <summary>Large enough that TicksTillFullyOpened clamps to 0 forever. The door
+        /// never ticks, so this is set once and stays.</summary>
+        private const int AlreadyFullyOpen = 100000;
+
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
             base.SpawnSetup(map, respawningAfterLoad);
+
+            // FORCE THE DOOR PERMANENTLY OPEN. This is the fix for pawns freezing beside a
+            // stairwell, and it is subtle enough to be worth spelling out.
+            //
+            // Pawn_PathFollower.NextCellDoorToWaitForOrManuallyOpen returns a door - making
+            // the pawn stand still in a Stance_Cooldown instead of stepping - when ALL of:
+            //     door.SlowsPawns && (!door.Open || door.TicksTillFullyOpened > 0)
+            //         && door.PawnCanOpen(pawn)
+            //
+            // Every one of those was true for a stairwell:
+            //   * SlowsPawns is `DoorPowerOn ? TicksToOpenNow > 20 : true` - a link has no
+            //     power comp, so it takes the unpowered branch and is ALWAYS true.
+            //   * PawnCanOpen is overridden to true here.
+            //   * Open is `openInt`, and openInt only ever flips inside Building_Door.Tick.
+            //     The def sets <tickerType>Never</tickerType> (deliberately - thousands of
+            //     link cells should not tick), so Tick NEVER RUNS and openInt is false for
+            //     the life of the building.
+            //
+            // So the pawn asked the door to open, waited TicksTillFullyOpened, the door
+            // could not possibly open, and it retried forever. Overriding AlwaysOpen did not
+            // help because AlwaysOpen only feeds StuckOpen and the auto-close logic - it
+            // never assigns openInt.
+            //
+            // Setting both fields directly is what a ticking door would have reached on its
+            // own, and it keeps tickerType Never. FreePassage/BlocksPawn were already correct,
+            // which is exactly why the diagnostics looked clean: links armed 9/9, CanReach
+            // true, a 15-node path found, every neighbour walkable - and a pawn that would
+            // not move.
+            openInt = true;
+            ticksSinceOpen = AlreadyFullyOpen;
+
             if (respawningAfterLoad)
             {
                 // Links are runtime state; rebuild them from the saved counterpart ref.
@@ -110,7 +145,7 @@ namespace AsAboveSoBelow
             Building_ABStairs2 cp = farCell.GetFirstThing<Building_ABStairs2>(map);
             CellRect farFootprint = cp != null
                 ? cp.OccupiedRect()
-                : GenAdj.OccupiedRect(farCell, Rot4.North, cpDef.Size);
+                : GenAdj.OccupiedRect(farCell, Rotation, cpDef.Size);
             CarveLanding(map, bands, farFootprint, targetBand);
 
             if (cp == null)
@@ -119,7 +154,24 @@ namespace AsAboveSoBelow
                 try
                 {
                     Thing t = ThingMaker.MakeThing(cpDef, Stuff ?? GenStuff.DefaultStuffFor(cpDef));
-                    cp = (Building_ABStairs2)GenSpawn.Spawn(t, farCell, map, WipeMode.Vanish);
+                    // ROTATION MUST MATCH THIS END. GenAdj.AdjustForRotation shifts a
+                    // building's OccupiedRect by a cell for any EVEN dimension:
+                    //     if (size.x % 2 == 0) center.x += num;
+                    //     if (size.z % 2 == 0) center.z += num2;
+                    // The 1x1 ladder and the 3x3 grand stairs are odd on both axes and so are
+                    // rotation-independent - but the 2x2 stairs are even on both. Spawning the
+                    // counterpart with the default Rot4.North while the player places this end
+                    // facing South (defaultPlacingRot) put the two footprints a cell out of
+                    // alignment, even though Position translated 1:1 between bands.
+                    //
+                    // ABWormhole.TryCellPairs then paired cell i to cell i and armed every
+                    // link, so nothing looked broken - but the linked cells were spatially
+                    // offset from the visible stairwell. Which cell a pawn happened to step
+                    // into decided whether the crossing behaved, which is the classic
+                    // "stairs work sometimes" symptom. TryCellPairs documents the matching
+                    // rotation as an invariant; this is the line that makes it true.
+                    cp = (Building_ABStairs2)GenSpawn.Spawn(t, farCell, map, Rotation,
+                        WipeMode.Vanish);
                     if (Faction != null)
                     {
                         cp.SetFaction(Faction);

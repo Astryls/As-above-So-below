@@ -268,10 +268,17 @@ namespace AsAboveSoBelow
             into.Clear();
             CellRect ra = p.a.OccupiedRect();
             CellRect rb = p.b.OccupiedRect();
-            if (ra.Area != rb.Area)
+            // Compare WIDTH and HEIGHT, not just Area. Index-order pairing below is only a
+            // valid positional correspondence when the two rects have the same shape - and a
+            // rotated non-square end has identical Area with its dimensions swapped, so an
+            // Area-only check would wave it through and silently pair the wrong cells. Every
+            // link def is square today; this guard is what stops a future non-square one
+            // failing invisibly.
+            if (ra.Width != rb.Width || ra.Height != rb.Height)
             {
-                Log.WarningOnce(ABLog.Tag + " V2: wormhole ends differ in size ("
-                    + ra.Area + " vs " + rb.Area + "); linking the first cell only.",
+                Log.WarningOnce(ABLog.Tag + " V2: wormhole ends differ in shape ("
+                    + ra.Width + "x" + ra.Height + " vs " + rb.Width + "x" + rb.Height
+                    + "); linking the first cell only.",
                     762195901);
                 into.Add(new KeyValuePair<IntVec3, IntVec3>(p.a.Position, p.b.Position));
                 return true;

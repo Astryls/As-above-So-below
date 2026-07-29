@@ -265,7 +265,7 @@ namespace AsAboveSoBelow
                     {
                         found = safe.CenterCell;
                         Log.Warning(ABLog.Tag + " V2: no standable start cell in the surface"
-                            + " band; falling back to " + found + ".");
+                            + " band; falling back to " + found + "." + lastSearchCensus);
                     }
 
                     MapGenerator.PlayerStartSpot = found;
@@ -522,7 +522,8 @@ namespace AsAboveSoBelow
             {
                 found = seed;
                 Log.Warning(ABLog.Tag + " V2: could not find any standable start cell in the"
-                    + " surface band; falling back to " + seed + ". Colonists may fail to spawn.");
+                    + " surface band; falling back to " + seed + ". Colonists may fail to spawn."
+                    + lastSearchCensus);
             }
             MapGenerator.PlayerStartSpot = found;
             ABLog.Dev("V2: player start spot moved into the surface band at " + found + ".");
@@ -535,33 +536,107 @@ namespace AsAboveSoBelow
         /// whole map, so a !Fogged test rejects every cell, the search fails, and the
         /// colony gets dumped on the band's centre cell (frequently solid rock). That was
         /// the run #4 "no colonists spawned" bug.</summary>
+        /// <summary>Why the last failed search failed, for the warning message. Without it
+        /// "no standable start cell" is unactionable - a band that is solid mountain and a
+        /// band that is solid ocean need completely different responses, and they produce
+        /// the identical message.</summary>
+        private static string lastSearchCensus = string.Empty;
+
+        /// <summary>
+        /// Finds somewhere the starting colony can actually land: standable, dry,
+        /// unobstructed, and (optionally) with a clear apron so drop pods and pawns fit.
+        ///
+        /// TWO PASSES, and the second one is the fix for a real failure. The radial pass
+        /// searches outward from the seed so the colony lands near the spot vanilla chose
+        /// for terrain reasons - but GenRadial's precomputed pattern tops out at
+        /// MaxRadialPatternRadius (~79.8), so it can only ever see ~70 cells. The surface
+        /// band is 200x200. When the seed fell inside a lake or a mountain and open ground
+        /// was further away than that, the search reported "no standable cell in the surface
+        /// band" while thousands of perfectly good cells sat just outside the disc. The
+        /// colony then fell back to the band centre, the drop-pod finder scattered pods
+        /// looking for somewhere valid, and four colonists ended up outside the band
+        /// entirely (caught by RescueStrandedColonists, which is the only reason they
+        /// survived).
+        ///
+        /// So a full deterministic sweep of the band backs it up. It is O(band) exactly
+        /// once at generation, and it means failure now genuinely means "this band contains
+        /// no standable dry cell at all" rather than "none within 70 cells of a guess".
+        ///
+        /// Deliberately does NOT test Fogged - by this point GenStep_Fog has fogged the
+        /// whole map, so a !Fogged test rejects every cell (that was the run #4 "no
+        /// colonists spawned" bug).
+        /// </summary>
         private static bool TryFindStartCell(Map map, CellRect surface, IntVec3 seed,
             bool requireApron, out IntVec3 result)
         {
-            // GenRadial's precomputed pattern tops out at MaxRadialPatternRadius (~79.8);
-            // asking for more logs "Not enough squares to get to radius N" and silently
-            // clamps. Stay inside it (run #7).
+            int water = 0;
+            int edifice = 0;
+            int unstandable = 0;
+            int noApron = 0;
+            int considered = 0;
+
+            // Pass 1: near the seed, so the colony keeps vanilla's choice of neighbourhood.
             float radius = Mathf.Min(70f, GenRadial.MaxRadialPatternRadius - 1f);
             foreach (IntVec3 c in GenRadial.RadialCellsAround(seed, radius, useCenter: true))
             {
-                if (!c.InBounds(map) || !surface.Contains(c))
+                if (Qualifies(map, surface, c, requireApron, ref considered, ref water,
+                    ref edifice, ref unstandable, ref noApron))
                 {
-                    continue;
+                    result = c;
+                    return true;
                 }
-                if (!c.Standable(map) || c.GetEdifice(map) != null
-                    || map.terrainGrid.TerrainAt(c).IsWater)
-                {
-                    continue;
-                }
-                if (requireApron && !ApronClear(map, surface, c))
-                {
-                    continue;
-                }
-                result = c;
-                return true;
             }
+
+            // Pass 2: the whole band. Slower, but it is the difference between "we looked
+            // everywhere" and "we looked in a circle".
+            foreach (IntVec3 c in surface)
+            {
+                if (Qualifies(map, surface, c, requireApron, ref considered, ref water,
+                    ref edifice, ref unstandable, ref noApron))
+                {
+                    result = c;
+                    return true;
+                }
+            }
+
+            lastSearchCensus = " [searched " + considered + " cells in " + surface
+                + ": " + unstandable + " unstandable, " + edifice + " blocked by an edifice, "
+                + water + " water"
+                + (requireApron ? ", " + noApron + " lacked a clear apron" : "") + "]";
             result = seed;
             return false;
+        }
+
+        private static bool Qualifies(Map map, CellRect surface, IntVec3 c, bool requireApron,
+            ref int considered, ref int water, ref int edifice, ref int unstandable,
+            ref int noApron)
+        {
+            if (!c.InBounds(map) || !surface.Contains(c))
+            {
+                return false;
+            }
+            considered++;
+            if (map.terrainGrid.TerrainAt(c).IsWater)
+            {
+                water++;
+                return false;
+            }
+            if (c.GetEdifice(map) != null)
+            {
+                edifice++;
+                return false;
+            }
+            if (!c.Standable(map))
+            {
+                unstandable++;
+                return false;
+            }
+            if (requireApron && !ApronClear(map, surface, c))
+            {
+                noApron++;
+                return false;
+            }
+            return true;
         }
 
         private static bool ApronClear(Map map, CellRect surface, IntVec3 center)
