@@ -50,6 +50,25 @@ namespace AsAboveSoBelow
         private static readonly List<KeyValuePair<string, double>> entries =
             new List<KeyValuePair<string, double>>();
 
+        /// <summary>Phase timings from inside the carve itself, plus operation counts.
+        ///
+        /// Added after the first A/B attempt failed: comparing carve totals across two
+        /// generations proved meaningless because tile content varies wildly (Plants was
+        /// 87.8 ms on one tile and 1,078.3 ms on the next - 12x - and everything vanilla
+        /// spawns in the doomed bands is something ClearCellHard must destroy). Per-phase
+        /// numbers and op counts interpret a SINGLE run on its own terms instead.</summary>
+        internal static readonly List<KeyValuePair<string, double>> carvePhases =
+            new List<KeyValuePair<string, double>>();
+
+        internal static int thingsDestroyed;
+
+        internal static int rocksSpawned;
+
+        internal static void Phase(string label, double ms)
+        {
+            carvePhases.Add(new KeyValuePair<string, double>(label, ms));
+        }
+
         /// <summary>FinalizeInit cost, captured separately: it is where regions, rooms and
         /// path costs are built, and it is the number that decides whether carving BEFORE
         /// it (single region build) is worth the reordering risk.</summary>
@@ -62,6 +81,9 @@ namespace AsAboveSoBelow
             depth = 0;
             currentLabel = null;
             entries.Clear();
+            carvePhases.Clear();
+            thingsDestroyed = 0;
+            rocksSpawned = 0;
             finalizeInitMs = -1;
             totalWatch.Restart();
         }
@@ -133,7 +155,14 @@ namespace AsAboveSoBelow
             }
             sb.AppendLine("  ---------");
             sb.AppendLine("  " + total.ToString("0.0").PadLeft(9) + " ms  all gensteps (wall)");
-            sb.AppendLine("  " + carveMs.ToString("0.0").PadLeft(9) + " ms  AB band carve (ClearCellHard/FillRock/sky/cavern)");
+            sb.AppendLine("  " + carveMs.ToString("0.0").PadLeft(9) + " ms  AB band carve, of which:");
+            for (int i = 0; i < carvePhases.Count; i++)
+            {
+                sb.AppendLine("  " + carvePhases[i].Value.ToString("0.0").PadLeft(9) + " ms      "
+                    + carvePhases[i].Key);
+            }
+            sb.AppendLine("              (" + thingsDestroyed.ToString("N0") + " things destroyed, "
+                + rocksSpawned.ToString("N0") + " rocks spawned)");
             sb.AppendLine("  " + startSpotMs.ToString("0.0").PadLeft(9) + " ms  AB start-spot fix + rescue");
             sb.AppendLine("  " + (finalizeInitMs < 0 ? "      n/a" : finalizeInitMs.ToString("0.0").PadLeft(9))
                 + " ms  Map.FinalizeInit (regions/rooms/path costs - built AFTER gensteps, RE-dirtied by carve)");

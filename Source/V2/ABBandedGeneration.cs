@@ -362,6 +362,48 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>
+        /// Stops the initial plant pass from planting the bands the carve will erase.
+        ///
+        /// Found by the generation profiler, in two steps. First profile: the carve cost
+        /// 2.4x all vanilla gensteps combined. Second and third profiles (after cheaper
+        /// fixes): per-operation cost stuck at ~0.19 ms across ~77k spawn/destroy ops with
+        /// our own patches suspended - so the cost is the ENGINE's, and it scales with how
+        /// crowded the map is (ListerThings removal is a linear List.Remove over lists that
+        /// hold ~100k things on a lush 3-band map; every destroy pays it).
+        ///
+        /// GenStep_Plants is the main crowd-maker: 2.7-3.3 s planting all three bands on a
+        /// lush tile, two-thirds of it content the carve immediately destroys - each destroy
+        /// paying that linear removal. Skipping the doomed bands is SAFE here specifically
+        /// because CheckSpawnWildPlantAt is a PER-CELL probabilistic roll: there is no
+        /// fixed count being redistributed, so surface density is untouched. (Contrast
+        /// scatterer gensteps, whose counts derive from map.Area - scoping those without
+        /// scaling the count would concentrate 3x the things into one band. Deliberately
+        /// not attempted.)
+        ///
+        /// Gated on the pending layout, so it costs one null check outside banded
+        /// generation and never fires in normal play - regrowth on the sky band stays
+        /// exactly as the per-band biome system provides.
+        /// </summary>
+        [HarmonyPatch(typeof(WildPlantSpawner), nameof(WildPlantSpawner.CheckSpawnWildPlantAt))]
+        public static class Patch_WildPlantSpawner_ABSkipDoomedBands
+        {
+            private static bool Prefix(Map ___map, IntVec3 c, ref bool __result)
+            {
+                if (pending == null)
+                {
+                    return true; // not generating a banded map - normal play path
+                }
+                if (!TryPendingSurfaceRect(___map, out CellRect surface, out _)
+                    || surface.Contains(c))
+                {
+                    return true;
+                }
+                __result = false;
+                return false; // doomed band: this plant would only ever be carve fodder
+            }
+        }
+
         // -------------------------------------------------------------------
         // Carving
         // -------------------------------------------------------------------
@@ -375,6 +417,21 @@ namespace AsAboveSoBelow
             }
             List<Perlin> noises = ABRockGen.MakeNoises(rocks.Count);
 
+            // Per-op sky sync is pure waste during a bulk carve - ABSkyBandGen derives the
+            // sky terrain from final state right after. See ABSkySync.Suspended.
+            ABSkySync.Suspended = true;
+            try
+            {
+                CarveInner(map, bands, rocks, noises);
+            }
+            finally
+            {
+                ABSkySync.Suspended = false;
+            }
+        }
+
+        private static void CarveInner(Map map, ABBandMap bands, List<ThingDef> rocks, List<Perlin> noises)
+        {
             for (int band = 0; band < bands.bandCount; band++)
             {
                 if (band == bands.surfaceBand)
@@ -382,13 +439,17 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 CellRect rect = bands.RectOfBand(band);
+                var phase = System.Diagnostics.Stopwatch.StartNew();
                 if (band < bands.surfaceBand)
                 {
                     FillRock(map, rect, rocks, noises);
+                    ABGenProfile.Phase("FillRock band " + band, phase.Elapsed.TotalMilliseconds);
+                    phase.Restart();
                     // Then optionally hollow it back out into a living cave system.
                     // Runs on the filled rock deliberately: the carve reads and destroys
                     // the rock it opens, and the untouched remainder becomes the walls.
                     ABCavernGen.Generate(map, bands, band);
+                    ABGenProfile.Phase("CavernGen band " + band, phase.Elapsed.TotalMilliseconds);
                 }
                 else
                 {
@@ -408,10 +469,16 @@ namespace AsAboveSoBelow
                             map.fogGrid.Unfog(c);
                         }
                     }
+                    ABGenProfile.Phase("Sky clear band " + band, phase.Elapsed.TotalMilliseconds);
+                    phase.Restart();
                     ABSkyBandGen.Generate(map, bands, band, rocks, noises);
+                    ABGenProfile.Phase("SkyBandGen band " + band, phase.Elapsed.TotalMilliseconds);
                 }
             }
+            var tail = System.Diagnostics.Stopwatch.StartNew();
             CarveGutters(map, bands);
+            ABGenProfile.Phase("CarveGutters", tail.Elapsed.TotalMilliseconds);
+            tail.Restart();
 
             // Fog policy differs by direction, matching V1:
             //  - BELOW the surface is solid rock, so it is fogged and revealed by mining,
@@ -424,6 +491,7 @@ namespace AsAboveSoBelow
             {
                 map.fogGrid.Refog(bands.RectOfBand(band));
             }
+            ABGenProfile.Phase("Refog", tail.Elapsed.TotalMilliseconds);
         }
 
         private static void FillRock(Map map, CellRect rect, List<ThingDef> rocks, List<Perlin> noises)
@@ -435,10 +503,30 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                ClearCellHard(map, c);
                 ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
+                // KEEP vanilla's rock when it is exactly the rock we would spawn.
+                // RocksFromGrid has already filled the mountainous share of this band, so a
+                // destroy+respawn pair here is pure waste whenever the def matches - and the
+                // phase profile priced that waste at ~0.25 ms per operation. Def-match only:
+                // where vanilla placed a DIFFERENT rock than our vein noise picks, we still
+                // swap it, so the basement's rock distribution is bit-identical to before.
+                Building existing = c.GetEdifice(map);
+                bool keep = existing != null && existing.def == rock
+                    && existing.def.building != null && existing.def.building.isNaturalRock;
+                if (keep)
+                {
+                    ClearCellExcept(map, c, existing);
+                }
+                else
+                {
+                    ClearCellHard(map, c);
+                }
                 terrain.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
-                GenSpawn.Spawn(rock, c, map);
+                if (!keep)
+                {
+                    GenSpawn.Spawn(rock, c, map);
+                    ABGenProfile.rocksSpawned++;
+                }
                 map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
             }
             ABOreGen.ScatterOres(map, rect.Cells.ToList(),
@@ -471,6 +559,31 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>ClearCellHard, minus one thing worth keeping.</summary>
+        private static void ClearCellExcept(Map map, IntVec3 c, Thing keep)
+        {
+            List<Thing> things = c.GetThingList(map);
+            for (int i = things.Count - 1; i >= 0; i--)
+            {
+                Thing t = things[i];
+                if (t == null || t == keep || t.Destroyed)
+                {
+                    continue;
+                }
+                if (!t.def.destroyable)
+                {
+                    if (t.Spawned)
+                    {
+                        t.DeSpawn(DestroyMode.Vanish);
+                        ABGenProfile.thingsDestroyed++;
+                    }
+                    continue;
+                }
+                t.Destroy(DestroyMode.Vanish);
+                ABGenProfile.thingsDestroyed++;
+            }
+        }
+
         /// <summary>Removes everything from a cell, pawns included. Generation-time only.</summary>
         private static void ClearCellHard(Map map, IntVec3 c)
         {
@@ -491,10 +604,12 @@ namespace AsAboveSoBelow
                     if (t.Spawned)
                     {
                         t.DeSpawn(DestroyMode.Vanish);
+                        ABGenProfile.thingsDestroyed++;
                     }
                     continue;
                 }
                 t.Destroy(DestroyMode.Vanish);
+                ABGenProfile.thingsDestroyed++;
             }
         }
 

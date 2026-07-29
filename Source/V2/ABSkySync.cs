@@ -45,6 +45,23 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABSkySync
     {
+        /// <summary>
+        /// Suspended during the band carve, and the generation profiler is why.
+        ///
+        /// The carve performs ~36k rock spawns, ~47k destroys and tens of thousands of
+        /// SetRoof calls in one burst - and every one of them fired these postfixes. Each
+        /// sync resolves the band component, does band math and reads grids, which is
+        /// nothing per call and seconds in aggregate (the phase profile showed FillRock at
+        /// 9,038 ms for work vanilla's RocksFromGrid does in ~300 ms - per-op patch
+        /// overhead, not engine cost). Every one of those syncs is REDUNDANT during the
+        /// carve: ABSkyBandGen derives the sky band's terrain itself, from final post-carve
+        /// state, immediately afterwards.
+        ///
+        /// Set/cleared in a try/finally by ABBandedGeneration.Carve only. Normal play never
+        /// suspends - event-driven sync is exactly right at play-time rates.
+        /// </summary>
+        internal static bool Suspended;
+
         /// <summary>Terrains this system owns. Anything else in a sky cell was put there by
         /// the generator or the player and is left strictly alone.</summary>
         private static bool IsDerived(TerrainDef t)
@@ -59,7 +76,7 @@ namespace AsAboveSoBelow
         /// <summary>Recompute the cell directly above <paramref name="below"/>.</summary>
         public static void SyncAbove(Map map, IntVec3 below)
         {
-            if (map == null || !ABGuard.On(ABGuard.RoofSync))
+            if (Suspended || map == null || !ABGuard.On(ABGuard.RoofSync))
             {
                 return;
             }
