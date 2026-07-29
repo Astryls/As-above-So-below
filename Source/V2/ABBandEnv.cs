@@ -141,14 +141,22 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!__result || map == null || !ABBands.Banded(map))
+                // Resolve the component ONCE. This postfix ran 719,002 times in a 2,000
+                // frame sample, and asking ABBands for Banded and then LevelOf hit the
+                // component lookup twice on every one of them.
+                if (!__result || map == null)
                 {
                     return;
                 }
-                int level = ABBands.LevelOf(map, c);
-                if (level == 0)
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded)
                 {
                     return;
+                }
+                int level = bands.LevelOf(c);
+                if (level == 0)
+                {
+                    return; // the surface, which is the overwhelming majority of calls
                 }
                 Room room = c.GetRoom(map);
                 if (room != null && !room.UsesOutdoorTemperature)

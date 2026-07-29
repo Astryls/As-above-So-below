@@ -220,6 +220,7 @@ namespace AsAboveSoBelow
         {
             base.MapRemoved();
             Patch_MixedBiome_ABBandBiomeAt.Forget();
+            ABBands.ForgetMemo();
         }
 
         public override void ExposeData()

@@ -36,14 +36,57 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<int, ABBandLayout> spikeLayouts = new Dictionary<int, ABBandLayout>();
 
+        /// <summary>
+        /// One-entry front cache for CompOf, held as a single immutable object.
+        ///
+        /// WHY A CLASS AND NOT TWO STATIC FIELDS: CompOf is reached from PawnRenderer's
+        /// ParallelPreDraw, which runs on Unity job worker threads. Two separate statics can
+        /// be read TORN - the map from one entry and the component from another - handing a
+        /// caller the wrong map's band layout, intermittently, only under load. Reference
+        /// assignment is atomic, so publishing both fields together behind one reference and
+        /// reading it once into a local makes the pair consistent by construction. No lock,
+        /// no volatile, no cost.
+        /// </summary>
+        private sealed class CompMemo
+        {
+            public readonly Map map;
+
+            public readonly ABBandMap comp;
+
+            public CompMemo(Map map, ABBandMap comp)
+            {
+                this.map = map;
+                this.comp = comp;
+            }
+        }
+
+        private static CompMemo memo;
+
+        /// <summary>Drop the front cache so a removed map is not pinned alive by it.</summary>
+        public static void ForgetMemo()
+        {
+            memo = null;
+        }
+
         public static ABBandMap CompOf(Map map)
         {
             if (map == null)
             {
                 return null;
             }
+            // Measured motivation: GenTemperature.TryGetTemperatureForCell drove 719,002
+            // calls through here in 2,000 frames and MixedBiomeMapComponent.GetBiomeAt
+            // another 843,350 - and the temperature patch alone probed the table TWICE per
+            // call. A ConditionalWeakTable lookup is a hash probe; a reference compare is
+            // not. In practice every call in a burst is for the same map.
+            CompMemo m = memo;
+            if (m != null && ReferenceEquals(m.map, map))
+            {
+                return m.comp;
+            }
             if (cache.TryGetValue(map, out ABBandMap comp))
             {
+                memo = new CompMemo(map, comp);
                 return comp;
             }
             comp = map.GetComponent<ABBandMap>();
@@ -57,6 +100,7 @@ namespace AsAboveSoBelow
                 {
                     // Benign race.
                 }
+                memo = new CompMemo(map, comp);
             }
             return comp;
         }
