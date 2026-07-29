@@ -26,6 +26,9 @@
   <AB_FreeCameraPanTip>Lets the camera pan and zoom past the edges of the level you are on, instead of being held inside it. The other levels stay hidden either way, so panning past the edge shows empty space rather than the level above or below.</AB_FreeCameraPanTip>
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
+  <AB_MapSizeBanded>{0}x{0} — {1} cells per level, {2} stacked</AB_MapSizeBanded>
+  <AB_MapSizeBandedTip>As above, So below stacks {0} playable levels into a single map, so this colony costs the stacked cell count shown — that is the figure RimWorld's pathfinder works over, not the per-level size. These sizes are chosen to sit just under a 64-row boundary, where the dead space between levels shrinks to its 2-row minimum. Sizes in between waste up to a fifth of the map on empty seam.</AB_MapSizeBandedTip>
+
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>
   <AB_MapSizeLockedTip>Locked by As above, So below. Each colony holds three stacked levels, so map sizes above {0}x{0} cost roughly three times their usual performance. Enable larger maps in the As above, So below mod settings.</AB_MapSizeLockedTip>
   <AB_NaturalPeaks>Naturalistic mountain peaks on new sky levels</AB_NaturalPeaks>
@@ -42,7 +45,7 @@
   <AB_SubsystemDownBecause>As above, so below: the '{0}' subsystem hit an error (likely cause: {1}) and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDownBecause>
   <AB_UnclampMapSize>Allow colony maps larger than {0}x{0}</AB_UnclampMapSize>
   <AB_UnclampMapSizeTip>As above, So below stacks three playable levels into one map. A {0}x{0} colony is already three times that many cells to simulate. Larger sizes are locked unless you enable this.</AB_UnclampMapSizeTip>
-  <AB_UnclampMapSizeWarning>WARNING: large maps will hurt performance badly. Every level multiplies the cells RimWorld must path over — a 325x325 colony is roughly 317,000 cells. Expect slowdowns and long map generation.</AB_UnclampMapSizeWarning>
+  <AB_UnclampMapSizeWarning>WARNING: large maps will hurt performance badly. Unlocking this restores RimWorld's full size list, including sizes that fall badly on the 64-row boundary and spend up to a fifth of the map on empty space between levels. A 325x325 banded colony is roughly 300,000 cells for 317,000 of pathfinding work. Expect slowdowns and long map generation.</AB_UnclampMapSizeWarning>
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
 

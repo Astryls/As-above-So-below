@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -23,33 +24,97 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABMapSizeLimit
     {
-        public const int Cap = 200;
+        /// <summary>
+        /// The offered sizes, and why these three specifically.
+        ///
+        /// Slot is `ceil((bandHeight + MinGutter) / 64) * 64`, so cost does NOT rise
+        /// smoothly with size - it steps. A size just past a 64 boundary pays a whole extra
+        /// 64 rows of dead gutter PER BAND for nothing. These are the three sizes that sit
+        /// immediately under a boundary, where the gutter collapses to its 2-row minimum:
+        ///
+        ///   126 -> slot 128, gutter 2   ->  48,384 cells  (1.6% wasted)
+        ///   190 -> slot 192, gutter 2   -> 109,440 cells  (1.0% wasted)
+        ///   254 -> slot 256, gutter 2   -> 195,072 cells  (0.8% wasted)
+        ///
+        /// The old 200x200 cap was one of the WORST points on that curve: slot 256, gutter
+        /// 56, 153,600 cells of which 33,600 are empty seam - 21.9% wasted. Dropping the cap
+        /// to 190 gives up 9.7% of playable area and saves 28.8% of the cells. Intermediate
+        /// sizes are never worth offering: 150x150 costs 86,400 for 67,500 playable, while
+        /// 190x190 costs 26% more and yields 60% more playable area.
+        ///
+        /// This matters because 1.6's PathGridJob is an IJobParallelFor over EVERY cell of
+        /// the map, so the stacked total - not the per-level size - is what the pathfinder
+        /// pays on a hot per-request path.
+        /// </summary>
+        public static readonly int[] Sizes = { 126, 190, 254 };
+
+        /// <summary>Largest size allowed while the cap is on. Must be one of Sizes.</summary>
+        public const int Cap = 190;
 
         public static bool Active => ABV2.Enabled && !(ABMod.Settings?.unclampMapSize ?? false);
+
+        /// <summary>Total cells RimWorld actually allocates and paths over for a banded
+        /// colony of this per-level size.</summary>
+        public static int StackedCells(int size)
+        {
+            return size * ABV2.BandCount * ABBandMap.SlotFor(size);
+        }
 
         /// <summary>Labels of the size options that are locked, rebuilt each time the
         /// chooser opens. Matching on the exact rendered label rather than parsing keeps
         /// this robust against localisation.</summary>
         private static readonly HashSet<string> lockedLabels = new HashSet<string>();
 
+        /// <summary>Vanilla label -> our relabelled version, carrying the stacked cost.</summary>
+        private static readonly Dictionary<string, string> relabel = new Dictionary<string, string>();
+
         private static bool inChooser;
+
+        /// <summary>Vanilla's own array, restored when the dialog closes.</summary>
+        private static int[] savedSizes;
+
+        private static readonly FieldInfo MapSizesField =
+            AccessTools.Field(typeof(Dialog_AdvancedGameConfig), nameof(Dialog_AdvancedGameConfig.MapSizes));
 
         public static void BeginChooser()
         {
             lockedLabels.Clear();
+            relabel.Clear();
             inChooser = true;
             if (!Active)
             {
                 return;
             }
-            foreach (int size in Dialog_AdvancedGameConfig.MapSizes)
+
+            // Swap vanilla's size list for ours FOR THE DURATION OF THE DIALOG ONLY.
+            // MapSizes is `static readonly int[]`, so the reference is settable by
+            // reflection; scoping the swap to the dialog means anything else that reads it
+            // (other mods, scenario code) still sees vanilla's list.
+            try
             {
-                if (size > Cap)
+                if (MapSizesField != null && savedSizes == null)
                 {
-                    lockedLabels.Add("MapSizeDesc".Translate(size, size * size));
+                    savedSizes = (int[])MapSizesField.GetValue(null);
+                    MapSizesField.SetValue(null, (int[])Sizes.Clone());
                 }
             }
-            // Test sizes too, when the player has them enabled.
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: could not replace the map size list, "
+                    + "falling back to locking oversized options: " + e.Message, 762195911);
+            }
+
+            foreach (int size in Sizes)
+            {
+                string vanilla = "MapSizeDesc".Translate(size, size * size);
+                relabel[vanilla] = "AB_MapSizeBanded".Translate(size,
+                    (size * size).ToString("N0"), StackedCells(size).ToString("N0"));
+                if (size > Cap)
+                {
+                    lockedLabels.Add(vanilla);
+                }
+            }
+            // Test sizes are appended by the dialog itself and bypass our list entirely.
             int[] test = { 350, 400 };
             for (int i = 0; i < test.Length; i++)
             {
@@ -61,6 +126,32 @@ namespace AsAboveSoBelow
         {
             inChooser = false;
             lockedLabels.Clear();
+            relabel.Clear();
+            try
+            {
+                if (savedSizes != null && MapSizesField != null)
+                {
+                    MapSizesField.SetValue(null, savedSizes);
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                savedSizes = null;
+            }
+        }
+
+        /// <summary>The relabelled text for a size option, or null if it is not one of
+        /// ours.</summary>
+        public static string RelabelFor(string label)
+        {
+            if (!inChooser || !Active || label == null)
+            {
+                return null;
+            }
+            return relabel.TryGetValue(label, out string s) ? s : null;
         }
 
         public static bool IsLocked(string label)
@@ -72,7 +163,22 @@ namespace AsAboveSoBelow
         /// bypass the chooser.</summary>
         public static int Clamp(int size)
         {
-            return Active ? Mathf.Min(size, Cap) : size;
+            if (!Active)
+            {
+                return size;
+            }
+            // Snap to the largest OFFERED size that fits. Plain Min(size, Cap) would happily
+            // return something like 175 - a size that is inside the cap but sits badly on
+            // the 64-row slot boundary, paying a full extra band of gutter for nothing.
+            int best = Sizes[0];
+            for (int i = 0; i < Sizes.Length; i++)
+            {
+                if (Sizes[i] <= Cap && Sizes[i] <= size && Sizes[i] > best)
+                {
+                    best = Sizes[i];
+                }
+            }
+            return Mathf.Min(best, Cap);
         }
     }
 
@@ -93,10 +199,13 @@ namespace AsAboveSoBelow
         {
             try
             {
+                // Snap whatever is selected onto an offered size. Vanilla's default is 250,
+                // which is no longer in the list, so without this the dialog can close with
+                // a size that has no radio button and never went through Clamp.
                 if (ABMapSizeLimit.Active && Find.GameInitData != null
-                    && Find.GameInitData.mapSize > ABMapSizeLimit.Cap)
+                    && Array.IndexOf(ABMapSizeLimit.Sizes, Find.GameInitData.mapSize) < 0)
                 {
-                    Find.GameInitData.mapSize = ABMapSizeLimit.Cap;
+                    Find.GameInitData.mapSize = ABMapSizeLimit.Clamp(Find.GameInitData.mapSize);
                 }
             }
             catch
@@ -123,13 +232,23 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABMapSizeLimit.IsLocked(label))
+                string relabelled = ABMapSizeLimit.RelabelFor(label);
+                bool locked = ABMapSizeLimit.IsLocked(label);
+                if (relabelled == null && !locked)
                 {
                     return;
                 }
-                label = "AB_MapSizeLocked".Translate(label);
-                tooltip = "AB_MapSizeLockedTip".Translate(ABMapSizeLimit.Cap);
-                disabled = true;
+                if (locked)
+                {
+                    label = "AB_MapSizeLocked".Translate(relabelled ?? label);
+                    tooltip = "AB_MapSizeLockedTip".Translate(ABMapSizeLimit.Cap);
+                    disabled = true;
+                    return;
+                }
+                // One of ours, and allowed: show the stacked cost, because that - not the
+                // per-level size - is what the pathfinder actually pays.
+                label = relabelled;
+                tooltip = "AB_MapSizeBandedTip".Translate(ABV2.BandCount);
             }
             catch
             {
