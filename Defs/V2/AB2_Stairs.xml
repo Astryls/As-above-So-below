@@ -133,6 +133,47 @@
     </modExtensions>
   </ThingDef>
 
+  <!-- ========================== elevator =========================== -->
+
+  <!-- ONE shaft, EVERY level. linksAllLevels makes TryEstablish spawn a car on each other
+       band of the column and link the whole set as a FULL MESH - the sky and basement cars
+       are linked directly, so a sky-to-basement ride is one transit, not a hop through the
+       surface. Its counterpartDef is itself: an elevator's far end is an elevator.
+       Metallic only and pricier than the grand staircase: it buys reach (three levels from
+       one footprint), not speed - transit is instantaneous for every link type. -->
+  <ThingDef ParentName="AB2_LinkBase">
+    <defName>AB2_Elevator</defName>
+    <label>elevator</label>
+    <description>A counterweighted elevator shaft connecting every level of the colony through a single 2x2 footprint. Completing it opens all levels it reaches and creates a matching car on each. Colonists ride between any two levels directly, and haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
+    <size>(2,2)</size>
+    <stuffCategories>
+      <li>Metallic</li>
+    </stuffCategories>
+    <costStuffCount>150</costStuffCount>
+    <graphicData>
+      <texPath>Things/Building/AB_Elevator</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(2,2)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <building>
+      <blueprintGraphicData>
+        <texPath>Things/Building/AB_Elevator</texPath>
+        <graphicClass>Graphic_Single</graphicClass>
+        <drawSize>(2,2)</drawSize>
+      </blueprintGraphicData>
+    </building>
+    <uiIconPath>Things/Building/AB_Elevator</uiIconPath>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABBandStairsExt">
+        <linksAllLevels>true</linksAllLevels>
+        <counterpartDef>AB2_Elevator</counterpartDef>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
   <!-- ======================= grand staircase ======================= -->
 
   <!-- The wide option, and the answer to stairwell congestion. At 3x3 it presents TWELVE

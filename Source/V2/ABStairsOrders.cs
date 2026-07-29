@@ -44,7 +44,10 @@ namespace AsAboveSoBelow
                 {
                     return null;
                 }
-                Building_ABStairs2 far = stairs.counterpart;
+                // Multiple ends (the elevator): prefer the one on the band the player is
+                // viewing - they are looking at where they want the pawn to go.
+                Building_ABStairs2 far = stairs.BestCounterpartFor(
+                    ABBandView.CurrentBand(stairs.Map));
                 if (far == null || !far.Spawned)
                 {
                     return null;

@@ -12,6 +12,10 @@ namespace AsAboveSoBelow
         /// <summary>defName of the building spawned at the far end. Lets ladders pair with
         /// ladders and stairs with stairs instead of everything collapsing to one type.</summary>
         public string counterpartDef;
+
+        /// <summary>The elevator: one shaft member on EVERY level of the column, all
+        /// pairwise linked, instead of a single far end. levelDelta is ignored when set.</summary>
+        public bool linksAllLevels;
     }
 
     /// <summary>
@@ -32,17 +36,68 @@ namespace AsAboveSoBelow
     /// </summary>
     public class Building_ABStairs2 : Building_Door
     {
-        public Building_ABStairs2 counterpart;
+        /// <summary>Every far end this link connects to. Stairs and ladders have exactly
+        /// one; the elevator has one per other level of the column.
+        ///
+        /// This replaced a single scribed `counterpart` reference - the rework the elevator
+        /// was deferred for. Old saves are migrated in ExposeData: the legacy
+        /// "AB2_counterpart" key is still read and merged into the list at PostLoadInit, so
+        /// pre-elevator stairs keep their pairing across the upgrade.</summary>
+        private List<Building_ABStairs2> counterparts = new List<Building_ABStairs2>();
+
+        private Building_ABStairs2 legacyCounterpart;
+
+        public IReadOnlyList<Building_ABStairs2> Counterparts => counterparts;
+
+        /// <summary>The end a camera-jump or go-order should prefer: the one on the band the
+        /// player is looking at (they are looking at where they want to go), else the first
+        /// live one.</summary>
+        public Building_ABStairs2 BestCounterpartFor(int viewBand)
+        {
+            Building_ABStairs2 first = null;
+            for (int i = 0; i < counterparts.Count; i++)
+            {
+                Building_ABStairs2 cp = counterparts[i];
+                if (cp == null || !cp.Spawned)
+                {
+                    continue;
+                }
+                if (first == null)
+                {
+                    first = cp;
+                }
+                ABBandMap bands = ABBands.CompOf(cp.Map);
+                if (bands != null && bands.BandOf(cp.Position) == viewBand)
+                {
+                    return cp;
+                }
+            }
+            return first;
+        }
+
+        internal void AddCounterpart(Building_ABStairs2 cp)
+        {
+            if (cp != null && cp != this && !counterparts.Contains(cp))
+            {
+                counterparts.Add(cp);
+            }
+        }
 
         /// <summary>Guards the recursive spawn: the counterpart must not try to build its
         /// own counterpart back again.</summary>
         private static bool spawningCounterpart;
+
+        /// <summary>Guards shaft collapse: destroying one member destroys them all, and
+        /// each of those DeSpawns must not re-enter the collapse.</summary>
+        private static bool collapsingShaft;
 
         private ABBandStairsExt ext;
 
         public ABBandStairsExt Ext => ext ?? (ext = def.GetModExtension<ABBandStairsExt>());
 
         public int LevelDelta => Ext?.levelDelta ?? -1;
+
+        public bool LinksAllLevels => Ext?.linksAllLevels ?? false;
 
         protected override bool AlwaysOpen => true;
 
@@ -96,10 +151,15 @@ namespace AsAboveSoBelow
 
             if (respawningAfterLoad)
             {
-                // Links are runtime state; rebuild them from the saved counterpart ref.
-                if (counterpart != null && counterpart.Spawned)
+                // Links are runtime state; rebuild them from the saved counterpart refs.
+                // Each pair links when its SECOND end spawns (the first end sees the other
+                // still unspawned and skips); ABWormhole.Link dedupes, so both trying is fine.
+                for (int i = 0; i < counterparts.Count; i++)
                 {
-                    ABWormhole.Link(this, counterpart);
+                    if (counterparts[i] != null && counterparts[i].Spawned)
+                    {
+                        ABWormhole.Link(this, counterparts[i]);
+                    }
                 }
                 return;
             }
@@ -120,16 +180,70 @@ namespace AsAboveSoBelow
                 return;
             }
             int myBand = bands.BandOf(Position);
-            int targetBand = myBand + LevelDelta;
-            if (!bands.BandExists(targetBand))
+
+            // The elevator serves the whole column; stairs and ladders serve one direction.
+            List<int> targets = new List<int>();
+            if (LinksAllLevels)
             {
-                Messages.Message("AB2: no level in that direction.", MessageTypeDefOf.RejectInput, false);
-                return;
+                for (int b = 0; b < bands.bandCount; b++)
+                {
+                    if (b != myBand)
+                    {
+                        targets.Add(b);
+                    }
+                }
             }
+            else
+            {
+                targets.Add(myBand + LevelDelta);
+            }
+
+            List<Building_ABStairs2> established = new List<Building_ABStairs2>();
+            for (int i = 0; i < targets.Count; i++)
+            {
+                int targetBand = targets[i];
+                if (!bands.BandExists(targetBand))
+                {
+                    if (!LinksAllLevels)
+                    {
+                        Messages.Message("AB2: no level in that direction.",
+                            MessageTypeDefOf.RejectInput, false);
+                    }
+                    continue;
+                }
+                Building_ABStairs2 cp = EstablishEnd(map, bands, targetBand);
+                if (cp == null)
+                {
+                    continue;
+                }
+                AddCounterpart(cp);
+                cp.AddCounterpart(this);
+                ABWormhole.Link(this, cp);
+                bands.Open(targetBand);
+                established.Add(cp);
+            }
+
+            // Full mesh for the elevator: the sky and basement cars link DIRECTLY too, so a
+            // sky-to-basement trip is one transit instead of a hop through the surface.
+            for (int i = 0; i < established.Count; i++)
+            {
+                for (int j = i + 1; j < established.Count; j++)
+                {
+                    established[i].AddCounterpart(established[j]);
+                    established[j].AddCounterpart(established[i]);
+                    ABWormhole.Link(established[i], established[j]);
+                }
+            }
+        }
+
+        /// <summary>Find-or-spawn the far end on one band: carve the landing (sized from the
+        /// real footprint), spawn with matching rotation, unfog. Returns null on failure.</summary>
+        private Building_ABStairs2 EstablishEnd(Map map, ABBandMap bands, int targetBand)
+        {
             IntVec3 farCell = bands.Translate(Position, targetBand);
             if (!farCell.InBounds(map))
             {
-                return;
+                return null;
             }
 
             // Resolve the counterpart BEFORE carving: the pocket has to be sized from the
@@ -140,7 +254,7 @@ namespace AsAboveSoBelow
             if (cpDef == null)
             {
                 Log.Error(ABLog.Tag + " V2: no counterpart stairs def for " + def.defName + ".");
-                return;
+                return null;
             }
             Building_ABStairs2 cp = farCell.GetFirstThing<Building_ABStairs2>(map);
             CellRect farFootprint = cp != null
@@ -182,12 +296,8 @@ namespace AsAboveSoBelow
                     spawningCounterpart = false;
                 }
             }
-            counterpart = cp;
-            cp.counterpart = this;
-
-            ABWormhole.Link(this, cp);
-            bands.Open(targetBand);
             map.fogGrid.Unfog(farCell);
+            return cp;
         }
 
         private ThingDef CounterpartDef()
@@ -256,40 +366,77 @@ namespace AsAboveSoBelow
         {
             Map map = Map;
             ABWormhole.Unlink(this, map);
-            Building_ABStairs2 cp = counterpart;
-            counterpart = null;
-            if (cp != null)
+            List<Building_ABStairs2> cps = new List<Building_ABStairs2>(counterparts);
+            counterparts.Clear();
+            for (int i = 0; i < cps.Count; i++)
             {
-                cp.counterpart = null;
+                cps[i]?.counterparts.Remove(this);
             }
             base.DeSpawn(mode);
-            // A shaft has two ends; destroying one collapses the other.
-            if (cp != null && cp.Spawned && !spawningCounterpart)
+            // A shaft is one structure: destroying any member collapses all of it. The
+            // latch stops each cascading DeSpawn from re-entering the collapse.
+            if (collapsingShaft)
             {
-                spawningCounterpart = true;
-                try
+                return;
+            }
+            collapsingShaft = true;
+            try
+            {
+                for (int i = 0; i < cps.Count; i++)
                 {
-                    cp.Destroy(DestroyMode.Vanish);
+                    if (cps[i] != null && cps[i].Spawned)
+                    {
+                        cps[i].Destroy(DestroyMode.Vanish);
+                    }
                 }
-                finally
-                {
-                    spawningCounterpart = false;
-                }
+            }
+            finally
+            {
+                collapsingShaft = false;
             }
         }
 
         public override void ExposeData()
         {
             base.ExposeData();
-            Scribe_References.Look(ref counterpart, "AB2_counterpart");
+            Scribe_Collections.Look(ref counterparts, "AB2_counterparts", LookMode.Reference);
+            // Legacy single-counterpart saves (pre-elevator). Read the old key and merge.
+            Scribe_References.Look(ref legacyCounterpart, "AB2_counterpart");
+            if (Scribe.mode == LoadSaveMode.PostLoadInit)
+            {
+                if (counterparts == null)
+                {
+                    counterparts = new List<Building_ABStairs2>();
+                }
+                counterparts.RemoveAll(c => c == null);
+                if (legacyCounterpart != null)
+                {
+                    AddCounterpart(legacyCounterpart);
+                    legacyCounterpart = null;
+                }
+            }
         }
 
         public override string GetInspectString()
         {
             string s = base.GetInspectString();
-            string mine = counterpart != null && counterpart.Spawned
-                ? "Connects to level " + ABBands.LevelOf(Map, counterpart.Position)
-                : "Not connected";
+            string mine = "Not connected";
+            if (counterparts.Count > 0 && Spawned)
+            {
+                List<string> levels = new List<string>();
+                for (int i = 0; i < counterparts.Count; i++)
+                {
+                    if (counterparts[i] != null && counterparts[i].Spawned)
+                    {
+                        levels.Add(ABBands.LevelOf(Map, counterparts[i].Position).ToString());
+                    }
+                }
+                if (levels.Count > 0)
+                {
+                    mine = "Connects to level" + (levels.Count > 1 ? "s " : " ")
+                        + string.Join(", ", levels);
+                }
+            }
             return string.IsNullOrEmpty(s) ? mine : s + "\n" + mine;
         }
 
@@ -299,19 +446,24 @@ namespace AsAboveSoBelow
             {
                 yield return g;
             }
-            if (counterpart == null || !counterpart.Spawned)
+            for (int i = 0; i < counterparts.Count; i++)
             {
-                yield break;
-            }
-            yield return new Command_Action
-            {
-                defaultLabel = "AB2: view other end",
-                defaultDesc = "Jump the camera to the far end of this stairwell.",
-                action = delegate
+                Building_ABStairs2 cp = counterparts[i];
+                if (cp == null || !cp.Spawned)
                 {
-                    ABBandView.JumpTo(Map, counterpart.Position);
+                    continue;
                 }
-            };
+                int level = ABBands.LevelOf(Map, cp.Position);
+                yield return new Command_Action
+                {
+                    defaultLabel = "AB2: view level " + level,
+                    defaultDesc = "Jump the camera to this link's end on level " + level + ".",
+                    action = delegate
+                    {
+                        ABBandView.JumpTo(Map, cp.Position);
+                    }
+                };
+            }
         }
     }
 }
