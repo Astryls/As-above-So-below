@@ -45,7 +45,7 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (map.terrainGrid.TerrainAt(cell) != ABDefOf.AB_OpenAir)
+            if (!ABBands.ShowsBelow(map.terrainGrid.TerrainAt(cell)))
             {
                 return false; // opaque from here; the click belongs to this band
             }

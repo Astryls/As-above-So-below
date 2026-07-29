@@ -206,7 +206,7 @@ namespace AsAboveSoBelow
             {
                 return idx;
             }
-            if (map.terrainGrid.TerrainAt(c) != ABDefOf.AB_OpenAir)
+            if (!ABBands.ShowsBelow(map.terrainGrid.TerrainAt(c)))
             {
                 return idx;
             }

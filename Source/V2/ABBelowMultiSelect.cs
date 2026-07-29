@@ -72,7 +72,7 @@ namespace AsAboveSoBelow
                 }
                 // Same see-through rule as every other below interaction.
                 IntVec3 above = bands.Translate(c, viewBand);
-                if (!above.InBounds(map) || terrain.TerrainAt(above) != ABDefOf.AB_OpenAir)
+                if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
                 {
                     continue;
                 }

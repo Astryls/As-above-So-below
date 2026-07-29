@@ -55,7 +55,7 @@ namespace AsAboveSoBelow
             }
             // Only through a genuine hole, matching the renderer's own mask.
             IntVec3 above = bands.Translate(cell, viewBand);
-            if (!above.InBounds(map) || map.terrainGrid.TerrainAt(above) != ABDefOf.AB_OpenAir)
+            if (!above.InBounds(map) || !ABBands.ShowsBelow(map.terrainGrid.TerrainAt(above)))
             {
                 return false;
             }
@@ -141,7 +141,7 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     IntVec3 above = bands.Translate(pos, viewBand);
-                    if (!above.InBounds(map) || terrain.TerrainAt(above) != ABDefOf.AB_OpenAir)
+                    if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
                     {
                         continue; // not visible from up here
                     }

@@ -125,6 +125,26 @@ namespace AsAboveSoBelow
             return c != null && c.Banded ? c.LevelOf(cell) : 0;
         }
 
+        /// <summary>
+        /// Does this terrain let you SEE the band below through it?
+        ///
+        /// AB_OpenAir is the obvious case. AB_WallTop has to be included, and the reason is
+        /// worth stating: the top of a wall, viewed from the level above, IS the wall. When
+        /// wall tops were first added they read as flat grey squares, because turning the
+        /// cell from AB_OpenAir into a solid terrain made every see-below renderer skip it -
+        /// so the wooden wall underneath stopped being drawn and its own terrain was painted
+        /// over the top instead.
+        ///
+        /// Visibility and solidity are separate questions here. AB_WallTop stays impassable
+        /// and buildable; it is only DRAWN through. Deliberately NOT used by the combat
+        /// hole test in ABCombatV2 - being able to see a wall top is not the same as being
+        /// able to shoot through it.
+        /// </summary>
+        public static bool ShowsBelow(TerrainDef t)
+        {
+            return t != null && (t == ABDefOf.AB_OpenAir || t == ABDefOf.AB_WallTop);
+        }
+
         public static bool InGutter(Map map, IntVec3 cell)
         {
             ABBandMap c = CompOf(map);
