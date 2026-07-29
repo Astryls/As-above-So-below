@@ -151,14 +151,96 @@ namespace AsAboveSoBelow
                         Log.Error(ABLog.Tag + " V2: ABBandMap component missing on a banded map.");
                         return;
                     }
-                    bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
-                    RescueStrandedColonists(__result, bands);
-                    Carve(__result, bands);
+                    // The heavy work (Setup + Rescue + Carve) has already happened in the
+                    // GenerateContentsIntoMap postfix below, INSIDE the generation window.
+                    // This safety net only fires if that patch somehow did not run.
+                    if (!carved)
+                    {
+                        Log.Warning(ABLog.Tag + " V2: in-window carve did not run; carving"
+                            + " post-init (slow path).");
+                        bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
+                        var slow = System.Diagnostics.Stopwatch.StartNew();
+                        RescueStrandedColonists(__result, bands);
+                        Carve(__result, bands);
+                        carveMs = slow.Elapsed.TotalMilliseconds;
+                    }
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
                     FixPlayerStartSpot(__result, bands);
+                    ABGenProfile.Report(__result, carveMs, watch.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception e)
                 {
                     Log.Error(ABLog.Tag + " V2: band carve failed: " + e);
+                }
+                finally
+                {
+                    carved = false;
+                    carveMs = 0;
+                }
+            }
+        }
+
+        private static bool carved;
+
+        private static double carveMs;
+
+        /// <summary>
+        /// Carves INSIDE the generation window - the single biggest map-gen optimization
+        /// this mod has, found by measurement, not theory.
+        ///
+        /// The first profile of a banded generation read:
+        ///     all 41 vanilla gensteps:  1,304.7 ms
+        ///     our band carve:           3,075.8 ms   <-- 2.4x everything vanilla does
+        ///     Map.FinalizeInit:           164.2 ms
+        ///
+        /// The carve used to run in the GenerateMap POSTFIX - i.e. after Map.FinalizeInit
+        /// had brought the map fully alive. At that point every one of the carve's ~70k
+        /// GenSpawn.Spawn / Destroy / SetTerrain operations pays live-map bookkeeping:
+        /// region dirtying, mesh sections, lister updates, incremental path costs. The
+        /// profile's tell was vanilla's own RocksFromGrid: it spawns a comparable volume of
+        /// rock across the whole map in 78 ms, because gensteps run with all of that
+        /// DEFERRED. Same work, ~40x the price, purely for running after init.
+        ///
+        /// This postfix runs after every genstep (vanilla AND modded - so the
+        /// carve-last semantics are unchanged, and ScenParts has already spawned the
+        /// colonists for RescueStrandedColonists) but BEFORE Scenario.PostMapGenerate and
+        /// Map.FinalizeInit. Two knock-on wins, both free:
+        ///   - regions/rooms/path costs are built ONCE, on the already-carved map, instead
+        ///     of built for vanilla's full map and then re-dirtied wholesale;
+        ///   - ABBandMap.FinalizeInit now sees Banded == true on FRESH generation, exactly
+        ///     as it does on load - previously Setup ran after Map.FinalizeInit, so every
+        ///     Banded-gated hook in it silently no-opped for a brand-new colony.
+        /// </summary>
+        [HarmonyPatch(typeof(MapGenerator), nameof(MapGenerator.GenerateContentsIntoMap))]
+        public static class Patch_GenerateContents_ABCarveInWindow
+        {
+            private static void Postfix(Map map)
+            {
+                PendingLayout p = pending;
+                if (p == null || map == null || carved)
+                {
+                    return;
+                }
+                try
+                {
+                    ABBandMap bands = map.GetComponent<ABBandMap>();
+                    if (bands == null)
+                    {
+                        return; // GenerateMap postfix will complain and slow-path it
+                    }
+                    // Stop the genstep profiler first so the carve's own DeepProfiler
+                    // traffic (from GenSpawn internals) cannot pollute the genstep table.
+                    ABGenProfile.Disarm();
+                    bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    RescueStrandedColonists(map, bands);
+                    Carve(map, bands);
+                    carveMs = watch.Elapsed.TotalMilliseconds;
+                    carved = true;
+                }
+                catch (Exception e)
+                {
+                    Log.Error(ABLog.Tag + " V2: in-window band carve failed: " + e);
                 }
             }
         }
