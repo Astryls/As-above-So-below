@@ -345,9 +345,25 @@ namespace AsAboveSoBelow
                     }
                     else
                     {
+                        // The full-band sweep proved the surface generated as SOLID ROCK.
+                        // Vanilla's elevation noise has no edge falloff and our surface band
+                        // is a 190-row window sliced from the middle of a much taller field,
+                        // so on mountainous tiles the entire window can land above the rock
+                        // threshold - no valley anywhere. (Recurred as run #115 and #121;
+                        // the census read "100% blocked by an edifice, 0 water" both times.)
+                        //
+                        // Leaving the fallback in rock produced an unplayable colony: the
+                        // start spot sat inside a mountain, GenStep_Fog's flood-unfog could
+                        // not spread, and the whole surface stayed black. Carving a clearing
+                        // turns the same tile into a legitimate mountain-base start instead.
+                        // Runs in the generation window, on an uncrowded map, so the ~1,800
+                        // rock removals are cheap; GenStep_Fog (order 48) then unfogs the
+                        // clearing naturally because the start spot is genuinely open.
                         found = safe.CenterCell;
-                        Log.Warning(ABLog.Tag + " V2: no standable start cell in the surface"
-                            + " band; falling back to " + found + "." + lastSearchCensus);
+                        CarveStartClearing(map, surface, found);
+                        Log.Warning(ABLog.Tag + " V2: surface band generated as solid rock;"
+                            + " carved a starting clearing at " + found
+                            + " (mountain-base start)." + lastSearchCensus);
                     }
 
                     MapGenerator.PlayerStartSpot = found;
@@ -733,6 +749,34 @@ namespace AsAboveSoBelow
         /// whole map, so a !Fogged test rejects every cell, the search fails, and the
         /// colony gets dumped on the band's centre cell (frequently solid rock). That was
         /// the run #4 "no colonists spawned" bug.</summary>
+        /// <summary>
+        /// Opens a pocket in a solid-rock surface band so the colony has somewhere to
+        /// exist. Radius matches PodScatterMargin: DropCellFinder scatters pods well away
+        /// from the requested centre, and every pod must land on carved ground.
+        ///
+        /// The roof is cleared along with the rock. Skipping that seemed harmless and is
+        /// not: an unsupported thick rock roof over the new clearing collapses onto the
+        /// colony the moment the roof-support check next runs.
+        /// </summary>
+        private static void CarveStartClearing(Map map, CellRect surface, IntVec3 centre)
+        {
+            float radius = Mathf.Min(24f, GenRadial.MaxRadialPatternRadius - 1f);
+            foreach (IntVec3 c in GenRadial.RadialCellsAround(centre, radius, useCenter: true))
+            {
+                if (!c.InBounds(map) || !surface.Contains(c))
+                {
+                    continue;
+                }
+                Building edifice = c.GetEdifice(map);
+                if (edifice != null && edifice.def.building != null
+                    && (edifice.def.building.isNaturalRock || edifice.def.building.isResourceRock))
+                {
+                    edifice.Destroy(DestroyMode.Vanish);
+                }
+                map.roofGrid.SetRoof(c, null);
+            }
+        }
+
         /// <summary>Why the last failed search failed, for the warning message. Without it
         /// "no standable start cell" is unactionable - a band that is solid mountain and a
         /// band that is solid ocean need completely different responses, and they produce
