@@ -25,10 +25,12 @@
     <!-- Rejects placements with no CARDINAL approach - a link flush against walls can be
          left reachable only diagonally, and PathUtility.BlocksDiagonalMovement trips on
          unwalkable cells (doors are not special-cased), which is what made pawns stall at
-         stairwells. NOTE: this list REPLACES the one inherited from DoorBase, so
-         PlaceWorker_DoorLearnOpeningSpeed is restated here deliberately - dropping it
-         would silently remove the door-speed learning helper. -->
-    <placeWorkers>
+         stairwells.
+         Inherit="False" because RimWorld MERGES <li> lists with the parent by default
+         (discovered via the wooden elevator: a child stuffCategories list APPENDED to the
+         base's). Without it, DoorBase's PlaceWorker_DoorLearnOpeningSpeed plus our
+         restated copy made a duplicate. This list is the complete, authoritative set. -->
+    <placeWorkers Inherit="False">
       <li>PlaceWorker_DoorLearnOpeningSpeed</li>
       <li>AsAboveSoBelow.PlaceWorker_ABLinkApproach</li>
     </placeWorkers>
@@ -146,7 +148,10 @@
     <label>elevator</label>
     <description>A counterweighted elevator shaft connecting every level of the colony through a single 2x2 footprint. Completing it opens all levels it reaches and creates a matching car on each. Colonists ride between any two levels directly, and haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
     <size>(2,2)</size>
-    <stuffCategories>
+    <!-- Inherit="False" is load-bearing: RimWorld MERGES <li> lists with the parent's
+         by default, so without it this became Metallic + the base's Woody and Stony -
+         observed as a wooden elevator. -->
+    <stuffCategories Inherit="False">
       <li>Metallic</li>
     </stuffCategories>
     <costStuffCount>150</costStuffCount>

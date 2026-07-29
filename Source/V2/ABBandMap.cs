@@ -133,22 +133,50 @@ namespace AsAboveSoBelow
                     {
                         return; // map gone, or not the one on screen - nothing to fix
                     }
-                    CameraDriver cam = Find.CameraDriver;
-                    if (cam == null)
+                    // Judge by the REMEMBERED camera position, not the live camera. Vanilla
+                    // restores map.rememberedCameraPos itself during load, and the ordering
+                    // between that restore and this deferred delegate is not ours to rely
+                    // on - reading the live camera mid-restore judged a transient position.
+                    // rememberedCameraPos is the authoritative answer either way.
+                    Vector3 remembered = m.rememberedCameraPos != null
+                        ? m.rememberedCameraPos.rootPos
+                        : Find.CameraDriver.MapPosition.ToVector3();
+                    IntVec3 look = new IntVec3(Mathf.RoundToInt(remembered.x), 0,
+                        Mathf.RoundToInt(remembered.z));
+                    if (look.InBounds(m) && BandOf(look) == surfaceBand)
                     {
+                        return; // saved looking at the surface: vanilla's restore is right
+                    }
+                    // Saved looking at another band. viewBand has been forced to the
+                    // surface, so the restored position would show the wrong band (or void
+                    // with free panning). Land on the COLONISTS, like vanilla does at game
+                    // start - a translated abstract column meant nothing to the player
+                    // (reported: "camera does not land on pawns as expected").
+                    Pawn anchor = null;
+                    foreach (Pawn p in m.mapPawns.FreeColonistsSpawned)
+                    {
+                        if (BandOf(p.Position) == surfaceBand)
+                        {
+                            anchor = p;
+                            break;
+                        }
+                        anchor = anchor ?? p;
+                    }
+                    if (anchor != null)
+                    {
+                        ABBandView.JumpTo(m, anchor.Position);
                         return;
                     }
-                    Vector3 p = cam.MapPosition.ToVector3();
-                    IntVec3 look = new IntVec3(Mathf.RoundToInt(p.x), 0, Mathf.RoundToInt(p.z));
-                    if (!look.InBounds(m) || BandOf(look) == surfaceBand)
-                    {
-                        return;
-                    }
-                    IntVec3 moved = Translate(look, surfaceBand);
+                    // No colonists at all: translate the remembered column into the surface
+                    // band so at least the neighbourhood is familiar.
+                    IntVec3 moved = look.InBounds(m)
+                        ? Translate(look, surfaceBand)
+                        : RectOfBand(surfaceBand).CenterCell;
                     if (moved.InBounds(m))
                     {
-                        cam.SetRootPosAndSize(new Vector3(moved.x + 0.5f, 0f, moved.z + 0.5f),
-                            cam.ZoomRootSize);
+                        Find.CameraDriver.SetRootPosAndSize(
+                            new Vector3(moved.x + 0.5f, 0f, moved.z + 0.5f),
+                            Find.CameraDriver.ZoomRootSize);
                     }
                 }
                 catch
