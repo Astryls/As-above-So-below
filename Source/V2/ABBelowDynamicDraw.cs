@@ -56,6 +56,15 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // Nothing below the bottom band. Without this the whole pass still ran on the
+            // basement every frame - building a view rect, then walking every spawned pawn
+            // AND every realtime drawable only for each one to fail the bounds test. Pure
+            // waste, and it scaled with colony size on the one band that can never show
+            // anything beneath it.
+            if (!bands.BandExists(ABBandView.CurrentBand(map) - 1))
+            {
+                return;
+            }
             int slot = bands.Slot;
             // The strip of the band BELOW that is currently under the camera.
             CellRect belowView = cam.CurrentViewRect.MovedBy(new IntVec3(0, 0, -slot));

@@ -89,7 +89,10 @@ namespace AsAboveSoBelow
                 {
                     return true; // surface stays vanilla, mixed-biome grid included
                 }
-                BiomeDef band = ABBandEnv.BiomeOf(map, cell);
+                // Pass the already-memoized component through: this runs per cell inside
+                // WildPlantSpawner's scan loops, and the map-only overload would re-resolve
+                // it from the CWT twice more on every call.
+                BiomeDef band = ABBandEnv.BiomeOf(map, bands, cell);
                 if (band == null)
                 {
                     return true;

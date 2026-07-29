@@ -48,11 +48,30 @@ namespace AsAboveSoBelow
 
         public static BiomeDef BiomeOf(Map map, IntVec3 cell)
         {
+            return BiomeOf(map, ABBands.CompOf(map), cell);
+        }
+
+        /// <summary>
+        /// Overload for callers that have already resolved the band component.
+        ///
+        /// This exists for one reason: MixedBiomeMapComponent.GetBiomeAt is called PER CELL
+        /// inside WildPlantSpawner's scan loops, and the convenience overload above cost two
+        /// ConditionalWeakTable probes on every one of those calls - one inside
+        /// ABBands.LevelOf, another inside the basement branch - even though the caller had
+        /// just resolved the same component. Threading it through removes both from the
+        /// hottest path this file has.
+        /// </summary>
+        public static BiomeDef BiomeOf(Map map, ABBandMap bands, IntVec3 cell)
+        {
             if (map == null)
             {
                 return null;
             }
-            int level = ABBands.LevelOf(map, cell);
+            if (bands == null || !bands.Banded)
+            {
+                return map.Biome;
+            }
+            int level = bands.LevelOf(cell);
             if (level == 0)
             {
                 return map.Biome;
@@ -63,8 +82,7 @@ namespace AsAboveSoBelow
                 // the band component so it survives save/load - this is the V2 stand-in
                 // for V1's pocketTileInfo.PrimaryBiome assignment. Uncarved basements
                 // fall through to plain solid rock.
-                ABBandMap bands = ABBands.CompOf(map);
-                if (bands?.basementBiome != null)
+                if (bands.basementBiome != null)
                 {
                     return bands.basementBiome;
                 }
