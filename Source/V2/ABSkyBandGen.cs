@@ -643,13 +643,27 @@ namespace AsAboveSoBelow
                         }
                         if (kind[i] == KindWall)
                         {
-                            if (open >= 6)
+                            // 7, not 6, and the difference is visible from orbit.
+                            //
+                            // At 6 a wall standing on any CONVEX bend of a plateau boundary
+                            // has enough open neighbours to dissolve, so two passes chewed
+                            // the outermost wall row off every meadow edge and left walkable
+                            // ledge floor in its place. Floor against floor gets a fade, not
+                            // a lip - which is why the plateau edge stopped reading as a
+                            // mountain edge even though the surface's did. At 7 only genuinely
+                            // isolated stubs and one-cell spurs dissolve (the speckle this
+                            // pass exists for), boundaries survive intact, and the rock walls
+                            // sit right at the meadow where VANILLA draws their pale top lip
+                            // and dark outline for us.
+                            if (open >= 7)
                             {
                                 next[i] = KindLedge;
                             }
                         }
                         else if (wall >= 6)
                         {
+                            // Filling notches stays at 6: it makes boundaries cleaner rather
+                            // than eroding them.
                             next[i] = KindWall;
                         }
                     }

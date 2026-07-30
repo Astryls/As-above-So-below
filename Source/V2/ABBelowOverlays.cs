@@ -53,13 +53,22 @@ namespace AsAboveSoBelow
             {
                 return false; // same band, or above us: not seen through the floor
             }
-            // Only through a genuine hole, matching the renderer's own mask.
+            // Ask the SHARED resolver what this column actually shows, rather than checking
+            // only the view-band cell. The old test passed as soon as the cell directly
+            // overhead was see-through, without caring whether the levels in between were -
+            // and it translated by a fixed band delta, so with levels stacked the label of a
+            // thing hidden behind an intervening floor could still be drawn, while a thing
+            // genuinely visible two levels down resolved to the wrong place. Requiring the
+            // descent to LAND on this very cell makes label placement agree with the
+            // renderer by construction.
             IntVec3 above = bands.Translate(cell, viewBand);
-            if (!above.InBounds(map) || !ABBands.ShowsBelow(map.terrainGrid.TerrainAt(above)))
+            if (!above.InBounds(map)
+                || !ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen, out int drop)
+                || seen.x != cell.x || seen.z != cell.z)
             {
                 return false;
             }
-            localized = new Vector3(world.x, world.y, world.z + (viewBand - thingBand) * bands.Slot);
+            localized = new Vector3(world.x, world.y, world.z + drop);
             return true;
         }
     }
@@ -126,22 +135,29 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                CellRect below = Find.CameraDriver.CurrentViewRect
-                    .MovedBy(new IntVec3(0, 0, -bands.Slot));
-                below.ClipInsideMap(map);
+                // Test the COLUMN, not one band's rect. Offsetting the view rect by a single
+                // Slot only ever found things exactly one level down, so from level 2 upward
+                // no below overlay was offered a draw at all - stack counts, forbidden
+                // markers and pawn labels all silently vanished while the content itself
+                // rendered fine.
+                CellRect view = Find.CameraDriver.CurrentViewRect;
                 FogGrid fog = map.fogGrid;
-                TerrainGrid terrain = map.terrainGrid;
                 List<Thing> list = map.listerThings.ThingsInGroup(ThingRequestGroup.HasGUIOverlay);
                 for (int i = 0; i < list.Count; i++)
                 {
                     Thing thing = list[i];
                     IntVec3 pos = thing.Position;
-                    if (!below.Contains(pos) || fog.IsFogged(pos))
+                    if (bands.BandOf(pos) >= viewBand || fog.IsFogged(pos))
                     {
                         continue;
                     }
                     IntVec3 above = bands.Translate(pos, viewBand);
-                    if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                    if (!above.InBounds(map) || !view.Contains(above))
+                    {
+                        continue; // off screen
+                    }
+                    if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen, out _)
+                        || seen.x != pos.x || seen.z != pos.z)
                     {
                         continue; // not visible from up here
                     }

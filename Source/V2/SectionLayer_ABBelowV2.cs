@@ -599,15 +599,32 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                IntVec3 above = new IntVec3(loc.x, loc.y, loc.z + bands.Slot);
-                if (!above.InBounds(map) || bands.InGutter(above))
+                // Mirror to EVERY band above, not just the next one.
+                //
+                // One step was enough while only one level could look down. With levels
+                // stacked, level +2 and +3 see the ground through the open air of the levels
+                // between them - but nothing ever dirtied their sections when the ground
+                // changed, so they kept whatever they baked the first time they were drawn.
+                // Reported as "ground floor mineables disappear on floor 2, and all prior
+                // levels' mineables on floor 3": not a masking or translation bug at all,
+                // simply a mesh nobody had invalidated since it was built.
+                int fromBand = bands.BandOf(loc);
+                if (fromBand < 0)
                 {
                     return;
                 }
                 mirroring = true;
                 try
                 {
-                    map.mapDrawer.MapMeshDirty(above, dirtyFlags);
+                    for (int b = fromBand + 1; b < bands.bandCount; b++)
+                    {
+                        IntVec3 above = bands.Translate(loc, b);
+                        if (!above.InBounds(map) || bands.InGutter(above))
+                        {
+                            continue;
+                        }
+                        map.mapDrawer.MapMeshDirty(above, dirtyFlags);
+                    }
                 }
                 finally
                 {

@@ -66,8 +66,12 @@ namespace AsAboveSoBelow
                 return;
             }
             int slot = bands.Slot;
-            // The strip of the band BELOW that is currently under the camera.
-            CellRect belowView = cam.CurrentViewRect.MovedBy(new IntVec3(0, 0, -slot));
+            int viewBand = ABBandView.CurrentBand(map);
+            CellRect camView = cam.CurrentViewRect;
+            // The strip of the band directly below, still used by the realtime-things pass.
+            // KNOWN GAP: that pass is still single-band, so motes, fire and other realtime
+            // drawables more than one level down do not show. Pawns no longer depend on it.
+            CellRect belowView = camView.MovedBy(new IntVec3(0, 0, -slot));
             belowView.ClipInsideMap(map);
             TerrainDef air = ABDefOf.AB_OpenAir;
             TerrainGrid terrain = map.terrainGrid;
@@ -91,10 +95,23 @@ namespace AsAboveSoBelow
                 // cost one wrong fix (running the pawn through all three DynamicDrawPhases,
                 // which was a real staleness bug but not this one).
                 bool probing = ReportNextPass;
-                if (!belowView.Contains(pos))
+                // ANY band below the view, not just the one directly beneath.
+                //
+                // The candidate rect used to be the view shifted down exactly one Slot, so a
+                // pawn two levels down was never even considered - "pawns disappear on floor
+                // 2 and stay hidden on floor 3". The column is now tested against the view
+                // rect in the VIEWING band and visibility is resolved with the shared
+                // descent rule, so the two agree by construction.
+                int pawnBand = bands.BandOf(pos);
+                if (pawnBand < 0 || pawnBand >= viewBand)
+                {
+                    continue; // same band or above: vanilla draws it
+                }
+                IntVec3 above = bands.Translate(pos, viewBand);
+                if (!camView.Contains(above))
                 {
                     if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
-                        + " - outside translated view rect " + belowView);
+                        + " - column outside the view rect " + camView);
                     continue;
                 }
                 if (fog.IsFogged(pos))
@@ -102,17 +119,18 @@ namespace AsAboveSoBelow
                     if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos + " - fogged");
                     continue;
                 }
-                IntVec3 above = new IntVec3(pos.x, 0, pos.z + slot);
                 if (!above.InBounds(map) || bands.InGutter(above))
                 {
                     if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
                         + " - cell above out of bounds / in gutter");
                     continue;
                 }
-                if (!ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen, out int drop)
+                    || seen.x != pos.x || seen.z != pos.z)
                 {
                     if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
-                        + " - covered from above by " + terrain.TerrainAt(above).defName);
+                        + " - not what this column shows (covered by "
+                        + terrain.TerrainAt(above).defName + ")");
                     continue;
                 }
                 if (probing)
@@ -126,7 +144,7 @@ namespace AsAboveSoBelow
                 try
                 {
                     Vector3 loc = p.DrawPos;
-                    loc.z += slot;
+                    loc.z += drop;
 
                     // Run the SAME three phases vanilla runs for a visible pawn, at our
                     // translated location - do not just call DrawNowAt.
@@ -147,7 +165,7 @@ namespace AsAboveSoBelow
                     // Armed across all three phases: the bed branch of GetBodyPos is reached
                     // from ParallelPreDraw as well as Draw, so arming only the draw call
                     // leaves the cached results holding the untranslated position.
-                    BelowDrawOffsetZ = slot;
+                    BelowDrawOffsetZ = drop;
                     try
                     {
                         p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
