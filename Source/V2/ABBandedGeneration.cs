@@ -73,13 +73,50 @@ namespace AsAboveSoBelow
         {
             surface = default(CellRect);
             slot = 0;
-            PendingLayout p = pending;
-            if (p == null || map == null)
+            if (map == null)
             {
                 return false;
             }
+            PendingLayout p = pending;
+            if (p == null)
+            {
+                // No real generation in flight. It may still be a MAP PREVIEW: Map Preview
+                // builds its own bare Map and runs gensteps on it without ever calling
+                // MapGenerator.GenerateMap, so no layout was ever recorded - yet the preview
+                // must reproduce the real map exactly, which means every generation-time
+                // patch that consults this has to answer the same way there.
+                //
+                // Inferred from the SIZE, which is safe because we chose that size ourselves
+                // (MapPreviewCompat.Stacked). An ordinary square map can never match: Slot is
+                // at least bandHeight + 2, so bandCount * Slot always exceeds the width once
+                // more than one band exists.
+                return TryInferredSurfaceRect(map, out surface, out slot);
+            }
             slot = ABBandMap.SlotFor(p.bandHeight);
             surface = new CellRect(0, p.surfaceBand * slot, map.Size.x, p.bandHeight);
+            return true;
+        }
+
+        /// <summary>Recover the band layout from a map's dimensions alone - see the preview
+        /// note in TryPendingSurfaceRect. Requires the current level plan to be the one the
+        /// size was built from, which for a preview is true by construction.</summary>
+        private static bool TryInferredSurfaceRect(Map map, out CellRect surface, out int slot)
+        {
+            surface = default(CellRect);
+            slot = 0;
+            int bands = ABV2.BandCount;
+            if (!ABV2.Enabled || bands <= 1)
+            {
+                return false;
+            }
+            int bandHeight = map.Size.x;
+            int s = ABBandMap.SlotFor(bandHeight);
+            if (s <= 0 || bands * s != map.Size.z)
+            {
+                return false;
+            }
+            slot = s;
+            surface = new CellRect(0, ABV2.SurfaceBand * s, map.Size.x, bandHeight);
             return true;
         }
 
