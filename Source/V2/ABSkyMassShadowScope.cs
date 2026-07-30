@@ -29,7 +29,7 @@ namespace AsAboveSoBelow
     {
         internal static bool MassCell(Map map, ABBandMap bands, int skyBand, IntVec3 c)
         {
-            if (!c.InBounds(map) || bands.BandOf(c) != skyBand)
+            if (!c.InBounds(map) || bands.InGutter(c) || bands.BandOf(c) != skyBand)
             {
                 return false;
             }
@@ -183,6 +183,208 @@ namespace AsAboveSoBelow
                 return true;
             }
             return !ABSkyMassShadowScope.IsSkyMassRock(map, bands, skyBand, t);
+        }
+    }
+
+    /// <summary>
+    /// The sky-band mountain interior shows the unified rock field instead of a fog
+    /// hole: vanilla's fog COLORS are re-computed with one predicate change - a fogged
+    /// cell that is sky-band mass counts as clear. Fog DATA is untouched (discovery,
+    /// letters, thing-print suppression in fogged cells all behave exactly as vanilla),
+    /// and fog everywhere else - other bands, the gutter, non-mass sky cells - is
+    /// byte-identical. Fogged things never print (vanilla rule), so clearing the veil
+    /// over the mass reveals the field underlay, not hidden ore.
+    /// </summary>
+    [HarmonyPatch(typeof(SectionLayer_FogOfWar), nameof(SectionLayer_FogOfWar.Regenerate))]
+    public static class Patch_SectionLayer_FogOfWar_ABSkyMassScope
+    {
+        private static readonly AccessTools.FieldRef<SectionLayer, Section> SectionRef =
+            AccessTools.FieldRefAccess<SectionLayer, Section>("section");
+
+        private static bool Prefix(SectionLayer_FogOfWar __instance)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Rendering))
+                {
+                    return true;
+                }
+                Section section = SectionRef(__instance);
+                Map map = section?.map;
+                ABBandMap bands = map != null ? ABBands.CompOf(map) : null;
+                if (bands == null || !bands.Banded)
+                {
+                    return true;
+                }
+                RegenerateFiltered(__instance, section, map, bands);
+                return false;
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " sky-mass fog scope failed, vanilla fallback: "
+                    + e.Message, 762195892);
+                return true;
+            }
+        }
+
+        /// <summary>Vanilla SectionLayer_FogOfWar.Regenerate with the mass predicate.
+        /// Same base geometry, same corner smoothing, same disabled handling.</summary>
+        private static void RegenerateFiltered(SectionLayer_FogOfWar layer, Section section,
+            Map map, ABBandMap bands)
+        {
+            LayerSubMesh subMesh = layer.GetSubMesh(MatBases.FogOfWar);
+            if (subMesh.mesh.vertexCount == 0)
+            {
+                SectionLayerGeometryMaker_Solid.MakeBaseGeometry(section, subMesh, AltitudeLayer.FogOfWar);
+            }
+            subMesh.Clear(MeshParts.Colors);
+            FogGrid fog = map.fogGrid;
+            int skyBand = bands.surfaceBand + 1;
+            bool FoggedAt(int x, int z)
+            {
+                IntVec3 cell = new IntVec3(x, 0, z);
+                if (!fog.IsFogged(cell))
+                {
+                    return false;
+                }
+                return !ABSkyMassShadowScope.MassCell(map, bands, skyBand, cell);
+            }
+            CellRect cellRect = section.CellRect;
+            int maxZ = map.Size.z - 1;
+            int maxX = map.Size.x - 1;
+            bool any = false;
+            bool[] covered = new bool[9];
+            for (int i = cellRect.minX; i <= cellRect.maxX; i++)
+            {
+                for (int j = cellRect.minZ; j <= cellRect.maxZ; j++)
+                {
+                    if (FoggedAt(i, j))
+                    {
+                        for (int k = 0; k < 9; k++)
+                        {
+                            covered[k] = true;
+                        }
+                    }
+                    else
+                    {
+                        for (int l = 0; l < 9; l++)
+                        {
+                            covered[l] = false;
+                        }
+                        if (j < maxZ && FoggedAt(i, j + 1))
+                        {
+                            covered[2] = true;
+                            covered[3] = true;
+                            covered[4] = true;
+                        }
+                        if (j > 0 && FoggedAt(i, j - 1))
+                        {
+                            covered[6] = true;
+                            covered[7] = true;
+                            covered[0] = true;
+                        }
+                        if (i < maxX && FoggedAt(i + 1, j))
+                        {
+                            covered[4] = true;
+                            covered[5] = true;
+                            covered[6] = true;
+                        }
+                        if (i > 0 && FoggedAt(i - 1, j))
+                        {
+                            covered[0] = true;
+                            covered[1] = true;
+                            covered[2] = true;
+                        }
+                        if (j > 0 && i > 0 && FoggedAt(i - 1, j - 1))
+                        {
+                            covered[0] = true;
+                        }
+                        if (j < maxZ && i > 0 && FoggedAt(i - 1, j + 1))
+                        {
+                            covered[2] = true;
+                        }
+                        if (j < maxZ && i < maxX && FoggedAt(i + 1, j + 1))
+                        {
+                            covered[4] = true;
+                        }
+                        if (j > 0 && i < maxX && FoggedAt(i + 1, j - 1))
+                        {
+                            covered[6] = true;
+                        }
+                    }
+                    for (int m = 0; m < 9; m++)
+                    {
+                        byte a;
+                        if (covered[m])
+                        {
+                            a = byte.MaxValue;
+                            any = true;
+                        }
+                        else
+                        {
+                            a = 0;
+                        }
+                        subMesh.colors.Add(new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, a));
+                    }
+                }
+            }
+            if (any)
+            {
+                subMesh.disabled = false;
+                subMesh.FinalizeMesh(MeshParts.Colors);
+            }
+            else
+            {
+                subMesh.disabled = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The sky-band mass' plain rock walls do not PRINT: their sprites are what drew
+    /// the pale lip + black outline rings inside the mass. The walls still exist -
+    /// mining, selection, designations, pathing, link masks of neighbouring ore all
+    /// behave exactly as before; only the sprite is withheld, and the unified field
+    /// (SectionLayer_ABMountainCap) is what shows instead. Ore prints natively
+    /// (prospecting information), every other band prints natively, and fogged things
+    /// never printed in the first place (vanilla rule). Thing.Print is the single
+    /// choke point - Mineable does not override it.
+    /// </summary>
+    [HarmonyPatch(typeof(Thing), nameof(Thing.Print))]
+    public static class Patch_Thing_Print_ABSkyMassRock
+    {
+        private static bool Prefix(Thing __instance)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Rendering))
+                {
+                    return true;
+                }
+                ThingDef def = __instance.def;
+                if (def == null || def.building == null || !def.building.isNaturalRock
+                    || def.building.isResourceRock)
+                {
+                    return true;
+                }
+                Map map = __instance.Map;
+                if (map == null)
+                {
+                    return true;
+                }
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded)
+                {
+                    return true;
+                }
+                IntVec3 p = __instance.Position;
+                return !(p.InBounds(map) && !bands.InGutter(p)
+                    && bands.BandOf(p) == bands.surfaceBand + 1);
+            }
+            catch
+            {
+                return true;
+            }
         }
     }
 

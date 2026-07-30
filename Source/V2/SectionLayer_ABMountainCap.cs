@@ -50,11 +50,6 @@ namespace AsAboveSoBelow
     {
         private static int lowQueue;
 
-        /// <summary>The mass-unification cover's queue: above the wall sprites (cutout),
-        /// vanilla fog and the EdgeShadow family, so covered wall cells and the fogged
-        /// interior hole read as the same continuous rock field as the open fill.</summary>
-        private static int coverQueue;
-
         private static bool queueReady;
 
         private static void EnsureQueue()
@@ -87,16 +82,6 @@ namespace AsAboveSoBelow
             // real wall sprites and their overhang decals draw over the fill,
             // exactly like walls over vanilla rough stone.
             lowQueue = Mathf.Clamp(Mathf.Max(terrain, shadow) + 1, Mathf.Min(terrain + 1, cutout - 1), cutout - 1);
-            int fogQ = 0;
-            if (MatBases.FogOfWar != null)
-            {
-                fogQ = MatBases.FogOfWar.renderQueue;
-                if (fogQ <= 0 && MatBases.FogOfWar.shader != null)
-                {
-                    fogQ = MatBases.FogOfWar.shader.renderQueue;
-                }
-            }
-            coverQueue = Mathf.Max(Mathf.Max(cutout, shadow), Mathf.Max(fogQ, lowQueue + 1)) + 1;
             queueReady = true;
         }
 
@@ -317,40 +302,75 @@ namespace AsAboveSoBelow
             {
                 queueClones.Clear();
             }
-            clone = new Material(source) { renderQueue = lowQueue };
+            // Edge tiles sit ONE step above the field underlay, both far below the
+            // cutout family: nothing of ours can ever paint over a plant, pawn or
+            // wall sprite (the cover regression's root mistake).
+            clone = new Material(source) { renderQueue = lowQueue + 1 };
             queueClones[source] = clone;
             return clone;
         }
 
-        /// <summary>Cover clones: same materials, queued above walls + fog + edge
-        /// shadows. Separate pool because one source material serves both queues.</summary>
-        private static readonly Dictionary<Material, Material> coverClones = new Dictionary<Material, Material>();
+        /// <summary>Field clones: the rock's ROUGH TERRAIN material (world-position
+        /// sampled - genuinely textured at any scale, where the atlas' fully-linked
+        /// mask-15 tile is near-flat; the run-25 lesson relearned the hard way via the
+        /// cover regression) re-queued to draw over the cap terrain, under everything
+        /// else.</summary>
+        private static readonly Dictionary<Material, Material> fieldClones = new Dictionary<Material, Material>();
 
-        private static Material CoverClone(Material source)
+        private static Material FieldClone(Material source)
         {
             if (source == null)
             {
                 return null;
             }
-            if (coverClones.TryGetValue(source, out Material clone))
+            if (fieldClones.TryGetValue(source, out Material clone))
             {
                 return clone;
             }
-            if (coverClones.Count > 512)
+            if (fieldClones.Count > 512)
             {
-                coverClones.Clear();
+                fieldClones.Clear();
             }
-            clone = new Material(source) { renderQueue = coverQueue };
-            coverClones[source] = clone;
+            clone = new Material(source) { renderQueue = lowQueue };
+            fieldClones[source] = clone;
             return clone;
+        }
+
+        /// <summary>Terrain-mesh-shaped quad: verts + colors + tris, deliberately NO
+        /// uvs - terrain shaders sample world position, and per-quad uvs are the
+        /// documented muddy-smear trap. Terrain materials get their own submeshes, so
+        /// uv-free and uv-carrying geometry never share one mesh.</summary>
+        private static void AddTerrainQuad(LayerSubMesh sub, IntVec3 c, float y)
+        {
+            if (sub == null)
+            {
+                return;
+            }
+            int n = sub.verts.Count;
+            sub.verts.Add(new Vector3(c.x, y, c.z));
+            sub.verts.Add(new Vector3(c.x, y, c.z + 1));
+            sub.verts.Add(new Vector3(c.x + 1, y, c.z + 1));
+            sub.verts.Add(new Vector3(c.x + 1, y, c.z));
+            for (int i = 0; i < 4; i++)
+            {
+                sub.colors.Add(White);
+            }
+            sub.tris.Add(n);
+            sub.tris.Add(n + 1);
+            sub.tris.Add(n + 2);
+            sub.tris.Add(n);
+            sub.tris.Add(n + 2);
+            sub.tris.Add(n + 3);
         }
 
         public SectionLayer_ABMountainCap(Section section) : base(section)
         {
             // Buildings flag: mining a wall changes both fill eligibility and the
             // link masks of its neighbours.
+            // FogOfWar: fogged ore becoming visible ore (and vice versa) changes
+            // whether this layer decorates the cell.
             relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain | (ulong)MapMeshFlagDefOf.Buildings
-                | (ulong)ABDefOf.AB_BelowThings;
+                | (ulong)MapMeshFlagDefOf.FogOfWar | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible => ABGuard.On(ABGuard.Rendering);
@@ -388,10 +408,6 @@ namespace AsAboveSoBelow
                 int skyBand = bands.surfaceBand + 1;
                 ThingDef fallbackRock = FallbackRock(map);
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
-                // Cover geometry sits at vanilla's fog altitude: above every wall
-                // sprite's depth-written pixels, so the later-queued cover can never
-                // lose the depth-test tie against the cutout it conceals.
-                float coverAlt = AltitudeLayer.FogOfWar.AltitudeFor();
                 bool emitted = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
@@ -414,63 +430,96 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    // Natural rock WALLS no longer render natively: they are COVERED
-                    // with properly-masked atlas tiles in a queue above the wall
-                    // sprites, vanilla fog and the EdgeShadow family, so fill ring,
-                    // wall band and the fogged interior hole read as ONE connected
-                    // rock field (the "texture outline errors" + "fog center hole"
-                    // screenshot). Exception - visible ORE: an explored resource rock
-                    // keeps its native sprite (prospecting information), while FOGGED
-                    // ore is covered like plain rock, because a fog dot inside the
-                    // unified field would itself be an ore tell vanilla never leaks.
-                    // Any OTHER edifice (torch, furniture, built walls) keeps the fill
-                    // beneath it like furniture on any floor (run-19).
+                    // Natural rock cells join the unified field like every other mass
+                    // cell - their SPRITES (and the fog geometry over the deep
+                    // interior) are scoped out by ABSkyMassShadowScope, NOT painted
+                    // over: the reverted cover proved that a queue-above-everything
+                    // blanket erases every overhanging tree, plant and pawn sprite and
+                    // renders as the near-flat mask-15 slab. Concealment is therefore
+                    // "don't draw", never "draw on top". Visible ORE is the exception:
+                    // its sprite still prints natively over the field (prospecting
+                    // information); fogged things never print at all (vanilla rule).
+                    // Any OTHER edifice (torch, furniture, built walls) keeps the
+                    // field beneath it like furniture on any floor (run-19).
                     Building edifice = c.GetEdifice(map);
-                    bool coverCell = false;
-                    bool resourceRock = false;
-                    if (edifice != null
+                    bool naturalRock = edifice != null
                         && (edifice.def.mineable
-                            || (edifice.def.building != null && edifice.def.building.isNaturalRock)))
-                    {
-                        resourceRock = edifice.def.building != null && edifice.def.building.isResourceRock;
-                        if (resourceRock && !map.fogGrid.IsFogged(c))
-                        {
-                            continue; // visible ore renders natively
-                        }
-                        coverCell = true;
-                    }
+                            || (edifice.def.building != null && edifice.def.building.isNaturalRock));
+                    bool visibleOre = naturalRock
+                        && edifice.def.building != null && edifice.def.building.isResourceRock
+                        && !map.fogGrid.IsFogged(c);
                     // Rock type comes from the GROUND map's rock at this column - the
                     // stone the mass actually stands on (run-20 diagnosis: sky-side
                     // walls/leave-terrains are noise-picked independently, producing
                     // limestone patches over a slate mountain). Ground-sourced typing
                     // also merges large regions into one material = one seamless
                     // submesh. The mined-floor mapping stays for ELIGIBILITY only.
-                    // A covered WALL is the one case that types from ITSELF - it IS
-                    // the rock - except fogged ore, which deliberately types from the
-                    // ground like its neighbours so the concealment is seamless.
-                    ThingDef rock = coverCell && !resourceRock
-                        ? edifice.def
-                        : (GroundRockAt(ground, c + groundOffset) ?? fallbackRock);
-                    float cellY = coverCell ? coverAlt : y;
-                    // Variant mode (Better Mountains): when the rock's graphic
-                    // is not a linked atlas (BM swaps rocks to Graphic_Random,
-                    // painterly 2x2 variants, no atlas), the atlas machinery
-                    // would sample nonsense sub-rects. Mimic what the walls
-                    // themselves now do: one deterministic variant sprite per
-                    // mass cell, centered at the graphic's own drawSize so
-                    // neighbors overlap into the same composed rockfield BM's
-                    // native walls show. No link masks, no corner fillers (no
-                    // baked rounding to cover, and BM's look is lip-less);
-                    // the meadow fade applies the same as in atlas mode.
+                    // A standing plain rock is the one case that types from ITSELF -
+                    // it IS the rock; ore types from the ground like its neighbours
+                    // so the field under and around it is seamless.
+                    ThingDef rock;
+                    if (naturalRock && !(edifice.def.building != null && edifice.def.building.isResourceRock))
+                    {
+                        rock = edifice.def;
+                    }
+                    else
+                    {
+                        rock = GroundRockAt(ground, c + groundOffset) ?? fallbackRock;
+                    }
+                    // The unified field underlay: the rock's own rough terrain,
+                    // world-position sampled, on EVERY mass cell.
+                    TerrainDef rough = rock?.building?.naturalTerrain;
+                    if (rough != null)
+                    {
+                        Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
+                        if (fieldMat != null)
+                        {
+                            AddTerrainQuad(GetSubMesh(fieldMat), c, y);
+                            emitted = true;
+                        }
+                    }
+                    else
+                    {
+                        // No naturalTerrain (never happens post-generator; belt and
+                        // braces): flat atlas base, uv-carrying quad.
+                        Material flatField = QueueClone(AtlasBaseFor(rock));
+                        if (flatField != null)
+                        {
+                            AddQuad(GetSubMesh(flatField), c.x, c.z, c.x + 1, c.z + 1, y);
+                            emitted = true;
+                        }
+                    }
+                    // The plateau boundary: the meadow's own vanilla fade fan over
+                    // this mass cell (run-44 wanted a soft transition; the flat-tone
+                    // skirt yielded to the real fade mechanic).
+                    emitted |= EmitMeadowFade(map, grid, c, y);
+                    if (visibleOre)
+                    {
+                        continue; // the ore sprite provides this cell's look
+                    }
+                    // Cardinal links in Graphic_Linked's own order (N=1 E=2 S=4
+                    // W=8): a direction links when the mass continues there. Interior
+                    // cells (mask 15) are the field alone - the atlas' fully-linked
+                    // tile is near-flat and adds nothing but a tone seam.
+                    bool n0 = Linked(map, grid, cap, c + IntVec3.North);
+                    bool e0 = Linked(map, grid, cap, c + IntVec3.East);
+                    bool s0 = Linked(map, grid, cap, c + IntVec3.South);
+                    bool w0 = Linked(map, grid, cap, c + IntVec3.West);
+                    int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
+                    if (mask == 15)
+                    {
+                        continue;
+                    }
                     Graphic liveGraphic = LiveGraphicFor(rock);
                     if (!(liveGraphic is Graphic_Linked))
                     {
-                        emitted |= EmitMeadowFade(map, grid, c, cellY, coverCell);
+                        // Variant mode (Better Mountains): BM's look is lip-less, so
+                        // the silhouette gets one deterministic variant sprite over
+                        // the (BM-recolored) field; interior is the field alone.
                         Material[] variants = VariantsFor(rock);
                         if (variants != null)
                         {
-                            Material vsrc = variants[StableCellIndex(c, variants.Length)];
-                            Material vmat = coverCell ? CoverClone(vsrc) : QueueClone(vsrc);
+                            Material vmat = QueueClone(variants[StableCellIndex(c, variants.Length)]);
                             if (vmat != null)
                             {
                                 Vector2 ds = liveGraphic != null ? liveGraphic.drawSize : Vector2.one;
@@ -478,20 +527,7 @@ namespace AsAboveSoBelow
                                 float hh = Mathf.Max(ds.y, 1f) * 0.5f;
                                 LayerSubMesh vsub = GetSubMesh(vmat);
                                 AddQuad(vsub, c.x + 0.5f - hw, c.z + 0.5f - hh,
-                                    c.x + 0.5f + hw, c.z + 0.5f + hh, cellY);
-                                emitted = true;
-                            }
-                        }
-                        else
-                        {
-                            // Unknown custom graphic class: flat single-material
-                            // fill beats sampling a wrong atlas window.
-                            Material flatSrc = AtlasBaseFor(rock);
-                            Material flat = coverCell ? CoverClone(flatSrc) : QueueClone(flatSrc);
-                            if (flat != null)
-                            {
-                                LayerSubMesh fsub = GetSubMesh(flat);
-                                AddQuad(fsub, c.x, c.z, c.x + 1, c.z + 1, cellY);
+                                    c.x + 0.5f + hw, c.z + 0.5f + hh, y);
                                 emitted = true;
                             }
                         }
@@ -502,34 +538,17 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    // Cardinal links in Graphic_Linked's own order (N=1 E=2 S=4
-                    // W=8): a direction links when the mass continues there.
-                    bool n0 = Linked(map, grid, cap, c + IntVec3.North);
-                    bool e0 = Linked(map, grid, cap, c + IntVec3.East);
-                    bool s0 = Linked(map, grid, cap, c + IntVec3.South);
-                    bool w0 = Linked(map, grid, cap, c + IntVec3.West);
-                    int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
-                    Material tileSrc = MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask);
-                    Material tile = coverCell ? CoverClone(tileSrc) : QueueClone(tileSrc);
+                    // The silhouette: the atlas EDGE tile (pale lip + dark outline
+                    // toward the unlinked side) over the field, plus the vanilla
+                    // corner fillers covering the rounding the atlas bakes into tile
+                    // corners (Graphic_LinkedCornerFiller's exact rule).
+                    Material tile = QueueClone(MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask));
                     if (tile == null)
                     {
                         continue;
                     }
-                    // The plateau boundary: the meadow's own vanilla fade fan over this
-                    // mass cell (run-44 wanted a soft transition; the flat-tone skirt it
-                    // got now yields to the real fade mechanic).
-                    emitted |= EmitMeadowFade(map, grid, c, cellY, coverCell);
-                    // The atlas tile, then the vanilla corner fillers: a quarter
-                    // -cell solid quad over every corner whose diagonal AND both
-                    // flanking cardinals link (Graphic_LinkedCornerFiller's exact
-                    // rule), covering the rounding every atlas tile bakes into
-                    // every corner - the mask-15 interior tile included. Tile +
-                    // fillers is precisely how native wall groups compose their
-                    // seamless field, so junctions are gap-free AND textured;
-                    // the flat interior quads and inset base quads this replaces
-                    // (runs 22-23) read as flat-vs-textured patchwork (run-24).
                     LayerSubMesh sub = GetSubMesh(tile);
-                    AddQuad(sub, c.x, c.z, c.x + 1, c.z + 1, cellY);
+                    AddQuad(sub, c.x, c.z, c.x + 1, c.z + 1, y);
                     emitted = true;
                     if (CornerFillersEnabled)
                     {
@@ -539,19 +558,19 @@ namespace AsAboveSoBelow
                         bool se = Linked(map, grid, cap, c + IntVec3.South + IntVec3.East);
                         if (sw && s0 && w0)
                         {
-                            AddCornerFiller(sub, map, c, -1, -1, cellY);
+                            AddCornerFiller(sub, map, c, -1, -1, y);
                         }
                         if (nw && n0 && w0)
                         {
-                            AddCornerFiller(sub, map, c, -1, 1, cellY);
+                            AddCornerFiller(sub, map, c, -1, 1, y);
                         }
                         if (ne && n0 && e0)
                         {
-                            AddCornerFiller(sub, map, c, 1, 1, cellY);
+                            AddCornerFiller(sub, map, c, 1, 1, y);
                         }
                         if (se && s0 && e0)
                         {
-                            AddCornerFiller(sub, map, c, 1, -1, cellY);
+                            AddCornerFiller(sub, map, c, 1, -1, y);
                         }
                     }
                 }
@@ -632,36 +651,23 @@ namespace AsAboveSoBelow
         /// spread is the documented stairstep-border trap.</summary>
         private static readonly Dictionary<Material, Material> fadeClones = new Dictionary<Material, Material>();
 
-        /// <summary>Fade clones for COVERED cells: the fan must beat the cover, which
-        /// already sits above fog/shadows, so this pool queues from coverQueue up.</summary>
-        private static readonly Dictionary<Material, Material> fadeClonesHigh = new Dictionary<Material, Material>();
-
-        private static Material FadeCloneFor(Material source, bool aboveCover)
+        private static Material FadeClone(Material source)
         {
             if (source == null)
             {
                 return null;
             }
-            Dictionary<Material, Material> pool = aboveCover ? fadeClonesHigh : fadeClones;
-            if (pool.TryGetValue(source, out Material clone))
+            if (fadeClones.TryGetValue(source, out Material clone))
             {
                 return clone;
             }
-            if (pool.Count > 512)
+            if (fadeClones.Count > 512)
             {
-                pool.Clear();
+                fadeClones.Clear();
             }
             int spread = Mathf.Clamp((source.renderQueue - 2000) / 25, 0, 40);
-            int queue;
-            if (aboveCover)
-            {
-                queue = coverQueue + 1 + spread;
-            }
-            else
-            {
-                int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : lowQueue + 449;
-                queue = Mathf.Min(lowQueue + 2 + spread, cutout - 1);
-            }
+            int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : lowQueue + 449;
+            int queue = Mathf.Min(lowQueue + 2 + spread, cutout - 1);
             clone = new Material(source);
             // Hard-edged sources (the rooftop tile) carry a TerrainHard shader that
             // ignores vertex alpha - the fan would render as a full opaque square.
@@ -674,7 +680,7 @@ namespace AsAboveSoBelow
                 clone.SetTexture(ShaderPropertyIDs.AlphaAddTex, TexGame.AlphaAddTex);
             }
             clone.renderQueue = queue;
-            pool[source] = clone;
+            fadeClones[source] = clone;
             return clone;
         }
 
@@ -695,7 +701,7 @@ namespace AsAboveSoBelow
         /// the meadow cell. Replaces the run-44 flat-tone skirt strips, which read as a
         /// painted gradient rather than grass creeping onto rock.
         /// </summary>
-        private bool EmitMeadowFade(Map map, TerrainGrid grid, IntVec3 c, float y, bool aboveCover)
+        private bool EmitMeadowFade(Map map, TerrainGrid grid, IntVec3 c, float y)
         {
             TerrainDef[] adj = meadowAdj;
             adj[0] = MeadowAt(map, grid, c + IntVec3.North);
@@ -727,7 +733,7 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Material mat = FadeCloneFor(map.terrainGrid.GetMaterial(d, false, null), aboveCover);
+                Material mat = FadeClone(map.terrainGrid.GetMaterial(d, false, null));
                 if (mat == null)
                 {
                     continue;
