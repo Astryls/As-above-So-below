@@ -279,6 +279,17 @@ namespace AsAboveSoBelow
         {
             try
             {
+                // Not while loading. The camera updates every frame throughout a load, and
+                // Map.ExposeData runs ConstructComponents() FIRST - so this per-frame path
+                // can reach a half-built ABBandMap whose bandCount already passes the Banded
+                // check while the state RectOfBand reads is not wired yet (observed: NRE in
+                // RectOfBand during load-in). Same rule CompOf uses for its cache, one layer
+                // out.
+                if (Current.ProgramState != ProgramState.Playing
+                    || Scribe.mode != LoadSaveMode.Inactive)
+                {
+                    return;
+                }
                 Map map = Find.CurrentMap;
                 if (map == null || !ABBandView.TryBandBounds(map, out float minZ, out float maxZ))
                 {

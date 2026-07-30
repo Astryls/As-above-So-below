@@ -3,6 +3,7 @@ using HarmonyLib;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.AI;
 
 namespace AsAboveSoBelow
 {
@@ -95,10 +96,86 @@ namespace AsAboveSoBelow
                         onPawnBand.z + (clickPos.z - cell.z));
                     return true;
                 }
+                // Exact cell unusable (a wall, a rock, the lip of a cliff): SNAP to the
+                // nearest ground on their own level rather than giving up and handing the
+                // group a cross-band destination it needs stairs for. This is the
+                // difference between "they walk to roughly where I pointed" and "nothing
+                // happens", and vanilla already behaves this way within a level.
+                if (TryNearestWalkableOnBand(map, bands, onPawnBand, pawnBand, out IntVec3 snapped))
+                {
+                    translated = new Vector3(snapped.x + 0.5f, clickPos.y, snapped.z + 0.5f);
+                    return true;
+                }
             }
-            // Nothing usable on their own level (an open-air cell, say): fall back to the
-            // see-through rule so ordering onto visible content below still works.
-            return TryTranslate(map, clickPos, out translated);
+            // Nothing usable on their own level (an open-air cell, say): the see-through
+            // rule can still order onto visible content below - but ONLY if the group can
+            // actually get there.
+            //
+            // This gate is the fix for "they don't move, and sometimes walk off toward the
+            // map edge". An untranslated cross-band destination is 100+ cells away in z and
+            // unreachable without stairs; vanilla's pathfinder cannot cross a synthetic link,
+            // so the goto fails and a failed goto degenerates into wandering. CanReach is the
+            // right question to ask and it works UNPATCHED through wormholes - that is the
+            // whole premise of the mod - so it answers "are there stairs joining these
+            // levels" for free. With no route we translate nothing, and vanilla resolves the
+            // click on the pawns' own level, which is what the player pointed at.
+            if (!TryTranslate(map, clickPos, out Vector3 seeThrough))
+            {
+                return false;
+            }
+            if (pawnBand >= 0 && !AnyCanReach(map, pawns, IntVec3.FromVector3(seeThrough)))
+            {
+                return false;
+            }
+            translated = seeThrough;
+            return true;
+        }
+
+        /// <summary>True when at least one commanded pawn has a genuine route to the cell.
+        /// Reachability is transitive through the wormhole RegionLinks, so this is also the
+        /// cheapest possible "is there a staircase" test.</summary>
+        private static bool AnyCanReach(Map map, System.Collections.Generic.List<Pawn> pawns,
+            IntVec3 target)
+        {
+            if (pawns == null || !target.InBounds(map))
+            {
+                return false;
+            }
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                Pawn p = pawns[i];
+                if (p != null && p.Spawned && p.Map == map
+                    && p.CanReach(target, PathEndMode.OnCell, Danger.Deadly))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Nearest walkable cell on one specific band, searched outward from a
+        /// starting cell. Radius is deliberately small: a snap should feel like the order
+        /// landing next to where you pointed, not like the pawn choosing its own
+        /// destination.</summary>
+        private static bool TryNearestWalkableOnBand(Map map, ABBandMap bands, IntVec3 origin,
+            int band, out IntVec3 found)
+        {
+            found = origin;
+            int count = Mathf.Min(GenRadial.NumCellsInRadius(8f), GenRadial.RadialPattern.Length);
+            for (int i = 0; i < count; i++)
+            {
+                IntVec3 c = origin + GenRadial.RadialPattern[i];
+                if (!c.InBounds(map) || bands.InGutter(c) || bands.BandOf(c) != band)
+                {
+                    continue;
+                }
+                if (c.Walkable(map))
+                {
+                    found = c;
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Translate a click position down one band when the player is looking
