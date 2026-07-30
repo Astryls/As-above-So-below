@@ -20,6 +20,13 @@ namespace AsAboveSoBelow
     ///              stays KindLedge so the rock face below still renders
     ///     rock  -> KindLedge within a wandering terrace width, KindWall behind it
     ///
+    /// THE LEDGE BAND IS >= 1 CELL BY CONSTRUCTION (option A's requirement, and it holds
+    /// without a special case): a plateau cell requires edgeDist >= 2, and TerraceWidth()
+    /// never returns less than 1, so no plateau or wall cell can ever touch a non-mass
+    /// cell - there is always at least one ledge cell between the mass interior and the
+    /// drop. The renderer leans on this: the rim is what carries the silhouette lip and
+    /// the cliff face.
+    ///
     /// Terrain then follows V1 exactly: ledge = mountain-top lip, wall = mineable rock
     /// under thick roof (deep interior fogged like an unexplored vanilla mountain),
     /// plateau = stone/gravel/soil by noise. Outside the mass: constructed roof below ->
@@ -74,6 +81,11 @@ namespace AsAboveSoBelow
             ABSettings settings = ABMod.Settings;
             float soilFrac = Mathf.Clamp(settings != null ? settings.peakSoilFraction : 0.15f, 0f, 0.5f);
             Perlin soilNoise = new Perlin(0.05, 2.0, 0.5, 5, Rand.Range(0, int.MaxValue), QualityMode.Medium);
+            // An INDEPENDENT moisture field, so damp ground is not just "more fertile":
+            // crossing it with the fertility ramp gives rich-soil pockets and boggy
+            // hollows in different places, which is what makes a plateau read as terrain
+            // rather than as a noise gradient.
+            Perlin moistNoise = new Perlin(0.06, 2.0, 0.5, 4, Rand.Range(0, int.MaxValue), QualityMode.Medium);
             TerrainDef arable = ArableTerrainFor(map.Biome);
             List<IntVec3> oreCells = new List<IntVec3>();
             List<IntVec3> fogCells = new List<IntVec3>();
@@ -117,22 +129,36 @@ namespace AsAboveSoBelow
 
                         case KindPlateau:
                         {
+                            // Plateau ground palette (option A). Every terrain here is
+                            // natural + FadeRough, so vanilla's own terrain layer blends
+                            // all the ground-to-ground boundaries for free; our cap layer
+                            // only has to hand-fade ground against the rock field.
                             float n = Noise01(soilNoise, c);
+                            float wet = Noise01(moistNoise, c);
                             TerrainDef t;
-                            if (n > 1f - soilFrac)
+                            if (n < 0.22f)
                             {
-                                t = arable;
-                            }
-                            else if (n < 0.22f)
-                            {
+                                // Bare stone shoulders, in the plateau's own rock type.
                                 ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
                                 t = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
                             }
-                            else
+                            else if (n < 0.40f)
                             {
                                 t = TerrainDefOf.Gravel;
                             }
-                            grid.SetTerrain(c, t);
+                            else if (n > 1f - soilFrac)
+                            {
+                                // The fertile heart: the biome's own arable terrain, going
+                                // to RICH soil where the moisture field also peaks.
+                                t = wet > 0.80f ? (TerrainDefOf.SoilRich ?? arable) : arable;
+                            }
+                            else
+                            {
+                                // Ordinary soil, with MUD in the wettest hollows only
+                                // (deliberately rare - mud everywhere reads as damage).
+                                t = wet > 0.90f ? (TerrainDefOf.Mud ?? TerrainDefOf.Soil) : TerrainDefOf.Soil;
+                            }
+                            grid.SetTerrain(c, t ?? TerrainDefOf.Gravel);
                             plateauCells.Add(c);
                             continue;
                         }

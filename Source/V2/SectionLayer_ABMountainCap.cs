@@ -41,8 +41,9 @@ namespace AsAboveSoBelow
     /// patchwork against the native wall field and is replaced by the exact
     /// vanilla filler geometry (run-24).
     /// Also from this layer: the meadow-fade fans at the plateau boundary (vanilla's
-    /// real terrain fade mechanic, re-queued over the fill) and the EdgeShadow drop-off
-    /// ring where the mass meets open air (the elevation cue).
+    /// real terrain fade mechanic, re-queued over the fill), the EdgeShadow drop-off
+    /// ring where the mass meets open air, and the SOUTH-FACING CLIFF FACE (option B)
+    /// that makes the plateau read as standing one level up.
     /// Kill switch: Rendering; regenerates on terrain and building changes.
     /// </summary>
     [StaticConstructorOnStartup]
@@ -340,7 +341,8 @@ namespace AsAboveSoBelow
         /// uvs - terrain shaders sample world position, and per-quad uvs are the
         /// documented muddy-smear trap. Terrain materials get their own submeshes, so
         /// uv-free and uv-carrying geometry never share one mesh.</summary>
-        private static void AddTerrainQuad(LayerSubMesh sub, IntVec3 c, float y)
+        private static void AddTerrainQuad(LayerSubMesh sub, IntVec3 c, float y,
+            Color32 south, Color32 north)
         {
             if (sub == null)
             {
@@ -351,10 +353,10 @@ namespace AsAboveSoBelow
             sub.verts.Add(new Vector3(c.x, y, c.z + 1));
             sub.verts.Add(new Vector3(c.x + 1, y, c.z + 1));
             sub.verts.Add(new Vector3(c.x + 1, y, c.z));
-            for (int i = 0; i < 4; i++)
-            {
-                sub.colors.Add(White);
-            }
+            sub.colors.Add(south);
+            sub.colors.Add(north);
+            sub.colors.Add(north);
+            sub.colors.Add(south);
             sub.tris.Add(n);
             sub.tris.Add(n + 1);
             sub.tris.Add(n + 2);
@@ -466,6 +468,16 @@ namespace AsAboveSoBelow
                     {
                         rock = GroundRockAt(ground, c + groundOffset) ?? fallbackRock;
                     }
+                    // Option B: is this one of the southern rim cells that form the
+                    // cliff face? If so every quad in this cell carries the vertical
+                    // brightness ramp, so face and lip shade together instead of the
+                    // tile repainting the face at full brightness.
+                    int faceDepth = CliffFaceDepth > 0
+                        ? FaceDepthAt(map, bands, grid, cap, c, CliffFaceDepth)
+                        : -1;
+                    Color32 shadeS = faceDepth >= 0 ? FaceShade(faceDepth, false) : White;
+                    Color32 shadeN = faceDepth >= 0 ? FaceShade(faceDepth, true) : White;
+
                     // The unified field underlay: the rock's own rough terrain,
                     // world-position sampled, on EVERY mass cell.
                     TerrainDef rough = rock?.building?.naturalTerrain;
@@ -474,7 +486,7 @@ namespace AsAboveSoBelow
                         Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
                         if (fieldMat != null)
                         {
-                            AddTerrainQuad(GetSubMesh(fieldMat), c, y);
+                            AddTerrainQuad(GetSubMesh(fieldMat), c, y, shadeS, shadeN);
                             emitted = true;
                         }
                     }
@@ -485,7 +497,8 @@ namespace AsAboveSoBelow
                         Material flatField = QueueClone(AtlasBaseFor(rock));
                         if (flatField != null)
                         {
-                            AddQuad(GetSubMesh(flatField), c.x, c.z, c.x + 1, c.z + 1, y);
+                            AddQuad(GetSubMesh(flatField), c.x, c.z, c.x + 1, c.z + 1, y,
+                                shadeS, shadeN);
                             emitted = true;
                         }
                     }
@@ -527,7 +540,7 @@ namespace AsAboveSoBelow
                                 float hh = Mathf.Max(ds.y, 1f) * 0.5f;
                                 LayerSubMesh vsub = GetSubMesh(vmat);
                                 AddQuad(vsub, c.x + 0.5f - hw, c.z + 0.5f - hh,
-                                    c.x + 0.5f + hw, c.z + 0.5f + hh, y);
+                                    c.x + 0.5f + hw, c.z + 0.5f + hh, y, shadeS, shadeN);
                                 emitted = true;
                             }
                         }
@@ -548,7 +561,7 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     LayerSubMesh sub = GetSubMesh(tile);
-                    AddQuad(sub, c.x, c.z, c.x + 1, c.z + 1, y);
+                    AddQuad(sub, c.x, c.z, c.x + 1, c.z + 1, y, shadeS, shadeN);
                     emitted = true;
                     if (CornerFillersEnabled)
                     {
@@ -558,19 +571,19 @@ namespace AsAboveSoBelow
                         bool se = Linked(map, grid, cap, c + IntVec3.South + IntVec3.East);
                         if (sw && s0 && w0)
                         {
-                            AddCornerFiller(sub, map, c, -1, -1, y);
+                            AddCornerFiller(sub, map, c, -1, -1, y, shadeS);
                         }
                         if (nw && n0 && w0)
                         {
-                            AddCornerFiller(sub, map, c, -1, 1, y);
+                            AddCornerFiller(sub, map, c, -1, 1, y, shadeN);
                         }
                         if (ne && n0 && e0)
                         {
-                            AddCornerFiller(sub, map, c, 1, 1, y);
+                            AddCornerFiller(sub, map, c, 1, 1, y, shadeN);
                         }
                         if (se && s0 && e0)
                         {
-                            AddCornerFiller(sub, map, c, 1, -1, y);
+                            AddCornerFiller(sub, map, c, 1, -1, y, shadeS);
                         }
                     }
                 }
@@ -810,6 +823,66 @@ namespace AsAboveSoBelow
             return n.InBounds(map) && IsMassCell(map, grid, cap, n);
         }
 
+        /// <summary>
+        /// OPTION B - the south-facing cliff face.
+        ///
+        /// RimWorld's camera looks straight down, so only SOUTH faces are ever visible;
+        /// this is the same reason vanilla draws wall south-faces and throws sun-shadow
+        /// skirts south. The face is rendered INSIDE the mass' own southern rim cells
+        /// (which option A guarantees exist) as a vertical brightness ramp, NOT projected
+        /// into the open-air cell below the drop. That containment is deliberate and is
+        /// the whole reason this is safe: open-air cells are where the see-below view
+        /// prints surface content at the cutout queue, so geometry drawn there would
+        /// either be overdrawn by a surface tree or - if we out-queued it - repeat the
+        /// sprite-erasing cover regression. Clipping to cells we already own is immune to
+        /// both queue and depth contests.
+        ///
+        /// Set to 0 to disable (dev A/B); 1 gives a thin lip, 2 reads as a real wall.
+        /// </summary>
+        internal static int CliffFaceDepth = 2;
+
+        /// <summary>Brightness at the very bottom of the face. Vertex colour multiplies
+        /// the terrain shader, so this dims the real rock texture rather than painting a
+        /// flat tone over it - the rock detail stays visible down the whole face.</summary>
+        private const float FaceDarkest = 0.42f;
+
+        /// <summary>Depth 0 is the cell whose south neighbour is the drop. The ramp runs
+        /// from FaceDarkest at the band's bottom edge to full brightness at its top, so a
+        /// two-cell face is one continuous gradient rather than two flat steps.</summary>
+        private static Color32 FaceShade(int depthFromDrop, bool northEdge)
+        {
+            float span = Mathf.Max(CliffFaceDepth, 1);
+            float height = depthFromDrop + (northEdge ? 1f : 0f);
+            float b = Mathf.Lerp(FaceDarkest, 1f, Mathf.Clamp01(height / span));
+            byte v = (byte)Mathf.Clamp(Mathf.RoundToInt(b * 255f), 0, 255);
+            return new Color32(v, v, v, byte.MaxValue);
+        }
+
+        /// <summary>How far this cell sits north of a southward drop, or -1 when it is
+        /// not part of a face band. Gutter cells never count as a drop, so no phantom
+        /// face appears along the band seam.</summary>
+        private static int FaceDepthAt(Map map, ABBandMap bands, TerrainGrid grid,
+            TerrainDef cap, IntVec3 c, int maxDepth)
+        {
+            for (int d = 0; d < maxDepth; d++)
+            {
+                IntVec3 probe = new IntVec3(c.x, c.y, c.z - 1 - d);
+                if (!probe.InBounds(map) || bands.InGutter(probe))
+                {
+                    return -1;
+                }
+                if (ABBands.ShowsBelow(grid.TerrainAt(probe)))
+                {
+                    return d;
+                }
+                if (!IsMassCell(map, grid, cap, probe))
+                {
+                    return -1;
+                }
+            }
+            return -1;
+        }
+
         /// <summary>A cell continues the mass when it holds natural rock (wall) or is
         /// itself an open mass cell (cap terrain or mined floor).</summary>
         internal static bool IsMassCell(Map map, TerrainGrid grid, TerrainDef cap, IntVec3 c)
@@ -897,7 +970,8 @@ namespace AsAboveSoBelow
         /// Off-map diagonals shift the quad a full cell outward at five times
         /// the size, vanilla's map-edge rule, so no rounding shows against the
         /// off-map surround.</summary>
-        private static void AddCornerFiller(LayerSubMesh sub, Map map, IntVec3 c, int dx, int dz, float y)
+        private static void AddCornerFiller(LayerSubMesh sub, Map map, IntVec3 c, int dx, int dz,
+            float y, Color32 color)
         {
             float cx = c.x + 0.5f + dx * FillerCornerOffset;
             float cz = c.z + 0.5f + dz * FillerCornerOffset + FillerNorthShift;
@@ -928,14 +1002,15 @@ namespace AsAboveSoBelow
                 }
             }
             AddCornerQuad(sub, cx - sx * 0.5f, cz - sz * 0.5f, cx + sx * 0.5f, cz + sz * 0.5f,
-                y + FillerAltBias);
+                y + FillerAltBias, color);
         }
 
         /// <summary>Vanilla CornerFillUVs: all four verts sample the tile's solid
         /// point (0.5, 0.6) - the filler is a flat-toned square.</summary>
         private static readonly Vector2 CornerFillUV = new Vector2(0.5f, 0.6f);
 
-        private static void AddCornerQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1, float y)
+        private static void AddCornerQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1,
+            float y, Color32 color)
         {
             int vi = sub.verts.Count;
             sub.verts.Add(new Vector3(x0, y, z0));
@@ -945,7 +1020,7 @@ namespace AsAboveSoBelow
             for (int i = 0; i < 4; i++)
             {
                 sub.uvs.Add(CornerFillUV);
-                sub.colors.Add(White);
+                sub.colors.Add(color);
             }
             sub.tris.Add(vi);
             sub.tris.Add(vi + 1);
@@ -964,7 +1039,8 @@ namespace AsAboveSoBelow
         /// horizontal seam dashes appear at cell bottoms (run-19).</summary>
         private const float NorthAltBias = 0.01f;
 
-        private static void AddQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1, float y)
+        private static void AddQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1, float y,
+            Color32 south, Color32 north)
         {
             int vi = sub.verts.Count;
             sub.verts.Add(new Vector3(x0, y, z0));
@@ -975,10 +1051,10 @@ namespace AsAboveSoBelow
             sub.uvs.Add(new Vector2(0f, 1f));
             sub.uvs.Add(new Vector2(1f, 1f));
             sub.uvs.Add(new Vector2(1f, 0f));
-            sub.colors.Add(White);
-            sub.colors.Add(White);
-            sub.colors.Add(White);
-            sub.colors.Add(White);
+            sub.colors.Add(south);
+            sub.colors.Add(north);
+            sub.colors.Add(north);
+            sub.colors.Add(south);
             sub.tris.Add(vi);
             sub.tris.Add(vi + 1);
             sub.tris.Add(vi + 2);
