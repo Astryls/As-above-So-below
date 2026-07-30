@@ -23,12 +23,23 @@ namespace AsAboveSoBelow
     /// looked at from an upper level - <see cref="SectionLayer_ABBelowWatergen"/> is the
     /// missing half.
     ///
-    /// Separately, <c>WaterInfo.SetTextures</c> publishes <c>_MapSize</c> as the map's REAL
-    /// size, which on a banded map is the whole stack (e.g. 126 x 896 for seven levels).
-    /// Anything the water shader UVs by <c>worldPos.xz / _MapSize</c> is therefore stretched
-    /// by the band count along z - which is the "water always flows north-south, even in
-    /// lakes" report: not a flow-direction bug at all, a 7x vertical texture stretch that is
-    /// uniform across every water cell precisely because it does not depend on flow data.
+    /// ⚠ REJECTED - DO NOT RETRY: republishing <c>_MapSize</c> as one band.
+    /// <c>WaterInfo.SetTextures</c> publishes <c>_MapSize</c> as the map's REAL size, which
+    /// on a banded map is the whole stack. The theory was that the water shader UVs its
+    /// surface by <c>worldPos.xz / _MapSize</c>, so a stacked map smears water
+    /// bandCount-times north-south - which fitted "water always goes vertical, even in
+    /// lakes" perfectly, including its uniformity. It shipped behind an A/B toggle and was
+    /// **DISPROVED IN ONE LAUNCH**: republishing as one Slot is what MAKES the water run
+    /// north-south, and vanilla's full-stack value looks correct.
+    /// The measurement was airtight because <c>surfaceBand</c> was 0 on the test map, so the
+    /// band fold was the IDENTITY and both addressings resolved to the same texture row -
+    /// the flow data reaching the shader was bit-identical, leaving <c>_MapSize.y</c> as the
+    /// only variable. The band-folded REPEAT-wrapped flow texture went with it: vanilla's
+    /// full-height texture is already 1:1 correct for every band, because rivers only ever
+    /// exist on the surface band.
+    /// The north-south symptom was most likely the GHOST RIVER instead - a river generated
+    /// into a sky band and carved away still leaves a flow field behind for surviving water
+    /// to sample - which the anchoring fix below removes at the source.
     ///
     /// And rivers were being carved into the wrong LEVEL - see
     /// <see cref="Patch_TileMutatorWorker_River_ABSurfaceBand"/>.
@@ -82,104 +93,6 @@ namespace AsAboveSoBelow
                 return anchor;
             }
             return bands.Translate(anchor, bands.surfaceBand);
-        }
-
-        // ---- band-folded river flow texture --------------------------------
-
-        /// <summary>Keyed by the Map OBJECT, never by uniqueID: ids restart at 0 for a new
-        /// game and repeat across loads, and a static keyed by one leaks the previous
-        /// session's texture into the next colony.</summary>
-        private static readonly ConditionalWeakTable<Map, Texture2D> foldedFlow =
-            new ConditionalWeakTable<Map, Texture2D>();
-
-        /// <summary>
-        /// The river flow field, FOLDED into one band's worth of rows.
-        ///
-        /// Vanilla's texture is map-sized and addressed as <c>worldPos.xz / _MapSize</c>.
-        /// Once <c>_MapSize.y</c> is republished as one Slot (see
-        /// <see cref="Patch_WaterInfo_ABBandWaterGlobals"/>) that address becomes
-        /// <c>band + local/Slot</c>, i.e. greater than 1 for every band above the bottom.
-        /// A texture whose wrapMode is REPEAT resolves that for us at the SAMPLER, with no
-        /// cooperation needed from a shader we cannot read: sampling at y = 3.4 returns the
-        /// row at 0.4. Folding every band onto the same Slot rows is therefore not a
-        /// compromise, it is what makes one texture correct for all of them - and it is
-        /// harmless because rivers only ever exist on the surface band.
-        /// </summary>
-        public static Texture2D FoldedFlowTexture(Map map, ABBandMap bands)
-        {
-            if (map == null || bands == null || !bands.Banded)
-            {
-                return null;
-            }
-            if (foldedFlow.TryGetValue(map, out Texture2D cached) && cached != null)
-            {
-                return cached;
-            }
-            List<float> flow = map.waterInfo?.riverFlowMap;
-            if (flow == null || flow.Count < map.Size.x * map.Size.z * 2)
-            {
-                return null; // no river on this tile - vanilla leaves the texture null too
-            }
-            int w = map.Size.x;
-            int slot = bands.Slot;
-            Color[] px = new Color[w * slot];
-            TerrainGrid grid = map.terrainGrid;
-            for (int x = 0; x < w; x++)
-            {
-                for (int z = 0; z < map.Size.z; z++)
-                {
-                    IntVec3 c = new IntVec3(x, 0, z);
-                    if (!grid.BaseTerrainAt(c).IsRiver)
-                    {
-                        continue;
-                    }
-                    Vector2 sum = FlowAt(flow, map, x, z);
-                    int n = 1;
-                    // Vanilla averages with the eight neighbours here but tests the CENTRE
-                    // cell's terrain inside the neighbour loop instead of the neighbour's -
-                    // so its "average" is really the centre value counted nine times. Tested
-                    // properly, which is what smooths the flow across a river's width.
-                    for (int i = 0; i < 8; i++)
-                    {
-                        IntVec3 nb = c + GenAdj.AdjacentCells[i];
-                        if (!nb.InBounds(map) || !grid.BaseTerrainAt(nb).IsRiver)
-                        {
-                            continue;
-                        }
-                        sum += FlowAt(flow, map, nb.x, nb.z);
-                        n++;
-                    }
-                    px[(z % slot) * w + x] = new Color(sum.x / n, sum.y / n, 0f);
-                }
-            }
-            Texture2D tex = new Texture2D(w, slot, TextureFormat.RGFloat, false);
-            tex.SetPixels(px);
-            tex.wrapMode = TextureWrapMode.Repeat;
-            tex.Apply();
-            foldedFlow.Remove(map);
-            foldedFlow.Add(map, tex);
-            return tex;
-        }
-
-        private static Vector2 FlowAt(List<float> flow, Map map, int x, int z)
-        {
-            int i = (x * map.Size.z + z) * 2;
-            return new Vector2(flow[i], flow[i + 1]);
-        }
-
-        /// <summary>Unity textures are not garbage collected with their owner, so the folded
-        /// texture has to be released explicitly when the map goes.</summary>
-        public static void Release(Map map)
-        {
-            if (map == null || !foldedFlow.TryGetValue(map, out Texture2D tex))
-            {
-                return;
-            }
-            foldedFlow.Remove(map);
-            if (tex != null)
-            {
-                LongEventHandler.ExecuteWhenFinished(delegate { UnityEngine.Object.Destroy(tex); });
-            }
         }
 
         public static string Report(Map map)
