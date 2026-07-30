@@ -7,7 +7,7 @@ namespace AsAboveSoBelow
 {
     /// <summary>Marks a parameterless <c>static void</c> method to run once per
     /// game tick from ABGameComp. A ticked feature is added by annotating its own
-    /// Tick() — Core never lists it (refactor R1). Lower Order runs first; ties
+    /// Tick() - Core never lists it (refactor R1). Lower Order runs first; ties
     /// break by full type+method name so the sequence is deterministic.</summary>
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ABGameTickAttribute : Attribute
@@ -43,7 +43,7 @@ namespace AsAboveSoBelow
     /// a call list into a dozen feature subsystems.
     ///
     /// Discovery is a single reflection pass at startup; the run path is a plain
-    /// indexed array walk — zero per-tick allocation, and the order is stable
+    /// indexed array walk - zero per-tick allocation, and the order is stable
     /// (by [Order] then type/method name), so behavior matches the old explicit
     /// list. Each callee still self-guards, so a fault trips only its subsystem.
     /// </summary>

@@ -21,7 +21,7 @@ namespace AsAboveSoBelow
             ABGuard.Reset();
             // Per-game static state (combat handoffs, turret orders, ritual/
             // hospitality caches, etc.) is self-registered via [ABGameReset] and
-            // cleared here (refactor R1) — Core no longer lists each feature.
+            // cleared here (refactor R1) - Core no longer lists each feature.
             ABGameHooks.RunResets();
         }
 

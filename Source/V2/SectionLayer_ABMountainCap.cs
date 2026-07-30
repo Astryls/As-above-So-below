@@ -9,7 +9,7 @@ namespace AsAboveSoBelow
 {
     /// <summary>
     /// Rock-top rendering for the sky level's mountain mass (final spec, run-17
-    /// reference photo: an unfogged granite group on the surface — one CONNECTED
+    /// reference photo: an unfogged granite group on the surface - one CONNECTED
     /// vanilla texture). The open "floor" cells of the mass render with the rock
     /// type's OWN LINKED ATLAS, exactly the machinery the walls themselves use:
     ///

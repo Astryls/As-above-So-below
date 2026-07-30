@@ -228,31 +228,46 @@ namespace AsAboveSoBelow
 
         private Vector2 scroll;
 
-        /// <summary>Measured from the PREVIOUS frame's listing. A scroll view needs its
-        /// content height up front, and a Listing_Standard only knows how tall it was after
-        /// it has drawn - so the height always lags one frame, which is invisible and is how
-        /// every scrolling settings panel in the game works.</summary>
-        private float viewHeight = 600f;
+        /// <summary>Content height PER TAB, measured from the previous frame's listing. A
+        /// scroll view needs its content height up front and a Listing_Standard only knows
+        /// how tall it was after drawing, so the value always lags a frame. Kept per tab
+        /// rather than shared: one shared value meant switching from a short tab to a tall
+        /// one sized the scroll region from the WRONG tab for a frame.</summary>
+        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f };
 
+        private static readonly Color TabActive = new Color(0.32f, 0.36f, 0.42f);
+
+        /// <summary>
+        /// A hand-drawn tab row rather than <c>TabDrawer.DrawTabs</c>.
+        ///
+        /// TabDrawer paints its row ABOVE the rect it is handed, which means it depends on
+        /// the host window leaving free space there. Inside <c>Dialog_ModSettings</c> that
+        /// space is not ours, and the result in play was tabs that rendered but never
+        /// switched - every pane except the default came up blank, with no exception logged
+        /// because nothing had thrown. Rather than keep guessing at a widget whose layout
+        /// contract is owned by the host dialog, the row is drawn explicitly: five buttons in
+        /// a rect we allocated, with the active one tinted. Plainer than vanilla tabs and it
+        /// cannot silently fail.
+        /// </summary>
         public void DoWindowContents(Rect inRect)
         {
             EnsureClimateLists();
 
-            // TabDrawer paints its row ABOVE the rect it is given, so the body has to start
-            // one tab-height down or the tabs land off the top of the window.
-            Rect body = new Rect(inRect.x, inRect.y + 32f, inRect.width, inRect.height - 32f);
-            Widgets.DrawMenuSection(body);
-            TabDrawer.DrawTabs(body, new List<TabRecord>
-            {
-                Rec("AB_TabPerformance", Tab.Performance),
-                Rec("AB_TabClimate", Tab.Climate),
-                Rec("AB_TabSky", Tab.Sky),
-                Rec("AB_TabBasement", Tab.Basement),
-                Rec("AB_TabDiagnostics", Tab.Diagnostics)
-            });
+            const float TabH = 32f;
+            Rect tabRow = new Rect(inRect.x, inRect.y, inRect.width, TabH);
+            DrawTabButton(tabRow, 0, 5, "AB_TabPerformance", Tab.Performance);
+            DrawTabButton(tabRow, 1, 5, "AB_TabClimate", Tab.Climate);
+            DrawTabButton(tabRow, 2, 5, "AB_TabSky", Tab.Sky);
+            DrawTabButton(tabRow, 3, 5, "AB_TabBasement", Tab.Basement);
+            DrawTabButton(tabRow, 4, 5, "AB_TabDiagnostics", Tab.Diagnostics);
 
-            Rect inner = body.ContractedBy(12f);
-            Rect view = new Rect(0f, 0f, inner.width - 20f, viewHeight);
+            Rect body = new Rect(inRect.x, inRect.y + TabH + 6f,
+                inRect.width, inRect.height - TabH - 6f);
+            Widgets.DrawMenuSection(body);
+
+            int index = (int)tab;
+            Rect inner = body.ContractedBy(10f);
+            Rect view = new Rect(0f, 0f, inner.width - 20f, viewHeights[index]);
             Widgets.BeginScrollView(inner, ref scroll, view);
             Listing_Standard list = new Listing_Standard();
             list.Begin(view);
@@ -264,18 +279,24 @@ namespace AsAboveSoBelow
                 case Tab.Basement: DoBasement(list); break;
                 default: DoDiagnostics(list); break;
             }
-            viewHeight = list.CurHeight + 16f;
+            viewHeights[index] = list.CurHeight + 16f;
             list.End();
             Widgets.EndScrollView();
         }
 
-        private TabRecord Rec(string key, Tab which)
+        private void DrawTabButton(Rect row, int slot, int count, string key, Tab which)
         {
-            return new TabRecord(key.Translate(), delegate
+            float w = row.width / count;
+            Rect r = new Rect(row.x + w * slot, row.y, w - 4f, row.height);
+            if (tab == which)
+            {
+                Widgets.DrawBoxSolid(r, TabActive);
+            }
+            if (Widgets.ButtonText(r, key.Translate(), drawBackground: tab != which))
             {
                 tab = which;
-                scroll = Vector2.zero; // a fresh tab should start at its top, not inherit
-            }, tab == which);
+                scroll = Vector2.zero; // a fresh tab starts at its top, not where the last one sat
+            }
         }
 
         // ---- performance tab -------------------------------------------------

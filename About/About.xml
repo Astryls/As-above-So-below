@@ -3,19 +3,19 @@
   <name>As above, So below II</name>
   <packageId>astryl.AsAboveSoBelow2</packageId>
   <author>astryl</author>
-  <description>Build upward and dig deeper. As above, So below II adds one sky level above your colony and one solid rock basement below it — three stacked levels living inside a single map, so your pawns treat the whole column as one base.
+  <description>Build upward and dig deeper. As above, So below II adds one sky level above your colony and one solid rock basement below it - three stacked levels living inside a single map, so your pawns treat the whole column as one base.
 
-This is a ground-up rearchitecture of the original As above, So below. Instead of separate pocket maps stitched together with hundreds of patches, the levels are bands of one real map connected through the engine's own region system. Vanilla RimWorld does not know the levels exist — it just finds a path. That is why cross-level behavior works without special-case code, and why this version is dramatically simpler, faster and more stable than its predecessor.
+This is a ground-up rearchitecture of the original As above, So below. Instead of separate pocket maps stitched together with hundreds of patches, the levels are bands of one real map connected through the engine's own region system. Vanilla RimWorld does not know the levels exist - it just finds a path. That is why cross-level behavior works without special-case code, and why this version is dramatically simpler, faster and more stable than its predecessor.
 
 [h1]Three Levels, One Colony[/h1]
 [list]
-[*][b]The sky level[/b]: open air over your roofs. Where a mountain rises past the surface, real summit terrain generates — plateaus, meadows, bare stone, ore — seeded with vegetation from your biome that regrows naturally.
+[*][b]The sky level[/b]: open air over your roofs. Where a mountain rises past the surface, real summit terrain generates - plateaus, meadows, bare stone, ore - seeded with vegetation from your biome that regrows naturally.
 [*][b]The surface[/b]: your normal map, untouched.
-[*][b]The basement[/b]: solid mineable rock. Carve out a bunker, a freezer, a prison — or with Biomes! Caverns installed, generate it as a living cave system with cave flora, wildlife, stalagmites and crystals, sealed in the dark until you break through.
+[*][b]The basement[/b]: solid mineable rock. Carve out a bunker, a freezer, a prison - or with Biomes! Caverns installed, generate it as a living cave system with cave flora, wildlife, stalagmites and crystals, sealed in the dark until you break through.
 [/list]
 
 [h1]One Workforce, No Micromanagement[/h1]
-Pawns cross levels on their own for hauling, construction, meals, rest, cleaning, medical treatment and recreation. Storage reaches across the column: a stockpile upstairs pulls goods up the stairs like any other stockpile. This is not scripted — connectivity is real to the engine, so anything that asks &quot;can I reach it?&quot; simply can.
+Pawns cross levels on their own for hauling, construction, meals, rest, cleaning, medical treatment and recreation. Storage reaches across the column: a stockpile upstairs pulls goods up the stairs like any other stockpile. This is not scripted - connectivity is real to the engine, so anything that asks &quot;can I reach it?&quot; simply can.
 
 [h1]A Living View Below[/h1]
 From the sky you look down through open air at the actual surface: live pawns, buildings, items, even construction in progress, drawn with the game's own materials. Roof a room and its rooftop becomes a walkable, buildable surface above. Stack a wall on top of a wall to raise structures floor by floor. Unexplored ground stays hidden.
@@ -29,14 +29,14 @@ From the sky you look down through open air at the actual surface: live pawns, b
 [/list]
 
 [h1]Camera[/h1]
-Switch levels with Ctrl+scroll or keybinds — the camera lands on the exact spot one level up or down. An optional free-panning mode lets you sweep past the edge of a level and see it floating in the void.
+Switch levels with Ctrl+scroll or keybinds - the camera lands on the exact spot one level up or down. An optional free-panning mode lets you sweep past the edge of a level and see it floating in the void.
 
 [h1]Honest Performance[/h1]
 [list]
 [*]Measured, not promised: about 2% of frame budget on a 96-colonist test colony, holding 60 fps.
-[*]No patches on reachability, pathfinding or region code — the systems performance mods care about are untouched.
+[*]No patches on reachability, pathfinding or region code - the systems performance mods care about are untouched.
 [*]Map sizes are curated to the engine's efficient boundaries, labeled with the true stacked cell cost.
-[*]Map generation takes a few seconds longer than vanilla — three levels are generated, after all.
+[*]Map generation takes a few seconds longer than vanilla - three levels are generated, after all.
 [*]Per-system kill switches: if anything errors, that one subsystem turns itself off and logs why; the rest keeps working.
 [/list]
 
@@ -45,7 +45,7 @@ Switch levels with Ctrl+scroll or keybinds — the camera lands on the exact spo
 [*][b]Cross-level combat is experimental.[/b] Shooting down through openings is implemented but still being verified; shooting upward does not render yet.
 [*][b]No elevator yet.[/b] Ladders and stairs only for now; the elevator is planned.
 [*][b]No vertical utility shafts yet[/b] (power/water/gas between levels). Planned.
-[*][b]Prefer inland tiles.[/b] Coastlines can generate incompletely on the banded map. On fully mountainous tiles the colony starts in a carved pocket — an intentional mountain-base start.
+[*][b]Prefer inland tiles.[/b] Coastlines can generate incompletely on the banded map. On fully mountainous tiles the colony starts in a carved pocket - an intentional mountain-base start.
 [*]Only NEW colonies get levels. Safe to add to an existing save, but existing maps stay vanilla.
 [/list]
 
@@ -53,8 +53,8 @@ Switch levels with Ctrl+scroll or keybinds — the camera lands on the exact spo
 [list]
 [*]Requires Harmony. Built for RimWorld 1.6.
 [*]Biomes! Caverns: living cavern basements, fully integrated.
-[*]Not compatible: the original As above, So below (this replaces it), MultiFloors, Z-Levels, Strata — different vertical-stacking mechanisms that cannot coexist.
-[*]Broad mod compatibility is a design goal (see Honest Performance) but the formal compatibility audit is ongoing — please report issues.
+[*]Not compatible: the original As above, So below (this replaces it), MultiFloors, Z-Levels, Strata - different vertical-stacking mechanisms that cannot coexist.
+[*]Broad mod compatibility is a design goal (see Honest Performance) but the formal compatibility audit is ongoing - please report issues.
 [/list]
 
 [h3] My Quality Commitment:[/h3]

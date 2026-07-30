@@ -24,9 +24,9 @@
 
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
-  <AB_LevelNotDug>Nothing has dug into that level yet — build stairs down to reach it.</AB_LevelNotDug>
-  <AB_MapSizeBanded>{0}x{0} — {1} cells per level, {2} stacked</AB_MapSizeBanded>
-  <AB_MapSizeBandedTip>As above, So below stacks {0} playable levels into a single map, so this colony costs the stacked cell count shown — that is the figure RimWorld's pathfinder works over, not the per-level size. These sizes are chosen to sit just under a 64-row boundary, where the dead space between levels shrinks to its 2-row minimum. Sizes in between waste up to a fifth of the map on empty seam.</AB_MapSizeBandedTip>
+  <AB_LevelNotDug>Nothing has dug into that level yet. Build stairs down to reach it.</AB_LevelNotDug>
+  <AB_MapSizeBanded>{0}x{0} ({1} cells per level, {2} stacked)</AB_MapSizeBanded>
+  <AB_MapSizeBandedTip>As above, So below stacks {0} playable levels into a single map, so this colony costs the stacked cell count shown. That is the figure RimWorld's pathfinder works over, not the per-level size. These sizes are chosen to sit just under a 64-row boundary, where the dead space between levels shrinks to its 2-row minimum. Sizes in between waste up to a fifth of the map on empty seam.</AB_MapSizeBandedTip>
 
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>
   <AB_MapSizeLockedTip>Locked by As above, So below: this size across {1} stacked levels would exceed the {0} cell budget. RimWorld's pathfinder works over every cell of the whole stack, so the budget is what keeps a tall colony affordable. Either choose fewer levels, a smaller per-level size, or lift the budget in the As above, So below mod settings.</AB_MapSizeLockedTip>
@@ -42,17 +42,17 @@
   <AB_UnclampConfirmTitle>Unsupported map sizes</AB_UnclampConfirmTitle>
   <AB_UnclampConfirm>You are about to remove the {0}-cell limit on stacked colony maps.
 
-RimWorld rebuilds its pathfinding grid across EVERY cell of the map. A stacked colony is every level plus its gutters tall, so the cost is paid on the whole tower at once — not on the level you are looking at. Going past the limit can mean long freezes when pawns repath, multi-minute map generation, and save files that grow very large.
+RimWorld rebuilds its pathfinding grid across EVERY cell of the map. A stacked colony is every level plus its gutters tall, so the cost is paid on the whole tower at once, not on the level you are looking at. Going past the limit can mean long freezes when pawns repath, multi-minute map generation, and save files that grow very large.
 
 If you continue, you accept that colonies generated above the limit are UNSUPPORTED. Performance reports from these maps cannot be acted on, and the recommended fix will always be to start a colony within the limit.
 
 You can turn this back off at any time; existing colonies keep the size they were generated at.</AB_UnclampConfirm>
   <AB_UnclampBannerTitle>Unsupported configuration enabled</AB_UnclampBannerTitle>
   <AB_BudgetExplain>The {0}-cell budget is fixed. It is chosen so the largest sensible layouts fit and the ones that cause freezes do not. Levels and per-level size are traded against each other on the colony creation screen.</AB_BudgetExplain>
-  <AB_LevelsOverBudget>{0}× over the supported budget — unsupported</AB_LevelsOverBudget>
+  <AB_LevelsOverBudget>{0}x over the supported budget. Unsupported.</AB_LevelsOverBudget>
 
   <!-- Climate -->
-  <AB_ClimateNewColonyNote>Climate is fixed when a colony is generated. Changes here affect NEW colonies only — your existing saves keep the climate they were made with.</AB_ClimateNewColonyNote>
+  <AB_ClimateNewColonyNote>Climate is fixed when a colony is generated. Changes here affect NEW colonies only. Your existing saves keep the climate they were made with.</AB_ClimateNewColonyNote>
   <AB_PresetGentle>Gentle</AB_PresetGentle>
   <AB_PresetStandard>Standard</AB_PresetStandard>
   <AB_PresetAlpine>Alpine</AB_PresetAlpine>
@@ -60,7 +60,7 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_ClimateDeepHeading>Temperature below the surface</AB_ClimateDeepHeading>
   <AB_ClimateWindHeading>Wind at altitude</AB_ClimateWindHeading>
   <AB_ClimateWindNote>Wind turbine output only. There is no wind below the surface.</AB_ClimateWindNote>
-  <AB_ClimateLevelTemp>Level {0}: {1}°C offset  (surface now → {2}°C here)</AB_ClimateLevelTemp>
+  <AB_ClimateLevelTemp>Level {0}: {1} deg offset (surface now becomes {2} deg here)</AB_ClimateLevelTemp>
   <AB_ClimateLevelWind>Level {0}: +{1}% turbine output</AB_ClimateLevelWind>
 
   <!-- Weather / altitude -->

@@ -674,12 +674,12 @@ namespace AsAboveSoBelow
 
         /// <summary>Width of the walkable rim before solid rock begins.
         ///
-        /// Ported verbatim from V1 — the shape matters enormously. HALF of all cells get
+        /// Ported verbatim from V1 - the shape matters enormously. HALF of all cells get
         /// width exactly 1 (n &lt; 0.5), and above that it grows on a 1.6 power curve, so
         /// wide terraces are rare and the mass is mostly ROCK.
         ///
         /// The naive `1 + floor(noise * max)` (uniform 1..5, mean ~3) made almost every
-        /// cell a ledge, so no rock ever spawned and the sky read as a flat plate — the
+        /// cell a ledge, so no rock ever spawned and the sky read as a flat plate - the
         /// run #8 "ledges don't spawn with rock, it's all flat" report.</summary>
         private static int TerraceWidth(Perlin noise, IntVec3 c, int max)
         {
