@@ -16,12 +16,11 @@ namespace AsAboveSoBelow
     /// </summary>
     internal static class ABMinedRockLookup
     {
-        private static Dictionary<TerrainDef, Color> minedRockColors;
-
         private static Dictionary<TerrainDef, ThingDef> minedRockDefs;
 
         /// <summary>Maps a mining leave-terrain to the ROCK DEF whose mining produces it, so
-        /// renderers can use the rock's own linked atlas graphic.</summary>
+        /// renderers can use the rock's own linked atlas graphic. The DEF map is safely
+        /// static - nothing rewires leaveTerrain at runtime.</summary>
         internal static bool TryGetMinedRockDef(TerrainDef leaveTerrain, out ThingDef rockDef)
         {
             rockDef = null;
@@ -31,43 +30,41 @@ namespace AsAboveSoBelow
             }
             if (minedRockDefs == null)
             {
-                TryGetMinedRockColor(leaveTerrain, out _); // builds both maps
-            }
-            return minedRockDefs != null && minedRockDefs.TryGetValue(leaveTerrain, out rockDef);
-        }
-
-        /// <summary>Maps every mining leave-terrain (rough-hewn stone etc.) to the tint of
-        /// the rock whose mining produces it. Miss means the terrain is not a mined floor.</summary>
-        internal static bool TryGetMinedRockColor(TerrainDef leaveTerrain, out Color color)
-        {
-            color = default(Color);
-            if (leaveTerrain == null)
-            {
-                return false;
-            }
-            if (minedRockColors == null)
-            {
-                minedRockColors = new Dictionary<TerrainDef, Color>();
                 minedRockDefs = new Dictionary<TerrainDef, ThingDef>();
                 List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
                 for (int i = 0; i < defs.Count; i++)
                 {
                     ThingDef d = defs[i];
                     TerrainDef leave = d.building?.leaveTerrain;
-                    if (leave == null || !d.mineable || minedRockColors.ContainsKey(leave))
+                    if (leave == null || !d.mineable || minedRockDefs.ContainsKey(leave))
                     {
                         continue;
                     }
-                    Color c = d.graphicData != null ? d.graphicData.color : Color.white;
-                    if (c == Color.white && d.stuffProps != null)
-                    {
-                        c = d.stuffProps.color;
-                    }
-                    minedRockColors[leave] = c;
                     minedRockDefs[leave] = d;
                 }
             }
-            return minedRockColors.TryGetValue(leaveTerrain, out color);
+            return minedRockDefs.TryGetValue(leaveTerrain, out rockDef);
+        }
+
+        /// <summary>The tint of the rock whose mining produces this leave-terrain. Read
+        /// LIVE from the def's current graphicData, never baked: Better Mountains
+        /// replaces rock graphicData wholesale (color included) at startup AND whenever
+        /// its mod settings change, so a build-once color cache serves the OLD palette
+        /// after a mid-game settings apply while the walls repaint to the new one.</summary>
+        internal static bool TryGetMinedRockColor(TerrainDef leaveTerrain, out Color color)
+        {
+            color = default(Color);
+            if (!TryGetMinedRockDef(leaveTerrain, out ThingDef rock))
+            {
+                return false;
+            }
+            Color c = rock.graphicData != null ? rock.graphicData.color : Color.white;
+            if (c == Color.white && rock.stuffProps != null)
+            {
+                c = rock.stuffProps.color;
+            }
+            color = c;
+            return true;
         }
     }
 }

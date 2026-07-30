@@ -40,6 +40,9 @@ namespace AsAboveSoBelow
     /// interior quads + inset edge base quads) made the fill a flat-vs-textured
     /// patchwork against the native wall field and is replaced by the exact
     /// vanilla filler geometry (run-24).
+    /// Also from this layer: the meadow-fade fans at the plateau boundary (vanilla's
+    /// real terrain fade mechanic, re-queued over the fill) and the EdgeShadow drop-off
+    /// ring where the mass meets open air (the elevation cue).
     /// Kill switch: Rendering; regenerates on terrain and building changes.
     /// </summary>
     [StaticConstructorOnStartup]
@@ -357,6 +360,13 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     TerrainDef t = grid.TerrainAt(c);
+                    // Open air beside the mass: the drop-off gets its shadow ring and
+                    // nothing else - see-through cells never take fill.
+                    if (ABBands.ShowsBelow(t))
+                    {
+                        emitted |= EmitDropShadowFan(map, grid, cap, c);
+                        continue;
+                    }
                     bool minedFloor = ABMinedRockLookup.TryGetMinedRockDef(t, out ThingDef minedRock);
                     if (t != cap && !minedFloor)
                     {
@@ -390,11 +400,11 @@ namespace AsAboveSoBelow
                     // neighbors overlap into the same composed rockfield BM's
                     // native walls show. No link masks, no corner fillers (no
                     // baked rounding to cover, and BM's look is lip-less);
-                    // meadow fade skirts unchanged.
+                    // the meadow fade applies the same as in atlas mode.
                     Graphic liveGraphic = LiveGraphicFor(rock);
                     if (!(liveGraphic is Graphic_Linked))
                     {
-                        EmitSkirts(map, grid, c, SkirtTone(rock), y);
+                        emitted |= EmitMeadowFade(map, grid, c, y);
                         Material[] variants = VariantsFor(rock);
                         if (variants != null)
                         {
@@ -441,12 +451,10 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    // Fade skirt: the open mass melts into adjacent meadow
-                    // ground instead of ending in a hard line (run-44 feedback:
-                    // the boundary read as "just a wall", not a higher layer).
-                    // Flat per-rock tone, vertex-alpha gradient, drawn INSIDE
-                    // the meadow cell so the lip keeps its silhouette.
-                    EmitSkirts(map, grid, c, SkirtTone(rock), y);
+                    // The plateau boundary: the meadow's own vanilla fade fan over this
+                    // mass cell (run-44 wanted a soft transition; the flat-tone skirt it
+                    // got now yields to the real fade mechanic).
+                    emitted |= EmitMeadowFade(map, grid, c, y);
                     // The atlas tile, then the vanilla corner fillers: a quarter
                     // -cell solid quad over every corner whose diagonal AND both
                     // flanking cardinals link (Graphic_LinkedCornerFiller's exact
@@ -497,8 +505,8 @@ namespace AsAboveSoBelow
         /// <summary>Linked = off-map (vanilla MapEdge link semantics), a mass
         /// cell, or meadow ground the mass fades into - linking the meadow side
         /// stops the atlas from drawing its wall lip + black outline toward the
-        /// plateau (run-44 "reads like a wall" feedback); the skirt supplies
-        /// the soft transition instead.</summary>
+        /// plateau (run-44 "reads like a wall" feedback); the meadow fade fan
+        /// supplies the soft transition instead.</summary>
         internal static bool Linked(Map map, TerrainGrid grid, TerrainDef cap, IntVec3 c)
         {
             if (!c.InBounds(map))
@@ -512,114 +520,191 @@ namespace AsAboveSoBelow
             return IsMeadowGround(grid.TerrainAt(c));
         }
 
-        /// <summary>Plateau meadow ground the mass visually fades into. Soil and
-        /// gravel only exist on the sky level as plateau floor (rough stone
-        /// already counts as a mass cell via the mined-floor mapping).</summary>
+        /// <summary>Plateau floor the mass visually melts into - EVERY natural ground
+        /// the sky gen lays on a plateau, not just literal Soil/Gravel: gravel, the
+        /// biome's arable terrain (matched by fertility so biome-specific soils
+        /// participate), and the rocks' own ROUGH terrain patches (natural=true,
+        /// FadeRough). Literal def-matching missed the rough patches, so the fill drew
+        /// its wall lip with no fade against them - a hard "wall" seam INSIDE what
+        /// should read as one seamless level. Mined-floor leave-terrains (RoughHewn)
+        /// are natural=false and stay MASS cells, so the two classifications never
+        /// overlap. Built floors are Hard-edged and deliberately excluded (a hard line
+        /// against laid flooring is the vanilla look), and water is excluded outright -
+        /// water materials must never be cloned into foreign render queues.</summary>
         internal static bool IsMeadowGround(TerrainDef t)
         {
-            return t == TerrainDefOf.Soil || t == TerrainDefOf.Gravel;
-        }
-
-        /// <summary>Shared skirt material: white VertexColor, queued just above
-        /// the atlas clones so the fade draws over both the tile edge and the
-        /// meadow terrain, still under the cutout family (walls, plants).</summary>
-        private static Material skirtMatCached;
-
-        private static Material SkirtMat()
-        {
-            if (skirtMatCached == null)
+            if (t == null || t.dontRender || t.IsWater)
             {
-                skirtMatCached = SolidColorMaterials.NewSolidColorMaterial(Color.white, ShaderDatabase.VertexColor);
-                skirtMatCached.renderQueue = lowQueue + 1;
+                return false;
             }
-            return skirtMatCached;
-        }
-
-        // Run-46 tuning (user): dimmer at the lip, longer dissolve.
-        private const float SkirtDepth = 0.8f;
-
-        private const float SkirtAltBias = 0.035f;
-
-        private const byte SkirtNearAlpha = 150;
-
-        /// <summary>Flat tone for the fade: the rock's mined-floor color (the
-        /// exact machinery the cap overlay family already uses for flat fills).</summary>
-        private static Color SkirtTone(ThingDef rock)
-        {
-            TerrainDef leave = rock?.building?.leaveTerrain;
-            if (leave != null && ABMinedRockLookup.TryGetMinedRockColor(leave, out Color tone))
+            if (t == TerrainDefOf.Soil || t == TerrainDefOf.Gravel)
             {
-                return tone;
+                return true;
             }
-            return new Color(0.44f, 0.41f, 0.38f);
+            if (t.edgeType == TerrainDef.TerrainEdgeType.Hard)
+            {
+                return false;
+            }
+            if (t.natural)
+            {
+                return true;
+            }
+            return t.fertility > 0f;
         }
 
-        /// <summary>One gradient strip per meadow-adjacent cardinal, spanning the
-        /// shared edge and reaching SkirtDepth into the meadow cell, near-solid
-        /// at the lip and transparent at the far end. Neighbor cells owned by an
-        /// edifice keep their own look.</summary>
-        private void EmitSkirts(Map map, TerrainGrid grid, IntVec3 c, Color tone, float y)
+        /// <summary>Meadow-fade clones: the meadow terrain's OWN material, re-queued just
+        /// above the atlas fill so vanilla's fade fan draws over the rock instead of
+        /// being buried under it (the fill deliberately sits above every terrain queue).
+        /// The source queue spread (renderPrecedence) is compressed and preserved so
+        /// soil still beats gravel where both fade over the same cell - flattening the
+        /// spread is the documented stairstep-border trap.</summary>
+        private static readonly Dictionary<Material, Material> fadeClones = new Dictionary<Material, Material>();
+
+        private static Material FadeClone(Material source)
         {
-            Color32 near = new Color32((byte)(tone.r * 255f), (byte)(tone.g * 255f), (byte)(tone.b * 255f), SkirtNearAlpha);
-            Color32 far = new Color32(near.r, near.g, near.b, 0);
-            for (int i = 0; i < 4; i++)
+            if (source == null)
             {
-                IntVec3 n = c + GenAdj.CardinalDirections[i];
-                if (!n.InBounds(map) || !IsMeadowGround(grid.TerrainAt(n)) || map.edificeGrid[n] != null)
+                return null;
+            }
+            if (fadeClones.TryGetValue(source, out Material clone))
+            {
+                return clone;
+            }
+            if (fadeClones.Count > 512)
+            {
+                fadeClones.Clear();
+            }
+            int cutout = ShaderDatabase.Cutout != null ? ShaderDatabase.Cutout.renderQueue : lowQueue + 449;
+            int spread = Mathf.Clamp((source.renderQueue - 2000) / 25, 0, 40);
+            clone = new Material(source) { renderQueue = Mathf.Min(lowQueue + 2 + spread, cutout - 1) };
+            fadeClones[source] = clone;
+            return clone;
+        }
+
+        /// <summary>Fade fans sit this far above the tile quads and corner fillers (0.03):
+        /// the atlas family depth-writes, so the fan must win the depth test outright.</summary>
+        private const float MeadowFadeAltBias = 0.04f;
+
+        private readonly bool[] fanCovered = new bool[9];
+
+        private readonly TerrainDef[] meadowAdj = new TerrainDef[8];
+
+        /// <summary>
+        /// THE vanilla fade mechanic at the plateau boundary: each distinct meadow
+        /// terrain among the eight neighbours gets its own 9-vertex edge fan emitted
+        /// OVER this mass cell - the exact geometry SectionLayer_Terrain gives soil
+        /// fading onto rough stone at a vanilla mountain foot, with the meadow's own
+        /// world-position-sampled material so the texture continues seamlessly out of
+        /// the meadow cell. Replaces the run-44 flat-tone skirt strips, which read as a
+        /// painted gradient rather than grass creeping onto rock.
+        /// </summary>
+        private bool EmitMeadowFade(Map map, TerrainGrid grid, IntVec3 c, float y)
+        {
+            TerrainDef[] adj = meadowAdj;
+            adj[0] = MeadowAt(map, grid, c + IntVec3.North);
+            adj[1] = MeadowAt(map, grid, c + IntVec3.South);
+            adj[2] = MeadowAt(map, grid, c + IntVec3.East);
+            adj[3] = MeadowAt(map, grid, c + IntVec3.West);
+            adj[4] = MeadowAt(map, grid, c + IntVec3.South + IntVec3.West);
+            adj[5] = MeadowAt(map, grid, c + IntVec3.North + IntVec3.West);
+            adj[6] = MeadowAt(map, grid, c + IntVec3.North + IntVec3.East);
+            adj[7] = MeadowAt(map, grid, c + IntVec3.South + IntVec3.East);
+            bool emitted = false;
+            for (int i = 0; i < 8; i++)
+            {
+                TerrainDef d = adj[i];
+                if (d == null)
                 {
                     continue;
                 }
-                LayerSubMesh sub = GetSubMesh(SkirtMat());
-                float yq = y + SkirtAltBias;
-                int dx = n.x - c.x;
-                int dz = n.z - c.z;
-                if (dz == 1)
+                bool seen = false;
+                for (int j = 0; j < i; j++)
                 {
-                    // Neighbor to the north: fade upward from its south edge.
-                    AddFadeQuad(sub, n.x, n.z, n.x + 1, n.z + SkirtDepth, yq, near, far, far, near);
+                    if (adj[j] == d)
+                    {
+                        seen = true;
+                        break;
+                    }
                 }
-                else if (dz == -1)
+                if (seen)
                 {
-                    // South: fade downward from its north edge.
-                    AddFadeQuad(sub, n.x, n.z + 1f - SkirtDepth, n.x + 1, n.z + 1, yq, far, near, near, far);
+                    continue;
                 }
-                else if (dx == 1)
+                Material mat = FadeClone(map.terrainGrid.GetMaterial(d, false, null));
+                if (mat == null)
                 {
-                    // East: fade rightward from its west edge.
-                    AddFadeQuad(sub, n.x, n.z, n.x + SkirtDepth, n.z + 1, yq, near, near, far, far);
+                    continue;
                 }
-                else
-                {
-                    // West: fade leftward from its east edge.
-                    AddFadeQuad(sub, n.x + 1f - SkirtDepth, n.z, n.x + 1, n.z + 1, yq, far, far, near, near);
-                }
+                ABNineFan.Cover(fanCovered,
+                    adj[0] == d, adj[1] == d, adj[2] == d, adj[3] == d,
+                    adj[4] == d, adj[5] == d, adj[6] == d, adj[7] == d);
+                ABNineFan.AddFan(GetSubMesh(mat), c.x, c.z, y + MeadowFadeAltBias, fanCovered,
+                    White, ClearWhite);
+                emitted = true;
             }
+            return emitted;
         }
 
-        /// <summary>Quad with per-vertex colors, vertex order matching AddQuad:
-        /// (x0,z0), (x0,z1), (x1,z1), (x1,z0). UVs sample the material center.</summary>
-        private static void AddFadeQuad(LayerSubMesh sub, float x0, float z0, float x1, float z1, float y,
-            Color32 c00, Color32 c01, Color32 c11, Color32 c10)
+        /// <summary>The neighbour's terrain when it is meadow ground the fade may sample,
+        /// else null. Mirrors vanilla's Underwall rule: a coversFloor edifice owns its
+        /// cell's look, so nothing fades out of it.</summary>
+        private static TerrainDef MeadowAt(Map map, TerrainGrid grid, IntVec3 n)
         {
-            int vi = sub.verts.Count;
-            sub.verts.Add(new Vector3(x0, y, z0));
-            sub.verts.Add(new Vector3(x0, y + NorthAltBias, z1));
-            sub.verts.Add(new Vector3(x1, y + NorthAltBias, z1));
-            sub.verts.Add(new Vector3(x1, y, z0));
-            for (int i = 0; i < 4; i++)
+            if (!n.InBounds(map))
             {
-                sub.uvs.Add(new Vector2(0.5f, 0.5f));
+                return null;
             }
-            sub.colors.Add(c00);
-            sub.colors.Add(c01);
-            sub.colors.Add(c11);
-            sub.colors.Add(c10);
-            sub.tris.Add(vi);
-            sub.tris.Add(vi + 1);
-            sub.tris.Add(vi + 2);
-            sub.tris.Add(vi);
-            sub.tris.Add(vi + 2);
-            sub.tris.Add(vi + 3);
+            TerrainDef t = grid.TerrainAt(n);
+            if (!IsMeadowGround(t))
+            {
+                return null;
+            }
+            Building ed = map.edificeGrid[n];
+            if (ed != null && ed.def.coversFloor)
+            {
+                return null;
+            }
+            return t;
+        }
+
+        private static readonly Color32 EdgeShadowed = new Color32(195, 195, 195, byte.MaxValue);
+
+        private static readonly Color32 EdgeLit = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
+
+        /// <summary>
+        /// The drop-off ring: where the sky band's open air borders the mass, the cliff
+        /// lip gets vanilla's EdgeShadow contact line, drawn INTO the open-air cell over
+        /// the see-below view - the same visual language a wall casts onto the floor
+        /// beside it, which is what makes the plateau read as HIGH ground rather than a
+        /// flat texture change. Ledge cells have no edifice, so vanilla's own
+        /// EdgeShadows layer emits nothing at the drop; this fan is that missing border.
+        /// EdgeShadow's queue (above the cutout family) also puts it over every below
+        /// print, and the fan shape self-composes without the double-multiply overlaps
+        /// hand-built corner strips would produce.
+        /// </summary>
+        private bool EmitDropShadowFan(Map map, TerrainGrid grid, TerrainDef cap, IntVec3 c)
+        {
+            bool n = MassNeighbor(map, grid, cap, c + IntVec3.North);
+            bool s = MassNeighbor(map, grid, cap, c + IntVec3.South);
+            bool e = MassNeighbor(map, grid, cap, c + IntVec3.East);
+            bool w = MassNeighbor(map, grid, cap, c + IntVec3.West);
+            bool sw = MassNeighbor(map, grid, cap, c + IntVec3.South + IntVec3.West);
+            bool nw = MassNeighbor(map, grid, cap, c + IntVec3.North + IntVec3.West);
+            bool ne = MassNeighbor(map, grid, cap, c + IntVec3.North + IntVec3.East);
+            bool se = MassNeighbor(map, grid, cap, c + IntVec3.South + IntVec3.East);
+            if (!(n | s | e | w | sw | nw | ne | se))
+            {
+                return false;
+            }
+            ABNineFan.Cover(fanCovered, n, s, e, w, sw, nw, ne, se);
+            ABNineFan.AddFan(GetSubMesh(MatBases.EdgeShadow), c.x, c.z,
+                AltitudeLayer.Shadows.AltitudeFor(), fanCovered, EdgeShadowed, EdgeLit);
+            return true;
+        }
+
+        private static bool MassNeighbor(Map map, TerrainGrid grid, TerrainDef cap, IntVec3 n)
+        {
+            return n.InBounds(map) && IsMassCell(map, grid, cap, n);
         }
 
         /// <summary>A cell continues the mass when it holds natural rock (wall) or is
@@ -768,6 +853,8 @@ namespace AsAboveSoBelow
         }
 
         private static readonly Color32 White = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
+
+        private static readonly Color32 ClearWhite = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, 0);
 
         /// <summary>Vanilla Printer_Plane tilts every plane: the north (z+) verts
         /// sit +0.01 higher, giving deterministic overlap at row seams. Without it,
