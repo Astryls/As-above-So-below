@@ -548,6 +548,12 @@ namespace AsAboveSoBelow
             ABGenProfile.Phase("CarveGutters", tail.Elapsed.TotalMilliseconds);
             tail.Restart();
 
+            // AFTER the gutters are carved, deliberately: seeding walks the band rects and
+            // the gutter rows are only turned into (non-snow-holding) open air above.
+            ABBandWeather.SeedAltitudeSnow(map, bands);
+            ABGenProfile.Phase("SeedAltitudeSnow", tail.Elapsed.TotalMilliseconds);
+            tail.Restart();
+
             // Fog policy differs by direction, matching V1:
             //  - BELOW the surface is solid rock, so it is fogged and revealed by mining,
             //    exactly like a vanilla mountain.
