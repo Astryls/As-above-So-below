@@ -61,9 +61,51 @@ namespace AsAboveSoBelow
             return room == null || room.UsesOutdoorTemperature;
         }
 
-        /// <summary>True only while the top-right temperature readout is being built.
-        /// See <see cref="Patch_GlobalControls_ABBandTemperature"/>.</summary>
-        internal static bool ReadoutScope;
+        /// <summary>Our own snow overlay for the rain-to-snow substitution. NOT taken from
+        /// WeatherPartPool: the pool hands out the instance the live weather system drives,
+        /// and we need one we can colour and pan without fighting SkyManager over it. The
+        /// underlying Material is a static shared asset either way, which is exactly why the
+        /// colour must be cleared the moment we stop substituting.</summary>
+        private static WeatherOverlay_SnowGentle snowOverlay;
+
+        private static bool substituting;
+
+        private static int lastPanTick = -1;
+
+        internal static WeatherOverlay_SnowGentle SnowOverlay =>
+            snowOverlay ?? (snowOverlay = new WeatherOverlay_SnowGentle());
+
+        /// <summary>Drive the falling-snow animation ourselves, ONCE PER GAME TICK.
+        /// TickOverlay only advances the material's texture offset, so calling it from the
+        /// draw path would pan at frame rate instead of tick rate and the snow would fall
+        /// visibly faster on a better machine.</summary>
+        internal static void PanSnowOnce(Map map)
+        {
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            if (now == lastPanTick)
+            {
+                return;
+            }
+            lastPanTick = now;
+            SnowOverlay.TickOverlay(map, 1f);
+        }
+
+        /// <summary>Stop substituting and hand the shared material back in a clean state.
+        /// Skipped when nothing was substituted, so this costs nothing on ordinary maps.</summary>
+        internal static void EndSubstitution()
+        {
+            if (!substituting)
+            {
+                return;
+            }
+            substituting = false;
+            SnowOverlay.SetOverlayColor(Color.clear);
+        }
+
+        internal static void BeginSubstitution()
+        {
+            substituting = true;
+        }
 
         /// <summary>
         /// SNOW HAS TO EXIST BEFORE IT CAN PERSIST.
@@ -251,23 +293,41 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
-    /// TIER 1 - no weather overlays on a level that is underground.
+    /// TIER 1 - what the weather LOOKS like on this level. Two jobs, one interception.
     ///
-    /// <c>DrawAllWeather</c> is purely visual (the event handler's draw pass plus the two
-    /// weather workers' full-screen overlays), so suppressing it changes nothing about
-    /// simulation, sound or accumulation - the basement is roofed rock and vanilla's roof
-    /// test already keeps rain and snow from settling there. What was wrong was only that
-    /// the player watched rain fall through a hundred metres of stone.
+    /// (a) NO OVERLAYS UNDERGROUND. <c>DrawAllWeather</c> is purely visual (the event
+    ///     handler's draw pass plus the two weather workers' full-screen overlays), so
+    ///     suppressing it changes nothing about simulation, sound or accumulation - the
+    ///     basement is roofed rock and vanilla's roof test already keeps precipitation from
+    ///     settling. What was wrong was only that the player watched rain fall through a
+    ///     hundred metres of stone.
     ///
-    /// Judged on the VIEWED band rather than any particular cell, because the overlays are
-    /// screen-space: there is no per-cell answer to give. Sky bands deliberately keep their
-    /// weather - they are outdoors, and Tier 2 has already turned the rain up there into
-    /// snow.
+    /// (b) RAIN IS DRAWN AS SNOW ABOVE THE FREEZING LINE. Tier 2 already made rain
+    ///     ACCUMULATE as snow up there, but the falling particles were still rain - reported
+    ///     as "rain does not show as snow". Snow was settling on a peak that visibly had
+    ///     rain falling on it.
+    ///
+    /// WHY SUBSTITUTE AT THE DRAW CALL. The tempting fix is to swap the entries in
+    /// <c>WeatherDef.Worker.overlays</c>, because BOTH consumers read that one list -
+    /// SkyManager.UpdateOverlays for the alpha and DrawAllWeather for the draw - so a single
+    /// swap would fix both. It is rejected: that list belongs to a global Def shared across
+    /// every map, and mutating it per viewed band leaks the substitution into other maps and
+    /// across save/load.
+    ///
+    /// THE COLOUR IS COPIED FROM THE RAIN OVERLAY WE ARE REPLACING, not recomputed. SkyManager
+    /// has already written the correct sky tint and transition alpha onto that material this
+    /// frame (<c>overlayColor.a = lerpFactor</c>), so copying it gets dusk, night and weather
+    /// fade-in exactly right by construction instead of by re-deriving them.
+    ///
+    /// ⚠ THE MATERIAL IS A STATIC SHARED ASSET (<c>WeatherOverlay_SnowGentle</c> holds a
+    /// static Material and SetOverlayColor writes to it), so the substitution MUST be undone
+    /// explicitly - hence EndSubstitution on every path that stops substituting. Left set,
+    /// the snow overlay would keep rendering over the surface level.
     /// </summary>
     [HarmonyPatch(typeof(WeatherManager), nameof(WeatherManager.DrawAllWeather))]
-    public static class Patch_WeatherManager_ABNoWeatherUnderground
+    public static class Patch_WeatherManager_ABBandOverlays
     {
-        private static bool Prefix()
+        private static bool Prefix(WeatherManager __instance)
         {
             try
             {
@@ -276,16 +336,80 @@ namespace AsAboveSoBelow
                     return true;
                 }
                 Map map = Find.CurrentMap;
-                if (map == null || !ABBands.Banded(map))
+                ABBandMap bands = ABBands.CompOf(map);
+                if (map == null || bands == null || !bands.Banded)
                 {
+                    ABBandWeather.EndSubstitution();
                     return true;
                 }
-                return ABBandView.CurrentLevel(map) >= 0;
+                int level = ABBandView.CurrentLevel(map);
+                if (level < 0)
+                {
+                    ABBandWeather.EndSubstitution();
+                    return false; // (a) underground: no sky, no weather to see
+                }
+                bool freezing = level > 0
+                    && ABBandWeather.BandOutdoorTemp(map, level) < 0f;
+                if (!freezing || __instance.RainRate <= 0.001f)
+                {
+                    ABBandWeather.EndSubstitution();
+                    return true; // ordinary weather for this level
+                }
+                DrawAsSnow(map, __instance);
+                return false;
             }
-            catch
+            catch (Exception e)
             {
+                Log.ErrorOnce(ABLog.Tag + " V2: band weather overlay threw: " + e, 118843303);
+                ABBandWeather.EndSubstitution();
                 return true;
             }
+        }
+
+        /// <summary>Draw everything the weather would have drawn EXCEPT its rain, then our
+        /// snow in its place. Non-precipitation overlays (fog, overcast tint) are kept, so a
+        /// foggy rain still reads as foggy up here.</summary>
+        private static void DrawAsSnow(Map map, WeatherManager wm)
+        {
+            ABBandWeather.BeginSubstitution();
+            Color tint = Color.white;
+            bool gotTint = false;
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                WeatherDef def = pass == 0 ? wm.curWeather : wm.lastWeather;
+                if (def?.Worker?.overlays == null)
+                {
+                    continue;
+                }
+                List<SkyOverlay> overlays = def.Worker.overlays;
+                for (int i = 0; i < overlays.Count; i++)
+                {
+                    SkyOverlay o = overlays[i];
+                    if (o is WeatherOverlay_Rain)
+                    {
+                        // Skip it, and steal the colour SkyManager just set on it.
+                        if (!gotTint && o is WeatherOverlayDualPanner panner
+                            && panner.worldOverlayMat != null)
+                        {
+                            tint = panner.worldOverlayMat.color;
+                            gotTint = true;
+                        }
+                        continue;
+                    }
+                    o.DrawOverlay(map);
+                }
+            }
+
+            if (!gotTint)
+            {
+                // No rain overlay found but RainRate says it is raining (a modded weather).
+                // Fall back to the transition factor so the snow still fades in properly.
+                tint.a = wm.TransitionLerpFactor;
+            }
+            ABBandWeather.SnowOverlay.SetOverlayColor(tint);
+            ABBandWeather.PanSnowOnce(map);
+            ABBandWeather.SnowOverlay.DrawOverlay(map);
         }
     }
 
@@ -352,44 +476,30 @@ namespace AsAboveSoBelow
     /// with it pinned to the surface there was no visible evidence that altitude did
     /// anything at all.
     ///
-    /// FIXED BY SCOPE, NOT BY REWRITING THE WIDGET. Reimplementing TemperatureString would
-    /// mean copying vanilla's Indoors / IndoorsUnroofed(N) / adjacent-room-probe logic and
-    /// maintaining it forever, and patching <c>OutdoorTemp</c> globally is out of the
-    /// question - it drives weather selection, comfort and our own melt, which would then
-    /// double-count the offset. So the getter is offset ONLY while this one UI method is on
-    /// the stack. Vanilla's ternary is lazy, so the getter is reached only in the outdoors
-    /// case; a sealed room reports its own tracked temperature and is untouched.
+    /// ⚠ THE FIRST FIX FOR THIS MISSED, AND THE REASON IS WORTH KEEPING. It scoped a postfix
+    /// onto <c>MapTemperature.OutdoorTemp</c> for the duration of this method - and that
+    /// getter is NEVER REACHED. Vanilla's line is
+    /// <c>(room == null || c.Fogged()) ? OutdoorTemp : room.Temperature</c>, and in RimWorld
+    /// an OUTDOOR CELL STILL BELONGS TO A ROOM (the big psychologically-outdoors one), so
+    /// <c>room</c> is non-null and the ternary always takes the second branch.
+    /// <c>Room.Temperature</c> then returns <c>tempTracker.temperatureInt</c> - a plain
+    /// stored field, no call to OutdoorTemp anywhere. The patch applied cleanly, fired never.
     ///
-    /// A Finalizer rather than a Postfix clears the flag: a Postfix does not run if the
-    /// method throws, and a stuck flag would silently offset every OutdoorTemp read in the
-    /// game.
+    /// (That also means <c>Room.Temperature</c> itself is band-blind. It does not matter for
+    /// gameplay: <c>Thing.AmbientTemperature</c> goes through
+    /// <c>GenTemperature.GetTemperatureForCell</c>, so pawns really do feel the altitude.)
+    ///
+    /// So the readout is rebuilt in a postfix instead, from
+    /// <c>GenTemperature.TryGetTemperatureForCell</c> - the API this mod already patches and
+    /// which the temperature OVERLAY was already using, which is exactly why the overlay was
+    /// right while the widget was wrong. Vanilla's own string is computed and discarded;
+    /// that is cheap and keeps us off its private caching statics.
     /// </summary>
     [HarmonyPatch(typeof(GlobalControls), "TemperatureString")]
     public static class Patch_GlobalControls_ABBandTemperature
     {
-        private static void Prefix()
+        private static void Postfix(ref string __result)
         {
-            ABBandWeather.ReadoutScope = true;
-        }
-
-        private static void Finalizer()
-        {
-            ABBandWeather.ReadoutScope = false;
-        }
-    }
-
-    /// <summary>The scoped half of the readout fix - inert unless the flag above is set, so
-    /// every other consumer of OutdoorTemp (weather, melt, comfort) still sees vanilla's
-    /// map-wide value, which is what they must see.</summary>
-    [HarmonyPatch(typeof(MapTemperature), nameof(MapTemperature.OutdoorTemp), MethodType.Getter)]
-    public static class Patch_MapTemperature_ABReadoutOffset
-    {
-        private static void Postfix(ref float __result)
-        {
-            if (!ABBandWeather.ReadoutScope)
-            {
-                return; // the overwhelming majority of calls, one bool read
-            }
             try
             {
                 Map map = Find.CurrentMap;
@@ -397,10 +507,42 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                __result += ABBandEnv.TempOffsetForLevel(ABBandView.CurrentLevel(map));
+                IntVec3 c = UI.MouseCell();
+                float temp;
+                string label;
+                if (!c.InBounds(map))
+                {
+                    // Mouse is over the UI, not the map: answer for the level being viewed.
+                    label = "Outdoors".Translate().CapitalizeFirst();
+                    temp = map.mapTemperature.OutdoorTemp
+                        + ABBandEnv.TempOffsetForLevel(ABBandView.CurrentLevel(map));
+                }
+                else
+                {
+                    Room room = c.GetRoom(map);
+                    bool indoors = room != null && !room.PsychologicallyOutdoors
+                        && !c.Fogged(map);
+                    if (indoors)
+                    {
+                        label = room.OpenRoofCount == 0
+                            ? (string)"Indoors".Translate()
+                            : "IndoorsUnroofed".Translate() + " ("
+                                + room.OpenRoofCount.ToStringCached() + ")";
+                    }
+                    else
+                    {
+                        label = "Outdoors".Translate().CapitalizeFirst();
+                    }
+                    if (!GenTemperature.TryGetTemperatureForCell(c, map, out temp))
+                    {
+                        return; // leave vanilla's answer rather than invent one
+                    }
+                }
+                __result = label + " " + temp.ToStringTemperature("F0");
             }
             catch
             {
+                // A wrong readout is survivable; a thrown one is not.
             }
         }
     }
