@@ -23,6 +23,9 @@ namespace AsAboveSoBelow
         nameof(ThingSelectionUtility.MultiSelectableThingsInScreenRectDistinct))]
     public static class Patch_ThingSelectionUtility_ABBelow
     {
+        /// <summary>Dev A/B switch: when off, the selection scan is exactly vanilla's.</summary>
+        internal static bool Enabled = true;
+
         private static void Postfix(Rect rect, ref IEnumerable<Thing> __result)
         {
             try
@@ -56,6 +59,12 @@ namespace AsAboveSoBelow
             {
                 seen.Add(t);
                 yield return t;
+            }
+            // Dev A/B switch ("AB2: bisect - toggle below multi-select"). Placed AFTER the
+            // originals so disabling it degrades to exactly vanilla behaviour.
+            if (!Enabled)
+            {
+                yield break;
             }
 
             // Walk the drag rect in the VIEWING band and descend per cell, instead of

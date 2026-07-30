@@ -273,6 +273,27 @@ namespace AsAboveSoBelow
         /// band clamp while it is open, so the camera can be pushed past the currently
         /// baked limits to find better ones; the numbers it reports get baked into
         /// ABCameraBounds.For(level).</summary>
+        /// <summary>Bisect for the drafted group-move bug: three drafted pawns ordered to
+        /// one cell, only one moves. Flip these ONE AT A TIME and re-test - whichever
+        /// restores group movement owns the bug.</summary>
+        [DebugAction("As above", "AB2: bisect - toggle click-through", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleClickThrough()
+        {
+            ABBelowClickThrough.Enabled = !ABBelowClickThrough.Enabled;
+            Messages.Message("AB2: below click-through / select-through "
+                + (ABBelowClickThrough.Enabled ? "ON" : "OFF"),
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        [DebugAction("As above", "AB2: bisect - toggle below multi-select", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowMultiSelect()
+        {
+            Patch_ThingSelectionUtility_ABBelow.Enabled = !Patch_ThingSelectionUtility_ABBelow.Enabled;
+            Messages.Message("AB2: below multi-select "
+                + (Patch_ThingSelectionUtility_ABBelow.Enabled ? "ON" : "OFF"),
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: camera calibration", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2CameraCalibration()
         {
