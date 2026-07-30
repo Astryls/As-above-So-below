@@ -335,7 +335,7 @@ namespace AsAboveSoBelow
         private static readonly AccessTools.FieldRef<MultiPawnGotoController, bool> ActiveRef =
             AccessTools.FieldRefAccess<MultiPawnGotoController, bool>("active");
 
-        private static readonly AccessTools.FieldRef<MultiPawnGotoController,
+        internal static readonly AccessTools.FieldRef<MultiPawnGotoController,
             System.Collections.Generic.List<Pawn>> PawnsRef =
             AccessTools.FieldRefAccess<MultiPawnGotoController,
                 System.Collections.Generic.List<Pawn>>("pawns");
@@ -345,10 +345,10 @@ namespace AsAboveSoBelow
             AccessTools.FieldRefAccess<MultiPawnGotoController,
                 System.Collections.Generic.List<IntVec3>>("dests");
 
-        private static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> StartRef =
+        internal static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> StartRef =
             AccessTools.FieldRefAccess<MultiPawnGotoController, IntVec3>("start");
 
-        private static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> EndRef =
+        internal static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> EndRef =
             AccessTools.FieldRefAccess<MultiPawnGotoController, IntVec3>("end");
 
         private static bool matsResolved;
@@ -436,6 +436,102 @@ namespace AsAboveSoBelow
                 v.z += (viewBand - band) * bands.Slot;
             }
             return v;
+        }
+    }
+
+    /// <summary>
+    /// THE group-order fix: keep the drag line inside ONE level.
+    ///
+    /// `RecomputeDestinations` spreads the selection ALONG the drag line -
+    /// `root = start + (end - start) * (j / (count-1))` - and then finds each pawn a cell
+    /// near its own interpolated point. That is a line formation, not a cluster, and it is
+    /// only sane while both endpoints are on the same band: if they are a Slot apart, the
+    /// line runs straight down through the GUTTER and the levels between, so pawns end up
+    /// evenly spaced down the map instead of arranged around the cursor.
+    ///
+    /// It also explains the odd/even split exactly. The fractions are j/(count-1), so an ODD
+    /// count samples precisely 0.5 - the midpoint - while 2 and 4 pawns never do. For a
+    /// one-Slot drag that midpoint is the impassable, permanently fogged gutter, which is why
+    /// 3 and 5 pawns misbehaved and 2 and 4 looked fine.
+    ///
+    /// Normalising the two endpoints into the commanded pawns' band fixes the cause and
+    /// leaves vanilla's formation maths completely untouched - which is what makes this
+    /// preferable to rewriting each pawn's destination individually.
+    /// </summary>
+    [HarmonyPatch(typeof(MultiPawnGotoController),
+        nameof(MultiPawnGotoController.RecomputeDestinations))]
+    public static class Patch_MultiPawnGoto_ABKeepLineInBand
+    {
+        private static void Prefix(MultiPawnGotoController __instance)
+        {
+            try
+            {
+                if (!ABBelowClickThrough.Enabled)
+                {
+                    return;
+                }
+                System.Collections.Generic.List<Pawn> pawns =
+                    Patch_MultiPawnGotoController_ABDrawInViewBand.PawnsRef(__instance);
+                if (pawns == null || pawns.Count == 0)
+                {
+                    return;
+                }
+                Map map = null;
+                int band = -1;
+                for (int i = 0; i < pawns.Count; i++)
+                {
+                    Pawn p = pawns[i];
+                    if (p == null || !p.Spawned)
+                    {
+                        continue;
+                    }
+                    map = p.Map;
+                    ABBandMap probe = ABBands.CompOf(map);
+                    if (probe == null || !probe.Banded)
+                    {
+                        return;
+                    }
+                    int b = probe.BandOf(p.Position);
+                    if (band < 0)
+                    {
+                        band = b;
+                    }
+                    else if (band != b)
+                    {
+                        return; // selection spans levels: no single line can serve them
+                    }
+                }
+                ABBandMap bands = ABBands.CompOf(map);
+                if (band < 0 || bands == null || !bands.Banded)
+                {
+                    return;
+                }
+                Normalise(map, bands, band,
+                    Patch_MultiPawnGotoController_ABDrawInViewBand.StartRef, __instance);
+                Normalise(map, bands, band,
+                    Patch_MultiPawnGotoController_ABDrawInViewBand.EndRef, __instance);
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: goto line normalise threw: " + e.Message,
+                    762195916);
+            }
+        }
+
+        private static void Normalise(Map map, ABBandMap bands, int band,
+            AccessTools.FieldRef<MultiPawnGotoController, IntVec3> field,
+            MultiPawnGotoController inst)
+        {
+            IntVec3 c = field(inst);
+            if (!c.IsValid || bands.BandOf(c) == band)
+            {
+                return;
+            }
+            IntVec3 moved = bands.Translate(c, band);
+            if (moved.InBounds(map) && !bands.InGutter(moved))
+            {
+                field(inst) = moved;
+            }
         }
     }
 

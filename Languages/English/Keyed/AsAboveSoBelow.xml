@@ -37,6 +37,8 @@
   <AB_LevelsBelow>Below surface</AB_LevelsBelow>
   <AB_LevelsSummary>{0} levels, {1}x{1} each</AB_LevelsSummary>
   <AB_LevelsCells>{0} cells (budget {1})</AB_LevelsCells>
+  <AB_LevelsHeadroom>This size affords up to {0} levels</AB_LevelsHeadroom>
+  <AB_LevelsPerLevelSize>Size of each level</AB_LevelsPerLevelSize>
   <AB_LevelsNoneNote>No extra levels: this colony generates as an ordinary single-level map.</AB_LevelsNoneNote>
   <AB_LevelsDefault>New colonies: {0} above, {1} below ({2} levels). Choose per colony on the map size screen when starting one.</AB_LevelsDefault>
   <AB_NaturalPeaks>Naturalistic mountain peaks on new sky levels</AB_NaturalPeaks>

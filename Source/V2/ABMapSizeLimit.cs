@@ -57,8 +57,10 @@ namespace AsAboveSoBelow
         //
         // The arithmetic that makes this work (heights sit just under a 64 boundary so the
         // gutter collapses to 2 rows):
-        //   3 x 190 = 109,440   (the historical default)
-        //   5 x 126 =  80,640
+        // What 131,000 buys (per-level size x levels = stacked cells):
+        //   2 x 254 = 130,048   <- fits; 130,000 missed this by 48 cells, hence 131,000
+        //   3 x 190 = 109,440   |  4 x 190 = 145,920  <- refused
+        //   3 x 254 = 195,072   <- refused
         //   7 x 126 = 112,896   <- seven levels for the price of three
         //   7 x 190 = 255,360   <- the footgun the budget exists to refuse
         // ==================================================
@@ -69,7 +71,7 @@ namespace AsAboveSoBelow
 
         /// <summary>Total cells a banded colony may allocate. Sized so the historical
         /// 3x190 layout and a 7x126 layout both fit, and 5x190 / 3x254 do not.</summary>
-        public const int CellBudget = 115000;
+        public const int CellBudget = 131000;
 
         public static int UpperLevels =>
             Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
@@ -108,6 +110,22 @@ namespace AsAboveSoBelow
         /// <summary>Largest offered per-level size that fits the budget at the current
         /// level count. Replaces the old fixed 190 cap: with more levels selected the
         /// affordable per-level size genuinely shrinks, and the UI says so.</summary>
+        /// <summary>How many levels this per-level size can afford. Surfaced in the chooser
+        /// so the dimension-versus-levels trade is visible BEFORE the player spends the
+        /// budget, rather than discovered by watching a size option grey out.</summary>
+        public static int MaxLevelsFor(int size)
+        {
+            int cap = MaxUpperLevels + MaxLowerLevels + 1;
+            for (int levels = cap; levels >= 1; levels--)
+            {
+                if (Fits(size, levels))
+                {
+                    return levels;
+                }
+            }
+            return 1;
+        }
+
         public static int MaxSize
         {
             get
@@ -178,11 +196,21 @@ namespace AsAboveSoBelow
                     lockedLabels.Add(vanilla);
                 }
             }
-            // Test sizes are appended by the dialog itself and bypass our list entirely.
-            int[] test = { 350, 400 };
-            for (int i = 0; i < test.Length; i++)
+            // Lock every size that is NOT one of ours.
+            //
+            // The reflection swap of Dialog_AdvancedGameConfig.MapSizes cannot be relied on -
+            // observed in play still listing vanilla's 200-325 (its Small/Medium/Large group
+            // headers only render for 200/250/300, so their presence proves our array was
+            // never in use). Rather than depend on it, vanilla's options are locked outright
+            // and the real choice lives in our own strip below, which needs no reflection.
+            int[] vanillaAndTest = { 200, 225, 250, 275, 300, 325, 350, 400 };
+            for (int i = 0; i < vanillaAndTest.Length; i++)
             {
-                lockedLabels.Add("MapSizeDesc".Translate(test[i], test[i] * test[i]));
+                int s = vanillaAndTest[i];
+                if (Array.IndexOf(Sizes, s) < 0)
+                {
+                    lockedLabels.Add("MapSizeDesc".Translate(s, s * s));
+                }
             }
         }
 
@@ -312,7 +340,7 @@ namespace AsAboveSoBelow
                 return;
             }
             // Bottom strip, clear of the close button vanilla draws below us.
-            float stripH = 150f;
+            float stripH = 240f;
             float top = inRect.height - stripH - CloseButtonClearance;
             Widgets.DrawLineHorizontal(0f, top, inRect.width);
             float y = top + 8f;
@@ -330,6 +358,41 @@ namespace AsAboveSoBelow
             rowY = Spinner(0f, rowY, 300f, "AB_LevelsBelow".Translate(), ref lower,
                 0, ABMapSizeLimit.MaxLowerLevels);
 
+            // OUR size selector - the authoritative one.
+            //
+            // Vanilla's column above is locked, because swapping its MapSizes array by
+            // reflection proved unreliable and the old code then re-snapped mapSize every
+            // frame, which silently undid whatever the player clicked - the "nothing is
+            // selected" report. These buttons write GameInitData.mapSize directly, so a
+            // click sticks and the snap below never has anything to correct.
+            float sizeX = 330f;
+            float sizeY = y;
+            Text.Font = GameFont.Small;
+            Widgets.Label(new Rect(sizeX, sizeY - 26f, 300f, 24f), "AB_LevelsPerLevelSize".Translate());
+            int[] sizes = ABMapSizeLimit.Sizes;
+            for (int i = 0; i < sizes.Length; i++)
+            {
+                int candidate = sizes[i];
+                bool affordable = ABMapSizeLimit.Fits(candidate, ABMapSizeLimit.BandCount);
+                Rect row = new Rect(sizeX, sizeY, 300f, 26f);
+                string label = candidate + "x" + candidate + "  ("
+                    + ABMapSizeLimit.StackedCells(candidate, ABMapSizeLimit.BandCount).ToString("N0")
+                    + " cells)";
+                Color prev = GUI.color;
+                if (!affordable)
+                {
+                    GUI.color = new Color(1f, 1f, 1f, 0.4f);
+                }
+                if (Widgets.RadioButtonLabeled(row, label,
+                        Find.GameInitData.mapSize == candidate)
+                    && affordable)
+                {
+                    Find.GameInitData.mapSize = candidate;
+                }
+                GUI.color = prev;
+                sizeY += 28f;
+            }
+
             if (upper != s.upperLevels || lower != s.lowerLevels)
             {
                 s.upperLevels = upper;
@@ -344,7 +407,7 @@ namespace AsAboveSoBelow
             int bandCount = ABMapSizeLimit.BandCount;
             int size = Find.GameInitData.mapSize;
             int cells = ABMapSizeLimit.StackedCells(size, bandCount);
-            float infoX = 330f;
+            float infoX = 660f;
             float infoW = Mathf.Max(220f, inRect.width - infoX);
             float infoY = y;
             Widgets.Label(new Rect(infoX, infoY, infoW, 24f),
@@ -358,6 +421,15 @@ namespace AsAboveSoBelow
             }
             Widgets.Label(new Rect(infoX, infoY, infoW, 24f), "AB_LevelsCells".Translate(
                 cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0")));
+            GUI.color = old;
+            infoY += 26f;
+
+            // Headroom: the useful question while spending a budget is "what else could I
+            // afford", not only "what am I spending". Makes the dimension-versus-levels
+            // trade visible BEFORE a size option greys out.
+            GUI.color = new Color(1f, 1f, 1f, 0.7f);
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f),
+                "AB_LevelsHeadroom".Translate(ABMapSizeLimit.MaxLevelsFor(size), size));
             GUI.color = old;
             infoY += 26f;
 
@@ -412,7 +484,10 @@ namespace AsAboveSoBelow
         {
             if (ABV2.Enabled)
             {
-                __result.y += 170f;
+                // Room for the levels + per-level-size strip. Vanilla lays its columns out
+                // from the top and never consults the height, so this is space we own.
+                __result.y += 260f;
+                __result.x = Mathf.Max(__result.x, 1000f);
             }
         }
     }
