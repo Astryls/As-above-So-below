@@ -415,15 +415,27 @@ namespace AsAboveSoBelow
                 "AB_LevelsSummary".Translate(bandCount, size));
             infoY += 26f;
 
+            // Colour against the BUDGET ITSELF, not against Fits(): once the player has
+            // lifted the cap, Fits() is unconditionally true, and that is exactly the state
+            // in which the warning matters most. An unlocked map that is 2x over budget must
+            // still say so, every time the player looks at this screen.
             Color old = GUI.color;
-            if (!ABMapSizeLimit.Fits(size, bandCount))
+            bool over = cells > ABMapSizeLimit.CellBudget;
+            if (over)
             {
                 GUI.color = new Color(1f, 0.4f, 0.4f);
             }
             Widgets.Label(new Rect(infoX, infoY, infoW, 24f), "AB_LevelsCells".Translate(
                 cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0")));
-            GUI.color = old;
             infoY += 26f;
+            if (over)
+            {
+                Widgets.Label(new Rect(infoX, infoY, infoW, 44f),
+                    "AB_LevelsOverBudget".Translate(
+                        (cells / (float)ABMapSizeLimit.CellBudget).ToString("0.0")));
+                infoY += 46f;
+            }
+            GUI.color = old;
 
             // Headroom: the useful question while spending a budget is "what else could I
             // afford", not only "what am I spending". Makes the dimension-versus-levels

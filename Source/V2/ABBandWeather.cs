@@ -47,10 +47,12 @@ namespace AsAboveSoBelow
             return temperature * 0.0058f;
         }
 
-        /// <summary>Outdoor temperature as this band experiences it.</summary>
-        internal static float BandOutdoorTemp(Map map, int level)
+        /// <summary>Outdoor temperature as this band experiences it. Takes the band
+        /// component so the colony's SNAPSHOTTED climate is used rather than the live
+        /// settings - see ABBandMap.SnapshotClimate.</summary>
+        internal static float BandOutdoorTemp(Map map, ABBandMap bands, int level)
         {
-            return map.mapTemperature.OutdoorTemp + ABBandEnv.TempOffsetForLevel(level);
+            return map.mapTemperature.OutdoorTemp + ABBandEnv.TempOffsetForLevel(bands, level);
         }
 
         /// <summary>Vanilla's own outdoor test from DoCellSteadyEffects, so the rain-to-snow
@@ -151,7 +153,7 @@ namespace AsAboveSoBelow
             int seeded = 0;
             for (int band = bands.surfaceBand + 1; band < bands.bandCount; band++)
             {
-                float t = outdoor + ABBandEnv.TempOffsetForLevel(band - bands.surfaceBand);
+                float t = outdoor + ABBandEnv.TempOffsetForLevel(bands, band - bands.surfaceBand);
                 if (t >= 0f)
                 {
                     continue; // this level is above freezing today; no snow line here
@@ -242,7 +244,7 @@ namespace AsAboveSoBelow
                 // Unconditional - see the class note. Level 0 recomputes to exactly
                 // vanilla's value, so the surface is untouched in behaviour.
                 MeltRef(__instance) = ABBandWeather.MeltAmountAt(
-                    ABBandWeather.BandOutdoorTemp(map, bands.LevelOf(c)));
+                    ABBandWeather.BandOutdoorTemp(map, bands, bands.LevelOf(c)));
             }
             catch (Exception e)
             {
@@ -274,7 +276,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (ABBandWeather.BandOutdoorTemp(map, level) >= 0f)
+                if (ABBandWeather.BandOutdoorTemp(map, bands, level) >= 0f)
                 {
                     return; // warm enough up here for it to stay rain
                 }
@@ -349,7 +351,7 @@ namespace AsAboveSoBelow
                     return false; // (a) underground: no sky, no weather to see
                 }
                 bool freezing = level > 0
-                    && ABBandWeather.BandOutdoorTemp(map, level) < 0f;
+                    && ABBandWeather.BandOutdoorTemp(map, bands, level) < 0f;
                 if (!freezing || __instance.RainRate <= 0.001f)
                 {
                     ABBandWeather.EndSubstitution();
@@ -451,7 +453,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                __result *= ABBandEnv.WindFactorForLevel(bands.LevelOf(parent.Position));
+                __result *= ABBandEnv.WindFactorForLevel(bands, bands.LevelOf(parent.Position));
             }
             catch
             {
@@ -515,7 +517,8 @@ namespace AsAboveSoBelow
                     // Mouse is over the UI, not the map: answer for the level being viewed.
                     label = "Outdoors".Translate().CapitalizeFirst();
                     temp = map.mapTemperature.OutdoorTemp
-                        + ABBandEnv.TempOffsetForLevel(ABBandView.CurrentLevel(map));
+                        + ABBandEnv.TempOffsetForLevel(ABBands.CompOf(map),
+                            ABBandView.CurrentLevel(map));
                 }
                 else
                 {
@@ -642,7 +645,7 @@ namespace AsAboveSoBelow
                     return;
                 }
                 int level = bands.LevelOf(parent.Position);
-                float factor = ABBandEnv.WindFactorForLevel(level);
+                float factor = ABBandEnv.WindFactorForLevel(bands, level);
                 if (Mathf.Approximately(factor, 1f))
                 {
                     return;

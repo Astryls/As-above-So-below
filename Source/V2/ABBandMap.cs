@@ -54,6 +54,36 @@ namespace AsAboveSoBelow
         /// <summary>Which band index is the surface (level 0).</summary>
         public int surfaceBand;
 
+        /// <summary>
+        /// THE COLONY'S OWN CLIMATE, copied from the settings at generation and scribed.
+        ///
+        /// Same reasoning as bandCount/bandHeight sitting here rather than being read live:
+        /// a generated world does not change shape because a slider moved. Reading the live
+        /// settings for temperature would silently re-climate every existing save - a player
+        /// tuning the alpine numbers for a NEW colony would melt the snow line and kill the
+        /// crops in the one they have been running for three years. Null on a map generated
+        /// before this existed, which the resolver in ABBandEnv treats as "fall back to
+        /// settings, then defaults".
+        /// </summary>
+        public List<float> climateSky;
+
+        public List<float> climateDeep;
+
+        public List<float> climateWind;
+
+        /// <summary>Freeze the current settings onto this map. Called once, beside Setup.</summary>
+        public void SnapshotClimate(ABSettings s)
+        {
+            if (s == null)
+            {
+                return;
+            }
+            s.EnsureClimateLists();
+            climateSky = new List<float>(s.skyTempOffsets);
+            climateDeep = new List<float>(s.deepTempOffsets);
+            climateWind = new List<float>(s.skyWindFactors);
+        }
+
         /// <summary>The biome the basement was carved as, or null for plain solid rock.
         ///
         /// This is V2's stand-in for V1's <c>map.pocketTileInfo.PrimaryBiome</c>. V1 got
@@ -281,6 +311,9 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref bandCount, "AB2_bandCount", 1);
             Scribe_Values.Look(ref bandHeight, "AB2_bandHeight", 0);
             Scribe_Values.Look(ref surfaceBand, "AB2_surfaceBand", 0);
+            Scribe_Collections.Look(ref climateSky, "AB2_climateSky", LookMode.Value);
+            Scribe_Collections.Look(ref climateDeep, "AB2_climateDeep", LookMode.Value);
+            Scribe_Collections.Look(ref climateWind, "AB2_climateWind", LookMode.Value);
             Scribe_Defs.Look(ref basementBiome, "AB2_basementBiome");
             Scribe_Collections.Look(ref openedBands, "AB2_openedBands", LookMode.Value);
             if (Scribe.mode == LoadSaveMode.PostLoadInit && openedBands == null)

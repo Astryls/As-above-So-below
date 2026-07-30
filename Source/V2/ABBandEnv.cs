@@ -69,7 +69,12 @@ namespace AsAboveSoBelow
         /// Levels beyond the table extrapolate at the last step so a taller stack stays
         /// monotonic instead of falling off the end of the array.
         /// </summary>
-        private static readonly float[] SkyTempOffsets = { 0f, -7f, -16f, -35f };
+        public static readonly float[] DefaultSkyTempOffsets = { -7f, -16f, -35f };
+
+        /// <summary>Deep rock does NOT keep getting colder - it converges on a stable
+        /// temperature, and real caves warm again with depth. Flat by default; a geothermal
+        /// or a freezing gradient is now the player's call rather than ours.</summary>
+        public static readonly float[] DefaultDeepTempOffsets = { -6f, -6f, -6f };
 
         /// <summary>Wind multiplier by level. Exposed ridges catch more wind, and this is
         /// the one place altitude pays the player back for the cold. Applied to wind TURBINE
@@ -80,7 +85,43 @@ namespace AsAboveSoBelow
         /// Below the surface it is ZERO: there is no wind in a sealed basement. Vanilla's
         /// own roof check in RecalculateBlockages very likely zeroes a buried turbine
         /// already, but stating it here means the rule does not depend on that.</summary>
-        private static readonly float[] WindFactors = { 1f, 1.15f, 1.3f, 1.5f };
+        public static readonly float[] DefaultSkyWindFactors = { 1.15f, 1.3f, 1.5f };
+
+        /// <summary>
+        /// CLIMATE IS SNAPSHOTTED PER COLONY, NOT READ LIVE FROM SETTINGS.
+        ///
+        /// <c>ABBandMap.SnapshotClimate</c> copies the settings onto the map component at
+        /// generation and scribes them, exactly as the band layout itself is. Reading the
+        /// live settings instead would re-climate every EXISTING save the moment a slider
+        /// moved - dragging a settings bar would trigger global warming in a colony that had
+        /// been running for three years, silently melting its snow line and killing its
+        /// crops. A colony's climate is part of the world it was generated into.
+        ///
+        /// Falls back to the settings, then to the defaults above, so a map generated before
+        /// snapshotting existed (or one mid-generation, before Setup runs) still answers
+        /// sensibly.
+        /// </summary>
+        private static float FromTable(List<float> snapshot, List<float> configured,
+            float[] fallback, int index)
+        {
+            List<float> table = snapshot != null && snapshot.Count > 0 ? snapshot : configured;
+            if (table == null || table.Count == 0)
+            {
+                table = null;
+            }
+            int count = table != null ? table.Count : fallback.Length;
+            if (index < count)
+            {
+                return table != null ? table[index] : fallback[index];
+            }
+            // Past the table: continue at the last step rather than clamping, so an eighth
+            // level is colder than the seventh instead of identical to it.
+            float last = table != null ? table[count - 1] : fallback[count - 1];
+            float prev = count >= 2
+                ? (table != null ? table[count - 2] : fallback[count - 2])
+                : last;
+            return last + (last - prev) * (index - count + 1);
+        }
 
         private static BiomeDef undergroundBiome;
 
@@ -141,45 +182,50 @@ namespace AsAboveSoBelow
                 ?? map.Biome;
         }
 
-        public static float TempOffsetForLevel(int level)
+        /// <summary>Temperature offset for a level, preferring the colony's own snapshot.
+        /// Pass the band component wherever it is already in hand - the temperature patch
+        /// alone runs this hundreds of thousands of times per sample.</summary>
+        public static float TempOffsetForLevel(ABBandMap bands, int level)
         {
             if (level == 0)
             {
                 return 0f;
             }
+            ABSettings s = ABMod.Settings;
             if (level > 0)
             {
-                if (level < SkyTempOffsets.Length)
-                {
-                    return SkyTempOffsets[level];
-                }
-                // Past the table: continue at the last step rather than clamping, so an
-                // eighth level is colder than the seventh instead of identical to it.
-                int last = SkyTempOffsets.Length - 1;
-                float step = SkyTempOffsets[last] - SkyTempOffsets[last - 1];
-                return SkyTempOffsets[last] + step * (level - last);
+                return FromTable(bands?.climateSky, s?.skyTempOffsets,
+                    DefaultSkyTempOffsets, level - 1);
             }
-            // Deep rock does NOT keep getting colder - it converges on a stable
-            // temperature, and real caves warm again with depth. Held flat rather than
-            // scaled: a geothermal warming trend is defensible but it would change the
-            // balance of existing basements, and nothing has asked for it yet.
-            return BasementTempOffset;
+            return FromTable(bands?.climateDeep, s?.deepTempOffsets,
+                DefaultDeepTempOffsets, -level - 1);
+        }
+
+        /// <summary>Settings-only overload, for callers with no map in hand (the settings
+        /// preview, principally).</summary>
+        public static float TempOffsetForLevel(int level)
+        {
+            return TempOffsetForLevel(null, level);
         }
 
         /// <summary>Wind turbine output multiplier for a level. 0 underground.</summary>
-        public static float WindFactorForLevel(int level)
+        public static float WindFactorForLevel(ABBandMap bands, int level)
         {
+            if (level == 0)
+            {
+                return 1f;
+            }
             if (level < 0)
             {
                 return 0f;
             }
-            if (level < WindFactors.Length)
-            {
-                return WindFactors[level];
-            }
-            int last = WindFactors.Length - 1;
-            float step = WindFactors[last] - WindFactors[last - 1];
-            return WindFactors[last] + step * (level - last);
+            return FromTable(bands?.climateWind, ABMod.Settings?.skyWindFactors,
+                DefaultSkyWindFactors, level - 1);
+        }
+
+        public static float WindFactorForLevel(int level)
+        {
+            return WindFactorForLevel(null, level);
         }
     }
 
@@ -235,7 +281,7 @@ namespace AsAboveSoBelow
                 {
                     return; // a real interior; vanilla's room temperature is correct
                 }
-                tempResult += ABBandEnv.TempOffsetForLevel(level);
+                tempResult += ABBandEnv.TempOffsetForLevel(bands, level);
             }
             catch
             {

@@ -30,8 +30,72 @@ namespace AsAboveSoBelow
         /// <summary>Lift the total-cell budget on colony maps. See ABMapSizeLimit for why
         /// the budget exists: 1.6's path grid is an IJobParallelFor over EVERY cell, and a
         /// banded map is every level plus gutters tall, so the stacked total is what the
-        /// pathfinder pays.</summary>
+        /// pathfinder pays.
+        ///
+        /// ONLY EVER SET TRUE THROUGH THE CONFIRMATION DIALOG. The checkbox writes to a
+        /// local, so the state itself encodes "the player read the warning and accepted it"
+        /// and no separate acknowledgement flag is needed. Turning it back OFF is immediate -
+        /// there is never a reason to make returning to a supported configuration harder.</summary>
         public bool unclampMapSize;
+
+        // ---- climate -------------------------------------------------------
+        //
+        // Per-level temperature offsets and wind factors. SNAPSHOTTED onto ABBandMap at
+        // generation (see ABBandMap.SnapshotClimate) so changing them never re-climates an
+        // existing colony. Always three entries each: the level plan tops out at 3 up and
+        // 3 down, and showing all six regardless of the current plan lets a player tune a
+        // layout before they choose it.
+
+        public List<float> skyTempOffsets;
+
+        public List<float> deepTempOffsets;
+
+        public List<float> skyWindFactors;
+
+        /// <summary>Climate presets. Not just convenience: they give the numbers a story, so
+        /// a player who does not want to reason about lapse rates still gets a coherent
+        /// mountain rather than whatever the sliders happened to be left at.</summary>
+        public static readonly float[][] SkyPresets =
+        {
+            new[] { -4f, -9f, -18f },   // Gentle - the peak is cold, not lethal
+            new[] { -7f, -16f, -35f },  // Standard - +2 is the seasonal line, +3 a permanent cap
+            new[] { -10f, -24f, -50f }  // Alpine - only the surface is comfortable
+        };
+
+        public static readonly float[][] DeepPresets =
+        {
+            new[] { -4f, -4f, -4f },
+            new[] { -6f, -6f, -6f },
+            new[] { -8f, -10f, -12f }
+        };
+
+        /// <summary>Rebuild any climate list that is missing or the wrong length. Called on
+        /// load and before every read: a hand-edited config or a version that shipped a
+        /// different level cap must not produce an index-out-of-range deep inside the
+        /// temperature patch.</summary>
+        public void EnsureClimateLists()
+        {
+            skyTempOffsets = Fix(skyTempOffsets, ABBandEnv.DefaultSkyTempOffsets);
+            deepTempOffsets = Fix(deepTempOffsets, ABBandEnv.DefaultDeepTempOffsets);
+            skyWindFactors = Fix(skyWindFactors, ABBandEnv.DefaultSkyWindFactors);
+        }
+
+        private static List<float> Fix(List<float> list, float[] defaults)
+        {
+            if (list == null)
+            {
+                return new List<float>(defaults);
+            }
+            while (list.Count < defaults.Length)
+            {
+                list.Add(defaults[list.Count]);
+            }
+            if (list.Count > defaults.Length)
+            {
+                list.RemoveRange(defaults.Length, list.Count - defaults.Length);
+            }
+            return list;
+        }
 
         // ---- level plan ----------------------------------------------------
         //
@@ -140,47 +204,245 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.3f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
+            Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
+            Scribe_Collections.Look(ref deepTempOffsets, "deepTempOffsets", LookMode.Value);
+            Scribe_Collections.Look(ref skyWindFactors, "skyWindFactors", LookMode.Value);
+            if (Scribe.mode == LoadSaveMode.PostLoadInit || Scribe.mode == LoadSaveMode.LoadingVars)
+            {
+                EnsureClimateLists();
+            }
         }
 
-        /// <summary>The map-size cap banner. Kept at the very top rather than filed under a
-        /// heading, because it changes how every new colony generates and is the single
-        /// setting most likely to be blamed for bad performance if a player flips it and
-        /// then forgets they did.</summary>
-        private void DrawMapSizeCap(Listing_Standard list)
+        // ---- window ---------------------------------------------------------
+
+        private enum Tab
         {
-            bool before = unclampMapSize;
-            list.CheckboxLabeled(
-                "AB_UnclampMapSize".Translate(ABMapSizeLimit.CellBudget.ToString("N0")),
-                ref unclampMapSize,
-                "AB_UnclampMapSizeTip".Translate(ABMapSizeLimit.CellBudget.ToString("N0")));
+            Performance,
+            Climate,
+            Sky,
+            Basement,
+            Diagnostics
+        }
+
+        private Tab tab = Tab.Performance;
+
+        private Vector2 scroll;
+
+        /// <summary>Measured from the PREVIOUS frame's listing. A scroll view needs its
+        /// content height up front, and a Listing_Standard only knows how tall it was after
+        /// it has drawn - so the height always lags one frame, which is invisible and is how
+        /// every scrolling settings panel in the game works.</summary>
+        private float viewHeight = 600f;
+
+        public void DoWindowContents(Rect inRect)
+        {
+            EnsureClimateLists();
+
+            // TabDrawer paints its row ABOVE the rect it is given, so the body has to start
+            // one tab-height down or the tabs land off the top of the window.
+            Rect body = new Rect(inRect.x, inRect.y + 32f, inRect.width, inRect.height - 32f);
+            Widgets.DrawMenuSection(body);
+            TabDrawer.DrawTabs(body, new List<TabRecord>
+            {
+                Rec("AB_TabPerformance", Tab.Performance),
+                Rec("AB_TabClimate", Tab.Climate),
+                Rec("AB_TabSky", Tab.Sky),
+                Rec("AB_TabBasement", Tab.Basement),
+                Rec("AB_TabDiagnostics", Tab.Diagnostics)
+            });
+
+            Rect inner = body.ContractedBy(12f);
+            Rect view = new Rect(0f, 0f, inner.width - 20f, viewHeight);
+            Widgets.BeginScrollView(inner, ref scroll, view);
+            Listing_Standard list = new Listing_Standard();
+            list.Begin(view);
+            switch (tab)
+            {
+                case Tab.Performance: DoPerformance(list); break;
+                case Tab.Climate: DoClimate(list); break;
+                case Tab.Sky: DoSky(list); break;
+                case Tab.Basement: DoBasement(list); break;
+                default: DoDiagnostics(list); break;
+            }
+            viewHeight = list.CurHeight + 16f;
+            list.End();
+            Widgets.EndScrollView();
+        }
+
+        private TabRecord Rec(string key, Tab which)
+        {
+            return new TabRecord(key.Translate(), delegate
+            {
+                tab = which;
+                scroll = Vector2.zero; // a fresh tab should start at its top, not inherit
+            }, tab == which);
+        }
+
+        // ---- performance tab -------------------------------------------------
+
+        /// <summary>
+        /// The cap, and the one place this mod tells a player it will not help them.
+        ///
+        /// The budget is deliberately NOT a slider. A number a player can nudge invites
+        /// nudging, and every nudge lands them a little further into a configuration that
+        /// cannot be supported without ever showing them a warning. One locked value and one
+        /// gated escape hatch means anyone running an unsupported map made an explicit,
+        /// dated decision to do so.
+        /// </summary>
+        private void DoPerformance(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabPerformance".Translate());
+            Text.Font = GameFont.Small;
+
+            string budget = ABMapSizeLimit.CellBudget.ToString("N0");
 
             if (unclampMapSize)
             {
                 Color old = GUI.color;
                 GUI.color = WarnRed;
+                Text.Font = GameFont.Medium;
+                list.Label("AB_UnclampBannerTitle".Translate());
+                Text.Font = GameFont.Small;
                 list.Label("AB_UnclampMapSizeWarning".Translate());
                 GUI.color = old;
-            }
-            if (before != unclampMapSize)
-            {
-                Write();
+                list.Gap(6f);
             }
 
-            // The authoritative place to choose levels is the advanced-config screen while
-            // starting a colony; this row is the persisted default that screen opens with,
-            // and the only way to see it outside world creation.
+            // The checkbox writes to a LOCAL. unclampMapSize itself only ever becomes true
+            // inside the confirmation callback, so the tick cannot latch on a misclick and
+            // the stored value always means "warning read and accepted".
+            bool want = unclampMapSize;
+            list.CheckboxLabeled("AB_UnclampMapSize".Translate(budget), ref want,
+                "AB_UnclampMapSizeTip".Translate(budget));
+            if (want != unclampMapSize)
+            {
+                if (want)
+                {
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                        "AB_UnclampConfirm".Translate(budget),
+                        delegate
+                        {
+                            unclampMapSize = true;
+                            Write();
+                        },
+                        destructive: true,
+                        "AB_UnclampConfirmTitle".Translate()));
+                }
+                else
+                {
+                    // Going back to a supported configuration is never gated.
+                    unclampMapSize = false;
+                    Write();
+                }
+            }
+
+            list.Gap(8f);
             list.Label("AB_LevelsDefault".Translate(upperLevels, lowerLevels,
                 ABMapSizeLimit.BandCount));
+
+            Color dim = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_BudgetExplain".Translate(budget));
+            GUI.color = dim;
         }
 
-        public void DoWindowContents(Rect inRect)
+        // ---- climate tab -----------------------------------------------------
+
+        /// <summary>A concrete surface temperature to show the offsets against. The live map
+        /// when there is one, otherwise a plain 20 C - an offset alone ("-35") means nothing
+        /// to most players, but "20 C surface becomes -15 C here" does.</summary>
+        private static float ReferenceTemp()
         {
-            Listing_Standard list = new Listing_Standard();
-            list.Begin(inRect);
+            Map m = Current.ProgramState == ProgramState.Playing ? Find.CurrentMap : null;
+            if (m != null)
+            {
+                try
+                {
+                    return m.mapTemperature.OutdoorTemp;
+                }
+                catch
+                {
+                }
+            }
+            return 20f;
+        }
 
-            DrawMapSizeCap(list);
-            list.GapLine();
+        private void DoClimate(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabClimate".Translate());
+            Text.Font = GameFont.Small;
 
+            Color old = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_ClimateNewColonyNote".Translate());
+            GUI.color = old;
+            list.Gap(4f);
+
+            Rect presetRow = list.GetRect(30f);
+            float w = presetRow.width / 3f - 6f;
+            if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, w, 30f),
+                "AB_PresetGentle".Translate()))
+            {
+                ApplyPreset(0);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + w + 9f, presetRow.y, w, 30f),
+                "AB_PresetStandard".Translate()))
+            {
+                ApplyPreset(1);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + (w + 9f) * 2f, presetRow.y, w, 30f),
+                "AB_PresetAlpine".Translate()))
+            {
+                ApplyPreset(2);
+            }
+            list.Gap(10f);
+
+            float reference = ReferenceTemp();
+
+            list.Label("AB_ClimateSkyHeading".Translate());
+            for (int i = 0; i < skyTempOffsets.Count; i++)
+            {
+                list.Label("AB_ClimateLevelTemp".Translate("+" + (i + 1),
+                    skyTempOffsets[i].ToString("0"),
+                    (reference + skyTempOffsets[i]).ToString("0")));
+                skyTempOffsets[i] = Mathf.Round(list.Slider(skyTempOffsets[i], -60f, 0f));
+            }
+
+            list.Gap(6f);
+            list.Label("AB_ClimateDeepHeading".Translate());
+            for (int i = 0; i < deepTempOffsets.Count; i++)
+            {
+                list.Label("AB_ClimateLevelTemp".Translate("-" + (i + 1),
+                    deepTempOffsets[i].ToString("0"),
+                    (reference + deepTempOffsets[i]).ToString("0")));
+                deepTempOffsets[i] = Mathf.Round(list.Slider(deepTempOffsets[i], -30f, 15f));
+            }
+
+            list.Gap(6f);
+            list.Label("AB_ClimateWindHeading".Translate());
+            GUI.color = NoteDim;
+            list.Label("AB_ClimateWindNote".Translate());
+            GUI.color = old;
+            for (int i = 0; i < skyWindFactors.Count; i++)
+            {
+                list.Label("AB_ClimateLevelWind".Translate("+" + (i + 1),
+                    Mathf.RoundToInt((skyWindFactors[i] - 1f) * 100f).ToString()));
+                skyWindFactors[i] = Mathf.Round(list.Slider(skyWindFactors[i], 1f, 3f) * 20f) / 20f;
+            }
+        }
+
+        private void ApplyPreset(int index)
+        {
+            skyTempOffsets = new List<float>(SkyPresets[index]);
+            deepTempOffsets = new List<float>(DeepPresets[index]);
+        }
+
+        // ---- sky tab ---------------------------------------------------------
+
+        private void DoSky(Listing_Standard list)
+        {
             Text.Font = GameFont.Medium;
             list.Label("AB_SkyHeading".Translate());
             Text.Font = GameFont.Small;
@@ -207,8 +469,12 @@ namespace AsAboveSoBelow
 
             list.Label("AB_SkyVegetationDensity".Translate(skyVegetationDensity.ToString("0.0")));
             skyVegetationDensity = list.Slider(skyVegetationDensity, 0f, 2f);
+        }
 
-            list.GapLine();
+        // ---- basement tab ----------------------------------------------------
+
+        private void DoBasement(Listing_Standard list)
+        {
             Text.Font = GameFont.Medium;
             list.Label("AB_BasementHeading".Translate());
             Text.Font = GameFont.Small;
@@ -251,8 +517,16 @@ namespace AsAboveSoBelow
                     cavernFormations = list.Slider(cavernFormations, 0f, 2f);
                 }
             }
+        }
 
-            list.GapLine();
+        // ---- diagnostics tab -------------------------------------------------
+
+        private void DoDiagnostics(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabDiagnostics".Translate());
+            Text.Font = GameFont.Small;
+
             list.CheckboxLabeled("AB_VerboseLogging".Translate(), ref verboseLogging,
                 "AB_VerboseLoggingTip".Translate());
 
@@ -260,8 +534,6 @@ namespace AsAboveSoBelow
             GUI.color = NoteDim;
             list.Label("AB_SettingsGenerationNote".Translate());
             GUI.color = oldColor;
-
-            list.End();
         }
     }
 }

@@ -209,6 +209,7 @@ namespace AsAboveSoBelow
                         Log.Warning(ABLog.Tag + " V2: in-window carve did not run; carving"
                             + " post-init (slow path).");
                         bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
+                        bands.SnapshotClimate(ABMod.Settings);
                         var slow = System.Diagnostics.Stopwatch.StartNew();
                         RescueStrandedColonists(__result, bands);
                         Carve(__result, bands);
@@ -282,6 +283,10 @@ namespace AsAboveSoBelow
                     // traffic (from GenSpawn internals) cannot pollute the genstep table.
                     ABGenProfile.Disarm();
                     bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
+                    // Freeze the climate onto the colony at the same moment as its shape:
+                    // read live from settings instead and moving a slider would re-climate
+                    // every existing save.
+                    bands.SnapshotClimate(ABMod.Settings);
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     RescueStrandedColonists(map, bands);
                     Carve(map, bands);

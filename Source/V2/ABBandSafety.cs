@@ -43,7 +43,16 @@ namespace AsAboveSoBelow
         /// the same overhang produces a visibly sawn-off building at the top of the level.
         /// Ten matches vanilla's own NoBuildEdgeWidth, which is the number vanilla uses for
         /// "structures do not belong this close to the boundary".</summary>
-        internal const int StructureSeamMargin = 10;
+        /// <remarks>DERIVED, not constant. A flat 10 was 16% of a 126-tall band gone at both
+        /// ends versus 10% at 190, and it showed: two different scatterers reported "could
+        /// not find cell to generate at" across three test maps once the band-local
+        /// CloseToEdge fix had already tightened the legal area on the other axis. Scaling
+        /// with the band keeps the intent (structures do not sit astride a seam) without
+        /// squeezing small levels until generation starves.</remarks>
+        internal static int SeamMarginFor(int bandHeight)
+        {
+            return Mathf.Clamp(bandHeight / 24, 4, 12);
+        }
 
         /// <summary>How often the sweep looks for pawns in the void. Two seconds: this is a
         /// net for a bug that should never fire, not a gameplay system, and it walks every
@@ -423,7 +432,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                int m = ABBandSafety.StructureSeamMargin;
+                int m = ABBandSafety.SeamMarginFor(band.Height);
                 if (band.Height <= 2 * m)
                 {
                     return; // a band too short to afford the margin keeps vanilla behaviour
