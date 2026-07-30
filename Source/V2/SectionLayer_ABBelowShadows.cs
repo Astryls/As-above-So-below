@@ -141,8 +141,6 @@ namespace AsAboveSoBelow
             LayerSubMesh sub = GetSubMesh(MatBases.SunShadow);
             try
             {
-                int slot = bands.Slot;
-                TerrainDef air = ABDefOf.AB_OpenAir;
                 TerrainGrid terrain = map.terrainGrid;
                 FogGrid fog = map.fogGrid;
                 Building[] edifices = map.edificeGrid.InnerArray;
@@ -177,11 +175,19 @@ namespace AsAboveSoBelow
                         // matches how the geometry behaves - AddSkirt only emits a side
                         // whose neighbour is shorter, so a caster with no see-through
                         // neighbour has nothing visible to contribute anyway.
-                        if (!AnySeeThroughAround(map, bands, terrain, air, here))
+                        //
+                        // The neighbour scan also supplies the DESCENT. This layer used to
+                        // step `z - slot` unconditionally, which is the one-descent bug for
+                        // the sixth time: from level +1 that single step lands on the opaque
+                        // surface and works, but from +2 or +3 it lands in the OPEN AIR of
+                        // the level between, which holds no edifices - so shadows appeared
+                        // on the first upper level and nowhere above it. See
+                        // ABBands.TryResolveVisibleBelow for the one definition.
+                        if (!TryResolveDropAround(map, bands, terrain, here, out int drop))
                         {
                             continue;
                         }
-                        IntVec3 below = new IntVec3(x, 0, z - slot);
+                        IntVec3 below = new IntVec3(x, 0, z - drop);
                         if (!below.InBounds(map) || bands.InGutter(below) || fog.IsFogged(below))
                         {
                             continue;
@@ -294,11 +300,23 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>True when this cell or any of its eight neighbours is open air on this
-        /// band - i.e. somewhere the shadow could actually be seen from up here.</summary>
-        private static bool AnySeeThroughAround(Map map, ABBandMap bands, TerrainGrid terrain,
-            TerrainDef air, IntVec3 c)
+        /// <summary>
+        /// Is this cell, or any of its eight neighbours, see-through - and if so, how far
+        /// down does the view actually reach?
+        ///
+        /// The mask and the descent are answered together deliberately. A caster at a
+        /// mountain's outer edge sits under an OPAQUE cap, so it can never resolve a descent
+        /// of its own; the level it is casting onto is the one its see-through neighbours
+        /// look down at. The SMALLEST drop among the nine is taken: that is the highest
+        /// visible floor, which is the surface most of the surrounding view is showing, so
+        /// the shadow stays attached to the mass that threw it instead of being drawn
+        /// against a floor two levels further down that happens to peek through one corner.
+        /// </summary>
+        private static bool TryResolveDropAround(Map map, ABBandMap bands, TerrainGrid terrain,
+            IntVec3 c, out int drop)
         {
+            drop = 0;
+            bool any = false;
             for (int i = 0; i < 9; i++)
             {
                 IntVec3 n = i == 8 ? c : c + GenAdj.AdjacentCells[i];
@@ -306,12 +324,17 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (ABBands.ShowsBelow(terrain.TerrainAt(n)))
+                if (!ABBands.TryResolveVisibleBelow(map, bands, n, out _, out int d) || d <= 0)
                 {
-                    return true;
+                    continue;
+                }
+                if (!any || d < drop)
+                {
+                    drop = d;
+                    any = true;
                 }
             }
-            return false;
+            return any;
         }
 
     }
@@ -375,7 +398,6 @@ namespace AsAboveSoBelow
             }
             try
             {
-                int slot = bands.Slot;
                 TerrainGrid terrain = map.terrainGrid;
                 Building[] edifices = map.edificeGrid.InnerArray;
                 CellIndices indices = map.cellIndices;
@@ -397,7 +419,15 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        IntVec3 below = new IntVec3(i, 0, j - slot);
+                        // Was a single `j - slot` step - the one-descent bug's SEVENTH
+                        // appearance, and the other half of "shadows show on upper 1 but not
+                        // upper 2 or 3": two stacked see-through levels put that step in the
+                        // void. One definition, shared with everything else that looks down.
+                        if (!ABBands.TryResolveVisibleBelow(map, bands, above,
+                            out IntVec3 below, out _))
+                        {
+                            continue;
+                        }
                         if (!below.InBounds(map) || bands.InGutter(below))
                         {
                             continue;

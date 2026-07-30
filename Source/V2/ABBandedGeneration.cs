@@ -503,7 +503,6 @@ namespace AsAboveSoBelow
                     ABGenProfile.Phase("Sky clear band " + band, phase.Elapsed.TotalMilliseconds);
                     phase.Restart();
                     ABSkyBandGen.Generate(map, bands, band, rocks, noises);
-                    SeedHighAltitudeSnow(map, bands, band);
                     ABGenProfile.Phase("SkyBandGen band " + band, phase.Elapsed.TotalMilliseconds);
                 }
             }
@@ -526,41 +525,20 @@ namespace AsAboveSoBelow
             ABGenProfile.Phase("Refog", tail.Elapsed.TotalMilliseconds);
         }
 
-        /// <summary>
-        /// The snow line, seeded at generation.
-        ///
-        /// The PERSISTENT mechanism is just the per-level temperature offset: vanilla melts
-        /// snow using each cell's own temperature, so a cold high level holds snow after the
-        /// surface has thawed, and the line moves with the seasons for free. This pass only
-        /// supplies the opening state, so a brand-new high summit looks the part instead of
-        /// waiting for the first snowfall - and only where it would actually survive, so a
-        /// desert peak does not generate under improbable snow.
-        /// </summary>
-        private static void SeedHighAltitudeSnow(Map map, ABBandMap bands, int band)
-        {
-            int level = band - bands.surfaceBand;
-            if (level < 2 || map.mapTemperature == null)
-            {
-                return;
-            }
-            float temp = map.mapTemperature.OutdoorTemp + ABBandEnv.TempOffsetForLevel(level);
-            if (temp > -2f)
-            {
-                return;
-            }
-            float depth = Mathf.Clamp01(0.35f + 0.2f * (level - 2));
-            int cells = 0;
-            foreach (IntVec3 c in bands.RectOfBand(band))
-            {
-                if (c.InBounds(map) && map.roofGrid.RoofAt(c) == null)
-                {
-                    map.snowGrid.SetDepth(c, depth);
-                    cells++;
-                }
-            }
-            ABLog.Dev("V2: seeded snow on level +" + level + " (" + cells + " cells, depth "
-                + depth.ToString("0.00") + ", effective temp " + temp.ToString("0.0") + ").");
-        }
+        // The generation-time SNOW SEEDING that used to live here is deliberately gone.
+        //
+        // It blanketed level +2 and above in snow the moment the map was made, whenever the
+        // level's effective temperature was below -2 C. As a design that reads badly: the
+        // player buys three upper levels and the top one arrives pre-frozen, which makes the
+        // highest and most expensive level look like a different biome rather than a higher
+        // part of the same mountain.
+        //
+        // The real snow line is NOT lost with it, and that is why removing this is safe:
+        // vanilla melts and accumulates snow using each CELL's own temperature, and
+        // ABBandEnv's per-level temperature offset already makes high levels cold. So high
+        // ground still collects snow from actual snowfall and holds it after the surface has
+        // thawed, and the line still moves with the seasons - it is just earned rather than
+        // painted on at t=0.
 
         private static void FillRock(Map map, CellRect rect, List<ThingDef> rocks,
             List<Perlin> noises, int depth)

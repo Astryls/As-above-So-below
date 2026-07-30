@@ -23,6 +23,18 @@ namespace AsAboveSoBelow
 
         public static bool DrawBelowLighting = true;
 
+        /// <summary>The below-band WATER DEPTH pass (SectionLayer_ABBelowWatergen). Off makes
+        /// water seen from an upper level vanish again, which is the confirmation that the
+        /// depth pass - not masking or translation - is what was missing.</summary>
+        public static bool DrawBelowWater = true;
+
+        /// <summary>Republish the water shader's _MapSize as one Slot instead of the whole
+        /// stack. A/B this against vanilla in one session: with it OFF the water surface is
+        /// stretched bandCount-times north-south, with it ON the scale is square again. The
+        /// one honest test of whether _MapSize is what the shader UVs its surface by, since
+        /// the shader itself lives in an asset bundle and cannot be read.</summary>
+        public static bool BandWaterGlobals = true;
+
         /// <summary>Traces every step of a cross-band transit. Off by default (it is noisy
         /// and per-move); the stairs order is the one flow where seeing each step beats
         /// reasoning about it.</summary>
@@ -53,7 +65,9 @@ namespace AsAboveSoBelow
             return "terrain=" + DrawBelowTerrain
                 + " things=" + DrawBelowThings
                 + " airMask=" + DrawBelowAirMask
-                + " lighting=" + DrawBelowLighting;
+                + " lighting=" + DrawBelowLighting
+                + " belowWater=" + DrawBelowWater
+                + " bandWaterGlobals=" + BandWaterGlobals;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Text;
 using HarmonyLib;
 using LudeonTK;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -118,6 +119,49 @@ namespace AsAboveSoBelow
         {
             ABV2Debug.DrawBelowLighting = !ABV2Debug.DrawBelowLighting;
             V2ApplyBisect();
+        }
+
+        [DebugAction("As above", "AB2: bisect - toggle below water depth", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBelowWater()
+        {
+            ABV2Debug.DrawBelowWater = !ABV2Debug.DrawBelowWater;
+            V2ApplyBisect();
+        }
+
+        /// <summary>A/B the water shader's _MapSize between one Slot (ours) and the whole
+        /// stack (vanilla). Look at any lake while toggling: if the surface stops being
+        /// smeared north-south, _MapSize is what the shader UVs its surface by - which is a
+        /// question no amount of reading can answer, because the shader is in an asset
+        /// bundle.</summary>
+        [DebugAction("As above", "AB2: bisect - toggle band water globals", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleBandWaterGlobals()
+        {
+            ABV2Debug.BandWaterGlobals = !ABV2Debug.BandWaterGlobals;
+            if (!ABV2Debug.BandWaterGlobals)
+            {
+                // Hand the globals straight back to vanilla; SetTextures republishes its own
+                // values every frame, so one frame later this is authoritative again.
+                Map m = Find.CurrentMap;
+                if (m != null)
+                {
+                    Shader.SetGlobalVector(ShaderPropertyIDs.MapSize,
+                        new Vector4(m.Size.x, m.Size.z));
+                    Shader.SetGlobalTexture(ShaderPropertyIDs.WaterOffsetTex,
+                        m.waterInfo?.riverFlowTexture);
+                }
+            }
+            V2ApplyBisect();
+        }
+
+        /// <summary>Everything the water systems know, per band. Run it BEFORE theorising
+        /// about water: the per-band census separates "the river never generated" from "the
+        /// river generated three levels up and was carved away", and the flow/global readout
+        /// separates a missing depth pass from a stretched shader UV.</summary>
+        [DebugAction("As above", "AB2: water report", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2WaterReport()
+        {
+            Log.Warning(ABLog.Tag + " V2 water report:\n" + ABWaterBand.Report(Find.CurrentMap));
+            Messages.Message("AB2: water report written to log.", MessageTypeDefOf.TaskCompletion, false);
         }
 
         private static void V2ApplyBisect()
