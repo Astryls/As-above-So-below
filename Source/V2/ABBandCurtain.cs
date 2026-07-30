@@ -35,6 +35,15 @@ namespace AsAboveSoBelow
     /// MapEdgeClipDrawer.DrawClippers, because a textured clipper tiles from
     /// MainTextureScale/MainTextureOffset and would sample wrongly without it.
     /// </summary>
+    /// <remarks>
+    /// [StaticConstructorOnStartup] is required, not decorative: RimWorld's startup
+    /// reflection scan flags any type holding a static Unity asset field (here the
+    /// MaterialPropertyBlock, same rule as Texture2D/Material) and warns "probably needs a
+    /// StaticConstructorOnStartup attribute ... All assets must be loaded in the main
+    /// thread". The attribute alone silences it and grants permission to run the static
+    /// initialisers on the main thread during startup; no static constructor is needed.
+    /// </remarks>
+    [StaticConstructorOnStartup]
     public static class ABBandCurtain
     {
         /// <summary>How far past the map the curtain extends. The camera can be zoomed out

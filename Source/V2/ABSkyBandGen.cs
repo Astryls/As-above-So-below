@@ -76,7 +76,7 @@ namespace AsAboveSoBelow
                 }
             }
 
-            byte[] kind = Classify(solid, w, h);
+            byte[] kind = Classify(solid, w, h, out int[] edgeDist);
             // ONE central fog hole, decided up front over the whole band rather than
             // per cell, so the mass shows a single soft fog border instead of a rash of
             // little ones.
@@ -197,7 +197,196 @@ namespace AsAboveSoBelow
                 ABOreGen.ScatterOres(map, oreCells,
                     Mathf.Clamp(settings?.basementOreDensity ?? 6f, 0f, 12f) * 0.5f);
             }
-            SeedFlora(map, plateauCells, settings);
+            // ---- pass 3: the alpine plateau (option D) ----------------------
+            // Order is deliberate: tarns first so a shoreline exists before anything is
+            // scattered near it, then rim scree, then flora last so it plants against
+            // the finished terrain (and never into open water, which has no fertility).
+            CarveTarns(map, rect, w, h, kind, edgeDist, settings);
+            ScatterRimScree(map, rect, w, h, kind, edgeDist, rocks, noises);
+            SeedFlora(map, plateauCells, settings, edgeDist, rect, w);
+        }
+
+        /// <summary>No tarn water within this many cells of a drop. The user's rule -
+        /// "lakes should never spawn on upper levels near the edge" - and a sound one: a
+        /// lake lipping over a cliff would need the whole waterfall system (option E) to
+        /// make any sense, and looks broken without it.</summary>
+        private const int MinTarnEdgeDist = 6;
+
+        /// <summary>Roughly one tarn per this many eligible interior cells.</summary>
+        private const int TarnCellsPerSeed = 1100;
+
+        /// <summary>
+        /// Tarns: small alpine lakes in the plateau interior, shallow water with a mud
+        /// fringe (the moisture field already puts rich soil and mud nearby, so a tarn
+        /// reads as the reason that ground is damp).
+        ///
+        /// SHALLOW ONLY, deliberately: deep water is impassable, and an impassable pocket
+        /// on a plateau reachable solely through our wormhole stairs is exactly the kind
+        /// of thing that turns into a stuck-pawn report. Shallow water is wadeable, so the
+        /// plateau stays fully traversable.
+        ///
+        /// The edge rule is enforced PER CELL, not on the seed: every water cell must
+        /// itself be MinTarnEdgeDist from a drop, so the blob clips itself against the rim
+        /// instead of relying on radius arithmetic being right.
+        /// </summary>
+        private static void CarveTarns(Map map, CellRect rect, int w, int h, byte[] kind,
+            int[] edgeDist, ABSettings settings)
+        {
+            if (settings != null && !settings.naturalPeaks)
+            {
+                return;
+            }
+            TerrainDef water = TerrainDefOf.WaterShallow;
+            if (water == null)
+            {
+                return;
+            }
+            TerrainDef fringe = TerrainDefOf.Mud;
+            List<int> seeds = new List<int>();
+            for (int i = 0; i < kind.Length; i++)
+            {
+                if (kind[i] == KindPlateau && edgeDist[i] >= MinTarnEdgeDist + 2)
+                {
+                    seeds.Add(i);
+                }
+            }
+            if (seeds.Count == 0)
+            {
+                return;
+            }
+            int tarns = Mathf.Clamp(seeds.Count / TarnCellsPerSeed, seeds.Count >= 400 ? 1 : 0, 4);
+            if (tarns <= 0)
+            {
+                return;
+            }
+            TerrainGrid grid = map.terrainGrid;
+            int carved = 0;
+            for (int t = 0; t < tarns; t++)
+            {
+                int seed = seeds[Rand.Range(0, seeds.Count)];
+                int sx = seed % w;
+                int sz = seed / w;
+                float radius = Rand.Range(2.2f, 4.2f);
+                int reach = Mathf.CeilToInt(radius) + 2;
+                for (int dz = -reach; dz <= reach; dz++)
+                {
+                    for (int dx = -reach; dx <= reach; dx++)
+                    {
+                        int lx = sx + dx;
+                        int lz = sz + dz;
+                        if (lx < 0 || lz < 0 || lx >= w || lz >= h)
+                        {
+                            continue;
+                        }
+                        int idx = lz * w + lx;
+                        if (kind[idx] != KindPlateau || edgeDist[idx] < MinTarnEdgeDist)
+                        {
+                            continue;
+                        }
+                        IntVec3 c = new IntVec3(rect.minX + lx, 0, rect.minZ + lz);
+                        if (!c.InBounds(map))
+                        {
+                            continue;
+                        }
+                        // Deterministic per-cell jitter: an irregular shore instead of a
+                        // disc, stable across regeneration.
+                        float d = Mathf.Sqrt(dx * dx + dz * dz)
+                            + (Rand.ValueSeeded(idx * 977 + 13) - 0.5f) * 0.9f;
+                        if (d <= radius)
+                        {
+                            grid.SetTerrain(c, water);
+                            carved++;
+                        }
+                        else if (fringe != null && d <= radius + 1.1f
+                            && grid.TerrainAt(c) != water)
+                        {
+                            grid.SetTerrain(c, fringe);
+                        }
+                    }
+                }
+            }
+            if (carved > 0)
+            {
+                ABLog.Dev("Sky tarns: " + tarns + " attempted, " + carved
+                    + " shallow-water cells (all >= " + MinTarnEdgeDist + " cells from any drop).");
+            }
+        }
+
+        private const float RimChunkChance = 0.014f;
+
+        private const int MaxRimChunks = 60;
+
+        /// <summary>
+        /// Rim scree: loose stone chunks along the plateau shoulder, in the local rock
+        /// type, so the edge reads as weathered rather than cut.
+        ///
+        /// These are real haulable chunks, which is a deliberate trade the user chose:
+        /// they look right and give free stone, but every chunk is a Thing that a hauler
+        /// will eventually want to carry down the stairs. Hence the hard cap and the low
+        /// per-cell chance - this is scenery with a side of resource, not a quarry.
+        /// Restricted to the rim shoulder (edgeDist 1-4) so the plateau interior stays
+        /// clean and the chunks read as having tumbled from the edge.
+        /// </summary>
+        private static void ScatterRimScree(Map map, CellRect rect, int w, int h, byte[] kind,
+            int[] edgeDist, List<ThingDef> rocks, List<Perlin> noises)
+        {
+            if (rocks == null || rocks.Count == 0)
+            {
+                return;
+            }
+            int placed = 0;
+            for (int lz = 0; lz < h && placed < MaxRimChunks; lz++)
+            {
+                for (int lx = 0; lx < w && placed < MaxRimChunks; lx++)
+                {
+                    int idx = lz * w + lx;
+                    byte k = kind[idx];
+                    if (k != KindLedge && k != KindPlateau)
+                    {
+                        continue;
+                    }
+                    int ed = edgeDist[idx];
+                    if (ed < 1 || ed > 4 || !Rand.Chance(RimChunkChance))
+                    {
+                        continue;
+                    }
+                    IntVec3 c = new IntVec3(rect.minX + lx, 0, rect.minZ + lz);
+                    if (!c.InBounds(map) || !c.Standable(map) || c.GetEdifice(map) != null)
+                    {
+                        continue;
+                    }
+                    TerrainDef t = c.GetTerrain(map);
+                    if (t == null || t.IsWater)
+                    {
+                        continue;
+                    }
+                    ThingDef chunk = ChunkFor(rocks[ABRockGen.PickIndex(noises, c)]);
+                    if (chunk == null)
+                    {
+                        continue;
+                    }
+                    if (GenSpawn.Spawn(chunk, c, map, WipeMode.Vanish) != null)
+                    {
+                        placed++;
+                    }
+                }
+            }
+            if (placed > 0)
+            {
+                ABLog.Dev("Sky rim scree: " + placed + " stone chunks along the plateau shoulder.");
+            }
+        }
+
+        /// <summary>The chunk def for a rock type, by the "Chunk" + defName convention
+        /// every stone in the game (and every stone-adding mod) follows. Deliberately NOT
+        /// falling back to `building.mineableThing` - for some rocks that is blocks or an
+        /// ore product, and spawning steel bars on a mountain shoulder would be worse than
+        /// spawning nothing.</summary>
+        private static ThingDef ChunkFor(ThingDef rock)
+        {
+            return rock != null
+                ? DefDatabase<ThingDef>.GetNamedSilentFail("Chunk" + rock.defName)
+                : null;
         }
 
         /// <summary>
@@ -215,7 +404,8 @@ namespace AsAboveSoBelow
         /// water species simply have nowhere to land on soil and gravel, and open air and
         /// roof surfaces are never candidates because they are not plateau cells at all.
         /// </summary>
-        private static void SeedFlora(Map map, List<IntVec3> plateauCells, ABSettings settings)
+        private static void SeedFlora(Map map, List<IntVec3> plateauCells, ABSettings settings,
+            int[] edgeDist, CellRect rect, int w)
         {
             if (plateauCells == null || plateauCells.Count == 0)
             {
@@ -243,11 +433,25 @@ namespace AsAboveSoBelow
                 IntVec3 c = plateauCells[i];
                 TerrainDef t = c.GetTerrain(map);
                 if (t.fertility <= 0.01f || !c.Standable(map) || c.GetPlant(map) != null
-                    || c.GetEdifice(map) != null || !Rand.Chance(chanceBase * t.fertility))
+                    || c.GetEdifice(map) != null)
+                {
+                    continue; // open water and mud flats fall out here on fertility
+                }
+                // ALPINE CHARACTER (option D): exposure falls off inland, so growth
+                // thins toward the rim and trees effectively refuse to stand there.
+                // rim01 = 0 at the shoulder, 1 well inside the plateau.
+                int idx = (c.z - rect.minZ) * w + (c.x - rect.minX);
+                int ed = idx >= 0 && idx < edgeDist.Length ? edgeDist[idx] : 99;
+                float rim01 = Mathf.Clamp01((ed - 1) / 8f);
+                float exposure = Mathf.Lerp(0.30f, 1f, rim01);
+                if (!Rand.Chance(chanceBase * t.fertility * exposure))
                 {
                     continue;
                 }
-                ThingDef plantDef = plants.RandomElementByWeight(p => biome.CommonalityOfPlant(p));
+                float treeWeight = Mathf.Lerp(0.05f, 1f, rim01);
+                ThingDef plantDef = plants.RandomElementByWeight(p =>
+                    biome.CommonalityOfPlant(p)
+                        * (p.plant != null && p.plant.IsTree ? treeWeight : 1f));
                 if (plantDef?.plant == null || plantDef.plant.fertilityMin > t.fertility)
                 {
                     continue;
@@ -268,7 +472,7 @@ namespace AsAboveSoBelow
         /// <summary>Edge-distance BFS then meadow/terrace classification. Band-local
         /// indices throughout: the band is a contiguous rect, so a local w*h grid keeps
         /// this independent of map size.</summary>
-        private static byte[] Classify(bool[] solid, int w, int h)
+        private static byte[] Classify(bool[] solid, int w, int h, out int[] edgeDistOut)
         {
             int count = w * h;
             byte[] kind = new byte[count];
@@ -315,6 +519,11 @@ namespace AsAboveSoBelow
                     }
                 }
             }
+
+            // Handed back for the alpine pass: tarn placement and flora exposure both
+            // need "how far is this cell from a drop", and recomputing the BFS would be
+            // both wasteful and a chance to disagree with the classifier.
+            edgeDistOut = edgeDist;
 
             ABSettings gs = ABMod.Settings;
             bool naturalistic = gs == null || gs.naturalPeaks;
