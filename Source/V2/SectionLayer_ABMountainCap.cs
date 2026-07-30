@@ -432,42 +432,45 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    // Natural rock cells join the unified field like every other mass
-                    // cell - their SPRITES (and the fog geometry over the deep
-                    // interior) are scoped out by ABSkyMassShadowScope, NOT painted
-                    // over: the reverted cover proved that a queue-above-everything
-                    // blanket erases every overhanging tree, plant and pawn sprite and
-                    // renders as the near-flat mask-15 slab. Concealment is therefore
-                    // "don't draw", never "draw on top". Visible ORE is the exception:
-                    // its sprite still prints natively over the field (prospecting
-                    // information); fogged things never print at all (vanilla rule).
-                    // Any OTHER edifice (torch, furniture, built walls) keeps the
-                    // field beneath it like furniture on any floor (run-19).
+                    // STANDING NATURAL ROCK RENDERS NATIVELY, and this layer stays out
+                    // of its cells entirely.
+                    //
+                    // Suppressing those wall sprites (to make the mass one seamless
+                    // field) was a mistake with two reported symptoms: minable rock
+                    // read as walkable FLOOR - the wall/floor distinction is load
+                    // bearing gameplay information, not decoration - and ore veins,
+                    // robbed of the rock context their linked atlas assumes, closed
+                    // their outlines into blocky glyph shapes ("strange text" on
+                    // compacted steel). Vanilla wall sprites ARE how rock reads as
+                    // rock; the lip a wall throws onto adjacent floor is vanilla's
+                    // language for "standing rock above walkable ground", not an
+                    // artifact. Redundant outlines are fixed where they are actually
+                    // caused - the generator no longer speckles the mass into dozens
+                    // of tiny clusters.
+                    //
+                    // Nothing is emitted under a wall: the sprite is opaque, so a
+                    // field quad there is pure waste. Any OTHER edifice (torch,
+                    // furniture, built walls) keeps the field beneath it like
+                    // furniture on any floor (run-19).
                     Building edifice = c.GetEdifice(map);
-                    bool naturalRock = edifice != null
+                    if (edifice != null
                         && (edifice.def.mineable
-                            || (edifice.def.building != null && edifice.def.building.isNaturalRock));
-                    bool visibleOre = naturalRock
-                        && edifice.def.building != null && edifice.def.building.isResourceRock
-                        && !map.fogGrid.IsFogged(c);
+                            || (edifice.def.building != null && edifice.def.building.isNaturalRock)))
+                    {
+                        continue;
+                    }
+                    // Fogged cells belong to vanilla's fog layer.
+                    if (map.fogGrid.IsFogged(c))
+                    {
+                        continue;
+                    }
                     // Rock type comes from the GROUND map's rock at this column - the
                     // stone the mass actually stands on (run-20 diagnosis: sky-side
                     // walls/leave-terrains are noise-picked independently, producing
                     // limestone patches over a slate mountain). Ground-sourced typing
                     // also merges large regions into one material = one seamless
                     // submesh. The mined-floor mapping stays for ELIGIBILITY only.
-                    // A standing plain rock is the one case that types from ITSELF -
-                    // it IS the rock; ore types from the ground like its neighbours
-                    // so the field under and around it is seamless.
-                    ThingDef rock;
-                    if (naturalRock && !(edifice.def.building != null && edifice.def.building.isResourceRock))
-                    {
-                        rock = edifice.def;
-                    }
-                    else
-                    {
-                        rock = GroundRockAt(ground, c + groundOffset) ?? fallbackRock;
-                    }
+                    ThingDef rock = GroundRockAt(ground, c + groundOffset) ?? fallbackRock;
                     // Option B: is this one of the southern rim cells that form the
                     // cliff face? If so every quad in this cell carries the vertical
                     // brightness ramp, so face and lip shade together instead of the
@@ -506,10 +509,6 @@ namespace AsAboveSoBelow
                     // this mass cell (run-44 wanted a soft transition; the flat-tone
                     // skirt yielded to the real fade mechanic).
                     emitted |= EmitMeadowFade(map, grid, c, y);
-                    if (visibleOre)
-                    {
-                        continue; // the ore sprite provides this cell's look
-                    }
                     // Cardinal links in Graphic_Linked's own order (N=1 E=2 S=4
                     // W=8): a direction links when the mass continues there. Interior
                     // cells (mask 15) are the field alone - the atlas' fully-linked
