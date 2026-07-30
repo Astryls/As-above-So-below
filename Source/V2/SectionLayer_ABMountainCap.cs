@@ -718,7 +718,15 @@ namespace AsAboveSoBelow
         /// </summary>
         private bool EmitMeadowFade(Map map, TerrainGrid grid, IntVec3 c, float y)
         {
-            TerrainDef[] adj = meadowAdj;
+            return EmitMeadowFadeAt(this, map, grid, c, 0, y, fanCovered, meadowAdj);
+        }
+
+        /// <summary>Static form, so the see-below view can emit the same fans one or more
+        /// bands up. Scratch arrays come from the caller rather than being allocated per
+        /// cell - this runs for every mass cell of every section bake.</summary>
+        internal static bool EmitMeadowFadeAt(MapDrawLayer layer, Map map, TerrainGrid grid,
+            IntVec3 c, int zOffset, float y, bool[] fanCovered, TerrainDef[] adj)
+        {
             adj[0] = MeadowAt(map, grid, c + IntVec3.North);
             adj[1] = MeadowAt(map, grid, c + IntVec3.South);
             adj[2] = MeadowAt(map, grid, c + IntVec3.East);
@@ -756,8 +764,8 @@ namespace AsAboveSoBelow
                 ABNineFan.Cover(fanCovered,
                     adj[0] == d, adj[1] == d, adj[2] == d, adj[3] == d,
                     adj[4] == d, adj[5] == d, adj[6] == d, adj[7] == d);
-                ABNineFan.AddFan(GetSubMesh(mat), c.x, c.z, y + MeadowFadeAltBias, fanCovered,
-                    White, ClearWhite);
+                ABNineFan.AddFan(layer.GetSubMesh(mat), c.x, c.z + zOffset,
+                    y + MeadowFadeAltBias, fanCovered, White, ClearWhite);
                 emitted = true;
             }
             return emitted;
@@ -842,7 +850,7 @@ namespace AsAboveSoBelow
         /// prints that itself.
         /// </summary>
         internal static bool EmitMassSilhouetteAt(MapDrawLayer layer, Map map, IntVec3 source,
-            int zOffset, float altitude)
+            int zOffset, float altitude, bool[] fanScratch, TerrainDef[] adjScratch)
         {
             if (layer == null || map == null || !ABGuard.On(ABGuard.Rendering))
             {
@@ -878,6 +886,14 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // The meadow fades belong to the mass wherever it is seen from, interior cells
+            // included - grass creeping onto rock is not an edge-only effect.
+            bool emitted = false;
+            if (fanScratch != null && adjScratch != null)
+            {
+                emitted = EmitMeadowFadeAt(layer, map, grid, source, zOffset, altitude,
+                    fanScratch, adjScratch);
+            }
             bool n0 = Linked(map, grid, cap, source + IntVec3.North);
             bool e0 = Linked(map, grid, cap, source + IntVec3.East);
             bool s0 = Linked(map, grid, cap, source + IntVec3.South);
@@ -885,7 +901,7 @@ namespace AsAboveSoBelow
             int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
             if (mask == 15)
             {
-                return false; // interior
+                return emitted; // interior: no lip, but its fades still count
             }
             Material tile = QueueClone(
                 MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask));
@@ -898,8 +914,16 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // Cliff-face shading travels too: the vertical ramp is what tells the player a
+            // southern rim is a wall rather than more floor, and it reads exactly the same
+            // from two levels up as it does standing on it.
+            int faceDepth = CliffFaceDepth > 0
+                ? FaceDepthAt(map, bands, grid, cap, source, CliffFaceDepth)
+                : -1;
+            Color32 shadeS = faceDepth >= 0 ? FaceShade(faceDepth, false) : White;
+            Color32 shadeN = faceDepth >= 0 ? FaceShade(faceDepth, true) : White;
             IntVec3 at = new IntVec3(source.x, source.y, source.z + zOffset);
-            AddQuad(sub, at.x, at.z, at.x + 1, at.z + 1, altitude, White, White);
+            AddQuad(sub, at.x, at.z, at.x + 1, at.z + 1, altitude, shadeS, shadeN);
             if (CornerFillersEnabled)
             {
                 bool nw = Linked(map, grid, cap, source + IntVec3.North + IntVec3.West);
@@ -908,19 +932,19 @@ namespace AsAboveSoBelow
                 bool se = Linked(map, grid, cap, source + IntVec3.South + IntVec3.East);
                 if (sw && s0 && w0)
                 {
-                    AddCornerFiller(sub, map, at, -1, -1, altitude, White);
+                    AddCornerFiller(sub, map, at, -1, -1, altitude, shadeS);
                 }
                 if (nw && n0 && w0)
                 {
-                    AddCornerFiller(sub, map, at, -1, 1, altitude, White);
+                    AddCornerFiller(sub, map, at, -1, 1, altitude, shadeN);
                 }
                 if (ne && n0 && e0)
                 {
-                    AddCornerFiller(sub, map, at, 1, 1, altitude, White);
+                    AddCornerFiller(sub, map, at, 1, 1, altitude, shadeN);
                 }
                 if (se && s0 && e0)
                 {
-                    AddCornerFiller(sub, map, at, 1, -1, altitude, White);
+                    AddCornerFiller(sub, map, at, 1, -1, altitude, shadeS);
                 }
             }
             return true;

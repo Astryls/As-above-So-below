@@ -58,21 +58,22 @@ namespace AsAboveSoBelow
                 yield return t;
             }
 
+            // Walk the drag rect in the VIEWING band and descend per cell, instead of
+            // shifting the rect down a single Slot - which could only ever drag-select the
+            // level immediately below, so from level 2 upward the box selected nothing.
             CellRect mapRect = ABScreenRect.GetMapRect(screenRect);
-            CellRect belowRect = mapRect.MovedBy(new IntVec3(0, 0, -bands.Slot));
-            belowRect.ClipInsideMap(map);
-            TerrainGrid terrain = map.terrainGrid;
+            mapRect.ClipInsideMap(map);
             FogGrid fog = map.fogGrid;
 
-            foreach (IntVec3 c in belowRect)
+            foreach (IntVec3 above in mapRect)
             {
-                if (!c.InBounds(map) || fog.IsFogged(c))
+                if (!above.InBounds(map))
                 {
                     continue;
                 }
                 // Same see-through rule as every other below interaction.
-                IntVec3 above = bands.Translate(c, viewBand);
-                if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 c, out _)
+                    || fog.IsFogged(c))
                 {
                     continue;
                 }

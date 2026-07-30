@@ -183,9 +183,10 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                CellRect below = Find.CameraDriver.CurrentViewRect
-                    .MovedBy(new IntVec3(0, 0, -bands.Slot));
-                below.ClipInsideMap(map);
+                // The view rect in the VIEWING band; visibility of anything under it is
+                // resolved per column. Shifting the rect down one Slot only ever found the
+                // level directly below, so interaction icons vanished from level 2 upward.
+                CellRect view = Find.CameraDriver.CurrentViewRect;
                 Dictionary<Thing, ThingOverlaysHandle> handles = HandlesRef(__instance);
                 if (handles == null || handles.Count == 0)
                 {
@@ -208,21 +209,28 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     IntVec3 c = t.Position;
-                    if (!below.Contains(c) || fog.IsFogged(c))
+                    int band = bands.BandOf(c);
+                    if (band < 0 || band >= viewBand || fog.IsFogged(c))
                     {
                         continue;
                     }
                     IntVec3 above = bands.Translate(c, viewBand);
-                    if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                    if (!above.InBounds(map) || !view.Contains(above))
                     {
-                        continue; // not visible from up here
+                        continue; // off screen
+                    }
+                    if (!ABBands.TryResolveVisibleBelow(map, bands, above,
+                            out IntVec3 seen, out int drop)
+                        || seen.x != c.x || seen.z != c.z)
+                    {
+                        continue; // not what this column shows
                     }
                     if (!t.IsForbidden(Faction.OfPlayer))
                     {
                         continue;
                     }
                     Vector3 pos = t.DrawPos;
-                    pos.z += (viewBand - bands.BandOf(c)) * bands.Slot;
+                    pos.z += drop;
                     if (t.RotatedSize.z == 1)
                     {
                         pos.z -= 0.3f;

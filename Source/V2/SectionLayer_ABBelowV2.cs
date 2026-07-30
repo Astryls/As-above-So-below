@@ -226,6 +226,12 @@ namespace AsAboveSoBelow
 
         private readonly bool[] fogCovered = new bool[9];
 
+        /// <summary>Scratch for the cap layer's shared fan emitters, owned here so nothing
+        /// allocates per cell during a bake.</summary>
+        private readonly bool[] fanCovered = new bool[9];
+
+        private readonly TerrainDef[] meadowAdj = new TerrainDef[8];
+
         /// <summary>A below cell counts as fogged-for-view when it is genuinely fogged OR
         /// not legible at all (off-map, gutter): the veil then runs seamlessly to the
         /// band edge instead of leaving a lit seam against the air mask.</summary>
@@ -373,7 +379,7 @@ namespace AsAboveSoBelow
             if (def == ABDefOf.AB_MountainTop)
             {
                 SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
-                    above.z - below.z, altitude + 0.02f);
+                    above.z - below.z, altitude + 0.02f, fanCovered, meadowAdj);
             }
             return true;
         }
