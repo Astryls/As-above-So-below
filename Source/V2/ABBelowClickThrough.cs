@@ -49,12 +49,17 @@ namespace AsAboveSoBelow
             {
                 return false; // opaque from here; the click belongs to this band
             }
-            IntVec3 below = new IntVec3(cell.x, 0, cell.z - bands.Slot);
-            if (!below.InBounds(map) || bands.InGutter(below) || map.fogGrid.IsFogged(below))
+            // Descend as far as the view does, not one band. A single step worked only
+            // while there was exactly one level above the surface; with levels stacked, the
+            // level directly below an open-air cell is usually open air too, so clicking,
+            // selecting and every other interaction stopped working from level 2 upward
+            // even though the renderer was showing the ground perfectly well.
+            if (!ABBands.TryResolveVisibleBelow(map, bands, cell, out IntVec3 below, out int drop)
+                || map.fogGrid.IsFogged(below))
             {
                 return false; // nothing legible down there to click
             }
-            translated = new Vector3(clickPos.x, clickPos.y, clickPos.z - bands.Slot);
+            translated = new Vector3(clickPos.x, clickPos.y, clickPos.z - drop);
             return true;
         }
     }

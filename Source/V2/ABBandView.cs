@@ -60,9 +60,15 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (!bands.IsOpen(band))
+            // LOOKING UP IS FREE; LOOKING DOWN NEEDS STAIRS.
+            //
+            // You can see a mountain from the ground, so gating the view of a level ABOVE
+            // the surface behind construction was arbitrary - the terrain up there is
+            // simply visible. What lies BELOW is genuinely unknown until something digs
+            // into it, so that gate stays and doubles as the reveal.
+            if (band < bands.surfaceBand && !bands.IsOpen(band))
             {
-                Messages.Message("AB2: that level has not been opened yet - build stairs into it first.",
+                Messages.Message("AB_LevelNotDug".Translate(),
                     MessageTypeDefOf.RejectInput, false);
                 return false;
             }

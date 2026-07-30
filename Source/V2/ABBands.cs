@@ -251,6 +251,54 @@ namespace AsAboveSoBelow
             return c != null ? c.surfaceBand : 0;
         }
 
+        /// <summary>
+        /// THE one definition of "what do I actually see through this cell".
+        ///
+        /// Descends while each level is itself see-through and stops at the first opaque
+        /// floor (or the bottom band), returning the accumulated <paramref name="drop"/> in
+        /// cells. Everything that looks downward MUST use this - the renderer, click-through,
+        /// selection, overlays - because a single `- Slot` step silently works on a 3-level
+        /// map and breaks the moment two see-through levels stack: from level +3 the level
+        /// directly below is usually open air too, so one step lands in the void.
+        /// </summary>
+        public static bool TryResolveVisibleBelow(Map map, ABBandMap bands, IntVec3 cell,
+            out IntVec3 below, out int drop)
+        {
+            below = cell;
+            drop = 0;
+            if (map == null || bands == null || !bands.Banded)
+            {
+                return false;
+            }
+            if (!ShowsBelow(map.terrainGrid.TerrainAt(cell)))
+            {
+                return false; // opaque from here
+            }
+            int slot = bands.Slot;
+            IntVec3 cur = cell;
+            for (int guard = 0; guard < bands.bandCount; guard++)
+            {
+                IntVec3 next = new IntVec3(cur.x, cur.y, cur.z - slot);
+                if (!next.InBounds(map) || bands.InGutter(next))
+                {
+                    return false;
+                }
+                cur = next;
+                drop += slot;
+                if (!ShowsBelow(map.terrainGrid.TerrainAt(cur)))
+                {
+                    below = cur;
+                    return true; // an opaque floor: this is what is seen
+                }
+                if (bands.BandOf(cur) <= 0)
+                {
+                    below = cur;
+                    return true; // bottom level; nothing further down
+                }
+            }
+            return false;
+        }
+
         public static int BandCount(Map map)
         {
             ABBandMap c = CompOf(map);

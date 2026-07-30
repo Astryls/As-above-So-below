@@ -125,38 +125,11 @@ namespace AsAboveSoBelow
                         continue; // opaque by construction
                     }
 
-                    // DESCEND until something is actually visible, rather than looking
-                    // exactly one band down.
-                    //
-                    // With more than one level stacked above the surface, the level directly
-                    // below an open-air cell is usually ALSO open air - so a single-step look
-                    // found `dontRender` void and painted the air mask, and level +3 showed a
-                    // dark slab instead of the ground far below. Walking down while each
-                    // level is see-through lands on the first real floor, which is what
-                    // "looking down a shaft" should mean at any height.
-                    IntVec3 below = c;
-                    int drop = 0;
-                    bool inBounds = false;
-                    while (true)
-                    {
-                        IntVec3 next = new IntVec3(below.x, below.y, below.z - slot);
-                        if (!next.InBounds(map) || bands.InGutter(next))
-                        {
-                            inBounds = false;
-                            break;
-                        }
-                        below = next;
-                        drop += slot;
-                        inBounds = true;
-                        if (!ABBands.ShowsBelow(terrainGrid.TerrainAt(below)))
-                        {
-                            break; // opaque: this is the level you see
-                        }
-                        if (bands.BandOf(below) <= 0)
-                        {
-                            break; // bottom level; nothing further down to find
-                        }
-                    }
+                    // Descend to whatever is actually visible - see
+                    // ABBands.TryResolveVisibleBelow for why this is not a single step, and
+                    // why every downward-looking system shares that one definition.
+                    bool inBounds = ABBands.TryResolveVisibleBelow(map, bands, c,
+                        out IntVec3 below, out int drop);
                     bool foggedBelow = inBounds && fog.IsFogged(below);
 
                     if (!inBounds || foggedBelow)
@@ -186,7 +159,7 @@ namespace AsAboveSoBelow
                     }
 
                     if (ABV2Debug.DrawBelowTerrain
-                        && !PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt)
+                        && !PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt, slot)
                         && ABV2Debug.DrawBelowAirMask)
                     {
                         // Below terrain is itself dontRender: still needs a backdrop.
@@ -341,7 +314,7 @@ namespace AsAboveSoBelow
         ///    altitude.
         /// </summary>
         private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
-            IntVec3 above, float altitude)
+            IntVec3 above, float altitude, int slot)
         {
             TerrainDef def = terrainGrid.TerrainAt(below);
             if (def == null || def.dontRender)
@@ -349,6 +322,26 @@ namespace AsAboveSoBelow
                 return false;
             }
             CellTerrain self = CellTerrainAt(map, terrainGrid, below);
+            // A mountain mass on a level below reads as FLAT FLOOR from up here, because
+            // AB_MountainTop is a deliberately plain dark terrain and the rock texture that
+            // normally covers it comes from SectionLayer_ABMountainCap's rough-stone field -
+            // which lives in that band's OWN section mesh and so is invisible from another
+            // level. Substituting the host rock's rough terrain gives the mass its stone
+            // back when seen from above.
+            //
+            // PARTIAL by construction: the cap layer's silhouette lips, corner fillers and
+            // cliff-face shading are still not reproduced across bands, so a mountain viewed
+            // from two levels up reads as rock but without its rim detail. Fixing that
+            // properly means parameterising the cap layer's per-cell emitters by a z offset
+            // and calling them from here.
+            if (def == ABDefOf.AB_MountainTop)
+            {
+                TerrainDef host = HostRockTerrain(map, below, slot);
+                if (host != null)
+                {
+                    self.def = host;
+                }
+            }
             Material baseMat = MaterialFor(map, self);
             LayerSubMesh sub = baseMat != null ? GetSubMesh(baseMat) : null;
             if (sub == null)
@@ -466,6 +459,33 @@ namespace AsAboveSoBelow
                 }
             }
             edgeSet.Clear();
+        }
+
+        /// <summary>The rough terrain of the stone a mass cell stands on, found by walking
+        /// down the column - the mass was projected from that rock at generation. Ore is
+        /// excluded because ore defs carry no naturalTerrain at all.</summary>
+        private static TerrainDef HostRockTerrain(Map map, IntVec3 massCell, int slot)
+        {
+            IntVec3 probe = massCell;
+            for (int step = 0; step < 4; step++)
+            {
+                if (probe.InBounds(map))
+                {
+                    Building ed = probe.GetEdifice(map);
+                    if (ed != null && ed.def.mineable && ed.def.building != null
+                        && !ed.def.building.isResourceRock
+                        && ed.def.building.naturalTerrain != null)
+                    {
+                        return ed.def.building.naturalTerrain;
+                    }
+                }
+                probe = new IntVec3(probe.x, probe.y, probe.z - slot);
+                if (probe.z < 0)
+                {
+                    break;
+                }
+            }
+            return null;
         }
 
         private static CellTerrain CellTerrainAt(Map map, TerrainGrid terrainGrid, IntVec3 c)
