@@ -54,15 +54,31 @@ namespace AsAboveSoBelow
         // ==================================================
         internal static Limits For(int level)
         {
+            // Calibrated 2026-07-29 on a 126-height band (level +2 readout):
+            //   zoom seen  min 23.6  max 60.0    derive gives 63.0
+            //   overhang   max S 51.1  max N 63.5
+            //
+            // maxZoom LEFT DERIVED on purpose. The measured 60.0 is simply as far out as
+            // the camera happened to be pushed while unlocked, and derive (half the band)
+            // is 63.0 - the two agree to within noise, so 60 is not a deliberate limit.
+            // Baking it as an ABSOLUTE would also mis-scale: on a 190-height band derive is
+            // 95, and a hard 60 would clamp that map for no reason. Derive tracks the band.
+            //
+            // panMargin IS taken from the measurement. Note what it buys at this zoom: with
+            // zoom ~63 and margin 63.5 the view centre may sit only ~0.5 cells outside the
+            // band, because the viewport already spans almost the whole level. Real framing
+            // freedom would need a margin well above the zoom value.
             switch (level)
             {
-                case 1:  // sky
-                    return new Limits(0f, 0f);
+                case 3:
+                    return new Limits(0f, 63.5f);
+                case 2:  // measured
+                    return new Limits(0f, 63.5f);
+                case 1:
+                    return new Limits(0f, 63.5f);
                 case 0:  // surface
                     return new Limits(0f, 0f);
-                case -1: // basement
-                    return new Limits(0f, 0f);
-                default: // any further level, once slice counts are configurable
+                default: // every level below the surface
                     return new Limits(0f, 0f);
             }
         }

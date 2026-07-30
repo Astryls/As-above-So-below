@@ -826,6 +826,107 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
+        /// The mass SILHOUETTE for one cell, emitted into ANOTHER layer at a z offset.
+        ///
+        /// Exists because a mountain on a lower level used to read as flat ground from above.
+        /// The see-below view can reproduce terrain and things, but the thing that makes a
+        /// mass look like a mountain - the atlas edge tile's pale top lip and dark outline,
+        /// plus the corner fillers - is emitted by THIS layer into the mass' own band's
+        /// section mesh, which is invisible from any other level. Diagnosed from a below-
+        /// layer report: the submeshes showed substituted rough stone and no edge material at
+        /// all, so nothing was failing to print - the decoration simply lived elsewhere.
+        ///
+        /// Interior cells (mask 15) return false: their atlas tile is the near-flat one and
+        /// the substituted rough terrain already reads better. Cells holding natural rock
+        /// return false too - their own wall sprite carries the edge, and the below view
+        /// prints that itself.
+        /// </summary>
+        internal static bool EmitMassSilhouetteAt(MapDrawLayer layer, Map map, IntVec3 source,
+            int zOffset, float altitude)
+        {
+            if (layer == null || map == null || !ABGuard.On(ABGuard.Rendering))
+            {
+                return false;
+            }
+            ABBandMap bands = ABBands.CompOf(map);
+            if (bands == null || !bands.Banded)
+            {
+                return false;
+            }
+            TerrainGrid grid = map.terrainGrid;
+            TerrainDef cap = ABDefOf.AB_MountainTop;
+            if (!IsMassCell(map, grid, cap, source))
+            {
+                return false;
+            }
+            Building edifice = map.edificeGrid[source];
+            if (edifice != null
+                && (edifice.def.mineable
+                    || (edifice.def.building != null && edifice.def.building.isNaturalRock)))
+            {
+                return false; // its own sprite draws the edge
+            }
+            EnsureQueue();
+            ThingDef rock = GroundRockAt(map, source + new IntVec3(0, 0, -bands.Slot))
+                ?? FallbackRock(map);
+            if (!(LiveGraphicFor(rock) is Graphic_Linked))
+            {
+                return false; // variant-mode (Better Mountains) rocks have no lip to draw
+            }
+            Material baseMat = AtlasBaseFor(rock);
+            if (baseMat == null)
+            {
+                return false;
+            }
+            bool n0 = Linked(map, grid, cap, source + IntVec3.North);
+            bool e0 = Linked(map, grid, cap, source + IntVec3.East);
+            bool s0 = Linked(map, grid, cap, source + IntVec3.South);
+            bool w0 = Linked(map, grid, cap, source + IntVec3.West);
+            int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
+            if (mask == 15)
+            {
+                return false; // interior
+            }
+            Material tile = QueueClone(
+                MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask));
+            if (tile == null)
+            {
+                return false;
+            }
+            LayerSubMesh sub = layer.GetSubMesh(tile);
+            if (sub == null)
+            {
+                return false;
+            }
+            IntVec3 at = new IntVec3(source.x, source.y, source.z + zOffset);
+            AddQuad(sub, at.x, at.z, at.x + 1, at.z + 1, altitude, White, White);
+            if (CornerFillersEnabled)
+            {
+                bool nw = Linked(map, grid, cap, source + IntVec3.North + IntVec3.West);
+                bool ne = Linked(map, grid, cap, source + IntVec3.North + IntVec3.East);
+                bool sw = Linked(map, grid, cap, source + IntVec3.South + IntVec3.West);
+                bool se = Linked(map, grid, cap, source + IntVec3.South + IntVec3.East);
+                if (sw && s0 && w0)
+                {
+                    AddCornerFiller(sub, map, at, -1, -1, altitude, White);
+                }
+                if (nw && n0 && w0)
+                {
+                    AddCornerFiller(sub, map, at, -1, 1, altitude, White);
+                }
+                if (ne && n0 && e0)
+                {
+                    AddCornerFiller(sub, map, at, 1, 1, altitude, White);
+                }
+                if (se && s0 && e0)
+                {
+                    AddCornerFiller(sub, map, at, 1, -1, altitude, White);
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
         /// OPTION B - the south-facing cliff face.
         ///
         /// RimWorld's camera looks straight down, so only SOUTH faces are ever visible;

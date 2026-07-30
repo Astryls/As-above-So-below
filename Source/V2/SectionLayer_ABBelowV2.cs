@@ -365,6 +365,16 @@ namespace AsAboveSoBelow
             sub.tris.Add(count + 3);
 
             PrintBelowTerrainEdges(map, terrainGrid, below, above, self);
+            // Give a mountain mass its EDGE back. The substituted rough terrain above only
+            // restores its stone; the lip, outline and corner fillers that make it read as a
+            // mountain are emitted by the cap layer into its own band's mesh, so they have to
+            // be re-emitted here at our offset. Slightly above the terrain quad so the tile
+            // sits over it rather than fighting for the same depth.
+            if (def == ABDefOf.AB_MountainTop)
+            {
+                SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
+                    above.z - below.z, altitude + 0.02f);
+            }
             return true;
         }
 
