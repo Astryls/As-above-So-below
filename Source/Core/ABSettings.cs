@@ -27,18 +27,31 @@ namespace AsAboveSoBelow
 
         // ---- performance ---------------------------------------------------
 
-        /// <summary>Lift the 200x200 colony cap. See ABMapSizeLimit for why the cap exists:
-        /// 1.6's path grid is an IJobParallelFor over EVERY cell, and a banded map is three
-        /// bands plus gutters tall, so width is paid three times over.</summary>
+        /// <summary>Lift the total-cell budget on colony maps. See ABMapSizeLimit for why
+        /// the budget exists: 1.6's path grid is an IJobParallelFor over EVERY cell, and a
+        /// banded map is every level plus gutters tall, so the stacked total is what the
+        /// pathfinder pays.</summary>
         public bool unclampMapSize;
 
-        // ---- camera ---------------------------------------------------------
+        // ---- level plan ----------------------------------------------------
+        //
+        // Chosen per colony on the advanced-config screen; stored here so the choice
+        // persists as the default for the next colony. The GENERATED layout is scribed on
+        // ABBandMap, so an existing save never depends on these.
 
-        /// <summary>Let the camera pan and zoom past the edges of the current level
-        /// instead of being clamped inside it. The other levels stay hidden either way -
-        /// the view rect is clipped to the current band - so overhanging the edge just
-        /// shows empty space rather than the level above or below.</summary>
-        public bool freeCameraPan;
+        /// <summary>Levels above the surface (0-3).</summary>
+        public int upperLevels = 1;
+
+        /// <summary>Levels below the surface (0-3).</summary>
+        public int lowerLevels = 1;
+
+        // ---- camera ---------------------------------------------------------
+        //
+        // Nothing here any more, deliberately. `freeCameraPan` was a binary between two
+        // unsatisfying extremes that asked the player to reason about rendering internals.
+        // How the view behaves at the edge of a level is an authored, per-level decision:
+        // see ABCameraBounds for the baked table and the in-game calibration tool that
+        // produced its numbers.
 
         // ---- sky band generation -------------------------------------------
 
@@ -112,7 +125,8 @@ namespace AsAboveSoBelow
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
-            Scribe_Values.Look(ref freeCameraPan, "freeCameraPan", false);
+            Scribe_Values.Look(ref upperLevels, "upperLevels", 1);
+            Scribe_Values.Look(ref lowerLevels, "lowerLevels", 1);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
             Scribe_Values.Look(ref skyBiomeInherit, "skyBiomeInherit", true);
             Scribe_Values.Look(ref peakSoilFraction, "peakSoilFraction", 0.15f);
@@ -135,8 +149,10 @@ namespace AsAboveSoBelow
         private void DrawMapSizeCap(Listing_Standard list)
         {
             bool before = unclampMapSize;
-            list.CheckboxLabeled("AB_UnclampMapSize".Translate(ABMapSizeLimit.Cap),
-                ref unclampMapSize, "AB_UnclampMapSizeTip".Translate(ABMapSizeLimit.Cap));
+            list.CheckboxLabeled(
+                "AB_UnclampMapSize".Translate(ABMapSizeLimit.CellBudget.ToString("N0")),
+                ref unclampMapSize,
+                "AB_UnclampMapSizeTip".Translate(ABMapSizeLimit.CellBudget.ToString("N0")));
 
             if (unclampMapSize)
             {
@@ -149,6 +165,12 @@ namespace AsAboveSoBelow
             {
                 Write();
             }
+
+            // The authoritative place to choose levels is the advanced-config screen while
+            // starting a colony; this row is the persisted default that screen opens with,
+            // and the only way to see it outside world creation.
+            list.Label("AB_LevelsDefault".Translate(upperLevels, lowerLevels,
+                ABMapSizeLimit.BandCount));
         }
 
         public void DoWindowContents(Rect inRect)
@@ -159,14 +181,6 @@ namespace AsAboveSoBelow
             DrawMapSizeCap(list);
             list.GapLine();
 
-            Text.Font = GameFont.Medium;
-            list.Label("AB_CameraHeading".Translate());
-            Text.Font = GameFont.Small;
-
-            list.CheckboxLabeled("AB_FreeCameraPan".Translate(), ref freeCameraPan,
-                "AB_FreeCameraPanTip".Translate());
-
-            list.GapLine();
             Text.Font = GameFont.Medium;
             list.Label("AB_SkyHeading".Translate());
             Text.Font = GameFont.Small;

@@ -53,8 +53,13 @@ namespace AsAboveSoBelow
             {
                 return; // no Caverns, or the player chose plain solid rock
             }
-            Carve(map, bands, band, biome,
-                Mathf.Clamp(settings?.cavernOpenness ?? 0.3f, 0.1f, 0.6f));
+            // More cave the deeper you go. depth 1 = immediately below the surface, and the
+            // player's setting is that level's baseline rather than a ceiling - so a third
+            // basement reads as an open cave system instead of a slightly bigger warren.
+            int depth = Mathf.Max(1, bands.surfaceBand - band);
+            float openness = Mathf.Clamp(settings?.cavernOpenness ?? 0.3f, 0.1f, 0.6f)
+                * (1f + 0.35f * (depth - 1));
+            Carve(map, bands, band, biome, Mathf.Min(openness, 0.8f));
         }
 
         private static void Carve(Map map, ABBandMap bands, int band, BiomeDef biome, float openness)

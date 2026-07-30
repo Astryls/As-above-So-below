@@ -17,11 +17,14 @@ namespace AsAboveSoBelow
         /// <summary>When on, newly generated player colony maps are banded.</summary>
         public static bool Enabled = true;
 
-        /// <summary>Bands per column. 3 = basement / surface / sky.</summary>
-        public const int BandCount = 3;
+        /// <summary>Bands per column, from the player's level plan. 3 (one below, one
+        /// above) is the default; 1 means an ordinary unbanded map. Was a const until the
+        /// level plan made it a per-colony choice - every consumer already looped on
+        /// `bands.bandCount`, so this const was the only thing pinning it to 3.</summary>
+        public static int BandCount => ABMapSizeLimit.BandCount;
 
-        /// <summary>Index of the surface band in a 3-band map.</summary>
-        public const int SurfaceBand = 1;
+        /// <summary>Index of the surface band = however many levels sit below it.</summary>
+        public static int SurfaceBand => ABMapSizeLimit.SurfaceBand;
     }
 
     /// <summary>
@@ -116,17 +119,27 @@ namespace AsAboveSoBelow
                             + " to " + cappedX + "x" + capped + " (unclamp in mod settings).");
                         mapSize = new IntVec3(cappedX, mapSize.y, capped);
                     }
+                    int bandCount = ABV2.BandCount;
+                    if (bandCount <= 1)
+                    {
+                        // The player asked for no levels above or below: an ordinary map.
+                        // Banding a single band would leave Banded false anyway, but the
+                        // gutter carve and the z inflation would still run.
+                        ABLog.Dev("V2: level plan is a single level - generating an ordinary map.");
+                        return;
+                    }
                     int h = mapSize.z;
                     pending = new PendingLayout
                     {
-                        bandCount = ABV2.BandCount,
+                        bandCount = bandCount,
                         bandHeight = h,
                         surfaceBand = ABV2.SurfaceBand
                     };
                     int slot = ABBandMap.SlotFor(h);
-                    mapSize = new IntVec3(mapSize.x, mapSize.y, ABV2.BandCount * slot);
-                    ABLog.Dev("V2: banding new colony map -> " + mapSize + " (" + ABV2.BandCount
-                        + " bands of " + h + " + " + (slot - h) + " gutter, slot " + slot + ").");
+                    mapSize = new IntVec3(mapSize.x, mapSize.y, bandCount * slot);
+                    ABLog.Dev("V2: banding new colony map -> " + mapSize + " (" + bandCount
+                        + " bands of " + h + " + " + (slot - h) + " gutter, slot " + slot
+                        + ", surface band " + ABV2.SurfaceBand + ").");
                 }
                 catch (Exception e)
                 {
@@ -458,7 +471,9 @@ namespace AsAboveSoBelow
                 var phase = System.Diagnostics.Stopwatch.StartNew();
                 if (band < bands.surfaceBand)
                 {
-                    FillRock(map, rect, rocks, noises);
+                    // depth 1 = the level immediately below the surface. Ore richness and
+                    // cave openness both scale with it.
+                    FillRock(map, rect, rocks, noises, bands.surfaceBand - band);
                     ABGenProfile.Phase("FillRock band " + band, phase.Elapsed.TotalMilliseconds);
                     phase.Restart();
                     // Then optionally hollow it back out into a living cave system.
@@ -488,6 +503,7 @@ namespace AsAboveSoBelow
                     ABGenProfile.Phase("Sky clear band " + band, phase.Elapsed.TotalMilliseconds);
                     phase.Restart();
                     ABSkyBandGen.Generate(map, bands, band, rocks, noises);
+                    SeedHighAltitudeSnow(map, bands, band);
                     ABGenProfile.Phase("SkyBandGen band " + band, phase.Elapsed.TotalMilliseconds);
                 }
             }
@@ -510,7 +526,44 @@ namespace AsAboveSoBelow
             ABGenProfile.Phase("Refog", tail.Elapsed.TotalMilliseconds);
         }
 
-        private static void FillRock(Map map, CellRect rect, List<ThingDef> rocks, List<Perlin> noises)
+        /// <summary>
+        /// The snow line, seeded at generation.
+        ///
+        /// The PERSISTENT mechanism is just the per-level temperature offset: vanilla melts
+        /// snow using each cell's own temperature, so a cold high level holds snow after the
+        /// surface has thawed, and the line moves with the seasons for free. This pass only
+        /// supplies the opening state, so a brand-new high summit looks the part instead of
+        /// waiting for the first snowfall - and only where it would actually survive, so a
+        /// desert peak does not generate under improbable snow.
+        /// </summary>
+        private static void SeedHighAltitudeSnow(Map map, ABBandMap bands, int band)
+        {
+            int level = band - bands.surfaceBand;
+            if (level < 2 || map.mapTemperature == null)
+            {
+                return;
+            }
+            float temp = map.mapTemperature.OutdoorTemp + ABBandEnv.TempOffsetForLevel(level);
+            if (temp > -2f)
+            {
+                return;
+            }
+            float depth = Mathf.Clamp01(0.35f + 0.2f * (level - 2));
+            int cells = 0;
+            foreach (IntVec3 c in bands.RectOfBand(band))
+            {
+                if (c.InBounds(map) && map.roofGrid.RoofAt(c) == null)
+                {
+                    map.snowGrid.SetDepth(c, depth);
+                    cells++;
+                }
+            }
+            ABLog.Dev("V2: seeded snow on level +" + level + " (" + cells + " cells, depth "
+                + depth.ToString("0.00") + ", effective temp " + temp.ToString("0.0") + ").");
+        }
+
+        private static void FillRock(Map map, CellRect rect, List<ThingDef> rocks,
+            List<Perlin> noises, int depth)
         {
             TerrainGrid terrain = map.terrainGrid;
             foreach (IntVec3 c in rect)
@@ -545,8 +598,12 @@ namespace AsAboveSoBelow
                 }
                 map.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
             }
-            ABOreGen.ScatterOres(map, rect.Cells.ToList(),
-                Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f));
+            // Richer the deeper you dig: the reward for driving a shaft down three levels
+            // rather than one. Applied AFTER the settings clamp so the player's density is
+            // the level-1 baseline rather than a ceiling.
+            float density = Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f)
+                * (1f + 0.45f * (Mathf.Max(depth, 1) - 1));
+            ABOreGen.ScatterOres(map, rect.Cells.ToList(), Mathf.Min(density, 30f));
         }
 
         /// <summary>The seam rows. Impassable open air, permanently fogged, no roof - so

@@ -48,16 +48,80 @@ namespace AsAboveSoBelow
         /// </summary>
         public static readonly int[] Sizes = { 126, 190, 254 };
 
-        /// <summary>Largest size allowed while the cap is on. Must be one of Sizes.</summary>
-        public const int Cap = 190;
+        // ================= THE LEVEL PLAN =================
+        // Levels are chosen per colony on the advanced-config screen, and the constraint is
+        // a TOTAL CELL BUDGET rather than a maximum per-level size. That is the honest
+        // model: 1.6's path grid is an IJobParallelFor over EVERY cell of the map, so the
+        // stacked total is what the pathfinder pays - a player picking 7 levels is not
+        // asking for 7x the cost, they are asking for the same budget sliced differently.
+        //
+        // The arithmetic that makes this work (heights sit just under a 64 boundary so the
+        // gutter collapses to 2 rows):
+        //   3 x 190 = 109,440   (the historical default)
+        //   5 x 126 =  80,640
+        //   7 x 126 = 112,896   <- seven levels for the price of three
+        //   7 x 190 = 255,360   <- the footgun the budget exists to refuse
+        // ==================================================
+
+        public const int MaxUpperLevels = 3;
+
+        public const int MaxLowerLevels = 3;
+
+        /// <summary>Total cells a banded colony may allocate. Sized so the historical
+        /// 3x190 layout and a 7x126 layout both fit, and 5x190 / 3x254 do not.</summary>
+        public const int CellBudget = 115000;
+
+        public static int UpperLevels =>
+            Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
+
+        public static int LowerLevels =>
+            Mathf.Clamp(ABMod.Settings?.lowerLevels ?? 1, 0, MaxLowerLevels);
+
+        /// <summary>Bands per column, surface included. 1 means an ordinary unbanded map.</summary>
+        public static int BandCount => UpperLevels + LowerLevels + 1;
+
+        /// <summary>Bands stack along +z from the deepest basement, so the surface index is
+        /// simply the number of levels below it.</summary>
+        public static int SurfaceBand => LowerLevels;
 
         public static bool Active => ABV2.Enabled && !(ABMod.Settings?.unclampMapSize ?? false);
 
         /// <summary>Total cells RimWorld actually allocates and paths over for a banded
-        /// colony of this per-level size.</summary>
+        /// colony of this per-level size at a given level count.</summary>
+        public static int StackedCells(int size, int bandCount)
+        {
+            return size * bandCount * ABBandMap.SlotFor(size);
+        }
+
         public static int StackedCells(int size)
         {
-            return size * ABV2.BandCount * ABBandMap.SlotFor(size);
+            return StackedCells(size, BandCount);
+        }
+
+        /// <summary>Does this per-level size fit the budget at this level count? Always
+        /// true when the player has lifted the cap.</summary>
+        public static bool Fits(int size, int bandCount)
+        {
+            return !Active || StackedCells(size, bandCount) <= CellBudget;
+        }
+
+        /// <summary>Largest offered per-level size that fits the budget at the current
+        /// level count. Replaces the old fixed 190 cap: with more levels selected the
+        /// affordable per-level size genuinely shrinks, and the UI says so.</summary>
+        public static int MaxSize
+        {
+            get
+            {
+                int best = Sizes[0];
+                for (int i = 0; i < Sizes.Length; i++)
+                {
+                    if (Fits(Sizes[i], BandCount) && Sizes[i] > best)
+                    {
+                        best = Sizes[i];
+                    }
+                }
+                return best;
+            }
         }
 
         /// <summary>Labels of the size options that are locked, rebuilt each time the
@@ -109,7 +173,7 @@ namespace AsAboveSoBelow
                 string vanilla = "MapSizeDesc".Translate(size, size * size);
                 relabel[vanilla] = "AB_MapSizeBanded".Translate(size,
                     (size * size).ToString("N0"), StackedCells(size).ToString("N0"));
-                if (size > Cap)
+                if (!Fits(size, BandCount))
                 {
                     lockedLabels.Add(vanilla);
                 }
@@ -167,18 +231,21 @@ namespace AsAboveSoBelow
             {
                 return size;
             }
-            // Snap to the largest OFFERED size that fits. Plain Min(size, Cap) would happily
-            // return something like 175 - a size that is inside the cap but sits badly on
+            // Snap to the largest OFFERED size that fits the budget. A plain Min() would
+            // happily return something like 175 - inside the budget but sitting badly on
             // the 64-row slot boundary, paying a full extra band of gutter for nothing.
-            int best = Sizes[0];
+            int best = -1;
             for (int i = 0; i < Sizes.Length; i++)
             {
-                if (Sizes[i] <= Cap && Sizes[i] <= size && Sizes[i] > best)
+                int s = Sizes[i];
+                if (s <= size && Fits(s, BandCount) && s > best)
                 {
-                    best = Sizes[i];
+                    best = s;
                 }
             }
-            return Mathf.Min(best, Cap);
+            // Nothing at or below the request fits: the smallest offered size is the best
+            // available without breaking the budget.
+            return best > 0 ? best : Sizes[0];
         }
     }
 
@@ -195,26 +262,127 @@ namespace AsAboveSoBelow
             ABMapSizeLimit.BeginChooser();
         }
 
-        private static void Postfix()
+        private static void Postfix(Rect inRect)
         {
             try
             {
-                // Snap whatever is selected onto an offered size. Vanilla's default is 250,
-                // which is no longer in the list, so without this the dialog can close with
-                // a size that has no radio button and never went through Clamp.
+                DrawLevelChooser(inRect);
+
+                // Snap whatever is selected onto an offered size that fits the budget.
+                // Vanilla's default is 250, which is not in our list, and raising the level
+                // count can make a previously-legal size unaffordable - so this runs every
+                // frame, not just on open.
                 if (ABMapSizeLimit.Active && Find.GameInitData != null
-                    && Array.IndexOf(ABMapSizeLimit.Sizes, Find.GameInitData.mapSize) < 0)
+                    && (Array.IndexOf(ABMapSizeLimit.Sizes, Find.GameInitData.mapSize) < 0
+                        || !ABMapSizeLimit.Fits(Find.GameInitData.mapSize, ABMapSizeLimit.BandCount)))
                 {
                     Find.GameInitData.mapSize = ABMapSizeLimit.Clamp(Find.GameInitData.mapSize);
                 }
             }
-            catch
+            catch (Exception e)
             {
+                Log.ErrorOnce(ABLog.Tag + " V2: level chooser failed: " + e, 762195912);
             }
             finally
             {
                 ABMapSizeLimit.EndChooser();
             }
+        }
+
+        /// <summary>
+        /// The level chooser, drawn under vanilla's map-size column.
+        ///
+        /// Placed by hand rather than appended to vanilla's Listing_Standard because the
+        /// listing has already been End()ed by the time a postfix runs. y=210 clears the
+        /// size column in both configurations: our three sizes occupy ~112px, and ~188px
+        /// with Prefs.TestMapSizes adding its extra group.
+        /// </summary>
+        private static void DrawLevelChooser(Rect inRect)
+        {
+            if (!ABV2.Enabled || Find.GameInitData == null)
+            {
+                return;
+            }
+            ABSettings s = ABMod.Settings;
+            if (s == null)
+            {
+                return;
+            }
+            float x = 0f;
+            float width = 200f;
+            float y = 210f;
+
+            Text.Font = GameFont.Medium;
+            Widgets.Label(new Rect(x, y, width, 32f), "AB_LevelsHeading".Translate());
+            Text.Font = GameFont.Small;
+            y += 34f;
+
+            int upper = s.upperLevels;
+            int lower = s.lowerLevels;
+            y = Spinner(x, y, width, "AB_LevelsAbove".Translate(), ref upper,
+                0, ABMapSizeLimit.MaxUpperLevels);
+            y = Spinner(x, y, width, "AB_LevelsBelow".Translate(), ref lower,
+                0, ABMapSizeLimit.MaxLowerLevels);
+
+            if (upper != s.upperLevels || lower != s.lowerLevels)
+            {
+                s.upperLevels = upper;
+                s.lowerLevels = lower;
+                s.Write();
+                // The affordable size may have just changed under the selection.
+                Find.GameInitData.mapSize = ABMapSizeLimit.Clamp(Find.GameInitData.mapSize);
+            }
+
+            int bandCount = ABMapSizeLimit.BandCount;
+            int size = Find.GameInitData.mapSize;
+            int cells = ABMapSizeLimit.StackedCells(size, bandCount);
+            y += 4f;
+            Widgets.Label(new Rect(x, y, width, 24f),
+                "AB_LevelsSummary".Translate(bandCount, size));
+            y += 24f;
+
+            bool over = !ABMapSizeLimit.Fits(size, bandCount);
+            Color old = GUI.color;
+            if (over)
+            {
+                GUI.color = new Color(1f, 0.4f, 0.4f);
+            }
+            Widgets.Label(new Rect(x, y, width, 24f), "AB_LevelsCells".Translate(
+                cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0")));
+            GUI.color = old;
+            y += 26f;
+
+            if (bandCount <= 1)
+            {
+                GUI.color = new Color(1f, 1f, 1f, 0.62f);
+                Widgets.Label(new Rect(x, y, width, 48f), "AB_LevelsNoneNote".Translate());
+                GUI.color = old;
+            }
+        }
+
+        /// <summary>Label plus [-] n [+]. Deliberately not Widgets.IntEntry: that needs a
+        /// persistent string buffer per field and allows typing values outside the
+        /// range.</summary>
+        private static float Spinner(float x, float y, float width, string label,
+            ref int value, int min, int max)
+        {
+            Widgets.Label(new Rect(x, y + 2f, width - 80f, 24f), label);
+            Rect minus = new Rect(x + width - 78f, y, 24f, 24f);
+            Rect num = new Rect(x + width - 52f, y, 26f, 24f);
+            Rect plus = new Rect(x + width - 24f, y, 24f, 24f);
+            if (Widgets.ButtonText(minus, "-") && value > min)
+            {
+                value--;
+            }
+            TextAnchor anchor = Text.Anchor;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Widgets.Label(num, value.ToString());
+            Text.Anchor = anchor;
+            if (Widgets.ButtonText(plus, "+") && value < max)
+            {
+                value++;
+            }
+            return y + 28f;
         }
     }
 
@@ -241,7 +409,8 @@ namespace AsAboveSoBelow
                 if (locked)
                 {
                     label = "AB_MapSizeLocked".Translate(relabelled ?? label);
-                    tooltip = "AB_MapSizeLockedTip".Translate(ABMapSizeLimit.Cap);
+                    tooltip = "AB_MapSizeLockedTip".Translate(
+                        ABMapSizeLimit.CellBudget.ToString("N0"), ABMapSizeLimit.BandCount);
                     disabled = true;
                     return;
                 }

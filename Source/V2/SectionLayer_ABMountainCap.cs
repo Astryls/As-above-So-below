@@ -406,16 +406,22 @@ namespace AsAboveSoBelow
                     return;
                 }
                 Map ground = map;
+                // One slot down is the band this one stands on - the surface for level +1,
+                // and the sky band below for level +2 and up, which is exactly right: each
+                // sky level's mass is projected from the level beneath it, so mountains
+                // taper as they rise.
                 IntVec3 groundOffset = new IntVec3(0, 0, -bands.Slot);
-                int skyBand = bands.surfaceBand + 1;
+                int surfaceBand = bands.surfaceBand;
                 ThingDef fallbackRock = FallbackRock(map);
                 float y = AltitudeLayer.FloorEmplacement.AltitudeFor();
                 bool emitted = false;
                 foreach (IntVec3 c in section.CellRect)
                 {
-                    // Banded: only the sky band caps. Mined-rock leave-terrain also exists
-                    // in the BASEMENT band, which must not grow a mountain top.
-                    if (banded && ABBands.BandOf(map, c) != skyBand)
+                    // Banded: EVERY band above the surface caps, not just the first one -
+                    // with a multi-level plan there can be up to three. Mined-rock
+                    // leave-terrain also exists in the BASEMENT bands, which must never grow
+                    // a mountain top, hence a strict > rather than !=.
+                    if (banded && ABBands.BandOf(map, c) <= surfaceBand)
                     {
                         continue;
                     }

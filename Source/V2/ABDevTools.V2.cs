@@ -269,6 +269,16 @@ namespace AsAboveSoBelow
             return (List<SectionLayer>)AccessTools.Field(typeof(Section), "layers").GetValue(sec);
         }
 
+        /// <summary>Opens the camera-bounds calibration readout. The window UNLOCKS the
+        /// band clamp while it is open, so the camera can be pushed past the currently
+        /// baked limits to find better ones; the numbers it reports get baked into
+        /// ABCameraBounds.For(level).</summary>
+        [DebugAction("As above", "AB2: camera calibration", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2CameraCalibration()
+        {
+            Find.WindowStack.Add(new Dialog_ABCameraCalibration());
+        }
+
         [DebugAction("As above", "AB2: open all bands", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2OpenAllBands()
         {

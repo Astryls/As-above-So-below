@@ -150,9 +150,14 @@ namespace AsAboveSoBelow
     /// ThingCullDetails - a PRIVATE nested struct, which a postfix cannot name in its
     /// signature - and avoids a per-thing loop on a per-frame path.
     ///
-    /// This is what makes free panning possible: overhanging the band edge is now visually
-    /// harmless, because the neighbouring band simply is not drawn. The player sees empty
-    /// space past the edge of the level they are on.
+    /// This is what makes any edge overhang visually harmless: the neighbouring band simply
+    /// is not drawn, so the player sees empty space past the edge of the level they are on.
+    ///
+    /// ALWAYS ACTIVE as of the baked-bounds rework. It used to be gated on the free-pan
+    /// setting, on the reasoning that a strictly clamped camera makes the clip a no-op.
+    /// That reasoning died with the setting: per-level `panMargin` values mean the view is
+    /// *expected* to overhang, so the clip is now the load-bearing guarantee rather than a
+    /// redundant one. It is memoised per frame, so being unconditional costs one branch.
     ///
     /// The returned rect is modified, not the cached `lastViewRect` field, so vanilla's
     /// per-frame cache is not corrupted.
@@ -190,15 +195,7 @@ namespace AsAboveSoBelow
                     cachedFrame = Time.frameCount;
                     cachedActive = false;
                     Map map = Find.CurrentMap;
-                    // ONLY clip when free panning is actually enabled.
-                    //
-                    // With the band clamp active the camera can never leave the band, so the
-                    // clip is a guaranteed no-op - but it would still be feeding a rewritten
-                    // rect to every consumer of CurrentViewRect (sun shadows, the Burst cull
-                    // job, CameraDriver.IsVisible, mote and sound culling). There is no
-                    // reason to carry that risk for players who never turn the setting on.
                     if (map != null
-                        && ABMod.Settings != null && ABMod.Settings.freeCameraPan
                         // Gravship rendering encapsulates its own bounds into the view
                         // downstream of this; leave that path alone rather than clipping a
                         // rect it is about to extend for a different purpose.
@@ -256,29 +253,22 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
-    /// Keeps the camera's whole VIEW inside the current band - unless free panning is on.
+    /// Holds the camera to the current band, using the BAKED per-level bounds in
+    /// ABCameraBounds rather than a player-facing setting.
     ///
     /// Run #7 caught the naive version: clamping only rootPos (the view CENTRE) still let
     /// the viewport overhang the band edge, so the gutter and the neighbouring level were
     /// visible as a strip along the top/bottom of the screen. The camera is orthographic,
     /// so the visible half-height in world units IS RootSize - the centre must therefore
     /// stay RootSize away from each band edge, and the zoom must not exceed half the band
-    /// height or no centre position can satisfy that.
-    ///
-    /// With ABSettings.freeCameraPan the clamp is skipped entirely and vanilla's own
-    /// map-bounds clamping applies instead. That is safe ONLY because
-    /// Patch_CameraDriver_ABClipViewToBand stops the other bands drawing - without it,
-    /// removing this clamp is exactly the run #7 regression.
+    /// height or no centre position can satisfy that. That remains the derived default
+    /// (`maxZoom &lt;= 0`, `panMargin == 0`); a level may now widen either deliberately,
+    /// because the view clip above guarantees the overhang shows empty space and never the
+    /// neighbouring level.
     /// </summary>
     [HarmonyPatch(typeof(CameraDriver), nameof(CameraDriver.Update))]
     public static class Patch_CameraDriver_ABClampToBand
     {
-        private static readonly AccessTools.FieldRef<CameraDriver, Vector3> RootPosRef =
-            AccessTools.FieldRefAccess<CameraDriver, Vector3>("rootPos");
-
-        private static readonly AccessTools.FieldRef<CameraDriver, float> RootSizeRef =
-            AccessTools.FieldRefAccess<CameraDriver, float>("rootSize");
-
         private static void Postfix(CameraDriver __instance)
         {
             try
@@ -288,29 +278,33 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (ABMod.Settings != null && ABMod.Settings.freeCameraPan)
+                if (ABCameraBounds.CalibrationUnlocked)
                 {
-                    return; // pan and zoom freely; other bands are clipped out of the view
+                    // The calibration window is open: stand down so the camera can be
+                    // pushed PAST the baked limits. A tool that could only reach the
+                    // limits already in force could not help choose better ones.
+                    return;
                 }
                 float bandHeight = maxZ - minZ;
+                ABCameraBounds.Limits lim = ABCameraBounds.For(ABBandView.CurrentLevel(map));
 
-                // Never zoom out further than the band can fill, or the neighbouring band
-                // is guaranteed to show no matter where the camera sits.
-                float maxSize = bandHeight * 0.5f;
-                if (RootSizeRef(__instance) > maxSize)
+                // Derived default: never zoom out further than the band can fill.
+                float maxSize = lim.maxZoom > 0f ? lim.maxZoom : bandHeight * 0.5f;
+                if (ABCameraBounds.RootSize(__instance) > maxSize)
                 {
-                    RootSizeRef(__instance) = maxSize;
+                    ABCameraBounds.RootSize(__instance) = maxSize;
                 }
 
-                float half = RootSizeRef(__instance);
-                Vector3 p = RootPosRef(__instance);
-                float lo = minZ + half;
-                float hi = maxZ - half;
+                float half = ABCameraBounds.RootSize(__instance);
+                Vector3 p = ABCameraBounds.RootPos(__instance);
+                float margin = Mathf.Max(0f, lim.panMargin);
+                float lo = minZ + half - margin;
+                float hi = maxZ - half + margin;
                 float clamped = lo > hi ? (minZ + maxZ) * 0.5f : Mathf.Clamp(p.z, lo, hi);
                 if (!Mathf.Approximately(clamped, p.z))
                 {
                     p.z = clamped;
-                    RootPosRef(__instance) = p;
+                    ABCameraBounds.RootPos(__instance) = p;
                 }
             }
             catch (Exception e)

@@ -40,7 +40,12 @@ namespace AsAboveSoBelow
         /// Underground is stable and cool; the sky is thinner and colder.</summary>
         private const float BasementTempOffset = -6f;
 
-        private const float SkyTempOffset = -4f;
+        /// <summary>Per level of altitude, so it COMPOUNDS: +1 is brisk, +3 is genuinely
+        /// alpine. This single number is also the whole snow-line mechanism - vanilla melts
+        /// snow using each cell's own temperature, so a cold high level keeps its snow after
+        /// the surface has thawed, and the line moves with the seasons without any bespoke
+        /// system.</summary>
+        private const float SkyTempPerLevel = -4f;
 
         private static BiomeDef undergroundBiome;
 
@@ -107,7 +112,15 @@ namespace AsAboveSoBelow
             {
                 return 0f;
             }
-            return level < 0 ? BasementTempOffset : SkyTempOffset;
+            if (level > 0)
+            {
+                return SkyTempPerLevel * level;
+            }
+            // Deep rock does NOT keep getting colder - it converges on a stable
+            // temperature, and real caves warm again with depth. Held flat rather than
+            // scaled: a geothermal warming trend is defensible but it would change the
+            // balance of existing basements, and nothing has asked for it yet.
+            return BasementTempOffset;
         }
     }
 

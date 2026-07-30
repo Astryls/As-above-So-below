@@ -22,17 +22,22 @@
 
   <AB_LinkNeedsApproach>Must have at least one open cell directly beside it (not diagonal) for pawns to step in from.</AB_LinkNeedsApproach>
 
-  <!-- Camera -->
-  <AB_CameraHeading>Camera</AB_CameraHeading>
-  <AB_FreeCameraPan>Free camera panning</AB_FreeCameraPan>
-  <AB_FreeCameraPanTip>Lets the camera pan and zoom past the edges of the level you are on, instead of being held inside it. The other levels stay hidden either way, so panning past the edge shows empty space rather than the level above or below.</AB_FreeCameraPanTip>
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
   <AB_MapSizeBanded>{0}x{0} — {1} cells per level, {2} stacked</AB_MapSizeBanded>
   <AB_MapSizeBandedTip>As above, So below stacks {0} playable levels into a single map, so this colony costs the stacked cell count shown — that is the figure RimWorld's pathfinder works over, not the per-level size. These sizes are chosen to sit just under a 64-row boundary, where the dead space between levels shrinks to its 2-row minimum. Sizes in between waste up to a fifth of the map on empty seam.</AB_MapSizeBandedTip>
 
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>
-  <AB_MapSizeLockedTip>Locked by As above, So below. Each colony holds three stacked levels, so map sizes above {0}x{0} cost roughly three times their usual performance. Enable larger maps in the As above, So below mod settings.</AB_MapSizeLockedTip>
+  <AB_MapSizeLockedTip>Locked by As above, So below: this size across {1} stacked levels would exceed the {0} cell budget. RimWorld's pathfinder works over every cell of the whole stack, so the budget is what keeps a tall colony affordable. Either choose fewer levels, a smaller per-level size, or lift the budget in the As above, So below mod settings.</AB_MapSizeLockedTip>
+
+  <!-- Level plan -->
+  <AB_LevelsHeading>Levels</AB_LevelsHeading>
+  <AB_LevelsAbove>Above surface</AB_LevelsAbove>
+  <AB_LevelsBelow>Below surface</AB_LevelsBelow>
+  <AB_LevelsSummary>{0} levels, {1}x{1} each</AB_LevelsSummary>
+  <AB_LevelsCells>{0} cells (budget {1})</AB_LevelsCells>
+  <AB_LevelsNoneNote>No extra levels: this colony generates as an ordinary single-level map.</AB_LevelsNoneNote>
+  <AB_LevelsDefault>New colonies: {0} above, {1} below ({2} levels). Choose per colony on the map size screen when starting one.</AB_LevelsDefault>
   <AB_NaturalPeaks>Naturalistic mountain peaks on new sky levels</AB_NaturalPeaks>
   <AB_NaturalPeaksTip>Mountain tops on newly generated sky levels come out as walkable highland plateaus: natural terrain with patches of soil and vegetation, rocky outcrops, and a cliff rim of solid rock whose depth wanders naturally. Off restores the classic fully solid peak. Existing sky levels are unchanged either way.</AB_NaturalPeaksTip>
   <AB_PeakMeadowCutoff>Meadow threshold: {0}</AB_PeakMeadowCutoff>
@@ -45,8 +50,8 @@
   <AB_SkyHeading>Sky band</AB_SkyHeading>
   <AB_SubsystemDown>As above, so below: the '{0}' subsystem hit an error and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDown>
   <AB_SubsystemDownBecause>As above, so below: the '{0}' subsystem hit an error (likely cause: {1}) and shut itself down to protect your game. Other features keep running. You can re-arm it from the mod settings; details are in the log.</AB_SubsystemDownBecause>
-  <AB_UnclampMapSize>Allow colony maps larger than {0}x{0}</AB_UnclampMapSize>
-  <AB_UnclampMapSizeTip>As above, So below stacks three playable levels into one map. A {0}x{0} colony is already three times that many cells to simulate. Larger sizes are locked unless you enable this.</AB_UnclampMapSizeTip>
+  <AB_UnclampMapSize>Allow colony maps beyond the {0} cell budget</AB_UnclampMapSize>
+  <AB_UnclampMapSizeTip>As above, So below stacks every level of a colony into one map, and RimWorld's pathfinder works over every cell of that whole stack. Layouts are therefore budgeted by total cells rather than by per-level size: more levels means a smaller affordable footprint each. {0} cells covers three levels at 190x190, or seven at 126x126. Combinations that exceed it are locked unless you enable this.</AB_UnclampMapSizeTip>
   <AB_UnclampMapSizeWarning>WARNING: large maps will hurt performance badly. Unlocking this restores RimWorld's full size list, including sizes that fall badly on the 64-row boundary and spend up to a fifth of the map on empty space between levels. A 325x325 banded colony is roughly 300,000 cells for 317,000 of pathfinding work. Expect slowdowns and long map generation.</AB_UnclampMapSizeWarning>
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
