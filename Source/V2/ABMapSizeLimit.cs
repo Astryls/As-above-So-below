@@ -57,10 +57,11 @@ namespace AsAboveSoBelow
         //
         // The arithmetic that makes this work (heights sit just under a 64 boundary so the
         // gutter collapses to 2 rows):
-        // What 131,000 buys (per-level size x levels = stacked cells):
-        //   2 x 254 = 130,048   <- fits; 130,000 missed this by 48 cells, hence 131,000
-        //   3 x 190 = 109,440   |  4 x 190 = 145,920  <- refused
-        //   3 x 254 = 195,072   <- refused
+        // What 146,000 buys (per-level size x levels = stacked cells):
+        //   4 x 190 = 145,920   <- three upper levels at full size; the reason for 146,000
+        //   2 x 254 = 130,048   |  7 x 126 = 112,896
+        //   5 x 190 = 182,400   <- refused
+        //   7 x 190 = 255,360   <- refused (3 up AND 3 down at 190 drops the size to 126)
         //   7 x 126 = 112,896   <- seven levels for the price of three
         //   7 x 190 = 255,360   <- the footgun the budget exists to refuse
         // ==================================================
@@ -71,7 +72,7 @@ namespace AsAboveSoBelow
 
         /// <summary>Total cells a banded colony may allocate. Sized so the historical
         /// 3x190 layout and a 7x126 layout both fit, and 5x190 / 3x254 do not.</summary>
-        public const int CellBudget = 131000;
+        public const int CellBudget = 146000;
 
         public static int UpperLevels =>
             Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
