@@ -1,9 +1,19 @@
-> ⚠ **SUPERSEDED (2026-07-28).** This snapshot predates a full day of work: per-band biomes
-> via `BiomeAt`, Biomes! Caverns basements, sky vegetation, the camera/curtain system, the
-> sky-sync (wall stacking / rooftops), all three stair-stall fixes, curated map sizes, the
-> generation profiler and its ~4× carve optimization, and the mountain-base start. **The
-> Schematic (`.modmixer/schematic.json`) is the only current document.** Sections below may
-> be actively wrong — e.g. combat is "implemented, never verified", not untouched.
+> ⚠ **SUPERSEDED — DO NOT TRUST THIS FILE.** It is kept only for the reasoning it records
+> about the V1→V2 rearchitecture. **The Schematic (`.modmixer/schematic.json`) is the only
+> current document.**
+>
+> Since this snapshot: per-band biomes via `BiomeAt`, Biomes! Caverns basements, sky
+> vegetation, the camera/curtain system, sky-sync (wall stacking / rooftops), all three
+> stair-stall fixes, curated map sizes, the generation profiler, the mountain-base start,
+> the 7-level plan and cell budget, group-order fixes — and the **visuality pass**
+> (runs #167-171), which closed: shadows on every upper level, water visible from above
+> (1.6 water is a two-pass screen-space effect and only one pass was ported), river/lake
+> anchoring, coastline re-centring, snow-line removal, and compat for both Dubs Mint
+> Minimap and Map Preview.
+>
+> Concretely wrong below: the file/LOC counts (now ~61 files / ~16,400 LOC); combat is
+> "implemented, never verified", not untouched; and **the coastline caveat is FIXED** —
+> coastal tiles are multi-level again, so ignore any instruction to use inland tiles.
 
 # As above, So below II — V2 Handoff
 
@@ -245,7 +255,10 @@ deliberately: a pawn blocked by a just-landed pawn must still count as arrived.
   scribed reference plus a rework of `TryEstablish`'s single-`counterpart` assumption.
   Deliberately not bundled with the region-linking rewrite so a regression stays attributable.
 - **Transplant** — generate a normal map at full vanilla fidelity and move it into band 1.
-  Fixes the coastline caveat (**use inland tiles for now**), save migration, true-lazy banding.
+  Still the clean long-term answer to slicing, plus save migration and true-lazy banding.
+  **No longer needed for coastlines**: `TileMutatorWorker_Coast.GetNoiseValue` is now sampled
+  in band-local space, because `FalloffAtAngle`'s gradient was already one band wide and
+  merely centred on the middle of the whole stack. See §6e in the Schematic.
 - Turret cross-band targeting · drafted move ghost · per-band biome consumers · sky richness.
 
 ### Perf backlog

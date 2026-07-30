@@ -243,6 +243,85 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
+    /// COASTLINES ON A STACKED MAP.
+    ///
+    /// Symptom: a coastal colony generated with its ENTIRE surface band underwater - the
+    /// start-spot search reported "36100 water" out of exactly 36100 cells. 100%, not
+    /// "mostly", and that precision is what identified it: a lake CANNOT do that (its radius
+    /// is 0.6x the map WIDTH, so the band's corners always stay dry), only a map-spanning
+    /// coastline can.
+    ///
+    /// THE FALLOFF IS NOT SCALED WRONG, IT IS CENTRED WRONG. In
+    /// <c>MapNoiseUtility.FalloffAtAngle</c> the gradient's size comes only from
+    /// <c>map.Size.x</c> (<c>DistFromAxis_Directional(x/2)</c>, then a translate by
+    /// <c>x*(0.5-offsetPct)</c>). <c>map.Size.z</c> appears in exactly ONE place: the final
+    /// <c>Translate(-x/2, 0, -z/2)</c> that parks the field on the map centre. So on a stacked
+    /// map the coast gradient is already the right SIZE - one band wide - and merely sits at
+    /// the middle of the whole STACK. A surface band hundreds of cells from a gradient only
+    /// ~190 wide is fully saturated: all ocean, or all land.
+    ///
+    /// The correction is a coordinate rewrite, not a rebuild:
+    ///     <c>z' = (z % Slot) + (map.Size.z - bandHeight) / 2</c>
+    /// The modulo puts EVERY band on the same rows, so the ocean lands in the same place on
+    /// every level - which is what a stacked coastal colony wants. The offset re-centres the
+    /// band on the field's centre, giving exactly the window an ordinary bandHeight-tall map
+    /// would see.
+    ///
+    /// NO SCALING, deliberately. Stretching band-local z to span the full map height is the
+    /// obvious way to "fit" the gradient and it would have skewed every coastline that is not
+    /// axis-aligned (the rotation happens INSIDE the module) and made the displacement noise
+    /// anisotropic, smearing beach detail. Re-centring keeps the field isotropic and the angle
+    /// exact.
+    ///
+    /// ONE PATCH COVERS THE WHOLE FAMILY: Bay, Cove, Fjord, Peninsula, Archipelago,
+    /// CoastalIsland, CoastalAtoll, Iceberg and Lakeshore all derive from
+    /// <c>TileMutatorWorker_Coast</c> and NONE of them override <c>GetNoiseValue</c> - it is
+    /// the single point where the coast field is read, by both the elevation pass and the
+    /// terrain pass.
+    ///
+    /// The map comes from <c>MapGenerator.mapBeingGenerated</c> because GetNoiseValue is not
+    /// handed one; that also makes this work during a MAP PREVIEW, which sets the same field
+    /// and whose band layout TryPendingSurfaceRect infers from the size.
+    ///
+    /// STILL OPEN: Basin, Cavern, Chasm, Cliffs, Hollow and Valley use FalloffAtAngle too and
+    /// carry the same mis-centring, but they do not share this sampling hook.
+    /// </summary>
+    [HarmonyPatch(typeof(TileMutatorWorker_Coast), "GetNoiseValue")]
+    public static class Patch_TileMutatorWorker_Coast_ABBandLocal
+    {
+        private static void Prefix(ref IntVec3 cell)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.LevelGen))
+                {
+                    return;
+                }
+                Map map = MapGenerator.mapBeingGenerated;
+                if (map == null)
+                {
+                    return;
+                }
+                if (!ABBandedGeneration.TryPendingSurfaceRect(map, out CellRect surface, out int slot)
+                    || slot <= 0)
+                {
+                    return;
+                }
+                int h = surface.Height;
+                if (h <= 0 || h >= map.Size.z)
+                {
+                    return;
+                }
+                cell = new IntVec3(cell.x, cell.y, (cell.z % slot) + (map.Size.z - h) / 2);
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: coast band-local patch threw: " + e, 762195883);
+            }
+        }
+    }
+
+    /// <summary>
     /// V2 see-below: the WATER DEPTH pass for the band underneath - the missing half of
     /// water seen from above.
     ///
