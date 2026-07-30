@@ -285,15 +285,23 @@ namespace AsAboveSoBelow
                 {
                     return; // a real route exists (stairs); leave it to the router
                 }
+                // NEVER hand back a destination this pawn cannot reach either. Without this
+                // the patch could replace one unreachable cell with another and merely move
+                // the failure - and because MultiPawnGotoController calls this ONCE PER PAWN
+                // to lay out a formation, a per-pawn substitution that misses turns vanilla's
+                // tight cluster into pawns resolving independently (observed: an evenly
+                // spaced vertical column, one pawn heading the opposite way).
                 IntVec3 onPawnBand = bands.Translate(root, pawnBand);
                 if (onPawnBand.InBounds(map) && !bands.InGutter(onPawnBand)
-                    && onPawnBand.Walkable(map))
+                    && onPawnBand.Walkable(map)
+                    && searcher.CanReach(onPawnBand, PathEndMode.OnCell, Danger.Deadly))
                 {
                     root = onPawnBand;
                     return;
                 }
                 if (ABBelowClickThrough.TryNearestWalkableOnBand(map, bands, onPawnBand,
-                        pawnBand, out IntVec3 snapped))
+                        pawnBand, out IntVec3 snapped)
+                    && searcher.CanReach(snapped, PathEndMode.OnCell, Danger.Deadly))
                 {
                     root = snapped;
                 }
@@ -303,6 +311,131 @@ namespace AsAboveSoBelow
                 Log.WarningOnce(ABLog.Tag + " V2: ordered-goto band fix threw: " + e.Message,
                     762195914);
             }
+        }
+    }
+
+    /// <summary>
+    /// The group-goto PREVIEW, drawn into the level you are looking at.
+    ///
+    /// MultiPawnGotoController.Draw builds every position with
+    /// `ToVector3ShiftedWithAltitude` from cells on the PAWNS' own band, so from an upper
+    /// level the drag line and the destination ghosts render at that band's world z - which
+    /// on screen is the bottom of the map. Nothing is wrong with the cells; they are simply
+    /// drawn where they really are.
+    ///
+    /// Vanilla's body is short and uses public drawing APIs, so it is re-emitted here with
+    /// each position lifted into the current view band. Replacing a vanilla draw carries
+    /// upkeep if Ludeon changes it, so this is deliberately conservative: banded maps only,
+    /// and ANY missing member or thrown exception falls straight through to vanilla rather
+    /// than leaving the preview broken.
+    /// </summary>
+    [HarmonyPatch(typeof(MultiPawnGotoController), nameof(MultiPawnGotoController.Draw))]
+    public static class Patch_MultiPawnGotoController_ABDrawInViewBand
+    {
+        private static readonly AccessTools.FieldRef<MultiPawnGotoController, bool> ActiveRef =
+            AccessTools.FieldRefAccess<MultiPawnGotoController, bool>("active");
+
+        private static readonly AccessTools.FieldRef<MultiPawnGotoController,
+            System.Collections.Generic.List<Pawn>> PawnsRef =
+            AccessTools.FieldRefAccess<MultiPawnGotoController,
+                System.Collections.Generic.List<Pawn>>("pawns");
+
+        private static readonly AccessTools.FieldRef<MultiPawnGotoController,
+            System.Collections.Generic.List<IntVec3>> DestsRef =
+            AccessTools.FieldRefAccess<MultiPawnGotoController,
+                System.Collections.Generic.List<IntVec3>>("dests");
+
+        private static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> StartRef =
+            AccessTools.FieldRefAccess<MultiPawnGotoController, IntVec3>("start");
+
+        private static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> EndRef =
+            AccessTools.FieldRefAccess<MultiPawnGotoController, IntVec3>("end");
+
+        private static bool matsResolved;
+
+        private static Material circleMat;
+
+        private static Material lineMat;
+
+        private static void ResolveMats()
+        {
+            matsResolved = true;
+            circleMat = AccessTools.Field(typeof(MultiPawnGotoController), "GotoCircleMaterial")
+                ?.GetValue(null) as Material;
+            lineMat = AccessTools.Field(typeof(MultiPawnGotoController), "GotoBetweenLineMaterial")
+                ?.GetValue(null) as Material;
+        }
+
+        private static bool Prefix(MultiPawnGotoController __instance)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.Rendering) || !ActiveRef(__instance))
+                {
+                    return true;
+                }
+                Map map = Find.CurrentMap;
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded)
+                {
+                    return true;
+                }
+                if (!matsResolved)
+                {
+                    ResolveMats();
+                }
+                if (circleMat == null || lineMat == null)
+                {
+                    return true; // could not reach vanilla's materials; let it draw normally
+                }
+                int viewBand = ABBandView.CurrentBand(map);
+                System.Collections.Generic.List<Pawn> pawns = PawnsRef(__instance);
+                System.Collections.Generic.List<IntVec3> dests = DestsRef(__instance);
+                if (pawns == null || dests == null)
+                {
+                    return true;
+                }
+                // Vanilla's own constants, kept verbatim so the preview looks identical.
+                Vector3 size = new Vector3(1.7f, 1f, 1.7f);
+                float alt = AltitudeLayer.MetaOverlays.AltitudeFor();
+                float altCircle = alt + 0.03658537f;
+                float altLine = alt - 0.03658537f;
+                int count = Mathf.Min(pawns.Count, dests.Count);
+                for (int i = 0; i < count; i++)
+                {
+                    Pawn pawn = pawns[i];
+                    IntVec3 c = dests[i];
+                    if (pawn == null || !c.IsValid || !pawn.Spawned || c.Fogged(pawn.Map))
+                    {
+                        continue;
+                    }
+                    pawn.Drawer.renderer.RenderPawnAt(Lift(bands, viewBand, c, alt), Rot4.South);
+                    Graphics.DrawMesh(MeshPool.plane10,
+                        Matrix4x4.TRS(Lift(bands, viewBand, c, altCircle), Quaternion.identity, size),
+                        circleMat, 0);
+                }
+                GenDraw.DrawLineBetween(Lift(bands, viewBand, StartRef(__instance), altLine),
+                    Lift(bands, viewBand, EndRef(__instance), altLine), lineMat, 0.9f);
+                return false;
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: goto preview redraw threw, using vanilla: "
+                    + e.Message, 762195915);
+                return true;
+            }
+        }
+
+        /// <summary>A cell's draw position, lifted from its own band into the viewed one.</summary>
+        private static Vector3 Lift(ABBandMap bands, int viewBand, IntVec3 c, float altitude)
+        {
+            Vector3 v = c.ToVector3ShiftedWithAltitude(altitude);
+            int band = bands.BandOf(c);
+            if (band >= 0 && band != viewBand)
+            {
+                v.z += (viewBand - band) * bands.Slot;
+            }
+            return v;
         }
     }
 
