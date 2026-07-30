@@ -329,6 +329,17 @@ namespace AsAboveSoBelow
     /// and ANY missing member or thrown exception falls straight through to vanilla rather
     /// than leaving the preview broken.
     /// </summary>
+    /// <remarks>
+    /// <c>[StaticConstructorOnStartup]</c> is required by Verse's own static analysis, not by
+    /// our logic: any type holding a <c>Material</c> field is flagged with "All assets must be
+    /// loaded in the main thread". The two materials here are resolved LAZILY from vanilla
+    /// statics inside Draw (already the main thread), so nothing was ever actually unsafe -
+    /// but the attribute is free, it silences a warning that would otherwise be noise in
+    /// every future test run, and the check exists because this pattern usually IS a
+    /// cross-thread asset load. The static field initialisers it forces to run at startup are
+    /// all AccessTools reflection, which is main-thread-safe.
+    /// </remarks>
+    [StaticConstructorOnStartup]
     [HarmonyPatch(typeof(MultiPawnGotoController), nameof(MultiPawnGotoController.Draw))]
     public static class Patch_MultiPawnGotoController_ABDrawInViewBand
     {
