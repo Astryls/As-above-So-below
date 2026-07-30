@@ -13,6 +13,13 @@
     <passability>Impassable</passability>
     <avoidWander>true</avoidWander>
     <fertility>0</fertility>
+    <!-- THE FIX FOR "SNOW COVERS THE WHOLE SKY LEVEL".
+         TerrainDef.holdSnowOrSand DEFAULTS TO TRUE, and SnowGrid.CanHaveSnow consults
+         nothing else about the terrain - so open air was accumulating snow like any
+         meadow. On a sky band that is mostly void, that is the entire screen white, and
+         the gutter rows did it too. Water terrains are the vanilla precedent for turning
+         it off. -->
+    <holdSnowOrSand>false</holdSnowOrSand>
   </TerrainDef>
 
   <TerrainDef>
@@ -60,6 +67,11 @@
     <layerable>false</layerable>
     <passability>Impassable</passability>
     <fertility>0</fertility>
+    <!-- Matches vanilla walls exactly: SnowGrid.CanCoexistWithSnow returns false for any
+         Building with Fillage.Full, so a real wall never holds snow. A wall top IS that
+         wall seen from above, so it must not either - otherwise every wall on the level
+         below grows a white cap that the wall itself does not have. -->
+    <holdSnowOrSand>false</holdSnowOrSand>
     <affordances>
       <li>Light</li>
       <li>Medium</li>

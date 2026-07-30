@@ -37,15 +37,50 @@ namespace AsAboveSoBelow
     public static class ABBandEnv
     {
         /// <summary>Degrees offset from the map's outdoor temperature, per level.
-        /// Underground is stable and cool; the sky is thinner and colder.</summary>
+        /// Underground is stable and cool.</summary>
         private const float BasementTempOffset = -6f;
 
-        /// <summary>Per level of altitude, so it COMPOUNDS: +1 is brisk, +3 is genuinely
-        /// alpine. This single number is also the whole snow-line mechanism - vanilla melts
-        /// snow using each cell's own temperature, so a cold high level keeps its snow after
-        /// the surface has thawed, and the line moves with the seasons without any bespoke
-        /// system.</summary>
-        private const float SkyTempPerLevel = -4f;
+        /// <summary>
+        /// ⚠ THE LAPSE RATE IS NOT LINEAR, AND THE OLD COMMENT HERE WAS WRONG.
+        ///
+        /// It used to be a single -4/level constant, justified by "vanilla melts snow using
+        /// each CELL's own temperature, so a cold high level keeps its snow". That is FALSE.
+        /// <c>SteadyEnvironmentEffects.SteadyEnvironmentEffectsTick</c> computes
+        /// <c>outdoorMeltAmount = MeltAmountAt(map.mapTemperature.OutdoorTemp)</c> ONCE PER
+        /// TICK FOR THE WHOLE MAP and applies it to every outdoor cell. It never consults
+        /// <c>GenTemperature.TryGetTemperatureForCell</c>, which is the only thing this
+        /// offset patches - so the sky levels melted at exactly the surface's rate and the
+        /// snow line has never once worked. Fixed by
+        /// <see cref="Patch_SteadyEnvironmentEffects_ABBandSnow"/>, which is what finally
+        /// makes these numbers mean something.
+        ///
+        /// The curve ACCELERATES rather than stepping evenly, because the three levels are
+        /// meant to read as three different places rather than three equal increments:
+        ///   +1  -7   a cool upland. Seasons unchanged, just brisker.
+        ///   +2 -16   THE SEASONAL SNOW LINE - white in winter, bare in high summer. This
+        ///            band straddling 0 across the year is the whole point; it is what makes
+        ///            altitude legible at a glance.
+        ///   +3 -35   a permanent cap in any ordinary biome. Chosen so a temperate summer
+        ///            (~30) still lands at -5, while a desert (~45) or a heat wave DOES thaw
+        ///            it - melting the cap is meant to be possible, just extreme.
+        /// Deliberately NO ceiling clamp: the melt has to stay a consequence of real
+        /// temperature, or an extreme biome could never overcome it.
+        ///
+        /// Levels beyond the table extrapolate at the last step so a taller stack stays
+        /// monotonic instead of falling off the end of the array.
+        /// </summary>
+        private static readonly float[] SkyTempOffsets = { 0f, -7f, -16f, -35f };
+
+        /// <summary>Wind multiplier by level. Exposed ridges catch more wind, and this is
+        /// the one place altitude pays the player back for the cold. Applied to wind TURBINE
+        /// output only (see <see cref="Patch_CompPowerPlantWind_ABAltitudeWind"/>), not to
+        /// the map's wind speed itself, which is a single per-map value driving plant sway
+        /// and weather visuals.
+        ///
+        /// Below the surface it is ZERO: there is no wind in a sealed basement. Vanilla's
+        /// own roof check in RecalculateBlockages very likely zeroes a buried turbine
+        /// already, but stating it here means the rule does not depend on that.</summary>
+        private static readonly float[] WindFactors = { 1f, 1.15f, 1.3f, 1.5f };
 
         private static BiomeDef undergroundBiome;
 
@@ -114,13 +149,37 @@ namespace AsAboveSoBelow
             }
             if (level > 0)
             {
-                return SkyTempPerLevel * level;
+                if (level < SkyTempOffsets.Length)
+                {
+                    return SkyTempOffsets[level];
+                }
+                // Past the table: continue at the last step rather than clamping, so an
+                // eighth level is colder than the seventh instead of identical to it.
+                int last = SkyTempOffsets.Length - 1;
+                float step = SkyTempOffsets[last] - SkyTempOffsets[last - 1];
+                return SkyTempOffsets[last] + step * (level - last);
             }
             // Deep rock does NOT keep getting colder - it converges on a stable
             // temperature, and real caves warm again with depth. Held flat rather than
             // scaled: a geothermal warming trend is defensible but it would change the
             // balance of existing basements, and nothing has asked for it yet.
             return BasementTempOffset;
+        }
+
+        /// <summary>Wind turbine output multiplier for a level. 0 underground.</summary>
+        public static float WindFactorForLevel(int level)
+        {
+            if (level < 0)
+            {
+                return 0f;
+            }
+            if (level < WindFactors.Length)
+            {
+                return WindFactors[level];
+            }
+            int last = WindFactors.Length - 1;
+            float step = WindFactors[last] - WindFactors[last - 1];
+            return WindFactors[last] + step * (level - last);
         }
     }
 

@@ -31,6 +31,10 @@
   <AB_MapSizeLocked>{0}  [locked]</AB_MapSizeLocked>
   <AB_MapSizeLockedTip>Locked by As above, So below: this size across {1} stacked levels would exceed the {0} cell budget. RimWorld's pathfinder works over every cell of the whole stack, so the budget is what keeps a tall colony affordable. Either choose fewer levels, a smaller per-level size, or lift the budget in the As above, So below mod settings.</AB_MapSizeLockedTip>
 
+  <!-- Weather / altitude -->
+  <AB_WindAltitudeBonus>Exposed to altitude winds: +{0}% output</AB_WindAltitudeBonus>
+  <AB_WindNoneUnderground>Underground: no wind</AB_WindNoneUnderground>
+
   <!-- Level plan -->
   <AB_LevelsHeading>Levels</AB_LevelsHeading>
   <AB_LevelsAbove>Above surface</AB_LevelsAbove>
