@@ -113,7 +113,13 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>Runs right after the map mesh, so the curtain lands over any region the
-    /// section pass left untouched.</summary>
+    /// section pass left untouched.
+    ///
+    /// The skyfaller relay rides along here because it is the mirror image of the curtain:
+    /// the curtain paints the region outside the band, and the relay is the one thing that
+    /// is deliberately allowed to draw OVER that paint. Issuing them from the same hook keeps
+    /// the pair together. Draw order between the two does not matter - both go into the
+    /// transparent queue and sort by altitude - but reading them side by side does.</summary>
     [HarmonyPatch(typeof(MapDrawer), nameof(MapDrawer.DrawMapMesh))]
     public static class Patch_MapDrawer_ABBandCurtain
     {
@@ -122,13 +128,23 @@ namespace AsAboveSoBelow
 
         private static void Postfix(MapDrawer __instance)
         {
+            Map map = null;
             try
             {
-                ABBandCurtain.Draw(MapRef(__instance));
+                map = MapRef(__instance);
+                ABBandCurtain.Draw(map);
             }
             catch (Exception e)
             {
                 Log.ErrorOnce(ABLog.Tag + " V2: band curtain draw threw: " + e, 762195881);
+            }
+            try
+            {
+                ABSkyfallerRelay.Draw(map);
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: skyfaller relay threw: " + e, 331880418);
             }
         }
     }

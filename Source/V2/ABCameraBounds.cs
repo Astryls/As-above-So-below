@@ -68,18 +68,26 @@ namespace AsAboveSoBelow
             // zoom ~63 and margin 63.5 the view centre may sit only ~0.5 cells outside the
             // band, because the viewport already spans almost the whole level. Real framing
             // freedom would need a margin well above the zoom value.
+            //
+            // ONE ROW FOR EVERY LEVEL, as of the QOL pass.
+            //
+            // The table used to give the measured margin to levels +1..+3 and a hard zero to
+            // the surface and everything below it, on the reasoning that the calibration had
+            // only ever been run in the sky. In play that read as the framing being BROKEN on
+            // the ground floor: the surface is the level the player spends nearly all their
+            // time on, so the one level with no overhang was the one whose camera felt
+            // wrong - it refused to let the level sit away from the screen edge at all.
+            //
+            // There was never a per-level reason for the difference. panMargin is purely a
+            // framing choice: Patch_CameraDriver_ABClipViewToBand guarantees that whatever
+            // shows past a band edge is empty curtain and never the neighbouring level, so
+            // overhang cannot leak anything on any level, above or below. The switch is kept
+            // (rather than collapsed to a single return) because it is still the place a
+            // genuinely per-level value would go if one is ever calibrated.
             switch (level)
             {
-                case 3:
+                default:
                     return new Limits(0f, 63.5f);
-                case 2:  // measured
-                    return new Limits(0f, 63.5f);
-                case 1:
-                    return new Limits(0f, 63.5f);
-                case 0:  // surface
-                    return new Limits(0f, 0f);
-                default: // every level below the surface
-                    return new Limits(0f, 0f);
             }
         }
 
