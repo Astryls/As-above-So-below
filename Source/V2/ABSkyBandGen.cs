@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -76,6 +77,10 @@ namespace AsAboveSoBelow
             }
 
             byte[] kind = Classify(solid, w, h);
+            // ONE central fog hole, decided up front over the whole band rather than
+            // per cell, so the mass shows a single soft fog border instead of a rash of
+            // little ones.
+            bool[] fogMask = ComputeFogMask(kind, w, h);
 
             // ---- pass 2: terrain, walls, roofs ------------------------------
             ABSettings settings = ABMod.Settings;
@@ -120,7 +125,7 @@ namespace AsAboveSoBelow
                             // visible so the mountain reads as a mountain from above -
                             // fogging the faces lets the fog's soft edge swallow the
                             // ledge entirely (V1 playtest regression).
-                            if (AllWithinRadius(kind, w, h, x, z, 2, KindWall))
+                            if (fogMask[idx])
                             {
                                 fogCells.Add(c);
                             }
@@ -353,7 +358,95 @@ namespace AsAboveSoBelow
                     kind[i] = ed <= TerraceWidth(terraceNoise, c, terraceMax) ? KindLedge : KindWall;
                 }
             }
+            Despeckle(kind, solid, w, h, 2);
             return kind;
+        }
+
+        /// <summary>
+        /// THE REAL CAUSE OF "TEXTURE OUTLINE ERRORS", fixed at its source.
+        ///
+        /// Two independent noise fields (meadow and terrace) crossed at cell resolution
+        /// speckle the mass into dozens of one- and two-cell wall stubs and pinhole floor
+        /// pockets. Every one of those is a real wall/floor boundary, so vanilla draws it
+        /// a lip, an outline and an edge shadow - correctly - and the summit ends up laced
+        /// with nested rings. Hiding the wall sprites "fixed" the symptom and destroyed
+        /// the wall/floor read (minable rock looked like floor, ore veins turned into
+        /// glyphs); the honest fix is to stop generating the speckle.
+        ///
+        /// A majority filter: a wall with 6+ open neighbours dissolves into ledge, a floor
+        /// cell with 6+ wall neighbours fills in. Conversions require all EIGHT neighbours
+        /// to be inside the mass, which means edgeDist >= 2 - so the rim is never touched
+        /// and the "ledge band >= 1 cell" invariant survives untouched. Two passes clears
+        /// stubs and pinholes while leaving any 3x3-or-larger formation intact.
+        /// </summary>
+        private static void Despeckle(byte[] kind, bool[] solid, int w, int h, int passes)
+        {
+            int count = w * h;
+            byte[] next = new byte[count];
+            for (int p = 0; p < passes; p++)
+            {
+                Array.Copy(kind, next, count);
+                for (int z = 0; z < h; z++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        int i = z * w + x;
+                        if (!solid[i])
+                        {
+                            continue;
+                        }
+                        int wall = 0;
+                        int open = 0;
+                        int inMass = 0;
+                        for (int dz = -1; dz <= 1; dz++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dz == 0)
+                                {
+                                    continue;
+                                }
+                                int nx = x + dx;
+                                int nz = z + dz;
+                                if (nx < 0 || nz < 0 || nx >= w || nz >= h)
+                                {
+                                    continue;
+                                }
+                                int n = nz * w + nx;
+                                if (!solid[n])
+                                {
+                                    continue;
+                                }
+                                inMass++;
+                                if (kind[n] == KindWall)
+                                {
+                                    wall++;
+                                }
+                                else
+                                {
+                                    open++;
+                                }
+                            }
+                        }
+                        if (inMass < 8)
+                        {
+                            continue; // rim cell - leave the ledge band alone
+                        }
+                        if (kind[i] == KindWall)
+                        {
+                            if (open >= 6)
+                            {
+                                next[i] = KindLedge;
+                            }
+                        }
+                        else if (wall >= 6)
+                        {
+                            next[i] = KindWall;
+                        }
+                    }
+                }
+                Array.Copy(next, kind, count);
+            }
         }
 
         /// <summary>Width of the walkable rim before solid rock begins.
@@ -376,25 +469,124 @@ namespace AsAboveSoBelow
             return Mathf.Clamp(w, 1, max);
         }
 
-        private static bool AllWithinRadius(byte[] kind, int w, int h, int x, int z, int radius, byte want)
+        /// <summary>Wall depth at which the interior fogs.</summary>
+        private const int FogDepth = 3;
+
+        /// <summary>Fog regions smaller than this are dropped outright: a handful of
+        /// fogged cells buys nothing and costs another soft border.</summary>
+        private const int MinFogComponent = 24;
+
+        /// <summary>
+        /// The fog mask: wall cells at least FogDepth into the rock, keeping only
+        /// components big enough to be worth a border - "one centre hole" rather than a
+        /// scatter of small ones, which is what multiplied the border lines before.
+        ///
+        /// Distance is measured out of everything that is NOT wall (open mass cells and
+        /// off-mass cells alike), so a tunnel or a plateau bay pushes the fog line back
+        /// exactly as a player would expect.
+        /// </summary>
+        private static bool[] ComputeFogMask(byte[] kind, int w, int h)
         {
-            for (int dz = -radius; dz <= radius; dz++)
+            int count = w * h;
+            int[] depth = new int[count];
+            Queue<int> queue = new Queue<int>();
+            for (int i = 0; i < count; i++)
             {
-                for (int dx = -radius; dx <= radius; dx++)
+                if (kind[i] == KindWall)
                 {
-                    int nx = x + dx;
-                    int nz = z + dz;
-                    if (nx < 0 || nz < 0 || nx >= w || nz >= h)
+                    depth[i] = int.MaxValue;
+                }
+                else
+                {
+                    depth[i] = 0;
+                    queue.Enqueue(i);
+                }
+            }
+            while (queue.Count > 0)
+            {
+                int cur = queue.Dequeue();
+                int cx = cur % w;
+                int cz = cur / w;
+                int d = depth[cur] + 1;
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
                     {
-                        return false;
-                    }
-                    if (kind[nz * w + nx] != want)
-                    {
-                        return false;
+                        if (dx == 0 && dz == 0)
+                        {
+                            continue;
+                        }
+                        int nx = cx + dx;
+                        int nz = cz + dz;
+                        if (nx < 0 || nz < 0 || nx >= w || nz >= h)
+                        {
+                            continue;
+                        }
+                        int n = nz * w + nx;
+                        if (depth[n] > d)
+                        {
+                            depth[n] = d;
+                            queue.Enqueue(n);
+                        }
                     }
                 }
             }
-            return true;
+            bool[] mask = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                mask[i] = kind[i] == KindWall && depth[i] >= FogDepth;
+            }
+            // Prune fog islands below the size threshold.
+            bool[] seen = new bool[count];
+            List<int> comp = new List<int>();
+            for (int i = 0; i < count; i++)
+            {
+                if (!mask[i] || seen[i])
+                {
+                    continue;
+                }
+                comp.Clear();
+                queue.Clear();
+                queue.Enqueue(i);
+                seen[i] = true;
+                while (queue.Count > 0)
+                {
+                    int cur = queue.Dequeue();
+                    comp.Add(cur);
+                    int cx = cur % w;
+                    int cz = cur / w;
+                    for (int dz = -1; dz <= 1; dz++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            if (dx == 0 && dz == 0)
+                            {
+                                continue;
+                            }
+                            int nx = cx + dx;
+                            int nz = cz + dz;
+                            if (nx < 0 || nz < 0 || nx >= w || nz >= h)
+                            {
+                                continue;
+                            }
+                            int n = nz * w + nx;
+                            if (mask[n] && !seen[n])
+                            {
+                                seen[n] = true;
+                                queue.Enqueue(n);
+                            }
+                        }
+                    }
+                }
+                if (comp.Count < MinFogComponent)
+                {
+                    for (int k = 0; k < comp.Count; k++)
+                    {
+                        mask[comp[k]] = false;
+                    }
+                }
+            }
+            return mask;
         }
 
         private static float Noise01(Perlin noise, IntVec3 c)

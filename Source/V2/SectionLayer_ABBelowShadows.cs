@@ -470,10 +470,16 @@ namespace AsAboveSoBelow
 
     /// <summary>
     /// Vanilla SectionLayer_EdgeShadows' per-cell geometry, extracted VERBATIM so the
-    /// below-view port above and the sky-mass-scoped replacement (ABSkyMassShadowScope)
-    /// share one copy of the four asymmetric corner blocks instead of drifting apart.
-    /// Callers prepare the corner/cardinal/diagOnly arrays from their own caster rule
-    /// and coordinate mapping; this emits at (i, j).
+    /// below-view port above keeps one authoritative copy of the four asymmetric corner
+    /// blocks (they are NOT interchangeable - windings and offset signs differ per
+    /// corner). Callers prepare the corner/cardinal/diagOnly arrays from their own caster
+    /// rule and coordinate mapping; this emits at (i, j).
+    ///
+    /// A second consumer once lived here: a sky-mass-scoped replacement of vanilla's own
+    /// EdgeShadows and SunShadows layers, which suppressed shadows cast INSIDE the
+    /// mountain mass. It was retired along with the wall-sprite suppression it existed to
+    /// support - with wall sprites visible again those shadows are correct vanilla
+    /// shading, and the redundant-outline problem is fixed in the generator instead.
     /// </summary>
     internal static class ABEdgeShadowGeometry
     {

@@ -482,8 +482,9 @@ namespace AsAboveSoBelow
                     Color32 shadeN = faceDepth >= 0 ? FaceShade(faceDepth, true) : White;
 
                     // The unified field underlay: the rock's own rough terrain,
-                    // world-position sampled, on EVERY mass cell.
-                    TerrainDef rough = rock?.building?.naturalTerrain;
+                    // world-position sampled, on every open mass cell.
+                    TerrainDef rough = rock?.building?.naturalTerrain
+                        ?? fallbackRock?.building?.naturalTerrain;
                     if (rough != null)
                     {
                         Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
@@ -493,18 +494,14 @@ namespace AsAboveSoBelow
                             emitted = true;
                         }
                     }
-                    else
-                    {
-                        // No naturalTerrain (never happens post-generator; belt and
-                        // braces): flat atlas base, uv-carrying quad.
-                        Material flatField = QueueClone(AtlasBaseFor(rock));
-                        if (flatField != null)
-                        {
-                            AddQuad(GetSubMesh(flatField), c.x, c.z, c.x + 1, c.z + 1, y,
-                                shadeS, shadeN);
-                            emitted = true;
-                        }
-                    }
+                    // NO atlas fallback here, deliberately. Drawing AtlasBaseFor() as a
+                    // flat 0..1-uv quad was the "compacted steel looks like strange
+                    // text" bug: that material is the whole LINKED ATLAS SHEET, so a
+                    // full-cell quad crams every sub-tile into one cell and the motif
+                    // repeats per cell as glyph soup. An atlas base is only ever valid
+                    // through MaterialAtlasPool.SubMaterialFromAtlas. If a modded rock
+                    // somehow has no rough terrain at all, this cell simply shows the
+                    // cap terrain - dull, but never wrong.
                     // The plateau boundary: the meadow's own vanilla fade fan over
                     // this mass cell (run-44 wanted a soft transition; the flat-tone
                     // skirt yielded to the real fade mechanic).
@@ -906,7 +903,7 @@ namespace AsAboveSoBelow
                 return null;
             }
             Building ed = ground.edificeGrid[c];
-            if (ed != null && ed.def.mineable)
+            if (IsHostStone(ed?.def))
             {
                 return ed.def;
             }
@@ -923,12 +920,32 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 Building nEd = ground.edificeGrid[n];
-                if (nEd != null && nEd.def.mineable)
+                if (IsHostStone(nEd?.def))
                 {
                     return nEd.def;
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Host STONE only - never an ore, and never a rock without generated rough
+        /// terrain.
+        ///
+        /// Ore is embedded IN stone: the mountain top above a vein is that host stone,
+        /// not the vein. More importantly `TerrainDefGenerator_Stone.ImpliedTerrainDefs`
+        /// only builds the `_Rough` / `_RoughHewn` terrains for
+        /// `isNaturalRock &amp;&amp; !isResourceRock`, so **ore defs have a null
+        /// `building.naturalTerrain`**. Typing a cell from an ore therefore left the
+        /// field underlay with no terrain material to draw and fell through to an atlas
+        /// fallback that rendered the whole sheet per cell - the "compacted steel looks
+        /// like text" report. Requiring naturalTerrain here makes that unrepresentable
+        /// rather than merely unlikely.
+        /// </summary>
+        private static bool IsHostStone(ThingDef def)
+        {
+            return def != null && def.mineable && def.building != null
+                && !def.building.isResourceRock && def.building.naturalTerrain != null;
         }
 
         private static ThingDef FallbackRock(Map map)
