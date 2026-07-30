@@ -109,7 +109,6 @@ namespace AsAboveSoBelow
                     ? " (bands=" + bands.bandCount + " slot=" + bands.Slot
                         + " surfaceBand=" + bands.surfaceBand + ")"
                     : ""));
-            sb.AppendLine("band water globals: " + ABV2Debug.BandWaterGlobals);
             sb.AppendLine("below water depth pass: " + ABV2Debug.DrawBelowWater);
             WaterInfo wi = map.waterInfo;
             if (wi == null)
@@ -133,13 +132,11 @@ namespace AsAboveSoBelow
                 : wi.riverFlowMap.Count + " floats"));
             sb.AppendLine("vanilla riverFlowTexture: "
                 + (wi.riverFlowTexture == null ? "null" : wi.riverFlowTexture.width + "x" + wi.riverFlowTexture.height));
-            if (bands != null && bands.Banded)
-            {
-                Texture2D folded = foldedFlow.TryGetValue(map, out Texture2D t) ? t : null;
-                sb.AppendLine("folded flow texture: "
-                    + (folded == null ? "not built" : folded.width + "x" + folded.height + " wrap=" + folded.wrapMode));
-                sb.AppendLine("published _MapSize: " + Shader.GetGlobalVector(ShaderPropertyIDs.MapSize));
-            }
+            // Read back deliberately. _MapSize was the prime suspect for the north-south
+            // symptom and was DISPROVED in play (see the file header); keeping it in the
+            // report is what stops it being re-theorised about later.
+            sb.AppendLine("published _MapSize: " + Shader.GetGlobalVector(ShaderPropertyIDs.MapSize)
+                + "  (vanilla publishes the FULL STACK, and vanilla is correct here)");
 
             // Water census per band: this is what tells rivers-in-the-wrong-band apart from
             // rivers-that-never-generated.
@@ -241,78 +238,6 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 Log.ErrorOnce(ABLog.Tag + " V2: lake anchor patch threw: " + e, 762195882);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Republish the water shader's map-size global as ONE BAND, not the whole stack.
-    ///
-    /// <c>_MapSize</c> is a global the water shader divides world position by. On a banded
-    /// map the real size is (w, bandCount * Slot), so every UV derived from it is stretched
-    /// by the band count along z - a seven-level map smears the water surface 7x
-    /// north-south, uniformly, on every water cell including still lakes. That is the whole
-    /// "water shaders always go vertical" symptom, and it is a texture-scale artefact, not a
-    /// flow-direction one, which is exactly why it did not vary from cell to cell.
-    ///
-    /// Publishing one Slot restores a near-square scale (128 against a 126-wide band). The
-    /// flow lookup follows along via a REPEAT-wrapped folded texture - see
-    /// <see cref="ABWaterBand.FoldedFlowTexture"/> - so no shader cooperation is needed.
-    ///
-    /// Postfix, not prefix: vanilla's own work (the WaterDepth subcamera hookup, the sky
-    /// reflection, the camera matrices) must all still happen.
-    /// </summary>
-    [HarmonyPatch(typeof(WaterInfo), nameof(WaterInfo.SetTextures))]
-    public static class Patch_WaterInfo_ABBandWaterGlobals
-    {
-        private static readonly AccessTools.FieldRef<MapComponent, Map> MapRef =
-            AccessTools.FieldRefAccess<MapComponent, Map>("map");
-
-        private static void Postfix(WaterInfo __instance)
-        {
-            try
-            {
-                if (!ABGuard.On(ABGuard.Rendering) || !ABV2Debug.BandWaterGlobals)
-                {
-                    return;
-                }
-                Map map = MapRef(__instance);
-                ABBandMap bands = ABBands.CompOf(map);
-                if (bands == null || !bands.Banded)
-                {
-                    return;
-                }
-                Shader.SetGlobalVector(ShaderPropertyIDs.MapSize,
-                    new Vector4(map.Size.x, bands.Slot));
-                Texture2D folded = ABWaterBand.FoldedFlowTexture(map, bands);
-                if (folded != null)
-                {
-                    Shader.SetGlobalTexture(ShaderPropertyIDs.WaterOffsetTex, folded);
-                }
-            }
-            catch (Exception e)
-            {
-                ABGuard.Disable(ABGuard.Rendering, e, "V2 band water globals");
-            }
-        }
-    }
-
-    /// <summary>Release the folded flow texture with the map.</summary>
-    [HarmonyPatch(typeof(WaterInfo), nameof(WaterInfo.MapRemoved))]
-    public static class Patch_WaterInfo_ABReleaseFoldedFlow
-    {
-        private static readonly AccessTools.FieldRef<MapComponent, Map> MapRef =
-            AccessTools.FieldRefAccess<MapComponent, Map>("map");
-
-        private static void Postfix(WaterInfo __instance)
-        {
-            try
-            {
-                ABWaterBand.Release(MapRef(__instance));
-            }
-            catch
-            {
-                // Cleanup only.
             }
         }
     }

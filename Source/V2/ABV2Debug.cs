@@ -28,12 +28,12 @@ namespace AsAboveSoBelow
         /// depth pass - not masking or translation - is what was missing.</summary>
         public static bool DrawBelowWater = true;
 
-        /// <summary>Republish the water shader's _MapSize as one Slot instead of the whole
-        /// stack. A/B this against vanilla in one session: with it OFF the water surface is
-        /// stretched bandCount-times north-south, with it ON the scale is square again. The
-        /// one honest test of whether _MapSize is what the shader UVs its surface by, since
-        /// the shader itself lives in an asset bundle and cannot be read.</summary>
-        public static bool BandWaterGlobals = true;
+        // NOTE: BandWaterGlobals lived here - a toggle for republishing the water shader's
+        // _MapSize as one Slot instead of the whole stack. It was DISPROVED in one launch
+        // (banding the global is what makes water run north-south; vanilla's value is
+        // correct) and both the toggle and the patch behind it are gone. The A/B toggle is
+        // the reason that cost one launch instead of a release - build the discriminator
+        // INTO a change whose mechanism you cannot read.
 
         /// <summary>Traces every step of a cross-band transit. Off by default (it is noisy
         /// and per-move); the stairs order is the one flow where seeing each step beats
@@ -66,8 +66,7 @@ namespace AsAboveSoBelow
                 + " things=" + DrawBelowThings
                 + " airMask=" + DrawBelowAirMask
                 + " lighting=" + DrawBelowLighting
-                + " belowWater=" + DrawBelowWater
-                + " bandWaterGlobals=" + BandWaterGlobals;
+                + " belowWater=" + DrawBelowWater;
         }
     }
 }
