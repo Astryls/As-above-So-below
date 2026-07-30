@@ -427,10 +427,27 @@ namespace AsAboveSoBelow
             return p.links.Count > 0;
         }
 
-        /// <summary>Best transit pair for travelling from one band to another. Minimises
-        /// (walk to near anchor) + (walk from far anchor to destination), which is the
-        /// same whole-trip metric V1's StairRouter had to hand-roll - except here it is
-        /// only an optimisation, because reachability is already correct.</summary>
+        /// <summary>
+        /// The FIRST HOP of a route from one band to another, which may take several.
+        ///
+        /// It used to require a single pair whose two ends were exactly (fromBand, toBand).
+        /// That silently capped the mod at journeys of one flight: on a 4-level column a
+        /// pawn on the surface asking for level +2 matched nothing, TrySegment logged
+        /// "NONE (pawn will try to walk it and fail)", and the only way up was to order each
+        /// flight by hand. Reported as "pawns can't path through the first set of stairs to
+        /// proceed to the second one".
+        ///
+        /// Now it BFSes the band graph (bands = nodes, wormhole pairs = edges) and returns
+        /// the best pair that makes real progress along a shortest route. Chaining then
+        /// comes for free from machinery that already exists: after each transit,
+        /// ABWormholePather.Carry re-issues StartPath toward the true destination, which
+        /// re-enters TrySegment and asks for the next hop. Nothing has to know the length of
+        /// the journey.
+        ///
+        /// The x/z cost metric stays meaningful across a multi-hop route because bands are
+        /// aligned 1:1 in x/z: "how far is this anchor from the destination column" is the
+        /// right question on every level.
+        /// </summary>
         public static bool TryGetTransit(Map map, IntVec3 from, IntVec3 to,
             out Building_Door near, out Building_Door far)
         {
@@ -446,6 +463,13 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            int[] hopsToDest = HopDistances(map, list, bandTo);
+            if (hopsToDest == null || bandFrom < 0 || bandFrom >= hopsToDest.Length
+                || hopsToDest[bandFrom] <= 0)
+            {
+                return false; // no chain of wormholes joins these bands at all
+            }
+            int hops = hopsToDest[bandFrom];
             float best = float.MaxValue;
             for (int i = 0; i < list.Count; i++)
             {
@@ -454,18 +478,83 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Consider(map, from, to, bandFrom, bandTo, p.a, p.b, ref best, ref near, ref far);
-                Consider(map, from, to, bandFrom, bandTo, p.b, p.a, ref best, ref near, ref far);
+                Consider(map, from, to, bandFrom, hops, hopsToDest, p.a, p.b,
+                    ref best, ref near, ref far);
+                Consider(map, from, to, bandFrom, hops, hopsToDest, p.b, p.a,
+                    ref best, ref near, ref far);
             }
             return near != null;
         }
 
-        private static void Consider(Map map, IntVec3 from, IntVec3 to, int bandFrom, int bandTo,
-            Building_Door candNear, Building_Door candFar,
+        /// <summary>Hops from every band to <paramref name="target"/> over the wormhole
+        /// graph; -1 where unreachable. Arrays rather than dictionaries because bands are a
+        /// dense 0..bandCount-1 range and this runs on the StartPath path.</summary>
+        private static int[] HopDistances(Map map, List<Pair> list, int target)
+        {
+            int bandCount = ABBands.BandCount(map);
+            if (bandCount <= 1 || target < 0 || target >= bandCount)
+            {
+                return null;
+            }
+            // Adjacency as a bitmask per band: at most a handful of bands, so this is one
+            // small array instead of a dictionary of lists.
+            int[] adj = new int[bandCount];
+            for (int i = 0; i < list.Count; i++)
+            {
+                Pair p = list[i];
+                if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
+                {
+                    continue;
+                }
+                int ba = ABBands.BandOf(map, p.a.Position);
+                int bb = ABBands.BandOf(map, p.b.Position);
+                if (ba == bb || ba < 0 || bb < 0 || ba >= bandCount || bb >= bandCount)
+                {
+                    continue;
+                }
+                adj[ba] |= 1 << bb;
+                adj[bb] |= 1 << ba;
+            }
+            int[] dist = new int[bandCount];
+            for (int i = 0; i < bandCount; i++)
+            {
+                dist[i] = -1;
+            }
+            dist[target] = 0;
+            List<int> queue = new List<int> { target };
+            for (int head = 0; head < queue.Count; head++)
+            {
+                int cur = queue[head];
+                int mask = adj[cur];
+                for (int n = 0; n < bandCount; n++)
+                {
+                    if ((mask & (1 << n)) != 0 && dist[n] < 0)
+                    {
+                        dist[n] = dist[cur] + 1;
+                        queue.Add(n);
+                    }
+                }
+            }
+            return dist;
+        }
+
+        private static void Consider(Map map, IntVec3 from, IntVec3 to, int bandFrom,
+            int hops, int[] hopsToDest, Building_Door candNear, Building_Door candFar,
             ref float best, ref Building_Door near, ref Building_Door far)
         {
-            if (ABBands.BandOf(map, candNear.Position) != bandFrom
-                || ABBands.BandOf(map, candFar.Position) != bandTo)
+            if (ABBands.BandOf(map, candNear.Position) != bandFrom)
+            {
+                return;
+            }
+            int farBand = ABBands.BandOf(map, candFar.Position);
+            if (farBand < 0 || farBand >= hopsToDest.Length)
+            {
+                return;
+            }
+            // Only hops that get strictly CLOSER to the destination band. Without this a
+            // pawn could be sent sideways or back the way it came and ping-pong forever,
+            // because each hop re-plans from scratch with no memory of the last one.
+            if (hopsToDest[farBand] != hops - 1)
             {
                 return;
             }

@@ -125,8 +125,38 @@ namespace AsAboveSoBelow
                         continue; // opaque by construction
                     }
 
-                    IntVec3 below = new IntVec3(c.x, c.y, c.z - slot);
-                    bool inBounds = below.InBounds(map) && !bands.InGutter(below);
+                    // DESCEND until something is actually visible, rather than looking
+                    // exactly one band down.
+                    //
+                    // With more than one level stacked above the surface, the level directly
+                    // below an open-air cell is usually ALSO open air - so a single-step look
+                    // found `dontRender` void and painted the air mask, and level +3 showed a
+                    // dark slab instead of the ground far below. Walking down while each
+                    // level is see-through lands on the first real floor, which is what
+                    // "looking down a shaft" should mean at any height.
+                    IntVec3 below = c;
+                    int drop = 0;
+                    bool inBounds = false;
+                    while (true)
+                    {
+                        IntVec3 next = new IntVec3(below.x, below.y, below.z - slot);
+                        if (!next.InBounds(map) || bands.InGutter(next))
+                        {
+                            inBounds = false;
+                            break;
+                        }
+                        below = next;
+                        drop += slot;
+                        inBounds = true;
+                        if (!ABBands.ShowsBelow(terrainGrid.TerrainAt(below)))
+                        {
+                            break; // opaque: this is the level you see
+                        }
+                        if (bands.BandOf(below) <= 0)
+                        {
+                            break; // bottom level; nothing further down to find
+                        }
+                    }
                     bool foggedBelow = inBounds && fog.IsFogged(below);
 
                     if (!inBounds || foggedBelow)
@@ -181,6 +211,8 @@ namespace AsAboveSoBelow
                     List<Thing> things = thingGrid.ThingsListAtFast(below);
                     for (int i = 0; i < things.Count; i++)
                     {
+                        // NB: everything below is translated by `drop`, the accumulated
+                        // descent, not by one slot.
                         Thing t = things[i];
                         DrawerType drawer = t.def.drawerType;
                         if (drawer != DrawerType.MapMeshOnly && drawer != DrawerType.MapMeshAndRealTime)
@@ -191,7 +223,7 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        if (!IsPrintAnchor(t, below, map, bands, terrainGrid, air, slot))
+                        if (!IsPrintAnchor(t, below, map, bands, terrainGrid, air, drop))
                         {
                             continue;
                         }
@@ -199,7 +231,7 @@ namespace AsAboveSoBelow
                         {
                             SnapshotVertCounts();
                             t.Print(this);
-                            TranslateNewVerts(slot);
+                            TranslateNewVerts(drop);
                         }
                         catch (Exception e)
                         {
@@ -460,7 +492,7 @@ namespace AsAboveSoBelow
         /// (row-major) that has open air above it - not from the root cell, which may sit
         /// under a rooftop while the rest of the body is exposed.</summary>
         private static bool IsPrintAnchor(Thing t, IntVec3 belowCell, Map map, ABBandMap bands,
-            TerrainGrid terrainGrid, TerrainDef air, int slot)
+            TerrainGrid terrainGrid, TerrainDef air, int drop)
         {
             if (t.def.size.x == 1 && t.def.size.z == 1)
             {
@@ -472,7 +504,7 @@ namespace AsAboveSoBelow
                 for (int x = rect.minX; x <= rect.maxX; x++)
                 {
                     IntVec3 q = new IntVec3(x, 0, z);
-                    IntVec3 above = new IntVec3(x, 0, z + slot);
+                    IntVec3 above = new IntVec3(x, 0, z + drop);
                     if (!above.InBounds(map) || bands.InGutter(above))
                     {
                         continue;
@@ -496,9 +528,10 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Translates the vertices the last print emitted up one band. Altitude (y)
-        /// is left alone, and nothing is scaled or tinted: the below level is drawn exactly
-        /// as it is, which is the whole point of ONE BIG MAP.</summary>
+        /// <summary>Translates the vertices the last print emitted up to the viewing level -
+        /// by the accumulated descent, which may be several bands. Altitude (y) is left
+        /// alone, and nothing is scaled or tinted: the below level is drawn exactly as it is,
+        /// which is the whole point of ONE BIG MAP.</summary>
         private void TranslateNewVerts(int slot)
         {
             List<LayerSubMesh> subs = subMeshes;

@@ -290,12 +290,15 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
-        /// The level chooser, drawn under vanilla's map-size column.
+        /// The level chooser, in a strip reserved at the BOTTOM of the dialog.
         ///
-        /// Placed by hand rather than appended to vanilla's Listing_Standard because the
-        /// listing has already been End()ed by the time a postfix runs. y=210 clears the
-        /// size column in both configurations: our three sizes occupy ~112px, and ~188px
-        /// with Prefs.TestMapSizes adding its extra group.
+        /// The first version guessed a free spot inside vanilla's first column (y=210,
+        /// 200 wide) and overlapped the size radio buttons, which made them hard to click.
+        /// Guessing was the mistake: vanilla's own three columns can grow (test map sizes,
+        /// another mod's options) and a postfix cannot append to their Listing_Standard
+        /// because it has already been End()ed. So the window is made TALLER (see the
+        /// InitialSize patch) and we own the space we added - nothing can overlap because
+        /// vanilla lays out from the top and never sees the extra height.
         /// </summary>
         private static void DrawLevelChooser(Rect inRect)
         {
@@ -308,20 +311,23 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            float x = 0f;
-            float width = 200f;
-            float y = 210f;
+            // Bottom strip, clear of the close button vanilla draws below us.
+            float stripH = 150f;
+            float top = inRect.height - stripH - CloseButtonClearance;
+            Widgets.DrawLineHorizontal(0f, top, inRect.width);
+            float y = top + 8f;
 
             Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(x, y, width, 32f), "AB_LevelsHeading".Translate());
+            Widgets.Label(new Rect(0f, y, 300f, 32f), "AB_LevelsHeading".Translate());
             Text.Font = GameFont.Small;
             y += 34f;
 
             int upper = s.upperLevels;
             int lower = s.lowerLevels;
-            y = Spinner(x, y, width, "AB_LevelsAbove".Translate(), ref upper,
+            float rowY = y;
+            rowY = Spinner(0f, rowY, 300f, "AB_LevelsAbove".Translate(), ref upper,
                 0, ABMapSizeLimit.MaxUpperLevels);
-            y = Spinner(x, y, width, "AB_LevelsBelow".Translate(), ref lower,
+            rowY = Spinner(0f, rowY, 300f, "AB_LevelsBelow".Translate(), ref lower,
                 0, ABMapSizeLimit.MaxLowerLevels);
 
             if (upper != s.upperLevels || lower != s.lowerLevels)
@@ -333,32 +339,39 @@ namespace AsAboveSoBelow
                 Find.GameInitData.mapSize = ABMapSizeLimit.Clamp(Find.GameInitData.mapSize);
             }
 
+            // Readout in its own column, so a long localised string can never reflow over
+            // the spinner buttons.
             int bandCount = ABMapSizeLimit.BandCount;
             int size = Find.GameInitData.mapSize;
             int cells = ABMapSizeLimit.StackedCells(size, bandCount);
-            y += 4f;
-            Widgets.Label(new Rect(x, y, width, 24f),
+            float infoX = 330f;
+            float infoW = Mathf.Max(220f, inRect.width - infoX);
+            float infoY = y;
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f),
                 "AB_LevelsSummary".Translate(bandCount, size));
-            y += 24f;
+            infoY += 26f;
 
-            bool over = !ABMapSizeLimit.Fits(size, bandCount);
             Color old = GUI.color;
-            if (over)
+            if (!ABMapSizeLimit.Fits(size, bandCount))
             {
                 GUI.color = new Color(1f, 0.4f, 0.4f);
             }
-            Widgets.Label(new Rect(x, y, width, 24f), "AB_LevelsCells".Translate(
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f), "AB_LevelsCells".Translate(
                 cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0")));
             GUI.color = old;
-            y += 26f;
+            infoY += 26f;
 
             if (bandCount <= 1)
             {
                 GUI.color = new Color(1f, 1f, 1f, 0.62f);
-                Widgets.Label(new Rect(x, y, width, 48f), "AB_LevelsNoneNote".Translate());
+                Widgets.Label(new Rect(infoX, infoY, infoW, 44f), "AB_LevelsNoneNote".Translate());
                 GUI.color = old;
             }
         }
+
+        /// <summary>Vanilla draws its close button over the bottom of the window without
+        /// shrinking the rect handed to DoWindowContents, so we stay above it by hand.</summary>
+        private const float CloseButtonClearance = 50f;
 
         /// <summary>Label plus [-] n [+]. Deliberately not Widgets.IntEntry: that needs a
         /// persistent string buffer per field and allows typing values outside the
@@ -383,6 +396,24 @@ namespace AsAboveSoBelow
                 value++;
             }
             return y + 28f;
+        }
+    }
+
+    /// <summary>
+    /// Makes room for the level chooser. Vanilla lays its three columns out from the top of
+    /// the window and never consults the height, so adding to it yields space that is ours
+    /// alone - which is what stops the chooser overlapping the map-size radio buttons.
+    /// </summary>
+    [HarmonyPatch(typeof(Dialog_AdvancedGameConfig), nameof(Dialog_AdvancedGameConfig.InitialSize),
+        MethodType.Getter)]
+    public static class Patch_AdvancedGameConfig_ABTallerWindow
+    {
+        private static void Postfix(ref Vector2 __result)
+        {
+            if (ABV2.Enabled)
+            {
+                __result.y += 170f;
+            }
         }
     }
 
