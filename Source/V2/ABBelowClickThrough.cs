@@ -157,7 +157,7 @@ namespace AsAboveSoBelow
         /// starting cell. Radius is deliberately small: a snap should feel like the order
         /// landing next to where you pointed, not like the pawn choosing its own
         /// destination.</summary>
-        private static bool TryNearestWalkableOnBand(Map map, ABBandMap bands, IntVec3 origin,
+        internal static bool TryNearestWalkableOnBand(Map map, ABBandMap bands, IntVec3 origin,
             int band, out IntVec3 found)
         {
             found = origin;
@@ -237,6 +237,71 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Movement, e, "V2 click-through");
+            }
+        }
+    }
+
+    /// <summary>
+    /// THE per-pawn destination fix, at the one place every ordered goto resolves.
+    ///
+    /// `FloatMenuMakerMap.GetOptions` is the wrong layer for grouped movement: a group order
+    /// runs through MultiPawnGotoController, which never consults it and instead calls
+    /// RCellFinder.BestOrderedGotoDestNear ONCE PER PAWN. Patching there fixes what the
+    /// clickPos interception could not, and it is per-pawn by construction - so a selection
+    /// spanning several levels resolves correctly for each member instead of collapsing to
+    /// one shared answer.
+    ///
+    /// The rule: if the destination is on another band and this pawn genuinely cannot reach
+    /// it, bring the destination onto the PAWN'S OWN band at the same column. Reachability is
+    /// checked first so that legitimate cross-level orders - ones with a staircase - are left
+    /// completely alone for the wormhole router to segment.
+    ///
+    /// Covers every caller for free: grouped moves, single drafted moves, crates, hackables,
+    /// and jump targeting.
+    /// </summary>
+    [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.BestOrderedGotoDestNear))]
+    public static class Patch_RCellFinder_ABOrderedGotoBand
+    {
+        private static void Prefix(ref IntVec3 root, Pawn searcher)
+        {
+            try
+            {
+                if (searcher == null || !searcher.Spawned || !ABBelowClickThrough.Enabled)
+                {
+                    return;
+                }
+                Map map = searcher.Map;
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded || !root.InBounds(map))
+                {
+                    return;
+                }
+                int pawnBand = bands.BandOf(searcher.Position);
+                if (pawnBand < 0 || bands.BandOf(root) == pawnBand)
+                {
+                    return; // already on this pawn's level
+                }
+                if (searcher.CanReach(root, PathEndMode.OnCell, Danger.Deadly))
+                {
+                    return; // a real route exists (stairs); leave it to the router
+                }
+                IntVec3 onPawnBand = bands.Translate(root, pawnBand);
+                if (onPawnBand.InBounds(map) && !bands.InGutter(onPawnBand)
+                    && onPawnBand.Walkable(map))
+                {
+                    root = onPawnBand;
+                    return;
+                }
+                if (ABBelowClickThrough.TryNearestWalkableOnBand(map, bands, onPawnBand,
+                        pawnBand, out IntVec3 snapped))
+                {
+                    root = snapped;
+                }
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: ordered-goto band fix threw: " + e.Message,
+                    762195914);
             }
         }
     }
