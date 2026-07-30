@@ -335,12 +335,6 @@ namespace AsAboveSoBelow
     /// </summary>
     public class SectionLayer_ABBelowEdgeShadows : SectionLayer
     {
-        private const float InDist = 0.45f;
-
-        private static readonly Color32 Shadowed = new Color32(195, 195, 195, byte.MaxValue);
-
-        private static readonly Color32 Lit = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
-
         private readonly bool[] cornerShadowed = new bool[4];
 
         private readonly bool[] cardinalCaster = new bool[4];
@@ -393,27 +387,6 @@ namespace AsAboveSoBelow
                 bool[] cardinal = cardinalCaster;
                 bool[] diagOnly = diagonalOnly;
 
-                // Vanilla's connective triangles, as local functions so the four corner
-                // blocks read exactly like the decompiled source.
-                void ConnectCorner(int idx)
-                {
-                    sm.tris.Add(sm.verts.Count - 2);
-                    sm.tris.Add(idx);
-                    sm.tris.Add(sm.verts.Count - 1);
-                    sm.tris.Add(sm.verts.Count - 1);
-                    sm.tris.Add(idx);
-                    sm.tris.Add(idx + 1);
-                }
-                void CloseCornerTri()
-                {
-                    sm.colors.Add(Shadowed);
-                    sm.colors.Add(Lit);
-                    sm.colors.Add(Lit);
-                    sm.tris.Add(sm.verts.Count - 3);
-                    sm.tris.Add(sm.verts.Count - 2);
-                    sm.tris.Add(sm.verts.Count - 1);
-                }
-
                 for (int i = rect.minX; i <= rect.maxX; i++)
                 {
                     for (int j = rect.minZ; j <= rect.maxZ; j++)
@@ -433,21 +406,7 @@ namespace AsAboveSoBelow
                         if (thing != null && thing.def.castEdgeShadows)
                         {
                             // The caster's own cell: vanilla's full ambient quad.
-                            sm.verts.Add(new Vector3(i, y, j));
-                            sm.verts.Add(new Vector3(i, y, j + 1));
-                            sm.verts.Add(new Vector3(i + 1, y, j + 1));
-                            sm.verts.Add(new Vector3(i + 1, y, j));
-                            sm.colors.Add(Shadowed);
-                            sm.colors.Add(Shadowed);
-                            sm.colors.Add(Shadowed);
-                            sm.colors.Add(Shadowed);
-                            int count = sm.verts.Count;
-                            sm.tris.Add(count - 4);
-                            sm.tris.Add(count - 3);
-                            sm.tris.Add(count - 2);
-                            sm.tris.Add(count - 4);
-                            sm.tris.Add(count - 2);
-                            sm.tris.Add(count - 1);
+                            ABEdgeShadowGeometry.EmitCasterCell(sm, y, i, j);
                             continue;
                         }
 
@@ -481,134 +440,7 @@ namespace AsAboveSoBelow
                             }
                         }
 
-                        float dx;
-                        float dz;
-                        int count2 = sm.verts.Count;
-                        if (corner[0])
-                        {
-                            if (cardinal[0] || cardinal[1])
-                            {
-                                dx = 0f;
-                                dz = 0f;
-                                if (cardinal[0])
-                                {
-                                    dz = InDist;
-                                }
-                                if (cardinal[1])
-                                {
-                                    dx = InDist;
-                                }
-                                sm.verts.Add(new Vector3(i, y, j));
-                                sm.colors.Add(Shadowed);
-                                sm.verts.Add(new Vector3(i + dx, y, j + dz));
-                                sm.colors.Add(Lit);
-                                if (corner[1] && !diagOnly[1])
-                                {
-                                    ConnectCorner(sm.verts.Count);
-                                }
-                            }
-                            else
-                            {
-                                sm.verts.Add(new Vector3(i, y, j));
-                                sm.verts.Add(new Vector3(i, y, j + InDist));
-                                sm.verts.Add(new Vector3(i + InDist, y, j));
-                                CloseCornerTri();
-                            }
-                        }
-                        if (corner[1])
-                        {
-                            if (cardinal[1] || cardinal[2])
-                            {
-                                dx = 0f;
-                                dz = 0f;
-                                if (cardinal[1])
-                                {
-                                    dx = InDist;
-                                }
-                                if (cardinal[2])
-                                {
-                                    dz = 0f - InDist;
-                                }
-                                sm.verts.Add(new Vector3(i, y, j + 1));
-                                sm.colors.Add(Shadowed);
-                                sm.verts.Add(new Vector3(i + dx, y, j + 1 + dz));
-                                sm.colors.Add(Lit);
-                                if (corner[2] && !diagOnly[2])
-                                {
-                                    ConnectCorner(sm.verts.Count);
-                                }
-                            }
-                            else
-                            {
-                                sm.verts.Add(new Vector3(i, y, j + 1));
-                                sm.verts.Add(new Vector3(i + InDist, y, j + 1));
-                                sm.verts.Add(new Vector3(i, y, j + 1 - InDist));
-                                CloseCornerTri();
-                            }
-                        }
-                        if (corner[2])
-                        {
-                            if (cardinal[2] || cardinal[3])
-                            {
-                                dx = 0f;
-                                dz = 0f;
-                                if (cardinal[2])
-                                {
-                                    dz = 0f - InDist;
-                                }
-                                if (cardinal[3])
-                                {
-                                    dx = 0f - InDist;
-                                }
-                                sm.verts.Add(new Vector3(i + 1, y, j + 1));
-                                sm.colors.Add(Shadowed);
-                                sm.verts.Add(new Vector3(i + 1 + dx, y, j + 1 + dz));
-                                sm.colors.Add(Lit);
-                                if (corner[3] && !diagOnly[3])
-                                {
-                                    ConnectCorner(sm.verts.Count);
-                                }
-                            }
-                            else
-                            {
-                                sm.verts.Add(new Vector3(i + 1, y, j + 1));
-                                sm.verts.Add(new Vector3(i + 1, y, j + 1 - InDist));
-                                sm.verts.Add(new Vector3(i + 1 - InDist, y, j + 1));
-                                CloseCornerTri();
-                            }
-                        }
-                        if (!corner[3])
-                        {
-                            continue;
-                        }
-                        if (cardinal[3] || cardinal[0])
-                        {
-                            dx = 0f;
-                            dz = 0f;
-                            if (cardinal[3])
-                            {
-                                dx = 0f - InDist;
-                            }
-                            if (cardinal[0])
-                            {
-                                dz = InDist;
-                            }
-                            sm.verts.Add(new Vector3(i + 1, y, j));
-                            sm.colors.Add(Shadowed);
-                            sm.verts.Add(new Vector3(i + 1 + dx, y, j + dz));
-                            sm.colors.Add(Lit);
-                            if (corner[0] && !diagOnly[0])
-                            {
-                                ConnectCorner(count2);
-                            }
-                        }
-                        else
-                        {
-                            sm.verts.Add(new Vector3(i + 1, y, j));
-                            sm.verts.Add(new Vector3(i + 1 - InDist, y, j));
-                            sm.verts.Add(new Vector3(i + 1, y, j + InDist));
-                            CloseCornerTri();
-                        }
+                        ABEdgeShadowGeometry.EmitCorners(sm, y, i, j, corner, cardinal, diagOnly);
                     }
                 }
                 if (sm.verts.Count > 0)
@@ -633,6 +465,193 @@ namespace AsAboveSoBelow
             }
             Thing t = edifices[indices.CellToIndex(belowNeighbor)];
             return t != null && t.def.castEdgeShadows;
+        }
+    }
+
+    /// <summary>
+    /// Vanilla SectionLayer_EdgeShadows' per-cell geometry, extracted VERBATIM so the
+    /// below-view port above and the sky-mass-scoped replacement (ABSkyMassShadowScope)
+    /// share one copy of the four asymmetric corner blocks instead of drifting apart.
+    /// Callers prepare the corner/cardinal/diagOnly arrays from their own caster rule
+    /// and coordinate mapping; this emits at (i, j).
+    /// </summary>
+    internal static class ABEdgeShadowGeometry
+    {
+        internal const float InDist = 0.45f;
+
+        internal static readonly Color32 Shadowed = new Color32(195, 195, 195, byte.MaxValue);
+
+        internal static readonly Color32 Lit = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue);
+
+        /// <summary>Vanilla's full ambient quad over a caster's own cell.</summary>
+        internal static void EmitCasterCell(LayerSubMesh sm, float y, int i, int j)
+        {
+            sm.verts.Add(new Vector3(i, y, j));
+            sm.verts.Add(new Vector3(i, y, j + 1));
+            sm.verts.Add(new Vector3(i + 1, y, j + 1));
+            sm.verts.Add(new Vector3(i + 1, y, j));
+            sm.colors.Add(Shadowed);
+            sm.colors.Add(Shadowed);
+            sm.colors.Add(Shadowed);
+            sm.colors.Add(Shadowed);
+            int count = sm.verts.Count;
+            sm.tris.Add(count - 4);
+            sm.tris.Add(count - 3);
+            sm.tris.Add(count - 2);
+            sm.tris.Add(count - 4);
+            sm.tris.Add(count - 2);
+            sm.tris.Add(count - 1);
+        }
+
+        internal static void EmitCorners(LayerSubMesh sm, float y, int i, int j,
+            bool[] corner, bool[] cardinal, bool[] diagOnly)
+        {
+            void ConnectCorner(int idx)
+            {
+                sm.tris.Add(sm.verts.Count - 2);
+                sm.tris.Add(idx);
+                sm.tris.Add(sm.verts.Count - 1);
+                sm.tris.Add(sm.verts.Count - 1);
+                sm.tris.Add(idx);
+                sm.tris.Add(idx + 1);
+            }
+            void CloseCornerTri()
+            {
+                sm.colors.Add(Shadowed);
+                sm.colors.Add(Lit);
+                sm.colors.Add(Lit);
+                sm.tris.Add(sm.verts.Count - 3);
+                sm.tris.Add(sm.verts.Count - 2);
+                sm.tris.Add(sm.verts.Count - 1);
+            }
+            float dx;
+            float dz;
+            int count2 = sm.verts.Count;
+            if (corner[0])
+            {
+                if (cardinal[0] || cardinal[1])
+                {
+                    dx = 0f;
+                    dz = 0f;
+                    if (cardinal[0])
+                    {
+                        dz = InDist;
+                    }
+                    if (cardinal[1])
+                    {
+                        dx = InDist;
+                    }
+                    sm.verts.Add(new Vector3(i, y, j));
+                    sm.colors.Add(Shadowed);
+                    sm.verts.Add(new Vector3(i + dx, y, j + dz));
+                    sm.colors.Add(Lit);
+                    if (corner[1] && !diagOnly[1])
+                    {
+                        ConnectCorner(sm.verts.Count);
+                    }
+                }
+                else
+                {
+                    sm.verts.Add(new Vector3(i, y, j));
+                    sm.verts.Add(new Vector3(i, y, j + InDist));
+                    sm.verts.Add(new Vector3(i + InDist, y, j));
+                    CloseCornerTri();
+                }
+            }
+            if (corner[1])
+            {
+                if (cardinal[1] || cardinal[2])
+                {
+                    dx = 0f;
+                    dz = 0f;
+                    if (cardinal[1])
+                    {
+                        dx = InDist;
+                    }
+                    if (cardinal[2])
+                    {
+                        dz = 0f - InDist;
+                    }
+                    sm.verts.Add(new Vector3(i, y, j + 1));
+                    sm.colors.Add(Shadowed);
+                    sm.verts.Add(new Vector3(i + dx, y, j + 1 + dz));
+                    sm.colors.Add(Lit);
+                    if (corner[2] && !diagOnly[2])
+                    {
+                        ConnectCorner(sm.verts.Count);
+                    }
+                }
+                else
+                {
+                    sm.verts.Add(new Vector3(i, y, j + 1));
+                    sm.verts.Add(new Vector3(i + InDist, y, j + 1));
+                    sm.verts.Add(new Vector3(i, y, j + 1 - InDist));
+                    CloseCornerTri();
+                }
+            }
+            if (corner[2])
+            {
+                if (cardinal[2] || cardinal[3])
+                {
+                    dx = 0f;
+                    dz = 0f;
+                    if (cardinal[2])
+                    {
+                        dz = 0f - InDist;
+                    }
+                    if (cardinal[3])
+                    {
+                        dx = 0f - InDist;
+                    }
+                    sm.verts.Add(new Vector3(i + 1, y, j + 1));
+                    sm.colors.Add(Shadowed);
+                    sm.verts.Add(new Vector3(i + 1 + dx, y, j + 1 + dz));
+                    sm.colors.Add(Lit);
+                    if (corner[3] && !diagOnly[3])
+                    {
+                        ConnectCorner(sm.verts.Count);
+                    }
+                }
+                else
+                {
+                    sm.verts.Add(new Vector3(i + 1, y, j + 1));
+                    sm.verts.Add(new Vector3(i + 1, y, j + 1 - InDist));
+                    sm.verts.Add(new Vector3(i + 1 - InDist, y, j + 1));
+                    CloseCornerTri();
+                }
+            }
+            if (!corner[3])
+            {
+                return;
+            }
+            if (cardinal[3] || cardinal[0])
+            {
+                dx = 0f;
+                dz = 0f;
+                if (cardinal[3])
+                {
+                    dx = 0f - InDist;
+                }
+                if (cardinal[0])
+                {
+                    dz = InDist;
+                }
+                sm.verts.Add(new Vector3(i + 1, y, j));
+                sm.colors.Add(Shadowed);
+                sm.verts.Add(new Vector3(i + 1 + dx, y, j + dz));
+                sm.colors.Add(Lit);
+                if (corner[0] && !diagOnly[0])
+                {
+                    ConnectCorner(count2);
+                }
+            }
+            else
+            {
+                sm.verts.Add(new Vector3(i + 1, y, j));
+                sm.verts.Add(new Vector3(i + 1 - InDist, y, j));
+                sm.verts.Add(new Vector3(i + 1, y, j + InDist));
+                CloseCornerTri();
+            }
         }
     }
 }
