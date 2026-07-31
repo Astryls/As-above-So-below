@@ -283,8 +283,14 @@ namespace AsAboveSoBelow
                 }
                 tempResult += ABBandEnv.TempOffsetForLevel(bands, level);
             }
-            catch
+            catch (Exception e)
             {
+                // Was a bare `catch {}` on a path measured at 719,002 calls per 2,000 frames.
+                // A persistent fault here means every non-surface cell silently reports the
+                // SURFACE temperature - crops living where they should freeze, no snow line,
+                // and not one line in the log to connect it to. ErrorOnce is free on the
+                // happy path and turns a permanently invisible failure into a reported one.
+                Log.ErrorOnce(ABLog.Tag + " V2: band temperature offset threw: " + e, 118843305);
             }
         }
     }

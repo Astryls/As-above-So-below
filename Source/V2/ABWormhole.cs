@@ -614,13 +614,22 @@ namespace AsAboveSoBelow
             // unsubscribe - the handler becomes unreachable together with its map.
             map.events.RegionsRoomsChanged += delegate
             {
+                if (!ABGuard.On(ABGuard.Transit))
+                {
+                    return;
+                }
                 try
                 {
                     ABWormhole.RearmAll(map);
                 }
                 catch (Exception e)
                 {
-                    Log.Error(ABLog.Tag + " V2: wormhole re-arm threw: " + e);
+                    // ⚠ THIS HANDLER FIRES ONCE PER REGION REBUILD. A bare Log.Error here was
+                    // an unbounded error stream on a hot event - the same runaway shape as
+                    // the per-frame camera clamp. Guard-switched: the stairs stop conducting
+                    // (which is honest - a failed re-arm means they are not conducting
+                    // anyway), the player is told once, and the settings panel can re-arm it.
+                    ABGuard.Disable(ABGuard.Transit, e, "V2 wormhole re-arm");
                 }
             };
         }

@@ -120,9 +120,23 @@ namespace AsAboveSoBelow
 
         private static LocalTargetInfo saved;
 
+        /// <summary>Put the stance back. Idempotent, and safe to call when the swap never
+        /// happened: writing the saved value over itself is a no-op.</summary>
+        private static void Restore()
+        {
+            if (patched != null)
+            {
+                patched.focusTarg = saved;
+                patched = null;
+            }
+        }
+
         private static void Prefix(Pawn pawn)
         {
-            patched = null;
+            // Restore, do NOT just null the field. The old code opened with `patched = null`,
+            // which DISCARDS a pending restore rather than deferring it - so if the previous
+            // pawn's draw never got its restore, its focusTarg stayed permanently rewritten.
+            Restore();
             try
             {
                 Stance_Busy stance = pawn?.stances?.curStance as Stance_Busy;
@@ -142,17 +156,26 @@ namespace AsAboveSoBelow
             }
             catch
             {
-                patched = null;
+                Restore();
             }
         }
 
-        private static void Postfix()
+        /// <summary>
+        /// ⚠ A FINALIZER, NOT A POSTFIX, AND THE DIFFERENCE IS NOT COSMETIC.
+        ///
+        /// Harmony does not run postfixes when the original method THROWS - it runs
+        /// finalizers. This prefix mutates <c>stance.focusTarg</c>, which is LIVE COMBAT
+        /// STATE and not render state, so a single exception anywhere inside
+        /// DrawEquipmentAndApparelExtras (a bad graphic, another mod's postfix, a null
+        /// apparel) used to leave that pawn permanently aiming at a band-translated cell -
+        /// silently, with no error attributable to us, and surviving until the stance ended.
+        ///
+        /// The general rule this is an instance of: if a patch takes a lock on game state in
+        /// a prefix, the release belongs in a finalizer. A postfix is a happy-path hook.
+        /// </summary>
+        private static void Finalizer()
         {
-            if (patched != null)
-            {
-                patched.focusTarg = saved;
-                patched = null;
-            }
+            Restore();
         }
     }
 }

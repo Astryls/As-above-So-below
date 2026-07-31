@@ -397,7 +397,8 @@ namespace AsAboveSoBelow
                 // RectOfBand during load-in). Same rule CompOf uses for its cache, one layer
                 // out.
                 if (Current.ProgramState != ProgramState.Playing
-                    || Scribe.mode != LoadSaveMode.Inactive)
+                    || Scribe.mode != LoadSaveMode.Inactive
+                    || !ABGuard.On(ABGuard.Camera))
                 {
                     return;
                 }
@@ -437,7 +438,14 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                Log.Error(ABLog.Tag + " V2: camera band clamp threw: " + e);
+                // ⚠ THIS IS A PER-FRAME POSTFIX. A bare Log.Error here wrote one line every
+                // frame for as long as the fault lasted: the dev log filled, Player.log grew
+                // without bound, and the resulting I/O was itself enough to make the game
+                // unplayable - so the logging turned a cosmetic camera bug into a hang.
+                // Every other error path in this mod is ErrorOnce or guard-switched; this one
+                // was the exception. Tripping the switch also stops the throw recurring at
+                // all, and the settings panel offers a re-arm.
+                ABGuard.Disable(ABGuard.Camera, e, "V2 camera band clamp");
             }
         }
     }

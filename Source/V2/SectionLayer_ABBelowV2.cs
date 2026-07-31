@@ -633,6 +633,18 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // MIRROR VANILLA'S OWN GUARD. MapDrawer.MapMeshDirty opens with exactly this
+            // check and returns, so during map GENERATION every call - vanilla's and ours -
+            // does nothing. The postfix ran anyway, and the carve is the worst possible
+            // caller: SetTerrain and SetRoof each fire one, across ~36k cells per basement
+            // band, and each one then dispatched (bandCount - 1) Harmony-wrapped re-entries
+            // into a method whose first line is a return. On a seven-band map that is on the
+            // order of 1.3 million dead dispatches per carve, paid entirely inside the
+            // generation window this mod has spent three profiling runs shortening.
+            if (Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
             try
             {
                 Map map = MapRef(__instance);
@@ -641,7 +653,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // Mirror to EVERY band above, not just the next one.
+                // Mirror UPWARD, but only as far as the change can actually be SEEN.
                 //
                 // One step was enough while only one level could look down. With levels
                 // stacked, level +2 and +3 see the ground through the open air of the levels
@@ -663,9 +675,32 @@ namespace AsAboveSoBelow
                         IntVec3 above = bands.Translate(loc, b);
                         if (!above.InBounds(map) || bands.InGutter(above))
                         {
-                            continue;
+                            break; // nothing above a gutter column can look down it
                         }
                         map.mapDrawer.MapMeshDirty(above, dirtyFlags);
+                        // ⚠ THE ASCENT RULE - the inverse of ABBands.TryResolveVisibleBelow,
+                        // and it was missing here while the descent rule was being enforced
+                        // in ten other places. A band can only show this cell if EVERY level
+                        // between them is see-through; the first opaque floor, rooftop or
+                        // mountain cap hides it from that band AND from every band above.
+                        //
+                        // Mirroring past that point invalidated sections that provably
+                        // cannot display the change. It is the most expensive kind of waste
+                        // this codebase has, because the unit is not a cell but a SECTION
+                        // REGENERATION: on a seven-band map, one mined rock rebuilt six
+                        // section stacks, each running seven of our layers plus vanilla's -
+                        // and the lighting layer allocated a fresh Unity Mesh per section on
+                        // top. Steady-state fps never showed it; it lands entirely in the
+                        // hitches during mining and construction.
+                        //
+                        // The FIRST step above is deliberately unconditional:
+                        // SectionLayer_ABMountainCap derives its cap from the band exactly
+                        // one Slot below whether that cell is see-through or not, so band + 1
+                        // must always be told regardless of what the ascent rule says.
+                        if (!AnyOpenAround(map, bands, above))
+                        {
+                            break;
+                        }
                     }
                 }
                 finally
@@ -678,6 +713,40 @@ namespace AsAboveSoBelow
                 mirroring = false;
                 Log.ErrorOnce(ABLog.Tag + " V2: dirty mirror threw: " + e, 762195871);
             }
+        }
+
+        /// <summary>
+        /// Can ANY column in this cell's 3x3 neighbourhood still see downward?
+        ///
+        /// Nine cells, not one, and for exactly the reason
+        /// SectionLayer_ABBelowShadows.TryResolveDropAround already takes nine: the mirrored
+        /// passes are NEIGHBOUR-SAMPLING. Terrain edge fades read the eight adjacent
+        /// terrains, the fog fan reads eight neighbours' fog, the snow layer averages a
+        /// nine-cell kernel, and the sun-shadow caster mask is defined on neighbours
+        /// outright. A column that is opaque itself can still be read as a neighbour by an
+        /// adjacent column that is not, so stopping the climb on the centre cell alone would
+        /// drop invalidations a boundary pass genuinely needs - and boundary artifacts are
+        /// the single hardest class of bug to attribute in this codebase.
+        ///
+        /// Nine terrain reads per band is array indexing plus two reference compares. It buys
+        /// back whole section regenerations, so the trade is not close.
+        /// </summary>
+        private static bool AnyOpenAround(Map map, ABBandMap bands, IntVec3 c)
+        {
+            TerrainGrid terrain = map.terrainGrid;
+            for (int i = 0; i < 9; i++)
+            {
+                IntVec3 n = i == 8 ? c : c + GenAdj.AdjacentCells[i];
+                if (!n.InBounds(map) || bands.InGutter(n))
+                {
+                    continue;
+                }
+                if (ABBands.ShowsBelow(terrain.TerrainAt(n)))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

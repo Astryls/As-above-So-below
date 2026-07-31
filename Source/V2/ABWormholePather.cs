@@ -255,8 +255,11 @@ namespace AsAboveSoBelow
                 }
                 catch (Exception e)
                 {
-                    Log.Error(ABLog.Tag + " V2: carry threw for "
-                        + tmpCarry[i].Key.LabelShortCap + ": " + e);
+                    // Keyed on the pawn, so a pawn stuck in a failing transit logs once
+                    // rather than every tick it retries. TickTransits runs every game tick.
+                    Log.ErrorOnce(ABLog.Tag + " V2: carry threw for "
+                        + tmpCarry[i].Key.LabelShortCap + ": " + e,
+                        tmpCarry[i].Key.thingIDNumber ^ 762195935);
                 }
             }
             tmpCarry.Clear();

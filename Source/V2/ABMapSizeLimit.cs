@@ -312,10 +312,26 @@ namespace AsAboveSoBelow
             {
                 Log.ErrorOnce(ABLog.Tag + " V2: level chooser failed: " + e, 762195912);
             }
-            finally
-            {
-                ABMapSizeLimit.EndChooser();
-            }
+        }
+
+        /// <summary>
+        /// ⚠ THE RELEASE FOR BeginChooser, AND IT HAS TO BE A FINALIZER.
+        ///
+        /// It used to sit in the Postfix's finally block, which covers a throw in OUR code
+        /// but not one in VANILLA's - Harmony skips postfixes entirely when the original
+        /// method throws. And what BeginChooser takes is global: <c>inChooser</c> gates a
+        /// patch on <c>Listing_Standard.RadioButton</c>, a UI primitive used by every mod's
+        /// settings window and dozens of vanilla dialogs, and the reflection swap replaces
+        /// the static <c>Dialog_AdvancedGameConfig.MapSizes</c> array outright. Left latched,
+        /// unrelated radio buttons elsewhere in the game would be relabelled and DISABLED for
+        /// the rest of the session, with no plausible way to connect that to this mod.
+        ///
+        /// Same rule as Patch_PawnRenderUtility_ABAimAngle: state taken in a prefix is
+        /// released in a finalizer, never in a postfix.
+        /// </summary>
+        private static void Finalizer()
+        {
+            ABMapSizeLimit.EndChooser();
         }
 
         /// <summary>

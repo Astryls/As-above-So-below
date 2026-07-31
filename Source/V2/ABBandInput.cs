@@ -43,7 +43,8 @@ namespace AsAboveSoBelow
             try
             {
                 Map map = Find.CurrentMap;
-                if (map == null || !ABBands.Banded(map) || Find.CurrentMap.Disposed)
+                if (map == null || !ABGuard.On(ABGuard.Camera)
+                    || !ABBands.Banded(map) || Find.CurrentMap.Disposed)
                 {
                     return;
                 }
@@ -64,7 +65,11 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                Log.Error(ABLog.Tag + " V2: band input threw: " + e);
+                // GameComponentOnGUI runs several times per FRAME (once per GUI event), so an
+                // unthrottled Log.Error here has the same runaway shape as the camera clamp
+                // next door. Guard-switched instead: level switching stops, one line is
+                // logged, and the player is told which subsystem went down.
+                ABGuard.Disable(ABGuard.Camera, e, "V2 band input");
             }
         }
 

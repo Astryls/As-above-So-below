@@ -39,30 +39,51 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(MixedBiomeMapComponent), nameof(MixedBiomeMapComponent.GetBiomeAt))]
     public static class Patch_MixedBiome_ABBandBiomeAt
     {
-        /// <summary>One-entry memo. GetBiomeAt is called per cell inside WildPlantSpawner's
-        /// scan loops, so a ConditionalWeakTable probe per call is not acceptable; in
-        /// practice every call in a burst comes from the same map.</summary>
-        private static Map lastMap;
+        /// <summary>
+        /// One-entry memo, held as a SINGLE IMMUTABLE OBJECT rather than two static fields.
+        ///
+        /// GetBiomeAt is called per cell inside WildPlantSpawner's scan loops, so a
+        /// ConditionalWeakTable probe per call is not acceptable; in practice every call in a
+        /// burst comes from the same map. But the pair must be published TOGETHER: two loose
+        /// statics can be read torn - the map from one entry and the component from another -
+        /// handing back the wrong map's band layout intermittently and only under load. That
+        /// is the exact hazard ABBands.CompMemo was built to close, with the reasoning
+        /// written out two hundred lines away; this copy had drifted back to the broken
+        /// shape. Reference assignment is atomic, so one object read once into a local is
+        /// consistent by construction - no lock, no volatile, no cost.
+        /// </summary>
+        private sealed class BandsMemo
+        {
+            public readonly Map map;
 
-        private static ABBandMap lastBands;
+            public readonly ABBandMap bands;
+
+            public BandsMemo(Map map, ABBandMap bands)
+            {
+                this.map = map;
+                this.bands = bands;
+            }
+        }
+
+        private static BandsMemo memo;
 
         private static ABBandMap BandsOf(Map map)
         {
-            if (ReferenceEquals(map, lastMap))
+            BandsMemo m = memo;
+            if (m != null && ReferenceEquals(m.map, map))
             {
-                return lastBands;
+                return m.bands;
             }
-            lastMap = map;
-            lastBands = ABBands.CompOf(map);
-            return lastBands;
+            ABBandMap bands = ABBands.CompOf(map);
+            memo = new BandsMemo(map, bands);
+            return bands;
         }
 
         /// <summary>Dropped when a map goes away, so a recycled Map reference can never
         /// be answered from a stale component.</summary>
         public static void Forget()
         {
-            lastMap = null;
-            lastBands = null;
+            memo = null;
         }
 
         private static bool Prefix(MixedBiomeMapComponent __instance, IntVec3 cell,

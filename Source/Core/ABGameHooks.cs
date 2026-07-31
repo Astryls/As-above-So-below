@@ -146,28 +146,40 @@ namespace AsAboveSoBelow
             return arr;
         }
 
-        public static void RunTicks()
+        /// <summary>
+        /// Run one lane, ISOLATING each callee.
+        ///
+        /// This used to be a bare indexed call with a comment asserting "each callee
+        /// self-guards". They all do today - but that is a property of three files, not of
+        /// this one, and a comment is not an invariant. Without isolation the FIRST hook to
+        /// throw takes out every hook after it in the same lane (a stranded transit sweep
+        /// silently disabling the void-safety sweep, say) AND propagates out of
+        /// GameComponentTick every single tick.
+        ///
+        /// ErrorOnce keyed on the hook's identity: a hook that throws every tick reports once
+        /// and then costs only the throw. The array walk itself is unchanged - still zero
+        /// allocation, still deterministic order.
+        /// </summary>
+        private static void Run(Action[] lane, string laneName)
         {
-            for (int i = 0; i < ticks.Length; i++)
+            for (int i = 0; i < lane.Length; i++)
             {
-                ticks[i]();
+                try
+                {
+                    lane[i]();
+                }
+                catch (Exception e)
+                {
+                    Log.ErrorOnce(ABLog.Tag + " lifecycle hook (" + laneName + " #" + i
+                        + ") threw and was isolated: " + e, 762195940 ^ (laneName.GetHashCode() * 31) ^ i);
+                }
             }
         }
 
-        public static void RunResets()
-        {
-            for (int i = 0; i < resets.Length; i++)
-            {
-                resets[i]();
-            }
-        }
+        public static void RunTicks() => Run(ticks, "tick");
 
-        public static void RunExposes()
-        {
-            for (int i = 0; i < exposes.Length; i++)
-            {
-                exposes[i]();
-            }
-        }
+        public static void RunResets() => Run(resets, "reset");
+
+        public static void RunExposes() => Run(exposes, "expose");
     }
 }
