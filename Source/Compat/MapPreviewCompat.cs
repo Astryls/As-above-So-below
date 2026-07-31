@@ -52,6 +52,21 @@ namespace AsAboveSoBelow
 
         private const string WidgetTypeName = "MapPreview.MapPreviewWidget";
 
+        private const string RerollWindowTypeName = "MapPreview.MapSeedRerollWindow";
+
+        private const string ApiTypeName = "MapPreview.MapPreviewAPI";
+
+        // MapSeedRerollWindow's own layout constants, reproduced because the postfix has to
+        // re-derive the row count from a corrected element height. Their names, their values:
+        // WindowMargin 20, ElementSpacing 20, and a 70px header strip (a 50px toolbar plus
+        // one spacing). If they ever change, the grid gets slightly too many or too few rows
+        // - it does not break.
+        private const float RerollWindowMargin = 20f;
+
+        private const float RerollElementSpacing = 20f;
+
+        private const float RerollHeaderStrip = 70f;
+
         /// <summary>Headroom for the preview widget's texture and colour buffer.
         ///
         /// The widget is built as <c>new MapPreviewWidgetWithPreloader(MapSizeUtility.MaxMapSize)</c>
@@ -74,6 +89,18 @@ namespace AsAboveSoBelow
         private static MethodInfo onWorldTileSelected;
 
         private static MethodInfo mapPosFromScreenPos;
+
+        private static MethodInfo rerollUpdateElementSize;
+
+        private static MethodInfo rerollTryAddElement;
+
+        private static FieldInfo rerollElementSize;
+
+        private static FieldInfo rerollGridSize;
+
+        private static FieldInfo rerollMapSize;
+
+        private static PropertyInfo apiIsGeneratingPreview;
 
         private static PropertyInfo resultMapSize;
 
@@ -124,6 +151,15 @@ namespace AsAboveSoBelow
             }
         }
 
+        internal static MethodBase RerollGridTarget
+        {
+            get
+            {
+                Resolve();
+                return rerollUpdateElementSize;
+            }
+        }
+
         private static void Resolve()
         {
             if (resolved)
@@ -159,6 +195,23 @@ namespace AsAboveSoBelow
                 if (widgetType != null)
                 {
                     mapPosFromScreenPos = AccessTools.Method(widgetType, "MapPosFromScreenPos");
+                }
+                // The seed-reroll grid. Everything here is optional: the reroll feature is
+                // OFF by default in their settings, and any one of these resolving to null
+                // simply leaves the grid patch unarmed rather than breaking the rest.
+                Type rerollType = AccessTools.TypeByName(RerollWindowTypeName);
+                if (rerollType != null)
+                {
+                    rerollUpdateElementSize = AccessTools.Method(rerollType, "UpdateElementSize");
+                    rerollTryAddElement = AccessTools.Method(rerollType, "TryAddElement");
+                    rerollElementSize = AccessTools.Field(rerollType, "_elementSize");
+                    rerollGridSize = AccessTools.Field(rerollType, "_gridSize");
+                    rerollMapSize = AccessTools.Field(rerollType, "_mapSize");
+                }
+                Type apiType = AccessTools.TypeByName(ApiTypeName);
+                if (apiType != null)
+                {
+                    apiIsGeneratingPreview = AccessTools.Property(apiType, "IsGeneratingPreview");
                 }
 
                 RaiseSizeCaps();
@@ -259,6 +312,103 @@ namespace AsAboveSoBelow
             }
             Settlement s = parent as Settlement;
             return s != null && s.Faction != null && s.Faction.IsPlayer;
+        }
+
+        /// <summary>
+        /// SEED REROLL: make the candidate grid usable on a banded map.
+        ///
+        /// ⚠ WITHOUT THIS THE REROLL WINDOW OPENS COMPLETELY EMPTY, and the arithmetic is
+        /// worth writing down because the symptom looks like the feature is missing rather
+        /// than mis-sized.
+        ///
+        /// <c>MapSeedRerollWindow.PreOpen</c> takes its size from
+        /// <c>MapSizeUtility.DetermineMapSize</c> - the method we already postfix - so it
+        /// correctly gets the STACKED size, and that is exactly right: the thumbnails must
+        /// generate at full stacked height or their noise would not match the real map (the
+        /// whole §6d lesson). But <c>UpdateElementSize</c> then shapes each thumbnail with
+        /// <c>y = width / mapSize.x * mapSize.z</c> and derives the row count from it:
+        ///
+        ///     126x896 stack, 2560px window, 6 per row
+        ///       elementSize.y = 403 / 126 * 896 = 2,866 px      (a 7:1 sliver)
+        ///       gridSize.y    = floor(1330 / 2886) = 0
+        ///       DesiredCount  = 6 * 0 = 0
+        ///
+        /// The method's own trim loop then disposes every element, and <c>TryAddElement</c>
+        /// opens with <c>if (_elements.Count >= DesiredCount) return;</c> - 0 >= 0 - so it
+        /// returns immediately and nothing is ever queued.
+        ///
+        /// This is the SECOND consumer of the stacked size to be caught out by it; the first
+        /// was their main preview window, fixed by FixWindowAspect above. The fix is the
+        /// same shape: keep the stacked size for GENERATION, use the band's aspect for
+        /// LAYOUT. Deliberately not solved by suppressing the inflation while the reroll
+        /// window is open - that would make every thumbnail a picture of a map that will
+        /// never generate.
+        ///
+        /// Their cropping already works here for free: <c>MapPreviewWidget.OnPromiseResolved</c>
+        /// copies <c>result.TexCoords</c> and <c>DrawGenerated</c> draws through it, so the
+        /// existing CropTexCoords patch trims each thumbnail to the surface band.
+        /// </summary>
+        internal static void FixRerollGrid(object window, int elementsPerRow)
+        {
+            if (rerollElementSize == null || rerollGridSize == null || rerollMapSize == null)
+            {
+                return;
+            }
+            Window w = window as Window;
+            if (w == null || w.windowRect.height <= 0f || elementsPerRow <= 0)
+            {
+                return;
+            }
+            if (!(rerollMapSize.GetValue(window) is IntVec2 mapSize) || mapSize.x <= 0)
+            {
+                return;
+            }
+            // Only claim sizes that are OUR stack. An ordinary map (or a quest site) reaches
+            // this with a size TryBandRows refuses, and their own arithmetic was already
+            // correct for it - so the untouched path is the common one.
+            if (!TryBandRows(mapSize.z, out int _, out int bandHeight) || bandHeight <= 0)
+            {
+                return;
+            }
+            if (!(rerollElementSize.GetValue(null) is Vector2 size) || size.x <= 0f)
+            {
+                return;
+            }
+
+            // Width is theirs and already right; only the height was derived from the stack.
+            float y = size.x / mapSize.x * bandHeight;
+            rerollElementSize.SetValue(null, new Vector2(size.x, y));
+
+            int rows = Mathf.FloorToInt(
+                (w.windowRect.height - 2f * RerollWindowMargin - RerollHeaderStrip)
+                / (y + RerollElementSpacing));
+            rerollGridSize.SetValue(null, new Vector2Int(elementsPerRow, Mathf.Max(1, rows)));
+
+            // Their trim loop and TryAddElement call both already ran against the OLD (zero)
+            // DesiredCount, so the list was emptied and nothing was queued. Kick it once now
+            // that the grid is real; TryAddElement chains itself from each promise, so one
+            // call fills the whole grid.
+            if (rerollTryAddElement != null && !IsGeneratingPreview())
+            {
+                rerollTryAddElement.Invoke(window, null);
+            }
+        }
+
+        /// <summary>Mirrors the guard their own UpdateElementSize puts on TryAddElement.
+        /// Absent or unreadable resolves to "not busy", which fails toward populating the
+        /// grid rather than leaving it blank.</summary>
+        private static bool IsGeneratingPreview()
+        {
+            try
+            {
+                return apiIsGeneratingPreview != null
+                    && apiIsGeneratingPreview.GetValue(null) is bool busy
+                    && busy;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>The surface band's rows, from the cached band height alone.</summary>
@@ -452,6 +602,43 @@ namespace AsAboveSoBelow
             catch (Exception e)
             {
                 Log.ErrorOnce(ABLog.Tag + " Map Preview window aspect patch threw: " + e, 762195893);
+            }
+        }
+    }
+
+    /// <summary>Make the seed-reroll candidate grid usable on a banded map - see
+    /// <see cref="MapPreviewCompat.FixRerollGrid"/> for the arithmetic that otherwise leaves
+    /// the window empty.
+    ///
+    /// A POSTFIX that repairs two of their statics, rather than a prefix that reimplements
+    /// the method: their layout maths (element width, the trim loop) is correct and only the
+    /// aspect is wrong, so replacing the body would duplicate work that can silently drift
+    /// out of step on their next update.</summary>
+    [HarmonyPatch]
+    public static class Patch_MapPreview_ABRerollGrid
+    {
+        private static bool Prepare()
+        {
+            return MapPreviewCompat.Active && MapPreviewCompat.RerollGridTarget != null;
+        }
+
+        private static MethodBase TargetMethod()
+        {
+            return MapPreviewCompat.RerollGridTarget;
+        }
+
+        private static void Postfix(object __instance, int elementsPerRow)
+        {
+            try
+            {
+                if (ABV2.Enabled && ABV2.BandCount > 1)
+                {
+                    MapPreviewCompat.FixRerollGrid(__instance, elementsPerRow);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " Map Preview reroll grid patch threw: " + e, 762195895);
             }
         }
     }
