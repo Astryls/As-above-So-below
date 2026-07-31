@@ -675,9 +675,11 @@ namespace AsAboveSoBelow
                     {
                         t.DeSpawn(DestroyMode.Vanish);
                         ABGenProfile.thingsDestroyed++;
+                        ABGenProfile.NoteDestroyed(t.def);
                     }
                     continue;
                 }
+                ABGenProfile.NoteDestroyed(t.def);
                 t.Destroy(DestroyMode.Vanish);
                 ABGenProfile.thingsDestroyed++;
             }
@@ -704,9 +706,11 @@ namespace AsAboveSoBelow
                     {
                         t.DeSpawn(DestroyMode.Vanish);
                         ABGenProfile.thingsDestroyed++;
+                        ABGenProfile.NoteDestroyed(t.def);
                     }
                     continue;
                 }
+                ABGenProfile.NoteDestroyed(t.def);
                 t.Destroy(DestroyMode.Vanish);
                 ABGenProfile.thingsDestroyed++;
             }

@@ -64,6 +64,49 @@ namespace AsAboveSoBelow
 
         internal static int rocksSpawned;
 
+        /// <summary>WHAT the carve destroyed, by def.
+        ///
+        /// "74,584 things" is a magnitude, not a diagnosis. Attributing them to defs is
+        /// what turns "almost certainly rock" into a fact, and this codebase has a
+        /// documented history of confident sentences that were wrong (the snow line sat
+        /// dead for months behind one). It also doubles as the pass signal for the
+        /// doomed-band scoping work: as each mass spawner is scoped, its row here should
+        /// vanish.</summary>
+        internal static readonly Dictionary<string, int> destroyedByDef =
+            new Dictionary<string, int>();
+
+        internal static void NoteDestroyed(ThingDef def)
+        {
+            string key = def != null ? def.defName : "(null)";
+            destroyedByDef.TryGetValue(key, out int n);
+            destroyedByDef[key] = n + 1;
+        }
+
+        /// <summary>Top N rows of a def census, largest first.</summary>
+        private static void AppendCensus(StringBuilder sb, string title,
+            Dictionary<string, int> census, int top)
+        {
+            if (census.Count == 0)
+            {
+                sb.AppendLine("              " + title + ": none");
+                return;
+            }
+            var rows = new List<KeyValuePair<string, int>>(census);
+            rows.Sort((a, b) => b.Value.CompareTo(a.Value));
+            int total = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                total += rows[i].Value;
+            }
+            sb.AppendLine("              " + title + " (" + total.ToString("N0") + " over "
+                + rows.Count + " defs):");
+            for (int i = 0; i < rows.Count && i < top; i++)
+            {
+                sb.AppendLine("                " + rows[i].Value.ToString("N0").PadLeft(9)
+                    + "  " + rows[i].Key);
+            }
+        }
+
         internal static void Phase(string label, double ms)
         {
             carvePhases.Add(new KeyValuePair<string, double>(label, ms));
@@ -84,6 +127,8 @@ namespace AsAboveSoBelow
             carvePhases.Clear();
             thingsDestroyed = 0;
             rocksSpawned = 0;
+            destroyedByDef.Clear();
+            ABDoomedBands.Reset();
             finalizeInitMs = -1;
             totalWatch.Restart();
         }
@@ -165,6 +210,10 @@ namespace AsAboveSoBelow
             }
             sb.AppendLine("              (" + thingsDestroyed.ToString("N0") + " things destroyed, "
                 + rocksSpawned.ToString("N0") + " rocks spawned)");
+            sb.AppendLine("              SCOPING: skipRockInSkyBands="
+                + ABDoomedBands.SkipRockInSkyBands);
+            AppendCensus(sb, "DESTROYED by def", destroyedByDef, 10);
+            AppendCensus(sb, "SUPPRESSED by def (never spawned)", ABDoomedBands.suppressed, 10);
             sb.AppendLine("  " + startSpotMs.ToString("0.0").PadLeft(9) + " ms  AB start-spot fix + rescue");
             sb.AppendLine("  " + (finalizeInitMs < 0 ? "      n/a" : finalizeInitMs.ToString("0.0").PadLeft(9))
                 + " ms  Map.FinalizeInit (regions/rooms/path costs - built AFTER gensteps, RE-dirtied by carve)");
