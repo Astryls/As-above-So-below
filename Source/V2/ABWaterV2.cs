@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using HarmonyLib;
@@ -302,21 +303,101 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                if (!ABBandedGeneration.TryPendingSurfaceRect(map, out CellRect surface, out int slot)
-                    || slot <= 0)
-                {
-                    return;
-                }
-                int h = surface.Height;
-                if (h <= 0 || h >= map.Size.z)
-                {
-                    return;
-                }
-                cell = new IntVec3(cell.x, cell.y, (cell.z % slot) + (map.Size.z - h) / 2);
+                // The rewrite itself now lives in ABBandLocal, because three more
+                // consumers of it turned up in the VEE audit (§20). Behaviour is
+                // unchanged - this was the original and is still the reference case.
+                ABBandLocal.TryRemap(map, ref cell);
             }
             catch (Exception e)
             {
                 Log.ErrorOnce(ABLog.Tag + " V2: coast band-local patch threw: " + e, 762195883);
+            }
+        }
+    }
+
+    /// <summary>
+    /// RIVER WIDTH ON A NARROW BAND (§20 row 7).
+    ///
+    /// §6b remaps the river CENTRE into the surface band and that has always been enough for
+    /// vanilla, whose widest river is 30 cells on a map at least 250 wide - about 12%. It is
+    /// not enough once a mod widens them: Grand Rivers Reborn raises LargeRiver to 23 and
+    /// Epic Rivers adds a 50-cell EpicRiver, and a 50-cell river on a 126-cell band is 40% of
+    /// the level, wide enough to reach the permanently-fogged gutter rows and drown most of
+    /// the buildable surface.
+    ///
+    /// The centre fix and this one are the SAME slicing-rule row seen twice: an anchor was
+    /// remapped but the extent measured off it was not. Width is not a fraction of anything
+    /// in vanilla - it is an absolute cell count authored against a full-size map - so it has
+    /// to be re-based onto the band the river actually occupies.
+    ///
+    /// PATCHED ON THE PRODUCER, NOT THE DEF. Clamping <c>RiverDef.widthOnMap</c> directly
+    /// would be one line and is rejected for the same reason §16 rejected swapping
+    /// <c>WeatherDef.Worker.overlays</c>: a Def is global and shared across every map in the
+    /// save, so an ordinary quest-site map generated later in the same session would inherit
+    /// a river narrowed for a banded colony.
+    ///
+    /// <c>GenerateRiverGraph</c> is the one place a width reaches
+    /// <c>map.waterInfo.riverGraph</c>, but it is virtual and the delta / confluence /
+    /// headwater / island variants each declare their own override, so TargetMethods sweeps
+    /// every loaded declaration rather than trusting the base. That also picks up modded
+    /// workers for free. The postfix is idempotent (a clamp), so a subclass that chains to
+    /// base and gets patched twice is harmless.
+    /// </summary>
+    [HarmonyPatch]
+    public static class Patch_TileMutatorWorker_ABRiverWidth
+    {
+        /// <summary>Widest a river may be, as a fraction of band height. Vanilla's own worst
+        /// case is LargeRiver at 30 on a 250 map (12%); this leaves real headroom above that
+        /// while keeping a 126-band's river under 28 cells and well clear of the gutter.</summary>
+        private const float MaxWidthFraction = 0.22f;
+
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            foreach (Type t in typeof(TileMutatorWorker).AllSubclassesNonAbstract())
+            {
+                MethodInfo m = AccessTools.DeclaredMethod(t, "GenerateRiverGraph");
+                if (m != null)
+                {
+                    yield return m;
+                }
+            }
+            MethodInfo baseMethod = AccessTools.DeclaredMethod(typeof(TileMutatorWorker_River), "GenerateRiverGraph");
+            if (baseMethod != null)
+            {
+                yield return baseMethod;
+            }
+        }
+
+        private static void Postfix(Map map)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.LevelGen) || map?.waterInfo?.riverGraph == null)
+                {
+                    return;
+                }
+                if (!ABBandLocal.TryBandGeometry(map, out int bandHeight, out _, out _))
+                {
+                    return;
+                }
+                float max = bandHeight * MaxWidthFraction;
+                List<RiverNode> graph = map.waterInfo.riverGraph;
+                for (int i = 0; i < graph.Count; i++)
+                {
+                    RiverNode node = graph[i];
+                    if (node.width <= max)
+                    {
+                        continue;
+                    }
+                    ABLog.Dev("V2: river width " + node.width.ToString("0.#") + " -> "
+                        + max.ToString("0.#") + " (band height " + bandHeight + ").");
+                    node.width = max;
+                    graph[i] = node; // RiverNode may be a struct - write back by index
+                }
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: river width clamp threw: " + e, 762195884);
             }
         }
     }
