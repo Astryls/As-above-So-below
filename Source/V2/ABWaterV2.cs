@@ -541,12 +541,17 @@ namespace AsAboveSoBelow
                 return;
             }
             int layerId = SubcameraDefOf.WaterDepth.LayerId;
+            // Perspective mode moves the water depth mask with the shoreline it belongs to.
+            // It has to: the visible water material samples this texture at its own SCREEN
+            // position (§6b), so a depth mask left behind while the terrain slid would put
+            // the deep-water tint a few pixels off the pond.
+            Matrix4x4 m = ABDepthView.Matrix;
             for (int i = 0; i < subMeshes.Count; i++)
             {
                 LayerSubMesh sub = subMeshes[i];
                 if (sub.finalized && !sub.disabled)
                 {
-                    Graphics.DrawMesh(sub.mesh, Matrix4x4.identity, sub.material, layerId);
+                    Graphics.DrawMesh(sub.mesh, m, sub.material, layerId);
                 }
             }
         }

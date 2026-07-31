@@ -38,6 +38,13 @@ namespace AsAboveSoBelow
         /// Patch_PawnRenderer_ABBelowBodyPos. Non-zero exclusively inside that call.</summary>
         public static float BelowDrawOffsetZ;
 
+        /// <summary>Depth-falloff scale armed around a single below-pawn draw call, read by
+        /// Patch_PawnRenderer_ABBelowShrink. Exactly the same arm/disarm discipline as
+        /// BelowDrawOffsetZ: 1 outside the pass, so nothing else in the game can observe it.
+        /// Kept separate from the offset because a pawn can be translated without being
+        /// shrunk (falloff off, perspective on) and the two disarm independently.</summary>
+        public static float BelowDrawScale = 1f;
+
         private static readonly System.Text.StringBuilder report = new System.Text.StringBuilder();
 
         public static void DrawBelowPawns(Map map)
@@ -145,6 +152,13 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = p.DrawPos;
                     loc.z += drop;
+                    // Same two depth cues the printed pass applies, in the same order:
+                    // per-object shrink by how many levels down this pawn is, then the
+                    // whole-view perspective contraction. The perspective factor is
+                    // depth-UNIFORM by design (see ABDepthView) so a pawn cannot drift away
+                    // from the terrain it is standing on.
+                    loc = ABDepthView.Apply(loc);
+                    float shrink = ABDepthView.ScaleForLevels(slot > 0 ? drop / slot : 1);
 
                     // Run the SAME three phases vanilla runs for a visible pawn, at our
                     // translated location - do not just call DrawNowAt.
@@ -166,6 +180,7 @@ namespace AsAboveSoBelow
                     // from ParallelPreDraw as well as Draw, so arming only the draw call
                     // leaves the cached results holding the untranslated position.
                     BelowDrawOffsetZ = drop;
+                    BelowDrawScale = shrink;
                     try
                     {
                         p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
@@ -175,8 +190,10 @@ namespace AsAboveSoBelow
                     finally
                     {
                         // Cleared in a finally so a throw mid-draw cannot leave every pawn on
-                        // the map rendering a band too high.
+                        // the map rendering a band too high, or every pawn in the colony
+                        // rendering at 85%.
                         BelowDrawOffsetZ = 0f;
+                        BelowDrawScale = 1f;
                     }
                 }
                 catch (Exception e)
@@ -251,6 +268,15 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = t.DrawPos;
                     loc.z += slot;
+                    // Perspective only. There is no scale hook on this path: a realtime
+                    // thing is drawn by its own Graphic through DynamicDrawPhaseAt, which
+                    // takes a position and nothing else - unlike a pawn, whose renderer
+                    // funnels every draw through PawnDrawParms.matrix. Construction frames
+                    // and projectiles one level down therefore keep full size while the
+                    // pawns beside them shrink. Accepted: this pass is already documented as
+                    // the last single-band corner of the below view (§5), and both gaps want
+                    // the same fix.
+                    loc = ABDepthView.Apply(loc);
                     // All three phases, unconditionally. A phase-skipping optimisation was
                     // tried here and REVERTED: it caused a visible regression and was never
                     // worth it - it removed two virtual calls that immediately return and

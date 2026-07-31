@@ -791,6 +791,31 @@ namespace AsAboveSoBelow
         {
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
             IntVec3 spot = MapGenerator.PlayerStartSpotValid ? MapGenerator.PlayerStartSpot : IntVec3.Invalid;
+
+            // ⚠ THE COLONY OUTRANKS THE RECORD OF WHERE IT WAS MEANT TO BE.
+            //
+            // By the time this runs, the pawns have been on the map for two gensteps and
+            // RescueStrandedColonists may have MOVED them - so the stored spot is a
+            // statement about a plan, and the pawns are the fact. Everything downstream that
+            // reads PlayerStartSpot after generation wants the fact: Game.InitNewGame aims
+            // the camera at it, and it is the fallback target for later drops.
+            //
+            // This is the upstream half of the "camera does not land on the colonists" fix;
+            // ABBandView.LandOnColony is the backstop for the case where the spot is right
+            // and something else moved the view.
+            IntVec3 colony = ColonyAnchor(map, surface);
+            if (colony.IsValid)
+            {
+                if (colony != spot)
+                {
+                    MapGenerator.PlayerStartSpot = colony;
+                    ABLog.Dev("V2: start spot re-pointed at the colony's actual position "
+                        + colony + " (was " + (spot.IsValid ? spot.ToString() : "invalid")
+                        + ").");
+                }
+                return;
+            }
+
             if (spot.IsValid && surface.Contains(spot) && spot.Standable(map))
             {
                 return;
@@ -827,6 +852,53 @@ namespace AsAboveSoBelow
             }
             MapGenerator.PlayerStartSpot = found;
             ABLog.Dev("V2: player start spot moved into the surface band at " + found + ".");
+        }
+
+        /// <summary>Where the player's starting pawns ACTUALLY ended up, as a single cell:
+        /// the free colonist nearest the group's centroid, or Invalid when no player pawn is
+        /// spawned in the surface band (a scenario that spawns nobody, or a start that
+        /// genuinely failed - in which case the search below still has to run).
+        ///
+        /// Restricted to the surface band on purpose. A pawn found outside it has escaped
+        /// the rescue sweep and is about to be destroyed by carving, so pointing the start
+        /// spot at one would aim the camera at a pawn that will not exist a moment
+        /// later.</summary>
+        private static IntVec3 ColonyAnchor(Map map, CellRect surface)
+        {
+            int sumX = 0;
+            int sumZ = 0;
+            int n = 0;
+            foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+            {
+                if (!surface.Contains(p.Position))
+                {
+                    continue;
+                }
+                sumX += p.Position.x;
+                sumZ += p.Position.z;
+                n++;
+            }
+            if (n == 0)
+            {
+                return IntVec3.Invalid;
+            }
+            IntVec3 centroid = new IntVec3(sumX / n, 0, sumZ / n);
+            IntVec3 best = IntVec3.Invalid;
+            int bestDist = int.MaxValue;
+            foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+            {
+                if (!surface.Contains(p.Position))
+                {
+                    continue;
+                }
+                int d = (p.Position - centroid).LengthHorizontalSquared;
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = p.Position;
+                }
+            }
+            return best;
         }
 
         /// <summary>Finds somewhere the starting colony can actually land: standable, dry,

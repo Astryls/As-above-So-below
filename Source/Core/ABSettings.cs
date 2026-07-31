@@ -118,6 +118,30 @@ namespace AsAboveSoBelow
         // see ABCameraBounds for the baked table and the in-game calibration tool that
         // produced its numbers.
 
+        // ---- visuals ---------------------------------------------------------
+        //
+        // Two depth cues for the see-below view, documented in full on ABDepthView. Both
+        // are presentation only: nothing here changes what generates or what a pawn can
+        // reach, so either may be flipped mid-colony.
+
+        /// <summary>Content on a level below the one being viewed draws smaller, once per
+        /// level of drop. V1 had this and V2 dropped it; restored ON by default because it
+        /// is the cue that makes a three-deep column read as depth rather than as four
+        /// flat maps stacked in a list.</summary>
+        public bool depthFalloff = true;
+
+        /// <summary>Shrink applied per level of drop. BAKED INTO THE PRINTED VERTICES, so
+        /// changing it forces a map-mesh regeneration - see ABMod.WriteSettings.</summary>
+        public float depthFalloffPerLevel = ABDepthView.DefaultFalloff;
+
+        /// <summary>Perspective Mode: the below view contracts towards the camera centre,
+        /// so off-centre openings show a little of their far wall. OFF by default - it has
+        /// a real artifact (see ABDepthView) and it is a taste decision, not a fix.</summary>
+        public bool perspectiveMode;
+
+        /// <summary>0..1 of ABDepthView.MaxPerspectiveK. Per-frame, nothing baked.</summary>
+        public float perspectiveStrength = ABDepthView.DefaultPerspectiveStrength;
+
         // ---- sky band generation -------------------------------------------
 
         /// <summary>Meadow-Perlin peaks (varied ledges and plateaus) rather than a plain
@@ -205,6 +229,12 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.3f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
+            Scribe_Values.Look(ref depthFalloff, "depthFalloff", true);
+            Scribe_Values.Look(ref depthFalloffPerLevel, "depthFalloffPerLevel",
+                ABDepthView.DefaultFalloff);
+            Scribe_Values.Look(ref perspectiveMode, "perspectiveMode", false);
+            Scribe_Values.Look(ref perspectiveStrength, "perspectiveStrength",
+                ABDepthView.DefaultPerspectiveStrength);
             Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref deepTempOffsets, "deepTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref skyWindFactors, "skyWindFactors", LookMode.Value);
@@ -219,6 +249,7 @@ namespace AsAboveSoBelow
         private enum Tab
         {
             Performance,
+            Visuals,
             Climate,
             Sky,
             Basement,
@@ -234,7 +265,7 @@ namespace AsAboveSoBelow
         /// how tall it was after drawing, so the value always lags a frame. Kept per tab
         /// rather than shared: one shared value meant switching from a short tab to a tall
         /// one sized the scroll region from the WRONG tab for a frame.</summary>
-        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f };
+        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f, 600f };
 
         private static readonly Color TabActive = new Color(0.32f, 0.36f, 0.42f);
 
@@ -256,11 +287,12 @@ namespace AsAboveSoBelow
 
             const float TabH = 32f;
             Rect tabRow = new Rect(inRect.x, inRect.y, inRect.width, TabH);
-            DrawTabButton(tabRow, 0, 5, "AB_TabPerformance", Tab.Performance);
-            DrawTabButton(tabRow, 1, 5, "AB_TabClimate", Tab.Climate);
-            DrawTabButton(tabRow, 2, 5, "AB_TabSky", Tab.Sky);
-            DrawTabButton(tabRow, 3, 5, "AB_TabBasement", Tab.Basement);
-            DrawTabButton(tabRow, 4, 5, "AB_TabDiagnostics", Tab.Diagnostics);
+            DrawTabButton(tabRow, 0, 6, "AB_TabPerformance", Tab.Performance);
+            DrawTabButton(tabRow, 1, 6, "AB_TabVisuals", Tab.Visuals);
+            DrawTabButton(tabRow, 2, 6, "AB_TabClimate", Tab.Climate);
+            DrawTabButton(tabRow, 3, 6, "AB_TabSky", Tab.Sky);
+            DrawTabButton(tabRow, 4, 6, "AB_TabBasement", Tab.Basement);
+            DrawTabButton(tabRow, 5, 6, "AB_TabDiagnostics", Tab.Diagnostics);
 
             Rect body = new Rect(inRect.x, inRect.y + TabH + 6f,
                 inRect.width, inRect.height - TabH - 6f);
@@ -283,6 +315,7 @@ namespace AsAboveSoBelow
                 switch (tab)
                 {
                     case Tab.Performance: DoPerformance(list); break;
+                    case Tab.Visuals: DoVisuals(list); break;
                     case Tab.Climate: DoClimate(list); break;
                     case Tab.Sky: DoSky(list); break;
                     case Tab.Basement: DoBasement(list); break;
@@ -404,6 +437,77 @@ namespace AsAboveSoBelow
             GUI.color = NoteDim;
             list.Label("AB_BudgetExplain".Translate(budget));
             GUI.color = dim;
+        }
+
+        // ---- visuals tab -----------------------------------------------------
+
+        /// <summary>Set when a setting that is BAKED INTO MESH VERTICES changes, so the map
+        /// mesh can be regenerated once on close rather than on every frame of a slider
+        /// drag. Reading it clears it.</summary>
+        private static bool bakedVisualDirty;
+
+        public static bool ConsumeBakedVisualDirty()
+        {
+            bool was = bakedVisualDirty;
+            bakedVisualDirty = false;
+            return was;
+        }
+
+        /// <summary>
+        /// The two depth cues. Full reasoning lives on ABDepthView; this pane only has to
+        /// say what each one costs the player.
+        ///
+        /// The falloff slider is presented as "per level", not as a final size, because the
+        /// number compounds: at 85% a level-3 basement seen from the peak draws at 61%, and
+        /// a player who read the slider as "how big is the level below" would be surprised
+        /// by that. The readout spells the compounded value out.
+        /// </summary>
+        private void DoVisuals(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabVisuals".Translate());
+            Text.Font = GameFont.Small;
+
+            Color dim = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_VisualsNote".Translate());
+            GUI.color = dim;
+            list.Gap(8f);
+
+            bool falloffWas = depthFalloff;
+            list.CheckboxLabeled("AB_DepthFalloff".Translate(), ref depthFalloff,
+                "AB_DepthFalloffTip".Translate());
+            if (falloffWas != depthFalloff)
+            {
+                bakedVisualDirty = true;
+            }
+            if (depthFalloff)
+            {
+                float three = depthFalloffPerLevel * depthFalloffPerLevel * depthFalloffPerLevel;
+                list.Label("AB_DepthFalloffAmount".Translate(
+                    depthFalloffPerLevel.ToStringPercent(), three.ToStringPercent()));
+                float chosen = list.Slider(depthFalloffPerLevel,
+                    ABDepthView.MinFalloff, ABDepthView.MaxFalloff);
+                if (Mathf.Abs(chosen - depthFalloffPerLevel) > 0.0005f)
+                {
+                    depthFalloffPerLevel = chosen;
+                    bakedVisualDirty = true;
+                }
+            }
+
+            list.GapLine(10f);
+
+            list.CheckboxLabeled("AB_PerspectiveMode".Translate(), ref perspectiveMode,
+                "AB_PerspectiveModeTip".Translate());
+            if (perspectiveMode)
+            {
+                list.Label("AB_PerspectiveStrength".Translate(
+                    perspectiveStrength.ToStringPercent()));
+                perspectiveStrength = list.Slider(perspectiveStrength, 0f, 1f);
+                GUI.color = NoteDim;
+                list.Label("AB_PerspectiveWarn".Translate());
+                GUI.color = dim;
+            }
         }
 
         // ---- climate tab -----------------------------------------------------

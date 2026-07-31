@@ -92,6 +92,117 @@ namespace AsAboveSoBelow
             return true;
         }
 
+        /// <summary>
+        /// LAND ON THE COLONY, whatever the start spot ended up saying.
+        ///
+        /// Vanilla's Game.InitNewGame finishes with
+        /// <c>JumpToCurrentMapLoc(MapGenerator.PlayerStartSpot)</c>, which is correct on an
+        /// ordinary map because nothing moves the colony after the spot is chosen. On a
+        /// banded map two things can, and both run AFTER the pawns are on the ground:
+        /// RescueStrandedColonists relocates anything the pod scatter threw across a gutter
+        /// into a band the carve is about to erase, and the carve itself can make the
+        /// recorded spot unstandable. Either way the camera obeys a cell the colony is no
+        /// longer standing on, and the player opens their new game looking at empty ground -
+        /// intermittently, because it depends on where the scatter happened to land.
+        ///
+        /// Rather than chase the discrepancy, the camera is aimed at the pawns THEMSELVES,
+        /// which is what the start spot was only ever a proxy for. That is the same answer
+        /// the LOAD path already reaches in ABBandMap.FinalizeInit, for the same stated
+        /// reason ("camera does not land on pawns as expected"); this closes the matching
+        /// hole on the NEW-GAME path, which had no equivalent.
+        ///
+        /// Runs from GameComponent.StartedNewGame, which is the last thing InitNewGame does
+        /// and therefore the only hook that lands AFTER vanilla's own camera jump. A
+        /// GameComponent.FinalizeInit hook would be overwritten by it.
+        ///
+        /// rememberedCameraPos is written by hand as well as the live camera. The deferred
+        /// delegate in ABBandMap.FinalizeInit judges by that field rather than the camera
+        /// (deliberately - it cannot rely on the ordering of vanilla's own restore), so
+        /// leaving it stale would let the load-path fixer immediately undo this one.
+        /// </summary>
+        public static bool LandOnColony(Map map)
+        {
+            ABBandMap bands = ABBands.CompOf(map);
+            if (map == null || bands == null || !bands.Banded)
+            {
+                return false; // ordinary map: vanilla's jump is already right
+            }
+            try
+            {
+                IntVec3 anchor = IntVec3.Invalid;
+                int best = int.MaxValue;
+                int sumX = 0;
+                int sumZ = 0;
+                int n = 0;
+                foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+                {
+                    sumX += p.Position.x;
+                    sumZ += p.Position.z;
+                    n++;
+                }
+                if (n == 0)
+                {
+                    // No free colonists at all - a mech or animal start, or a scenario that
+                    // spawns nothing. Any player thing is a better aim point than a start
+                    // spot nobody is standing on.
+                    foreach (Thing t in map.listerThings.AllThings)
+                    {
+                        if (t.Faction != null && t.Faction.IsPlayer && t.Spawned)
+                        {
+                            sumX += t.Position.x;
+                            sumZ += t.Position.z;
+                            n++;
+                        }
+                    }
+                }
+                if (n == 0)
+                {
+                    return false;
+                }
+                IntVec3 centroid = new IntVec3(sumX / n, 0, sumZ / n);
+
+                // Aim at the pawn NEAREST the centroid, not the centroid itself: with pods
+                // scattered around a lake or a rock face the mean of the positions can be a
+                // cell nobody is anywhere near, and framing the group on a real member is
+                // both closer to vanilla's intent and never inside a mountain.
+                foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+                {
+                    int d = (p.Position - centroid).LengthHorizontalSquared;
+                    if (d < best)
+                    {
+                        best = d;
+                        anchor = p.Position;
+                    }
+                }
+                if (!anchor.IsValid)
+                {
+                    anchor = centroid;
+                }
+                if (!anchor.InBounds(map))
+                {
+                    return false;
+                }
+
+                JumpTo(map, anchor);
+                if (map.rememberedCameraPos != null && Find.CameraDriver != null)
+                {
+                    map.rememberedCameraPos.rootPos =
+                        new Vector3(anchor.x + 0.5f, 0f, anchor.z + 0.5f);
+                    map.rememberedCameraPos.rootSize = Find.CameraDriver.ZoomRootSize;
+                }
+                ABLog.Dev("V2: new game camera landed on the colony at " + anchor
+                    + " (band " + bands.BandOf(anchor) + ", start spot was "
+                    + (MapGenerator.PlayerStartSpotValid
+                        ? MapGenerator.PlayerStartSpot.ToString() : "invalid") + ").");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Warning(ABLog.Tag + " V2: could not land the camera on the colony: " + e);
+                return false;
+            }
+        }
+
         public static void JumpTo(Map map, IntVec3 cell)
         {
             ABBandMap bands = ABBands.CompOf(map);

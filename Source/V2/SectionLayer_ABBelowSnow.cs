@@ -56,6 +56,23 @@ namespace AsAboveSoBelow
         /// below views, then ours on top.</summary>
         public override bool Visible => DebugViewSettings.drawSnow && ABGuard.On(ABGuard.Rendering);
 
+        /// <summary>Snow moves with the ground it lies on under perspective mode. Nothing is
+        /// pinned here: unlike SectionLayer_ABBelowV2 this layer emits no mask geometry, only
+        /// the snow sheet itself.</summary>
+        public override void DrawLayer()
+        {
+            if (!Visible)
+            {
+                return;
+            }
+            if (!ABDepthView.PerspectiveActive)
+            {
+                base.DrawLayer();
+                return;
+            }
+            ABDepthView.DrawSubMeshes(subMeshes);
+        }
+
         public override void Regenerate()
         {
             LayerSubMesh sub = GetSubMesh(MatBases.Snow);

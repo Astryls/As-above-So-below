@@ -202,9 +202,17 @@ namespace AsAboveSoBelow
                         }
                         try
                         {
+                            // The depth cue is applied HERE, at print time, because it is a
+                            // per-object transform: each thing shrinks about its own centre,
+                            // so unlike a whole-layer scale nothing slides off the cell it
+                            // stands on. See ABDepthView for why this half is baked and the
+                            // perspective half is not.
+                            float shrink = ABDepthView.CanShrink(t)
+                                ? ABDepthView.ScaleForLevels(slot > 0 ? drop / slot : 1)
+                                : 1f;
                             SnapshotVertCounts();
                             t.Print(this);
-                            TranslateNewVerts(drop);
+                            FinishNewVerts(drop, t.TrueCenter(), shrink);
                         }
                         catch (Exception e)
                         {
@@ -564,12 +572,25 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Translates the vertices the last print emitted up to the viewing level -
-        /// by the accumulated descent, which may be several bands. Altitude (y) is left
-        /// alone, and nothing is scaled or tinted: the below level is drawn exactly as it is,
-        /// which is the whole point of ONE BIG MAP.</summary>
-        private void TranslateNewVerts(int slot)
+        /// <summary>
+        /// Finishes the vertices the last print emitted: shrink about the thing's own
+        /// centre, then translate up to the viewing level by the accumulated descent (which
+        /// may be several bands, hence `drop` and not one slot).
+        ///
+        /// ONE PASS, not two, and in this order. Scaling first means the pivot is the
+        /// thing's real TrueCenter rather than a translated copy of it, so there is no
+        /// second place for the `- Slot` family of bugs to hide. Altitude (y) is untouched:
+        /// it is draw order in this mod, not height.
+        ///
+        /// Tinting is still deliberately absent - the below view is lit by
+        /// SectionLayer_ABBelowLighting from the surface's own glow, and an artificial dim
+        /// on top of that is the double-darkening that made V1's sky view murky. SIZE is a
+        /// distance cue that costs no brightness, which is why it came back and the tint
+        /// did not.
+        /// </summary>
+        private void FinishNewVerts(int drop, Vector3 centre, float shrink)
         {
+            bool scaling = shrink < 0.999f;
             List<LayerSubMesh> subs = subMeshes;
             for (int i = 0; i < subs.Count; i++)
             {
@@ -578,9 +599,37 @@ namespace AsAboveSoBelow
                 for (int j = from; j < verts.Count; j++)
                 {
                     Vector3 v = verts[j];
-                    verts[j] = new Vector3(v.x, v.y, v.z + slot);
+                    if (scaling)
+                    {
+                        v.x = centre.x + (v.x - centre.x) * shrink;
+                        v.z = centre.z + (v.z - centre.z) * shrink;
+                    }
+                    verts[j] = new Vector3(v.x, v.y, v.z + drop);
                 }
             }
+        }
+
+        /// <summary>
+        /// Perspective mode, applied per frame as a transform rather than baked.
+        ///
+        /// The AIR MASK and the FOG FAN are pinned: they are not content seen through an
+        /// opening, they ARE the opening. Everything else in this layer - below terrain and
+        /// below things - contracts towards the camera centre with the other five below
+        /// passes, all of which use the identical matrix from ABDepthView so lighting,
+        /// shadows, water and snow cannot shear off the ground they belong to.
+        /// </summary>
+        public override void DrawLayer()
+        {
+            if (!Visible)
+            {
+                return;
+            }
+            if (!ABDepthView.PerspectiveActive)
+            {
+                base.DrawLayer();
+                return;
+            }
+            ABDepthView.DrawSubMeshes(subMeshes, AirMaskMat, MatBases.FogOfWar);
         }
     }
 

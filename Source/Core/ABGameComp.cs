@@ -25,6 +25,28 @@ namespace AsAboveSoBelow
             ABGameHooks.RunResets();
         }
 
+        /// <summary>
+        /// The LAST thing Game.InitNewGame does, and therefore the only hook that runs after
+        /// vanilla's own <c>JumpToCurrentMapLoc(MapGenerator.PlayerStartSpot)</c>.
+        ///
+        /// That ordering is the whole reason this lives here rather than in FinalizeInit:
+        /// a camera move made during FinalizeInit is simply overwritten a few lines later.
+        /// See ABBandView.LandOnColony for why the start spot can disagree with where the
+        /// colony actually is on a banded map.
+        /// </summary>
+        public override void StartedNewGame()
+        {
+            base.StartedNewGame();
+            try
+            {
+                ABBandView.LandOnColony(Find.CurrentMap);
+            }
+            catch (Exception e)
+            {
+                Log.Warning(ABLog.Tag + " V2: new-game camera anchor failed: " + e);
+            }
+        }
+
         public override void ExposeData()
         {
             base.ExposeData();
