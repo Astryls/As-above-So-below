@@ -268,6 +268,8 @@ namespace AsAboveSoBelow
 
             int index = (int)tab;
             Rect inner = body.ContractedBy(10f);
+
+
             Rect view = new Rect(0f, 0f, inner.width - 20f, viewHeights[index]);
             Widgets.BeginScrollView(inner, ref scroll, view);
             Listing_Standard list = new Listing_Standard();
@@ -297,7 +299,25 @@ namespace AsAboveSoBelow
                 Log.ErrorOnce(ABLog.Tag + " settings tab " + tab + " threw: " + e,
                     0x5E77 ^ (int)tab);
             }
-            viewHeights[index] = list.CurHeight + 16f;
+            // ⚠ NEVER LET THE MEASURED HEIGHT FALL BELOW THE VIEWPORT.
+            //
+            // This is the whole of the blank-tab bug, and it is a self-sustaining latch.
+            // The scroll view needs its content height a frame in advance, so it is measured
+            // from the previous frame's CurHeight. If any frame draws short - because the
+            // content threw partway, or simply because it was the first frame - the next
+            // frame gets a window that small, which CLIPS everything past it, so the frame
+            // after measures short again. It never recovers. Climate latched at 40px: the
+            // heading drew, everything below it was clipped, and the clipped region included
+            // the error text that would have explained why.
+            //
+            // The Performance tab escaped only because its content happened to fit inside the
+            // initial 600px on the very first frame, which is why exactly one tab worked and
+            // made this look like a dispatch problem for four launches.
+            //
+            // Flooring at the viewport height is also just correct: content shorter than the
+            // viewport should not scroll, and can never need a smaller rect than the window
+            // it sits in.
+            viewHeights[index] = Mathf.Max(list.CurHeight + 16f, inner.height);
             list.End();
             Widgets.EndScrollView();
         }
