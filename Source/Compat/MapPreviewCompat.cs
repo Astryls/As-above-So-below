@@ -281,12 +281,21 @@ namespace AsAboveSoBelow
 
         /// <summary>Inflate a would-be surface size into the full stacked size, exactly as
         /// ABBandedGeneration's own prefix does for a real map.</summary>
+        /// <summary>
+        /// The stacked size to preview at.
+        ///
+        /// ⚠ Both dimensions come from ONE planned size, deliberately. A band is SQUARE
+        /// (§2), so x and z are the same number; clamping them independently was how the
+        /// preview could end up previewing a shape that could never generate.
+        ///
+        /// See <see cref="ABMapSizeLimit.PlannedSize"/> for why this is not
+        /// <c>Clamp</c> - that lossy snap is what limited the preview to 190x190.
+        /// </summary>
         internal static IntVec2 Stacked(int x, int z)
         {
-            int clampedX = ABMapSizeLimit.Clamp(x);
-            int clampedZ = ABMapSizeLimit.Clamp(z);
-            lastBandHeight = clampedZ;
-            return new IntVec2(clampedX, ABV2.BandCount * ABBandMap.SlotFor(clampedZ));
+            int size = ABMapSizeLimit.PlannedSize(z > 0 ? z : x);
+            lastBandHeight = size;
+            return new IntVec2(size, ABV2.BandCount * ABBandMap.SlotFor(size));
         }
 
         /// <summary>Is a stacked size what this size already is? Guards against inflating a
@@ -506,9 +515,10 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            int x = ABMapSizeLimit.Clamp(lastBandHeight);
-            float width = r.height * (x / (float)lastBandHeight);
-            window.windowRect = GenUI.Rounded(new Rect(r.x, r.y, width, r.height));
+            // One band is square, and lastBandHeight is now the REAL planned size rather
+            // than a re-clamped guess, so the window is square too. This used to re-Clamp
+            // and could disagree with the size the preview had actually generated at.
+            window.windowRect = GenUI.Rounded(new Rect(r.x, r.y, r.height, r.height));
         }
     }
 
