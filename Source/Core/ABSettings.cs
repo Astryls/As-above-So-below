@@ -120,9 +120,14 @@ namespace AsAboveSoBelow
 
         // ---- visuals ---------------------------------------------------------
         //
-        // Two depth cues for the see-below view, documented in full on ABDepthView. Both
-        // are presentation only: nothing here changes what generates or what a pawn can
-        // reach, so either may be flipped mid-colony.
+        // The see-below depth cue, documented in full on ABDepthView. Presentation only:
+        // nothing here changes what generates or what a pawn can reach, so it may be
+        // flipped mid-colony.
+        //
+        // A second cue (camera-anchored Perspective Mode) shipped here briefly and was
+        // removed - see ABDepthView for the reasoning and for what re-adding it would cost.
+        // Its settings keys are simply no longer scribed; an old config file keeps them and
+        // RimWorld ignores unknown keys, so nothing errors on a downgrade.
 
         /// <summary>Content on a level below the one being viewed draws smaller, once per
         /// level of drop. V1 had this and V2 dropped it; restored ON by default because it
@@ -133,14 +138,6 @@ namespace AsAboveSoBelow
         /// <summary>Shrink applied per level of drop. BAKED INTO THE PRINTED VERTICES, so
         /// changing it forces a map-mesh regeneration - see ABMod.WriteSettings.</summary>
         public float depthFalloffPerLevel = ABDepthView.DefaultFalloff;
-
-        /// <summary>Perspective Mode: the below view contracts towards the camera centre,
-        /// so off-centre openings show a little of their far wall. OFF by default - it has
-        /// a real artifact (see ABDepthView) and it is a taste decision, not a fix.</summary>
-        public bool perspectiveMode;
-
-        /// <summary>0..1 of ABDepthView.MaxPerspectiveK. Per-frame, nothing baked.</summary>
-        public float perspectiveStrength = ABDepthView.DefaultPerspectiveStrength;
 
         // ---- sky band generation -------------------------------------------
 
@@ -232,9 +229,6 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref depthFalloff, "depthFalloff", true);
             Scribe_Values.Look(ref depthFalloffPerLevel, "depthFalloffPerLevel",
                 ABDepthView.DefaultFalloff);
-            Scribe_Values.Look(ref perspectiveMode, "perspectiveMode", false);
-            Scribe_Values.Look(ref perspectiveStrength, "perspectiveStrength",
-                ABDepthView.DefaultPerspectiveStrength);
             Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref deepTempOffsets, "deepTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref skyWindFactors, "skyWindFactors", LookMode.Value);
@@ -454,13 +448,13 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
-        /// The two depth cues. Full reasoning lives on ABDepthView; this pane only has to
-        /// say what each one costs the player.
+        /// The depth cue. Full reasoning lives on ABDepthView; this pane only has to say
+        /// what it costs the player.
         ///
-        /// The falloff slider is presented as "per level", not as a final size, because the
-        /// number compounds: at 85% a level-3 basement seen from the peak draws at 61%, and
-        /// a player who read the slider as "how big is the level below" would be surprised
-        /// by that. The readout spells the compounded value out.
+        /// The slider is presented as "per level", not as a final size, because the number
+        /// compounds: at 85% a level-3 basement seen from the peak draws at 61%, and a
+        /// player who read the slider as "how big is the level below" would be surprised by
+        /// that. The readout spells the compounded value out.
         /// </summary>
         private void DoVisuals(Listing_Standard list)
         {
@@ -493,20 +487,6 @@ namespace AsAboveSoBelow
                     depthFalloffPerLevel = chosen;
                     bakedVisualDirty = true;
                 }
-            }
-
-            list.GapLine(10f);
-
-            list.CheckboxLabeled("AB_PerspectiveMode".Translate(), ref perspectiveMode,
-                "AB_PerspectiveModeTip".Translate());
-            if (perspectiveMode)
-            {
-                list.Label("AB_PerspectiveStrength".Translate(
-                    perspectiveStrength.ToStringPercent()));
-                perspectiveStrength = list.Slider(perspectiveStrength, 0f, 1f);
-                GUI.color = NoteDim;
-                list.Label("AB_PerspectiveWarn".Translate());
-                GUI.color = dim;
             }
         }
 

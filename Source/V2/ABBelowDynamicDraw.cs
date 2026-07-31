@@ -41,8 +41,8 @@ namespace AsAboveSoBelow
         /// <summary>Depth-falloff scale armed around a single below-pawn draw call, read by
         /// Patch_PawnRenderer_ABBelowShrink. Exactly the same arm/disarm discipline as
         /// BelowDrawOffsetZ: 1 outside the pass, so nothing else in the game can observe it.
-        /// Kept separate from the offset because a pawn can be translated without being
-        /// shrunk (falloff off, perspective on) and the two disarm independently.</summary>
+        /// Kept separate from the offset because a pawn is always translated but is only
+        /// shrunk when the setting is on, and the two must disarm independently.</summary>
         public static float BelowDrawScale = 1f;
 
         private static readonly System.Text.StringBuilder report = new System.Text.StringBuilder();
@@ -152,12 +152,9 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = p.DrawPos;
                     loc.z += drop;
-                    // Same two depth cues the printed pass applies, in the same order:
-                    // per-object shrink by how many levels down this pawn is, then the
-                    // whole-view perspective contraction. The perspective factor is
-                    // depth-UNIFORM by design (see ABDepthView) so a pawn cannot drift away
-                    // from the terrain it is standing on.
-                    loc = ABDepthView.Apply(loc);
+                    // The same depth cue the printed pass applies: shrink by how many levels
+                    // down this pawn is. Position is untouched - the pawn stays plumb over
+                    // its own cell, which is what lets a click land where the sprite is.
                     float shrink = ABDepthView.ScaleForLevels(slot > 0 ? drop / slot : 1);
 
                     // Run the SAME three phases vanilla runs for a visible pawn, at our
@@ -268,15 +265,15 @@ namespace AsAboveSoBelow
                 {
                     Vector3 loc = t.DrawPos;
                     loc.z += slot;
-                    // Perspective only. There is no scale hook on this path: a realtime
-                    // thing is drawn by its own Graphic through DynamicDrawPhaseAt, which
-                    // takes a position and nothing else - unlike a pawn, whose renderer
-                    // funnels every draw through PawnDrawParms.matrix. Construction frames
-                    // and projectiles one level down therefore keep full size while the
-                    // pawns beside them shrink. Accepted: this pass is already documented as
-                    // the last single-band corner of the below view (§5), and both gaps want
-                    // the same fix.
-                    loc = ABDepthView.Apply(loc);
+                    // ⚠ NO SHRINK ON THIS PATH. A realtime thing is drawn by its own Graphic
+                    // through DynamicDrawPhaseAt, which takes a position and nothing else -
+                    // unlike a pawn, whose renderer funnels every draw through
+                    // PawnDrawParms.matrix (that single funnel is the whole reason the pawn
+                    // shrink is two small patches instead of a per-piece hunt). Construction
+                    // frames and projectiles one level down therefore keep full size while
+                    // the pawns beside them shrink. Accepted for now: this pass is already
+                    // documented as the last single-band corner of the below view (§5), and
+                    // both gaps want the same fix.
                     // All three phases, unconditionally. A phase-skipping optimisation was
                     // tried here and REVERTED: it caused a visible regression and was never
                     // worth it - it removed two virtual calls that immediately return and

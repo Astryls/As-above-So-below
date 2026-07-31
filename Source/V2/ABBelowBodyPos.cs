@@ -58,12 +58,6 @@ namespace AsAboveSoBelow
                     return; // took the drawLoc branch; already translated
                 }
                 __result.z += dz;
-                // The drawLoc branch got the perspective transform from the caller, which
-                // built it into `loc`. This branch threw that loc away and rebuilt the
-                // position from pawn.Position, so it has to be re-applied here or a sleeping
-                // colonist would be the one thing in the below view that did not move with
-                // the floor under the bed.
-                __result = ABDepthView.Apply(__result);
             }
             catch (Exception e)
             {

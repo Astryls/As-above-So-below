@@ -113,21 +113,11 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Also vanilla's SunShadows behaviour: bounds must be refreshed every
-        /// draw because the displaced geometry moves as the sun does. Perspective mode
-        /// rides along with the terrain these shadows fall on - a shadow that did not move
-        /// with its caster would be the most obvious break of the whole effect.</summary>
+        /// draw because the displaced geometry moves as the sun does.</summary>
         public override void DrawLayer()
         {
             RefreshSubMeshBounds();
-            if (!ABDepthView.PerspectiveActive)
-            {
-                base.DrawLayer();
-                return;
-            }
-            if (Visible)
-            {
-                ABDepthView.DrawSubMeshes(subMeshes);
-            }
+            base.DrawLayer();
         }
 
         public override void Regenerate()
@@ -368,22 +358,6 @@ namespace AsAboveSoBelow
     /// </summary>
     public class SectionLayer_ABBelowEdgeShadows : SectionLayer
     {
-        /// <summary>Perspective mode: the contact border belongs to the edifice that casts
-        /// it, so it travels with the below terrain like every other mirrored pass.</summary>
-        public override void DrawLayer()
-        {
-            if (!Visible)
-            {
-                return;
-            }
-            if (!ABDepthView.PerspectiveActive)
-            {
-                base.DrawLayer();
-                return;
-            }
-            ABDepthView.DrawSubMeshes(subMeshes);
-        }
-
         private readonly bool[] cornerShadowed = new bool[4];
 
         private readonly bool[] cardinalCaster = new bool[4];

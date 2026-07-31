@@ -205,8 +205,8 @@ namespace AsAboveSoBelow
                             // The depth cue is applied HERE, at print time, because it is a
                             // per-object transform: each thing shrinks about its own centre,
                             // so unlike a whole-layer scale nothing slides off the cell it
-                            // stands on. See ABDepthView for why this half is baked and the
-                            // perspective half is not.
+                            // stands on. Baked, therefore free per frame - at the price of a
+                            // rebake when the setting changes (ABMod.WriteSettings).
                             float shrink = ABDepthView.CanShrink(t)
                                 ? ABDepthView.ScaleForLevels(slot > 0 ? drop / slot : 1)
                                 : 1f;
@@ -607,29 +607,6 @@ namespace AsAboveSoBelow
                     verts[j] = new Vector3(v.x, v.y, v.z + drop);
                 }
             }
-        }
-
-        /// <summary>
-        /// Perspective mode, applied per frame as a transform rather than baked.
-        ///
-        /// The AIR MASK and the FOG FAN are pinned: they are not content seen through an
-        /// opening, they ARE the opening. Everything else in this layer - below terrain and
-        /// below things - contracts towards the camera centre with the other five below
-        /// passes, all of which use the identical matrix from ABDepthView so lighting,
-        /// shadows, water and snow cannot shear off the ground they belong to.
-        /// </summary>
-        public override void DrawLayer()
-        {
-            if (!Visible)
-            {
-                return;
-            }
-            if (!ABDepthView.PerspectiveActive)
-            {
-                base.DrawLayer();
-                return;
-            }
-            ABDepthView.DrawSubMeshes(subMeshes, AirMaskMat, MatBases.FogOfWar);
         }
     }
 

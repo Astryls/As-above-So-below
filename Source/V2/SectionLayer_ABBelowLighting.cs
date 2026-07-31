@@ -220,11 +220,7 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            // Offset FIRST (mesh-local to its band), then the perspective contraction about
-            // the camera - the light must land on the ground it is lighting, and that ground
-            // has already moved by the time this draws.
-            Graphics.DrawMesh(mesh.mesh, ABDepthView.Matrix * Matrix4x4.Translate(offset),
-                mesh.material, mesh.renderLayer);
+            Graphics.DrawMesh(mesh.mesh, Matrix4x4.Translate(offset), mesh.material, mesh.renderLayer);
         }
 
         /// <summary>Baked submeshes are free-standing (not owned by this layer's subMeshes

@@ -93,14 +93,10 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_UnclampMapSizeTip>As above, So below stacks every level of a colony into one map, and RimWorld's pathfinder works over every cell of that whole stack. Layouts are therefore budgeted by total cells rather than by per-level size: more levels means a smaller affordable footprint each. {0} cells covers three levels at 190x190, or seven at 126x126. Combinations that exceed it are locked unless you enable this.</AB_UnclampMapSizeTip>
   <AB_UnclampMapSizeWarning>WARNING: large maps will hurt performance badly. Unlocking this restores RimWorld's full size list, including sizes that fall badly on the 64-row boundary and spend up to a fifth of the map on empty space between levels. A 325x325 banded colony is roughly 300,000 cells for 317,000 of pathfinding work. Expect slowdowns and long map generation.</AB_UnclampMapSizeWarning>
   <AB_TabVisuals>Visuals</AB_TabVisuals>
-  <AB_VisualsNote>Depth cues for looking down through a level at the ones beneath it. Both are purely visual and can be changed at any time; neither affects generation, pathing or what your colonists can reach.</AB_VisualsNote>
+  <AB_VisualsNote>How looking down through a level at the ones beneath it is drawn. Purely visual and can be changed at any time; it does not affect generation, pathing or what your colonists can reach.</AB_VisualsNote>
   <AB_DepthFalloff>Distance shrink on lower levels</AB_DepthFalloff>
   <AB_DepthFalloffTip>Pawns, buildings, plants and items on a level below the one you are viewing draw slightly smaller, and smaller again for each further level down, the way anything further away looks smaller. This is the cue that makes a deep column read as depth instead of as flat levels stacked in a list. Walls, fences and natural rock are left at full size on purpose: each of their cells draws its own tile, so shrinking them would open a gap along every join.</AB_DepthFalloffTip>
   <AB_DepthFalloffAmount>Size per level down: {0}   (three levels down: {1})</AB_DepthFalloffAmount>
-  <AB_PerspectiveMode>Perspective mode</AB_PerspectiveMode>
-  <AB_PerspectiveModeTip>Lower levels lean very slightly towards the centre of the screen, so an opening off to one side shows a little of its far wall instead of looking straight down. It is the parallax you get from a real camera looking down into a shaft. Off by default: it is a taste choice, and at higher strengths it has a visible edge artifact.</AB_PerspectiveModeTip>
-  <AB_PerspectiveStrength>Perspective strength: {0}</AB_PerspectiveStrength>
-  <AB_PerspectiveWarn>The level you are standing on cannot cast a shadow over the one below it, so towards the edges of the screen lower ground can slide a little way out from under the near lip of its opening. The effect is zero at the centre of the screen and grows outwards; keep the strength low if you notice it.</AB_PerspectiveWarn>
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
 
