@@ -135,9 +135,11 @@ namespace AsAboveSoBelow
             entries.Sort((a, b) => b.Value.CompareTo(a.Value));
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("V2 banded generation profile (map " + map.Size + "):");
+            sb.AppendLine("  TILE  " + DescribeTile(map));
+            sb.AppendLine("  PLAN  " + DescribePlan(map));
             double shown = 0;
             int count = 0;
-            for (int i = 0; i < entries.Count && count < 15; i++, count++)
+            for (int i = 0; i < entries.Count && count < 25; i++, count++)
             {
                 sb.AppendLine("  " + entries[i].Value.ToString("0.0").PadLeft(9) + " ms  "
                     + entries[i].Key);
@@ -167,6 +169,80 @@ namespace AsAboveSoBelow
             sb.AppendLine("  " + (finalizeInitMs < 0 ? "      n/a" : finalizeInitMs.ToString("0.0").PadLeft(9))
                 + " ms  Map.FinalizeInit (regions/rooms/path costs - built AFTER gensteps, RE-dirtied by carve)");
             Log.Warning(ABLog.Tag + " " + sb);
+        }
+
+        /// <summary>
+        /// The tile stamp, without which a carve timing means nothing.
+        ///
+        /// Two runs of the SAME size and band count came in 7.4x apart (2.3 s on a bog,
+        /// 17.1 s on a mountainous tile), because biome content - not cell count - drives
+        /// the cost: everything vanilla spawns into a doomed band is something
+        /// ClearCellHard must then destroy. Comparing two profiles without knowing what
+        /// the tiles were is comparing noise, and the notes have already recorded four
+        /// carve timings that way.
+        ///
+        /// Mutators are listed because they are the largest single lever - a river, a
+        /// cave or a mixed biome changes what the gensteps have to place.
+        /// </summary>
+        private static string DescribeTile(Map map)
+        {
+            try
+            {
+                RimWorld.Planet.Tile t = map.TileInfo;
+                if (t == null)
+                {
+                    return "(no tile info)";
+                }
+                string mutators = "none";
+                if (t.Mutators != null && t.Mutators.Count > 0)
+                {
+                    var names = new List<string>();
+                    foreach (RimWorld.TileMutatorDef m in t.Mutators)
+                    {
+                        names.Add(m.defName);
+                    }
+                    mutators = string.Join(", ", names.ToArray());
+                }
+                return "tile " + map.Tile
+                    + " | biome " + (t.PrimaryBiome != null ? t.PrimaryBiome.defName : "?")
+                    + " | hilliness " + t.hilliness
+                    + " (elevGen " + t.HillinessForElevationGen + ")"
+                    + " | elev " + t.elevation.ToString("0")
+                    + " | temp " + t.temperature.ToString("0.0")
+                    + " | rain " + t.rainfall.ToString("0")
+                    + " | swamp " + t.swampiness.ToString("0.00")
+                    + " | coastal " + t.IsCoastal
+                    + " | mutators: " + mutators;
+            }
+            catch (Exception e)
+            {
+                return "(tile describe failed: " + e.Message + ")";
+            }
+        }
+
+        /// <summary>Band layout, so a profile records how many DOOMED bands it paid for.
+        /// Read from the live component, which the GenerateMap postfix sets up before
+        /// Report runs.</summary>
+        private static string DescribePlan(Map map)
+        {
+            try
+            {
+                ABBandMap b = ABBands.CompOf(map);
+                if (b == null || !b.Banded)
+                {
+                    return "unbanded (single level) - this is the VANILLA CONTROL";
+                }
+                int doomed = b.bandCount - 1;
+                return b.bandCount + " bands of " + b.bandHeight
+                    + " (slot " + b.Slot + "), surface band " + b.surfaceBand
+                    + " | " + (b.bandCount - 1 - b.surfaceBand) + " up / " + b.surfaceBand + " down"
+                    + " | " + doomed + " DOOMED bands = "
+                    + (doomed * b.bandHeight * map.Size.x).ToString("N0") + " cells generated then erased";
+            }
+            catch (Exception e)
+            {
+                return "(plan describe failed: " + e.Message + ")";
+            }
         }
     }
 
