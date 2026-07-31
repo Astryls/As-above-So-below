@@ -28,35 +28,91 @@ namespace AsAboveSoBelow
     /// </remarks>
     internal static class ABOreGen
     {
+        /// <summary>The ore table, built once. It was rebuilt by scanning the WHOLE
+        /// ThingDef database on every call - and this is called once per basement band plus
+        /// once for the sky, so a seven-level map walked several thousand defs four times
+        /// over inside the generation window. Defs do not change after startup.</summary>
+        private static List<ThingDef> oreDefs;
+
+        private static List<ThingDef> OreDefs()
+        {
+            if (oreDefs != null)
+            {
+                return oreDefs;
+            }
+            oreDefs = new List<ThingDef>();
+            List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
+            for (int i = 0; i < defs.Count; i++)
+            {
+                ThingDef d = defs[i];
+                if (d.building != null && d.building.isResourceRock
+                    && d.building.mineableScatterCommonality > 0f)
+                {
+                    oreDefs.Add(d);
+                }
+            }
+            return oreDefs;
+        }
+
+        /// <summary>
+        /// Scatter into a whole RECT, without materialising it.
+        ///
+        /// The basement fill used to call the list overload as
+        /// <c>ScatterOres(map, rect.Cells.ToList(), density)</c> - which built a
+        /// <c>List&lt;IntVec3&gt;</c> of every cell in the band (36,100 entries, ~430 KB, plus
+        /// the yield-return enumerator behind <c>rect.Cells</c>) purely so that two things
+        /// could be read off it: <c>.Count</c>, and about twenty <c>.RandomElement()</c>
+        /// picks. Both are answerable from the rect directly, in constant space. Repeated
+        /// once per basement band, inside the generation window.
+        /// </summary>
+        internal static void ScatterOres(Map map, CellRect area, float lumpsPer10kCells)
+        {
+            if (area.Area <= 0)
+            {
+                return;
+            }
+            Scatter(map, null, area, area.Area, lumpsPer10kCells);
+        }
+
+        /// <summary>Scatter into an explicit, genuinely sparse candidate set - the sky
+        /// generator's mountain wall cells, which are a small subset of their band.</summary>
         internal static void ScatterOres(Map map, List<IntVec3> candidates, float lumpsPer10kCells)
+        {
+            if (candidates != null && candidates.Count == 0)
+            {
+                return;
+            }
+            Scatter(map, candidates, default(CellRect), candidates?.Count ?? map.Area, lumpsPer10kCells);
+        }
+
+        private static void Scatter(Map map, List<IntVec3> candidates, CellRect area,
+            int cellBase, float lumpsPer10kCells)
         {
             try
             {
-                if (candidates != null && candidates.Count == 0)
-                {
-                    return;
-                }
-                List<ThingDef> ores = new List<ThingDef>();
-                List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
-                for (int i = 0; i < defs.Count; i++)
-                {
-                    ThingDef d = defs[i];
-                    if (d.building != null && d.building.isResourceRock
-                        && d.building.mineableScatterCommonality > 0f)
-                    {
-                        ores.Add(d);
-                    }
-                }
+                List<ThingDef> ores = OreDefs();
                 if (ores.Count == 0)
                 {
                     return;
                 }
-                int cellBase = candidates?.Count ?? map.Area;
                 int lumps = Mathf.Max(1, Mathf.RoundToInt(cellBase / 10000f * lumpsPer10kCells));
                 for (int i = 0; i < lumps; i++)
                 {
                     ThingDef ore = ores.RandomElementByWeight(d => d.building.mineableScatterCommonality);
-                    IntVec3 center = candidates != null ? candidates.RandomElement() : CellFinder.RandomCell(map);
+                    IntVec3 center;
+                    if (candidates != null)
+                    {
+                        center = candidates.RandomElement();
+                    }
+                    else if (area.Area > 0)
+                    {
+                        center = new IntVec3(Rand.RangeInclusive(area.minX, area.maxX), 0,
+                            Rand.RangeInclusive(area.minZ, area.maxZ));
+                    }
+                    else
+                    {
+                        center = CellFinder.RandomCell(map);
+                    }
                     int size = ore.building.mineableScatterLumpSizeRange.RandomInRange;
                     List<IntVec3> lump = GridShapeMaker.IrregularLump(center, map, size);
                     for (int j = 0; j < lump.Count; j++)

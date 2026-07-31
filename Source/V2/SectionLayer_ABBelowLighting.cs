@@ -54,15 +54,16 @@ namespace AsAboveSoBelow
 
         public override void Regenerate()
         {
-            Release();
             if (!ABGuard.On(ABGuard.Rendering))
             {
+                Release();
                 return;
             }
             Map map = section.map;
             ABBandMap bands = ABBands.CompOf(map);
             if (bands == null || !bands.Banded)
             {
+                Release();
                 return;
             }
             try
@@ -71,11 +72,33 @@ namespace AsAboveSoBelow
                 rect.ClipInsideMap(map);
                 if (rect.Width <= 0 || rect.Height <= 0)
                 {
+                    Release();
                     return;
                 }
-                // Vanilla builds the geometry; we only take over the colours.
-                mesh = SectionLayer_LightingOverlay.Bake(map, rect, MatBases.LightOverlay, null);
-                offset = new Vector3(rect.minX + rect.Width / 2f, 0f, rect.minZ + rect.Height / 2f);
+                // ⚠ BAKE THE GEOMETRY ONCE. This method used to open with Release() and
+                // re-Bake unconditionally, which allocated a fresh Unity Mesh and Destroy()d
+                // the previous one on EVERY regenerate - while vanilla's own overlay, and
+                // every other layer in this mod, reuses its submesh forever.
+                //
+                // It was the most expensive line in the see-below stack and the cost was
+                // invisible in an fps average, because it is paid in BURSTS: the dirty mirror
+                // next door invalidates a section stack per band, so one mined rock could
+                // allocate and destroy one Mesh per band per section touched. Native mesh
+                // allocation is not cheap and Destroy is deferred to end of frame, so the
+                // churn lands as a hitch during exactly the activity that triggers it.
+                //
+                // Safe to reuse because the geometry is a pure function of `rect`, and rect
+                // derives from section.botLeft, which never changes for a given layer. Unity's
+                // fake-null makes the check also catch a mesh destroyed underneath us.
+                if (mesh == null || mesh.mesh == null)
+                {
+                    Release();
+                    mesh = SectionLayer_LightingOverlay.Bake(map, rect, MatBases.LightOverlay, null);
+                    offset = new Vector3(rect.minX + rect.Width / 2f, 0f, rect.minZ + rect.Height / 2f);
+                }
+                // Only the COLOURS are per-regenerate - which is the whole reason vanilla
+                // splits Bake from the colour pass, and the reason this split was already
+                // sitting here unused.
                 if (mesh?.mesh != null)
                 {
                     mesh.mesh.colors32 = BuildColors(map, bands, rect);
@@ -109,7 +132,6 @@ namespace AsAboveSoBelow
             Thing[] edifices = map.edificeGrid.InnerArray;
             int sizeX = map.Size.x;
             int sizeZ = map.Size.z;
-            int slot = bands.Slot;
 
             // --- corner vertices: average the four cells touching each one ---------
             for (int vz = 0; vz <= h; vz++)
@@ -130,7 +152,7 @@ namespace AsAboveSoBelow
                         {
                             continue;
                         }
-                        int idx = SourceIndex(map, bands, indices, indices.CellToIndex(cx, cz), slot, sizeX);
+                        int idx = SourceIndex(map, bands, indices, indices.CellToIndex(cx, cz));
                         if (idx < 0)
                         {
                             continue;
@@ -176,7 +198,7 @@ namespace AsAboveSoBelow
                     int worldX = rect.minX + cx;
                     int worldZ = rect.minZ + cz;
                     int idx = SourceIndex(map, bands, indices,
-                        indices.CellToIndex(worldX, worldZ), slot, sizeX);
+                        indices.CellToIndex(worldX, worldZ));
                     if (col.a < 100 && idx >= 0 && roofs.Roofed(idx))
                     {
                         Thing edifice = edifices[idx];
@@ -191,27 +213,41 @@ namespace AsAboveSoBelow
             return colors;
         }
 
-        /// <summary>The whole trick: a cell you can see through reports the cell one band
-        /// below it. Index arithmetic rather than IntVec3 round-tripping, since this runs
-        /// for every vertex of every section.</summary>
-        private static int SourceIndex(Map map, ABBandMap bands, CellIndices indices,
-            int idx, int slot, int sizeX)
+        /// <summary>
+        /// The whole trick: a cell you can see through reports the cell the column ACTUALLY
+        /// SHOWS.
+        ///
+        /// ⚠ THIS WAS THE ONE-DESCENT BUG, FOR THE EIGHTH TIME. It used to end with a single
+        /// <c>idx - slot * sizeX</c> step - one band down, unconditionally. That is correct
+        /// from level +1, where the band below is the opaque surface, and wrong from every
+        /// level above it: from +2 or +3 the cell one band down is usually open air too, so
+        /// the overlay shaded the below view with the glow, roof and edifice of an EMPTY AIR
+        /// CELL while SectionLayer_ABBelowV2 was drawing the ground two or three levels
+        /// further down. Unroofed air reads as full daylight, so the symptom is a deep view
+        /// that stays bright at night and ignores every lamp actually lighting it - which
+        /// looks like a lighting bug, not like a missing descent.
+        ///
+        /// It survived the standing audit because that audit greps for `- Slot`, and this was
+        /// written in index space. See ABBands.TryResolveVisibleFrom.
+        ///
+        /// Deliberately requireUnfogged: FALSE. The overlay must shade whatever the terrain
+        /// layer drew, and that layer draws fogged ground too (behind its own fog fan);
+        /// vanilla shades fogged cells as well, so demanding legibility here would put a
+        /// bright square under every fog skirt.
+        /// </summary>
+        private static int SourceIndex(Map map, ABBandMap bands, CellIndices indices, int idx)
         {
             if (idx < 0 || idx >= indices.NumGridCells)
             {
                 return -1;
             }
             IntVec3 c = indices.IndexToCell(idx);
-            if (bands.BandOf(c) <= 0 || bands.InGutter(c))
+            if (!ABBands.TryResolveVisibleFrom(map, bands, c, requireUnfogged: false,
+                    out IntVec3 below, out _))
             {
-                return idx;
+                return idx; // opaque, off-band or in a seam: this cell shades itself
             }
-            if (!ABBands.ShowsBelow(map.terrainGrid.TerrainAt(c)))
-            {
-                return idx;
-            }
-            int below = idx - slot * sizeX;
-            return below >= 0 ? below : idx;
+            return indices.CellToIndex(below);
         }
 
         public override void DrawLayer()

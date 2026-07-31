@@ -141,7 +141,6 @@ namespace AsAboveSoBelow
             LayerSubMesh sub = GetSubMesh(MatBases.SunShadow);
             try
             {
-                TerrainGrid terrain = map.terrainGrid;
                 FogGrid fog = map.fogGrid;
                 Building[] edifices = map.edificeGrid.InnerArray;
                 CellIndices indices = map.cellIndices;
@@ -183,7 +182,7 @@ namespace AsAboveSoBelow
                         // the level between, which holds no edifices - so shadows appeared
                         // on the first upper level and nowhere above it. See
                         // ABBands.TryResolveVisibleBelow for the one definition.
-                        if (!TryResolveDropAround(map, bands, terrain, here, out int drop))
+                        if (!TryResolveDropAround(map, bands, here, out int drop))
                         {
                             continue;
                         }
@@ -312,7 +311,10 @@ namespace AsAboveSoBelow
         /// the shadow stays attached to the mass that threw it instead of being drawn
         /// against a floor two levels further down that happens to peek through one corner.
         /// </summary>
-        private static bool TryResolveDropAround(Map map, ABBandMap bands, TerrainGrid terrain,
+        /// <remarks>The TerrainGrid parameter is gone: it had never been read inside this
+        /// method, and its only caller was fetching map.terrainGrid once per section purely
+        /// to hand it over. The shared gate resolves terrain itself.</remarks>
+        private static bool TryResolveDropAround(Map map, ABBandMap bands,
             IntVec3 c, out int drop)
         {
             drop = 0;
@@ -320,11 +322,12 @@ namespace AsAboveSoBelow
             for (int i = 0; i < 9; i++)
             {
                 IntVec3 n = i == 8 ? c : c + GenAdj.AdjacentCells[i];
-                if (!n.InBounds(map) || bands.InGutter(n) || bands.BandOf(n) <= 0)
-                {
-                    continue;
-                }
-                if (!ABBands.TryResolveVisibleBelow(map, bands, n, out _, out int d) || d <= 0)
+                // Fog is deliberately NOT required: a mountain's outer rock casts onto ground
+                // whose exploration state is not the caster's business, and vanilla shadows
+                // fall on fogged cells too.
+                if (!ABBands.TryResolveVisibleFrom(map, bands, n, requireUnfogged: false,
+                        out IntVec3 _, out int d)
+                    || d <= 0)
                 {
                     continue;
                 }
@@ -398,7 +401,6 @@ namespace AsAboveSoBelow
             }
             try
             {
-                TerrainGrid terrain = map.terrainGrid;
                 Building[] edifices = map.edificeGrid.InnerArray;
                 CellIndices indices = map.cellIndices;
                 float y = AltitudeLayer.Shadows.AltitudeFor();
@@ -414,21 +416,14 @@ namespace AsAboveSoBelow
                     for (int j = rect.minZ; j <= rect.maxZ; j++)
                     {
                         IntVec3 above = new IntVec3(i, 0, j);
-                        if (bands.BandOf(above) <= 0 || bands.InGutter(above)
-                            || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
-                        {
-                            continue;
-                        }
                         // Was a single `j - slot` step - the one-descent bug's SEVENTH
                         // appearance, and the other half of "shadows show on upper 1 but not
                         // upper 2 or 3": two stacked see-through levels put that step in the
-                        // void. One definition, shared with everything else that looks down.
-                        if (!ABBands.TryResolveVisibleBelow(map, bands, above,
-                            out IntVec3 below, out _))
-                        {
-                            continue;
-                        }
-                        if (!below.InBounds(map) || bands.InGutter(below))
+                        // void. Now THE shared gate, so this pass cannot drift away from the
+                        // terrain it is shading. Fog is deliberately not required: an ambient
+                        // edge shadow under a fog skirt is what vanilla draws too.
+                        if (!ABBands.TryResolveVisibleFrom(map, bands, above,
+                                requireUnfogged: false, out IntVec3 below, out _))
                         {
                             continue;
                         }

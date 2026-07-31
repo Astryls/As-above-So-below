@@ -388,8 +388,13 @@ namespace AsAboveSoBelow
             // resolves to a constant cell offset instead of a different Map.
             // V1's pocket-map branch is gone: there is no Map.Level()/LowerMap() any more, so
             // the layer is banded-only. On an unbanded map it simply emits nothing.
-            bool banded = ABBands.Banded(map);
-            if (!ABGuard.On(ABGuard.Rendering) || !banded)
+            //
+            // The `banded` local (ABBands.Banded(map)) is gone with it: the bands.Banded test
+            // below is the same question asked of the component we need anyway, so the
+            // separate call was a second front-cache round trip per section regenerate for a
+            // strictly weaker answer (ABBands.Banded also says yes to a dev spike layout,
+            // which this layer cannot actually service - see below).
+            if (!ABGuard.On(ABGuard.Rendering))
             {
                 return;
             }
@@ -401,7 +406,11 @@ namespace AsAboveSoBelow
                 // The ground is the SAME map, one Slot down in z - a constant cell offset
                 // rather than a different Map.
                 ABBandMap bands = ABBands.CompOf(map);
-                if (bands == null)
+                // Require the REAL band component, not ABBands.Banded's answer - that one
+                // also returns true for a dev spike layout, and everything below depends on
+                // bands.Slot, which is 0 for an unbanded component. A spike map would have
+                // produced a zero ground offset and sampled its own cells.
+                if (bands == null || !bands.Banded)
                 {
                     return;
                 }
@@ -421,7 +430,14 @@ namespace AsAboveSoBelow
                     // with a multi-level plan there can be up to three. Mined-rock
                     // leave-terrain also exists in the BASEMENT bands, which must never grow
                     // a mountain top, hence a strict > rather than !=.
-                    if (banded && ABBands.BandOf(map, c) <= surfaceBand)
+                    //
+                    // Through the RESOLVED component, not the static ABBands.BandOf(map, c).
+                    // This is the first test in a 289-cell loop that runs for every section
+                    // regenerate, and the static form re-enters the front cache, re-checks
+                    // Banded and (before the spikeCount fast-out) probed a second weak table -
+                    // all to answer a question the local answers with one divide. Precisely
+                    // the redundancy ABBandEnv.BiomeOf's second overload exists to remove.
+                    if (bands.BandOf(c) <= surfaceBand)
                     {
                         continue;
                     }

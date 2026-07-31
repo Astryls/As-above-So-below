@@ -174,10 +174,21 @@ namespace AsAboveSoBelow
             return result.InBounds(map);
         }
 
-        /// <summary>Perimeter cell of the surface band on one side. The dir overloads of the
-        /// vanilla edge finders mean "the north edge of the world", and on a banded map that
-        /// is the surface band's north row, not the top of the sky.</summary>
-        public static bool TryRandomSurfaceEdgeCell(Map map, Rot4 dir,
+        /// <summary>
+        /// Perimeter cell of the surface band, optionally on one specific side.
+        ///
+        /// THE single surface-edge finder. There were two: this one, and a byte-for-byte
+        /// equivalent in ABBandEnv.ABBandEdges with the same 200-attempt loop and the same
+        /// deterministic sweep fallback, differing only in that it re-picked a random side
+        /// per attempt instead of taking one. That distinction is real - a validator that
+        /// rejects an entire side must not trap the search on it - so it is preserved as a
+        /// NULLABLE dir rather than merged away: null means "any side, re-rolled every
+        /// attempt", which is what the no-dir vanilla overloads mean.
+        ///
+        /// The dir overloads of the vanilla edge finders mean "the north edge of the world",
+        /// and on a banded map that is the surface band's north row, not the top of the sky.
+        /// </summary>
+        public static bool TryRandomSurfaceEdgeCell(Map map, Rot4? dir,
             Predicate<IntVec3> validator, out IntVec3 result)
         {
             result = IntVec3.Invalid;
@@ -207,35 +218,51 @@ namespace AsAboveSoBelow
             return false;
         }
 
-        private static IntVec3 EdgeOf(CellRect r, Rot4 dir)
+        /// <summary>A random cell on one side of the rect. A null dir re-rolls the side, which
+        /// is the same distribution as picking uniformly among the four sides and then
+        /// uniformly along it - exactly what the no-dir finder did before the merge.</summary>
+        private static IntVec3 EdgeOf(CellRect r, Rot4? dir)
         {
-            if (dir == Rot4.North)
+            Rot4 d = dir ?? new Rot4(Rand.RangeInclusive(0, 3));
+            if (d == Rot4.North)
             {
                 return new IntVec3(Rand.RangeInclusive(r.minX, r.maxX), 0, r.maxZ);
             }
-            if (dir == Rot4.South)
+            if (d == Rot4.South)
             {
                 return new IntVec3(Rand.RangeInclusive(r.minX, r.maxX), 0, r.minZ);
             }
-            if (dir == Rot4.East)
+            if (d == Rot4.East)
             {
                 return new IntVec3(r.maxX, 0, Rand.RangeInclusive(r.minZ, r.maxZ));
             }
             return new IntVec3(r.minX, 0, Rand.RangeInclusive(r.minZ, r.maxZ));
         }
 
-        private static IEnumerable<IntVec3> EdgeCells(CellRect r, Rot4 dir)
+        /// <summary>Deterministic sweep fallback, so a validator that rejects almost
+        /// everything still gets an answer instead of silently failing. A null dir walks the
+        /// WHOLE perimeter, matching what the no-dir finder swept.</summary>
+        private static IEnumerable<IntVec3> EdgeCells(CellRect r, Rot4? dir)
         {
-            if (dir == Rot4.North || dir == Rot4.South)
+            if (!dir.HasValue)
             {
-                int z = dir == Rot4.North ? r.maxZ : r.minZ;
+                foreach (IntVec3 c in r.EdgeCells)
+                {
+                    yield return c;
+                }
+                yield break;
+            }
+            Rot4 d = dir.Value;
+            if (d == Rot4.North || d == Rot4.South)
+            {
+                int z = d == Rot4.North ? r.maxZ : r.minZ;
                 for (int x = r.minX; x <= r.maxX; x++)
                 {
                     yield return new IntVec3(x, 0, z);
                 }
                 yield break;
             }
-            int px = dir == Rot4.East ? r.maxX : r.minX;
+            int px = d == Rot4.East ? r.maxX : r.minX;
             for (int z2 = r.minZ; z2 <= r.maxZ; z2++)
             {
                 yield return new IntVec3(px, 0, z2);

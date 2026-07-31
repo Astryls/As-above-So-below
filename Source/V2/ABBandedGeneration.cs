@@ -629,7 +629,11 @@ namespace AsAboveSoBelow
             // the level-1 baseline rather than a ceiling.
             float density = Mathf.Clamp(ABMod.Settings?.basementOreDensity ?? 6f, 0f, 12f)
                 * (1f + 0.45f * (Mathf.Max(depth, 1) - 1));
-            ABOreGen.ScatterOres(map, rect.Cells.ToList(), Mathf.Min(density, 30f));
+            // The RECT overload, not rect.Cells.ToList(): the scatterer only ever wanted the
+            // cell COUNT and a handful of random picks, and materialising 36,100 IntVec3 per
+            // basement band to supply them was ~430 KB of pure garbage inside the generation
+            // window, three times over on a 3-down map.
+            ABOreGen.ScatterOres(map, rect, Mathf.Min(density, 30f));
         }
 
         /// <summary>The seam rows. Impassable open air, permanently fogged, no roof - so
@@ -685,35 +689,17 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Removes everything from a cell, pawns included. Generation-time only.</summary>
+        /// <summary>Removes everything from a cell, pawns included. Generation-time only.
+        ///
+        /// Was a second, near-identical ~25-line copy of ClearCellExcept. It is exactly that
+        /// method with nothing kept: the loop's `t == keep` test is already `t == null` when
+        /// keep is null, and the null case is skipped one clause earlier anyway. Two copies
+        /// of a destroy loop that has to stay bit-identical (the geyser DeSpawn special case,
+        /// the two profile counters) is a maintenance trap for no benefit - a fix applied to
+        /// one and not the other would show up as a census that no longer conserves.</summary>
         private static void ClearCellHard(Map map, IntVec3 c)
         {
-            List<Thing> things = c.GetThingList(map);
-            for (int i = things.Count - 1; i >= 0; i--)
-            {
-                Thing t = things[i];
-                if (t == null || t.Destroyed)
-                {
-                    continue;
-                }
-                // Steam geysers (and anything else with destroyable=false) refuse
-                // Destroy() and log "Tried to destroy non-destroyable thing" - and worse,
-                // they SURVIVE, so the band fill would then spawn rock on top of them.
-                // DeSpawn removes them cleanly.
-                if (!t.def.destroyable)
-                {
-                    if (t.Spawned)
-                    {
-                        t.DeSpawn(DestroyMode.Vanish);
-                        ABGenProfile.thingsDestroyed++;
-                        ABGenProfile.NoteDestroyed(t.def);
-                    }
-                    continue;
-                }
-                ABGenProfile.NoteDestroyed(t.def);
-                t.Destroy(DestroyMode.Vanish);
-                ABGenProfile.thingsDestroyed++;
-            }
+            ClearCellExcept(map, c, null);
         }
 
         /// <summary>

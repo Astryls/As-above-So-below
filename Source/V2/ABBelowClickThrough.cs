@@ -193,21 +193,15 @@ namespace AsAboveSoBelow
                 return false;
             }
             IntVec3 cell = IntVec3.FromVector3(clickPos);
-            if (!cell.InBounds(map) || bands.BandOf(cell) <= 0 || bands.InGutter(cell))
-            {
-                return false;
-            }
-            if (!ABBands.ShowsBelow(map.terrainGrid.TerrainAt(cell)))
-            {
-                return false; // opaque from here; the click belongs to this band
-            }
-            // Descend as far as the view does, not one band. A single step worked only
-            // while there was exactly one level above the surface; with levels stacked, the
-            // level directly below an open-air cell is usually open air too, so clicking,
-            // selecting and every other interaction stopped working from level 2 upward
-            // even though the renderer was showing the ground perfectly well.
-            if (!ABBands.TryResolveVisibleBelow(map, bands, cell, out IntVec3 below, out int drop)
-                || map.fogGrid.IsFogged(below))
+            // THE shared see-below gate - the same one the renderer uses, which is what makes
+            // "you can click what you can see" true by construction rather than by two
+            // predicates being kept in step by hand. Descends as far as the view does, not
+            // one band: a single step worked only while there was exactly one level above the
+            // surface, and with levels stacked the level directly below an open-air cell is
+            // usually open air too, so clicking and selecting stopped working from level 2
+            // upward even though the renderer was showing the ground perfectly well.
+            if (!ABBands.TryResolveVisibleFrom(map, bands, cell, requireUnfogged: true,
+                    out IntVec3 _, out int drop))
             {
                 return false; // nothing legible down there to click
             }

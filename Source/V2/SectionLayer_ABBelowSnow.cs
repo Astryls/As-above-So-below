@@ -92,8 +92,9 @@ namespace AsAboveSoBelow
                 }
                 sub.Clear(MeshParts.Colors);
 
-                TerrainGrid terrainGrid = map.terrainGrid;
-                FogGrid fog = map.fogGrid;
+                // terrainGrid / fog locals removed with TryResolveSnowSource: the shared
+                // gate resolves both internally, so hoisting them here was fetching two
+                // grids per section regenerate that nothing then read.
                 SnowGrid snow = map.snowGrid;
                 CellRect rect = section.CellRect;
                 bool any = false;
@@ -105,8 +106,12 @@ namespace AsAboveSoBelow
                     for (int z = rect.minZ; z <= rect.maxZ; z++)
                     {
                         IntVec3 c = new IntVec3(x, 0, z);
-                        int drop;
-                        if (!TryResolveSnowSource(map, bands, terrainGrid, fog, c, out drop))
+                        // THE shared see-below gate (band, gutter, see-through, descent,
+                        // legibility) - identical by construction to the one
+                        // SectionLayer_ABBelowV2 applies, which is what stops snow ever
+                        // appearing in a cell whose terrain the below layer did not print.
+                        if (!ABBands.TryResolveVisibleFrom(map, bands, c, requireUnfogged: true,
+                                out IntVec3 _, out int drop))
                         {
                             // No visible ground below: nine fully transparent vertices.
                             // The count must still be emitted, or every later cell's
@@ -184,33 +189,11 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>
-        /// Is there snow-bearing ground visible through this cell, and how far down?
-        ///
-        /// Gated identically to SectionLayer_ABBelowV2's own per-cell test, so snow can
-        /// never appear in a cell whose terrain the below layer did not print - which is
-        /// what would otherwise paint snow over an opaque rooftop or a mountain cap.
-        /// </summary>
-        private static bool TryResolveSnowSource(Map map, ABBandMap bands,
-            TerrainGrid terrainGrid, FogGrid fog, IntVec3 c, out int drop)
-        {
-            drop = 0;
-            if (!c.InBounds(map) || bands.BandOf(c) <= 0 || bands.InGutter(c))
-            {
-                return false;
-            }
-            if (!ABBands.ShowsBelow(terrainGrid.TerrainAt(c)))
-            {
-                return false; // opaque from here
-            }
-            // THE one descent rule (§5). Never `- Slot`: from a high level the band directly
-            // beneath is usually open air too, and a single step lands in the void.
-            if (!ABBands.TryResolveVisibleBelow(map, bands, c, out IntVec3 below, out drop))
-            {
-                return false;
-            }
-            return !fog.IsFogged(below);
-        }
+        // TryResolveSnowSource lived here: band test, gutter test, ShowsBelow, descent, fog.
+        // It was the fifth verbatim copy of that preamble in the see-below stack, and the
+        // family's history is that copies drift and one of them silently loses the descent
+        // (see ABBands.TryResolveVisibleFrom, and the lighting overlay it had already
+        // happened to). Replaced by the shared gate at the call site above.
 
         private readonly float[] adjDepth = new float[9];
 

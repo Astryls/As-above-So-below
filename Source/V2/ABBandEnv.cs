@@ -313,45 +313,19 @@ namespace AsAboveSoBelow
             return map != null && ABBands.Banded(map);
         }
 
-        /// <summary>Perimeter cells of the surface band, treated as the map edge.</summary>
+        /// <summary>Perimeter cells of the surface band, treated as the map edge - ANY side.
+        ///
+        /// Forwards to the single implementation in ABBandSafety. This used to be a second
+        /// copy of it: same 200-attempt loop, same deterministic perimeter sweep, same
+        /// random-side pick spelled as a switch instead of a Rot4. The two lived in different
+        /// files behind different helper classes purely because the dir and no-dir vanilla
+        /// overloads were band-corrected at different times, and a fix to one would not have
+        /// reached the other. A null dir preserves this version's distinguishing behaviour
+        /// exactly - the side is re-rolled on every attempt, so a validator that rejects one
+        /// whole side cannot trap the search.</summary>
         public static bool TryRandomSurfaceEdgeCell(Map map, Predicate<IntVec3> validator, out IntVec3 result)
         {
-            result = IntVec3.Invalid;
-            CellRect surface = ABBands.RectOfBand(map, ABBands.SurfaceBand(map));
-            for (int attempt = 0; attempt < 200; attempt++)
-            {
-                IntVec3 c = RandomEdgeOf(surface);
-                if (!c.InBounds(map))
-                {
-                    continue;
-                }
-                if (validator == null || validator(c))
-                {
-                    result = c;
-                    return true;
-                }
-            }
-            // Deterministic sweep fallback so callers never silently fail.
-            foreach (IntVec3 c in surface.EdgeCells)
-            {
-                if (c.InBounds(map) && (validator == null || validator(c)))
-                {
-                    result = c;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static IntVec3 RandomEdgeOf(CellRect r)
-        {
-            switch (Rand.RangeInclusive(0, 3))
-            {
-                case 0: return new IntVec3(r.minX, 0, Rand.RangeInclusive(r.minZ, r.maxZ));
-                case 1: return new IntVec3(r.maxX, 0, Rand.RangeInclusive(r.minZ, r.maxZ));
-                case 2: return new IntVec3(Rand.RangeInclusive(r.minX, r.maxX), 0, r.minZ);
-                default: return new IntVec3(Rand.RangeInclusive(r.minX, r.maxX), 0, r.maxZ);
-            }
+            return ABBandSafety.TryRandomSurfaceEdgeCell(map, null, validator, out result);
         }
     }
 

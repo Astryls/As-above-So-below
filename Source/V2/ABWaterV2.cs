@@ -387,28 +387,17 @@ namespace AsAboveSoBelow
             try
             {
                 TerrainGrid grid = map.terrainGrid;
-                FogGrid fog = map.fogGrid;
                 float y = AltitudeLayer.Terrain.AltitudeFor();
                 bool printed = false;
 
                 foreach (IntVec3 c in section.CellRect)
                 {
-                    if (!c.InBounds(map) || bands.BandOf(c) <= 0 || bands.InGutter(c))
-                    {
-                        continue;
-                    }
-                    if (!ABBands.ShowsBelow(grid.TerrainAt(c)))
-                    {
-                        continue;
-                    }
-                    if (!ABBands.TryResolveVisibleBelow(map, bands, c, out IntVec3 below, out _))
-                    {
-                        continue;
-                    }
-                    // Unexplored ground is veiled by the fog fan in the below layer, so its
-                    // water must not contribute depth either or the veil sits on top of a
+                    // THE shared see-below gate. requireUnfogged is true because unexplored
+                    // ground is veiled by the fog fan in the below layer, so its water must
+                    // not contribute depth either - otherwise the veil sits on top of a
                     // shoreline nobody has discovered.
-                    if (fog.IsFogged(below))
+                    if (!ABBands.TryResolveVisibleFrom(map, bands, c, requireUnfogged: true,
+                            out IntVec3 below, out _))
                     {
                         continue;
                     }

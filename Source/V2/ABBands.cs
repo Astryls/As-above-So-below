@@ -40,6 +40,17 @@ namespace AsAboveSoBelow
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Map, ABBandLayout> spikeLayouts =
             new System.Runtime.CompilerServices.ConditionalWeakTable<Map, ABBandLayout>();
 
+        /// <summary>How many spike layouts have ever been registered this session.
+        ///
+        /// Purely a fast-out, and it earns its keep on EVERY MAP IN THE GAME. Banded(),
+        /// BandOf() and SameBand() all fall through to SpikeLayoutOf() when the real band
+        /// component says no - which is the answer on every quest site, caravan map, pocket
+        /// map and unbanded colony - so an ordinary map paid a SECOND ConditionalWeakTable
+        /// probe on every one of those calls. Banded() alone is asked once per section
+        /// regenerate from three separate patches. That is a permanent tax on everyone's game
+        /// for a dev-only spike almost nobody will ever arm.</summary>
+        private static int spikeCount;
+
         /// <summary>
         /// One-entry front cache for CompOf, held as a single immutable object.
         ///
@@ -156,20 +167,23 @@ namespace AsAboveSoBelow
             {
                 spikeLayouts.Remove(map);
                 spikeLayouts.Add(map, layout);
+                spikeCount++;
             }
         }
 
         public static void Clear(Map map)
         {
-            if (map != null)
+            if (map != null && spikeLayouts.Remove(map))
             {
-                spikeLayouts.Remove(map);
+                spikeCount = System.Math.Max(0, spikeCount - 1);
             }
         }
 
         private static ABBandLayout SpikeLayoutOf(Map map)
         {
-            if (map == null)
+            // One int compare replaces a hash probe for every map that has no spike layout,
+            // which in practice is every map anyone plays. See spikeCount.
+            if (spikeCount == 0 || map == null)
             {
                 return null;
             }
@@ -297,6 +311,54 @@ namespace AsAboveSoBelow
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// THE FULL SEE-BELOW GATE, as every mirrored pass actually needs it.
+        ///
+        /// <see cref="TryResolveVisibleBelow"/> answers only "how far down does this column
+        /// see". Every consumer additionally has to ask the same four preliminary questions -
+        /// is the cell on the map, is it on a band that HAS something under it, is it out of
+        /// the gutter, and is its own terrain see-through - and then usually whether what it
+        /// found is legible (unfogged). Seven call sites hand-rolled that preamble
+        /// independently, and they had drifted: some checked fog, some did not, some tested
+        /// the gutter at the destination and some at the source.
+        ///
+        /// ⚠ THAT DRIFT IS NOT COSMETIC - IT IS HOW THE DESCENT BUG KEEPS COMING BACK.
+        /// <c>SectionLayer_ABBelowLighting.SourceIndex</c> wrote its own preamble and then a
+        /// single <c>idx - slot * sizeX</c> step, which is the one-descent bug for the EIGHTH
+        /// time. It survived the standing `grep '- Slot'` audit for one reason: it was
+        /// written as INDEX arithmetic, so it did not contain the string the audit looks for.
+        /// A rule enforced by grepping for a syntax only catches that syntax. Enforcing it by
+        /// making the correct version the only convenient one is what actually holds.
+        ///
+        /// Returns the cell this column genuinely shows and the accumulated drop to it.
+        /// Consumers that need to distinguish "nothing below" from "fogged below" (the below
+        /// terrain layer, which draws an air mask and a fog fan for each) still call
+        /// TryResolveVisibleBelow directly - that is the one legitimate reason to.
+        /// </summary>
+        public static bool TryResolveVisibleFrom(Map map, ABBandMap bands, IntVec3 cell,
+            bool requireUnfogged, out IntVec3 below, out int drop)
+        {
+            below = cell;
+            drop = 0;
+            if (map == null || bands == null || !bands.Banded)
+            {
+                return false;
+            }
+            if (!cell.InBounds(map) || bands.BandOf(cell) <= 0 || bands.InGutter(cell))
+            {
+                return false; // bottom band, off map, or a seam: nothing to look down at
+            }
+            if (!ShowsBelow(map.terrainGrid.TerrainAt(cell)))
+            {
+                return false; // opaque from here
+            }
+            if (!TryResolveVisibleBelow(map, bands, cell, out below, out drop))
+            {
+                return false;
+            }
+            return !requireUnfogged || !map.fogGrid.IsFogged(below);
         }
 
         public static int BandCount(Map map)
