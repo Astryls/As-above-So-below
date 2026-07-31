@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -271,13 +272,30 @@ namespace AsAboveSoBelow
             Widgets.BeginScrollView(inner, ref scroll, view);
             Listing_Standard list = new Listing_Standard();
             list.Begin(view);
-            switch (tab)
+            // A settings panel that shows its own failure beats one that silently draws
+            // nothing. RimWorld catches exceptions per-window and, depending on which GUI
+            // event they land in, a pane can come up blank with nothing reaching the log at
+            // all - which is precisely the state this panel was in.
+            try
             {
-                case Tab.Performance: DoPerformance(list); break;
-                case Tab.Climate: DoClimate(list); break;
-                case Tab.Sky: DoSky(list); break;
-                case Tab.Basement: DoBasement(list); break;
-                default: DoDiagnostics(list); break;
+                switch (tab)
+                {
+                    case Tab.Performance: DoPerformance(list); break;
+                    case Tab.Climate: DoClimate(list); break;
+                    case Tab.Sky: DoSky(list); break;
+                    case Tab.Basement: DoBasement(list); break;
+                    default: DoDiagnostics(list); break;
+                }
+            }
+            catch (Exception e)
+            {
+                Color prev = GUI.color;
+                GUI.color = WarnRed;
+                list.Label("Settings tab '" + tab + "' failed to draw:");
+                list.Label(e.GetType().Name + ": " + e.Message);
+                GUI.color = prev;
+                Log.ErrorOnce(ABLog.Tag + " settings tab " + tab + " threw: " + e,
+                    0x5E77 ^ (int)tab);
             }
             viewHeights[index] = list.CurHeight + 16f;
             list.End();
@@ -394,6 +412,20 @@ namespace AsAboveSoBelow
             Text.Font = GameFont.Medium;
             list.Label("AB_TabClimate".Translate());
             Text.Font = GameFont.Small;
+
+            // Defensive: every consumer below indexes these by position. EnsureClimateLists
+            // runs at the top of DoWindowContents, but if it ever failed to produce three
+            // entries the loops would draw nothing and the pane would look empty rather than
+            // broken, which is a much harder thing to diagnose.
+            if (skyTempOffsets.Count < 3 || deepTempOffsets.Count < 3 || skyWindFactors.Count < 3)
+            {
+                Color bad = GUI.color;
+                GUI.color = WarnRed;
+                list.Label("Climate lists not initialised (" + skyTempOffsets.Count + "/"
+                    + deepTempOffsets.Count + "/" + skyWindFactors.Count + ").");
+                GUI.color = bad;
+                return;
+            }
 
             Color old = GUI.color;
             GUI.color = NoteDim;
