@@ -17,7 +17,8 @@ namespace AsAboveSoBelow
     /// is the one place V2 is measurably worse than V1, where only maps with pathing pawns
     /// paid at all.
     ///
-    /// So colony maps are capped at 200x200 by default. The cap is enforced in TWO places
+    /// So colony maps are capped at the largest offered per-level size the cell budget can
+    /// afford at the chosen level count. The cap is enforced in TWO places
     /// deliberately: at the map-size chooser (so the player is told, not silently
     /// overridden) and again at generation (so nothing - a scenario, another mod, a loaded
     /// config - can slip past it).
@@ -25,28 +26,43 @@ namespace AsAboveSoBelow
     public static class ABMapSizeLimit
     {
         /// <summary>
-        /// The offered sizes, and why these three specifically.
+        /// The offered sizes, and why these four.
         ///
-        /// Slot is `ceil((bandHeight + MinGutter) / 64) * 64`, so cost does NOT rise
-        /// smoothly with size - it steps. A size just past a 64 boundary pays a whole extra
-        /// 64 rows of dead gutter PER BAND for nothing. These are the three sizes that sit
-        /// immediately under a boundary, where the gutter collapses to its 2-row minimum:
+        /// ⚠ THE 64 CONSTRAINT IS ON *SLOT*, NOT ON BAND HEIGHT. Slot is
+        /// `ceil((bandHeight + MinGutter) / 64) * 64` and has to be 64-aligned because
+        /// terrain shaders sample by world position (ABBandMap.SlotAlignment). The band
+        /// height itself only has to leave MinGutter rows under that boundary. The original
+        /// three sizes were all 64k-2 - the tightest possible fit - and for a long time that
+        /// coincidence was mistaken for the requirement. It is not one. 64k-2 is merely the
+        /// CHEAPEST point on the curve, not the only legal one, and that mistake is what
+        /// kept vanilla's own numbers off this list.
         ///
-        ///   126 -> slot 128, gutter 2   ->  48,384 cells  (1.6% wasted)
-        ///   190 -> slot 192, gutter 2   -> 109,440 cells  (1.0% wasted)
-        ///   254 -> slot 256, gutter 2   -> 195,072 cells  (0.8% wasted)
+        ///   size  slot  gutter  cells/band  playable  waste
+        ///   126    128     2       16,128     15,876    1.6%
+        ///   190    192     2       36,480     36,100    1.0%
+        ///   250    256     6       64,000     62,500    2.3%   &lt;- vanilla Medium, exactly
+        ///   300    320    20       96,000     90,000    6.3%   &lt;- vanilla Large, exactly
         ///
-        /// The old 200x200 cap was one of the WORST points on that curve: slot 256, gutter
-        /// 56, 153,600 cells of which 33,600 are empty seam - 21.9% wasted. Dropping the cap
-        /// to 190 gives up 9.7% of playable area and saves 28.8% of the cells. Intermediate
-        /// sizes are never worth offering: 150x150 costs 86,400 for 67,500 playable, while
-        /// 190x190 costs 26% more and yields 60% more playable area.
+        /// Paying 2.3% and 6.3% of the cells buys the two sizes players actually recognise
+        /// from vanilla's map-size list. That is worth more than the rounding.
         ///
-        /// This matters because 1.6's PathGridJob is an IJobParallelFor over EVERY cell of
-        /// the map, so the stacked total - not the per-level size - is what the pathfinder
-        /// pays on a hot per-request path.
+        /// ⚠ 200 IS THE ONE NUMBER TO AVOID, and it is instructive: it lands just PAST the
+        /// 192 boundary, so slot 256, gutter 56, 51,200 cells for 40,000 playable - 21.9%
+        /// wasted, the worst point on the curve. Waste is a SAWTOOTH in size, not a smooth
+        /// function of it, so recompute the table before ever adding a size.
+        ///
+        /// ⚠ A WIDE GUTTER IS A FEATURE, NOT PURELY WASTE. §14 records that "a spatial
+        /// helper that reaches 22 rows will cross a 2-row gutter" - the root of the
+        /// things-in-the-void class (§15a) and of the drag-line ordering bug (§4). The
+        /// gutter is 6 rows at 250 and 20 rows at 300, so those tiers are materially harder
+        /// to punch a spatial helper through than the old 2-row minimum. Those cells were
+        /// being rounded away to slot alignment regardless; this spends them on safety.
+        ///
+        /// This all matters because 1.6's PathGridJob is an IJobParallelFor over EVERY cell
+        /// of the map, so the stacked total - not the per-level size - is what the
+        /// pathfinder pays on a hot per-request path.
         /// </summary>
-        public static readonly int[] Sizes = { 126, 190, 254 };
+        public static readonly int[] Sizes = { 126, 190, 250, 300 };
 
         // ================= THE LEVEL PLAN =================
         // Levels are chosen per colony on the advanced-config screen, and the constraint is
@@ -55,24 +71,36 @@ namespace AsAboveSoBelow
         // stacked total is what the pathfinder pays - a player picking 7 levels is not
         // asking for 7x the cost, they are asking for the same budget sliced differently.
         //
-        // The arithmetic that makes this work (heights sit just under a 64 boundary so the
-        // gutter collapses to 2 rows):
-        // What 146,000 buys (per-level size x levels = stacked cells):
-        //   4 x 190 = 145,920   <- three upper levels at full size; the reason for 146,000
-        //   2 x 254 = 130,048   |  7 x 126 = 112,896
-        //   5 x 190 = 182,400   <- refused
-        //   7 x 190 = 255,360   <- refused (3 up AND 3 down at 190 drops the size to 126)
-        //   7 x 126 = 112,896   <- seven levels for the price of three
-        //   7 x 190 = 255,360   <- the footgun the budget exists to refuse
+        // What 192,000 buys (per-level size x levels = stacked cells):
+        //   7 x 126 = 112,896   <- the full seven levels, for well under one 250 colony
+        //   5 x 190 = 182,400
+        //   3 x 250 = 192,000   <- lands EXACTLY on the budget
+        //   2 x 300 = 192,000   <- also exactly; these two tiers are what SET the figure
+        //   6 x 190 = 218,880   <- refused
+        //   4 x 250 = 256,000   <- refused
+        //   3 x 300 = 288,000   <- refused (the footgun the budget exists to refuse)
+        //
+        // The ladder that falls out is 7 / 5 / 3 / 2 levels, monotone in size, and EVERY
+        // tier still yields real z-levels. A tier whose only affordable plan is one level
+        // would be a z-level mod option with no z, which is why 350 and 382 are not offered:
+        // 350 needs 134,400 cells per band and 382 needs 146,688, so a second level costs
+        // more than this entire budget.
         // ==================================================
 
         public const int MaxUpperLevels = 3;
 
         public const int MaxLowerLevels = 3;
 
-        /// <summary>Total cells a banded colony may allocate. Sized so the historical
-        /// 3x190 layout and a 7x126 layout both fit, and 5x190 / 3x254 do not.</summary>
-        public const int CellBudget = 146000;
+        /// <summary>Total cells a banded colony may allocate.
+        ///
+        /// 192,000 is not a round number picked by feel: it is simultaneously 3 x 64,000
+        /// (250 at three levels) and 2 x 96,000 (300 at two), so both large tiers land dead
+        /// on it. A budget that exactly accommodates the two sizes it is meant to permit is
+        /// tuned rather than guessed.
+        ///
+        /// Up from 146,000 (+31.5%). The previous figure was set by 4 x 190 = 145,920 back
+        /// when 190 was the largest tier offered.</summary>
+        public const int CellBudget = 192000;
 
         public static int UpperLevels =>
             Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
@@ -275,6 +303,37 @@ namespace AsAboveSoBelow
             // Nothing at or below the request fits: the smallest offered size is the best
             // available without breaking the budget.
             return best > 0 ? best : Sizes[0];
+        }
+
+        /// <summary>
+        /// THE PLAYER'S ACTUAL PER-LEVEL SIZE, which is not the same question as Clamp.
+        ///
+        /// <c>Clamp</c> answers "snap this arbitrary number DOWN to something affordable",
+        /// which is right when sanitising a value that arrived from a scenario or a stale
+        /// config. It is WRONG as a way of finding out what the player chose, because it is
+        /// lossy: <c>Clamp(250)</c> at four levels returns 190, and did so no matter which
+        /// tier was actually selected.
+        ///
+        /// That is exactly the bug that made Map Preview work only at 190x190. Map Preview
+        /// asks how big the map will be and hands us VANILLA's configured size (250 by
+        /// default) rather than our per-level pick; the old code ran that through Clamp, got
+        /// 190 every time, and generated a 190-based stack. The crop check then compared
+        /// that against the real stacked height and bailed as "not one of ours" for every
+        /// tier except the one that happened to be 190.
+        ///
+        /// The selection is not something to re-derive at all - the chooser's radio buttons
+        /// write <c>GameInitData.mapSize</c> directly (§2: own the widget, do not patch the
+        /// data), so it is simply on record. Aim at the fact, not at a reconstruction of it.
+        /// Clamp remains the fallback for the genuinely unknown-value case.
+        /// </summary>
+        public static int PlannedSize(int requested)
+        {
+            int chosen = Find.GameInitData?.mapSize ?? 0;
+            if (chosen > 0 && Array.IndexOf(Sizes, chosen) >= 0 && Fits(chosen, BandCount))
+            {
+                return chosen;
+            }
+            return Clamp(requested);
         }
     }
 
@@ -515,7 +574,9 @@ namespace AsAboveSoBelow
             {
                 // Room for the levels + per-level-size strip. Vanilla lays its columns out
                 // from the top and never consults the height, so this is space we own.
-                __result.y += 260f;
+                // 288 not 260: the strip grew a fourth size row at 28px when the tiers went
+                // to 126/190/250/300. Adding a size means revisiting this number.
+                __result.y += 288f;
                 __result.x = Mathf.Max(__result.x, 1000f);
             }
         }
