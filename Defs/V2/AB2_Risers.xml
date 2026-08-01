@@ -90,22 +90,30 @@
     </graphicData>
   </ThingDef>
 
-  <!-- ============================ VANILLA POWER ============================ -->
 
   <ThingDef ParentName="AB_RiserBase">
-    <defName>AB_RiserPower</defName>
-    <label>power riser</label>
-    <description>A distribution box that mounts on a wall and carries electricity between levels. Build one on a level and its twin appears on the level above or below, joining the two power grids into one.\n\nWithout a riser, each level's power grid is entirely separate - conduits cannot cross the rock between bands.</description>
+    <defName>AB_PowerJunction</defName>
+    <label>power junction box</label>
+    <description>A wall-mounted power junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
-      <texPath>Things/Building/Risers/AB_RiserPower</texPath>
+      <texPath>Things/Building/Risers/AB_PowerJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Power</designationCategory>
-    <uiOrder>2100</uiOrder>
     <researchPrerequisites>
       <li>Electricity</li>
     </researchPrerequisites>
+    <statBases>
+      <MaxHitPoints>120</MaxHitPoints>
+      <WorkToBuild>1600</WorkToBuild>
+      <Flammability>0.4</Flammability>
+      <Beauty>-3</Beauty>
+    </statBases>
+    <costList>
+      <Steel>60</Steel>
+      <ComponentIndustrial>2</ComponentIndustrial>
+    </costList>
     <comps>
       <li Class="CompProperties_Power">
         <compClass>CompPowerTransmitter</compClass>
@@ -115,7 +123,45 @@
     <modExtensions>
       <li Class="AsAboveSoBelow.ABRiserExt">
         <network>Power</network>
-        <wallMounted>true</wallMounted>
+        <role>Junction</role>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_PowerBreaker</defName>
+    <label>power breaker box</label>
+    <description>A wall-mounted power breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_PowerBreaker</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Power</designationCategory>
+    <researchPrerequisites>
+      <li>Electricity</li>
+    </researchPrerequisites>
+    <statBases>
+      <MaxHitPoints>120</MaxHitPoints>
+      <WorkToBuild>900</WorkToBuild>
+      <Flammability>0.4</Flammability>
+      <Beauty>-3</Beauty>
+    </statBases>
+    <costList>
+      <Steel>25</Steel>
+      <ComponentIndustrial>1</ComponentIndustrial>
+    </costList>
+    <comps>
+      <li Class="CompProperties_Power">
+        <compClass>CompPowerTransmitter</compClass>
+        <transmitsPower>true</transmitsPower>
+      </li>
+      <li Class="CompProperties_Flickable" />
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Power</network>
+        <role>Breaker</role>
       </li>
     </modExtensions>
   </ThingDef>

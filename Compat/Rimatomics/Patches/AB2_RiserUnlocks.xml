@@ -20,8 +20,10 @@
   <Operation Class="PatchOperationAdd">
     <xpath>Defs/Def[defName="BuildReactorTurbine"]/Unlocks</xpath>
     <value>
-      <li>AB_RiserColdWater</li>
-      <li>AB_RiserSteam</li>
+      <li>AB_ColdWaterJunction</li>
+      <li>AB_ColdWaterBreaker</li>
+      <li>AB_SteamJunction</li>
+      <li>AB_SteamBreaker</li>
     </value>
   </Operation>
 
@@ -29,7 +31,8 @@
   <Operation Class="PatchOperationAdd">
     <xpath>Defs/Def[defName="TestForCore"]/Unlocks</xpath>
     <value>
-      <li>AB_RiserCoolant</li>
+      <li>AB_CoolantJunction</li>
+      <li>AB_CoolantBreaker</li>
     </value>
   </Operation>
 
@@ -37,8 +40,10 @@
   <Operation Class="PatchOperationAdd">
     <xpath>Defs/Def[defName="BuildReactorCooling"]/Unlocks</xpath>
     <value>
-      <li>AB_RiserHighVoltage</li>
-      <li>AB_RiserLoom</li>
+      <li>AB_HighVoltageJunction</li>
+      <li>AB_HighVoltageBreaker</li>
+      <li>AB_LoomJunction</li>
+      <li>AB_LoomBreaker</li>
     </value>
   </Operation>
 
