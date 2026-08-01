@@ -61,6 +61,19 @@ svg{display:block;width:100%}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 code{font-family:var(--mono);font-size:12px;background:#0b0e13;padding:1px 5px;border-radius:3px}
+textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line);border-radius:6px;
+  font-family:var(--mono);font-size:11.5px;line-height:1.6;padding:9px;resize:vertical}
+input[type=text]{background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+  border-radius:6px;padding:6px 9px;font-family:inherit;font-size:12.5px}
+.outbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px}
+.outbar input[type=text]{flex:1;min-width:200px}
+.saved{display:flex;flex-direction:column;gap:7px}
+.srow{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;padding:8px 11px;font-size:12.5px}
+.srow .tag{font-family:var(--mono);color:var(--accent);flex:0 0 auto}
+.srow .nm{color:var(--dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .fl{font-size:10.5px;color:#5e6b78;font-family:var(--mono)}
+.empty{color:#5e6b78;font-size:12.5px;font-style:italic}
 </style>
 </head>
 <body>
@@ -112,6 +125,24 @@ code{font-family:var(--mono);font-size:12px;background:#0b0e13;padding:1px 5px;b
   <div class="grid" id="stats"></div>
   <div class="bar"><i id="bfill"></i></div>
   <div class="msgs" id="msgs"></div>
+
+  <h2 style="margin-bottom:8px">Hand this back to me</h2>
+  <textarea id="spec" rows="2" readonly></textarea>
+  <div class="outbar">
+    <input type="text" id="note" placeholder="what is this plan for? e.g. gutter-leak repro, 250 tier verify">
+    <button id="copyone">Copy this plan</button>
+    <button class="on" id="add">Add to list</button>
+  </div>
+</div>
+
+<h2>Saved plans <span id="scount" style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
+<div class="panel">
+  <div class="saved" id="savedlist"></div>
+  <div class="outbar">
+    <button class="on" id="copyall">Copy all plans</button>
+    <button id="clearall">Clear list</button>
+    <span style="font-size:11.5px;color:#5e6b78">Kept in this browser, so the list survives a reload.</span>
+  </div>
 </div>
 
 <h2>The stack</h2>
@@ -252,6 +283,71 @@ function render() {
   drawStack(p);
   drawSaw(p);
   drawTable(p);
+  $("spec").value = specLine(p, $("note").value.trim());
+}
+
+/* ---------------- the handback format ----------------
+   Inputs first, then derived values. The derived half is redundant on purpose:
+   it lets whoever reads this line later re-run the arithmetic and catch a plan
+   that was hand-edited into something inconsistent. */
+function flagsFor(p) {
+  const f = [];
+  if (p.over) f.push("OVER_BUDGET");
+  if (p.n > CAP) f.push("OVER_LEVEL_CAP");
+  if (p.waste > 0.12) f.push("HIGH_WASTE");
+  if (p.gutter === MIN_GUTTER) f.push("TIGHT_GUTTER");
+  if (p.gap <= 6) f.push("CAN_EXPRESS_GUTTER_LEAK");
+  else f.push("GUTTER_LEAK_NOT_TESTABLE");
+  if (p.aspect > 3) f.push("HIGH_ASPECT");
+  if (SHIPPED.includes(p.h) && p.w === p.h) f.push("SHIPPING_TIER");
+  return f.join(",");
+}
+
+function specLine(p, note) {
+  return "ABPLAN v1 | w=" + p.w + " h=" + p.h + " levels=" + p.n + " budget=" + p.budget +
+    " | slot=" + p.slot + " gutter=" + p.gutter + " gap=" + p.gap +
+    " costBand=" + p.costBand + " total=" + p.total +
+    " playable=" + pct(p.playable) + " aspect=" + p.aspect.toFixed(2) +
+    " | flags=" + flagsFor(p) +
+    (note ? " | note=" + note.replace(/[|\n]/g, " ") : "");
+}
+
+const HEADER =
+  "# As above, So below II - level plan(s) for testing\n" +
+  "# Slot = ceil((h + " + MIN_GUTTER + ") / " + ALIGN + ") * " + ALIGN +
+  "; map is (w, 1, levels * Slot); gap = gutter + 1\n" +
+  "# derived values are included so they can be cross-checked against the inputs\n";
+
+/* ---------------- saved list ---------------- */
+const KEY = "ab2.levelplans";
+let saved = [];
+try { saved = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { saved = []; }
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+
+function drawSaved() {
+  const el = $("savedlist");
+  $("scount").textContent = saved.length ? "(" + saved.length + ")" : "";
+  $("copyall").disabled = saved.length === 0;
+  if (!saved.length) { el.innerHTML = '<div class="empty">Nothing saved yet. Set up a plan above and press Add to list.</div>'; return; }
+  el.innerHTML = "";
+  saved.forEach((s, i) => {
+    const row = document.createElement("div");
+    row.className = "srow";
+    row.innerHTML = '<span class="tag">' + s.w + "\u00d7" + s.h + " \u00d7" + s.n + "L</span>" +
+      '<span class="nm">' + (s.note || "(no note)") + "</span>" +
+      '<span class="fl">' + fmt(s.total) + " cells</span>";
+    const load = document.createElement("button");
+    load.textContent = "Load";
+    load.onclick = () => { $("w").value = s.w; $("h").value = s.h; $("n").value = s.n; $("b").value = s.budget; $("note").value = s.note || ""; render(); };
+    const cp = document.createElement("button");
+    cp.textContent = "Copy";
+    cp.onclick = () => { navigator.clipboard.writeText(s.line); cp.textContent = "Copied"; setTimeout(() => cp.textContent = "Copy", 1200); };
+    const rm = document.createElement("button");
+    rm.textContent = "\u2715";
+    rm.onclick = () => { saved.splice(i, 1); persist(); drawSaved(); };
+    row.append(load, cp, rm);
+    el.appendChild(row);
+  });
 }
 
 /* ---------------- stack diagram ---------------- */
@@ -361,6 +457,25 @@ function drawTable(p) {
 
 ["w", "h", "b"].forEach(id => $(id).oninput = render);
 $("n").oninput = render;
+$("note").oninput = render;
+
+$("copyone").onclick = () => {
+  navigator.clipboard.writeText(HEADER + "\n" + $("spec").value);
+  $("copyone").textContent = "Copied"; setTimeout(() => $("copyone").textContent = "Copy this plan", 1300);
+};
+$("add").onclick = () => {
+  const p = plan(+$("w").value, +$("h").value, +$("n").value, +$("b").value);
+  saved.push({ w: p.w, h: p.h, n: p.n, budget: p.budget, total: p.total,
+               note: $("note").value.trim(), line: specLine(p, $("note").value.trim()) });
+  persist(); drawSaved();
+  $("add").textContent = "Added"; setTimeout(() => $("add").textContent = "Add to list", 1100);
+};
+$("copyall").onclick = () => {
+  navigator.clipboard.writeText(HEADER + "\n" + saved.map(s => s.line).join("\n"));
+  $("copyall").textContent = "Copied " + saved.length; setTimeout(() => $("copyall").textContent = "Copy all plans", 1300);
+};
+$("clearall").onclick = () => { if (confirm("Clear all saved plans?")) { saved = []; persist(); drawSaved(); } };
+drawSaved();
 document.querySelectorAll("[data-p]").forEach(btn => btn.onclick = () => {
   const [w, h, n] = btn.dataset.p.split(",").map(Number);
   $("w").value = w; $("h").value = h; $("n").value = n; render();
