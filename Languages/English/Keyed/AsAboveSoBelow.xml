@@ -100,4 +100,6 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
 
+  <AB_RiserNeedsWall>Must be built inside a wall.</AB_RiserNeedsWall>
+  <AB_RiserFaceBlocked>Must face open space, not another wall.</AB_RiserFaceBlocked>
 </LanguageData>

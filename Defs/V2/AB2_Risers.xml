@@ -14,39 +14,37 @@
     the point: an abstract parent naming only vanilla types is safe everywhere, so every
     gated child can inherit shape, cost and stats from one place instead of repeating them.
 
-    ⚠ EVERY RISER IS A WALL ATTACHMENT, exactly like vanilla's WallLamp and TorchWallLamp:
-    `isAttachment` + `Placeworker_AttachedToWall` + Standable + BuildingOnTop. That keeps
-    the floor clear, puts the riser where the conduits and pipes already run, and gets a
-    behaviour vanilla already supports - `CompPower.ConnectToTransmitter` resolves an
-    attachment's connector position from the WALL it hangs on rather than from its own cell
-    (CompPower.cs:199), so a wall-mounted power riser wires up correctly with no help.
+    ⚠ A RISER GOES *IN* A WALL, NOT BESIDE ONE. `canPlaceOverWall` + PlaceWorker_ABOnWall,
+    modelled directly on VTE_WallMountedVent and vanilla's Vent. The building occupies the
+    WALL'S OWN cell and faces out of it into the room.
 
-    ⚠⚠ ROTATION IS THE DIRECTION OF THE WALL, NOT THE DIRECTION THE UNIT FACES.
-    `Placeworker_AttachedToWall` requires a Full-fillage `supportsWallAttachments` building
-    at `loc + GenAdj.CardinalDirections[rot.AsInt]`, and CardinalDirections[0] is (0,0,1) -
-    north, up the screen. Rot4.North.AsInt is 0 and Graphic_Multi takes mats[0] as _north.
-    Therefore:
+    ⚠ THE EARLIER `isAttachment` VERSION WAS WRONG AND COULD NOT PLACE AT ALL. RimWorld has
+    two unrelated wall-mounted mechanisms:
+      isAttachment  - occupies the OPEN cell beside a wall; Rotation points INTO the wall;
+                      the wall must declare `supportsWallAttachments`, which ORDINARY COLONY
+                      WALLS DO NOT. Only a handful of natural and Anomaly structures do, so
+                      attachments silently refuse to place on a normal wall.
+      canPlaceOverWall - occupies the WALL's cell; Rotation points OUT into the room.
+    Vanilla Vent, VTE's WallMountedVent and WallMountedCooler all use the second.
 
-        _north  wall ABOVE  -> unit hugs the top edge, front face points DOWN, fully seen
-        _east   wall RIGHT  -> unit hugs the right edge, front face points LEFT
-        _south  wall BELOW  -> unit hugs the bottom edge, we see its BACK
-        _west   mirrored from _east automatically
+    ⚠ SO ROTATION IS ORDINARY FACING, AND `_south` IS THE FRONT VIEW AGAIN. Because the
+    unit faces out of the wall rather than into it, the usual RimWorld convention applies:
+    _south faces the player and shows the front. An `isAttachment` riser would have needed
+    the inverted convention; this one does not.
 
-    This is the OPPOSITE of the usual RimWorld habit where _south is the hero front view,
-    and it is worth stating loudly because the art cannot tell you it is wrong - swapped
-    north/south files simply look like a unit that turns its back when you rotate it.
-
-    ⚠ NON-EDIFICE ON PURPOSE. Risers sit alongside the host mod's own pipes and conduits,
-    which are themselves non-edifice and expect to share a cell with walls and floors. An
-    edifice riser could not be placed where players will actually want it.
+    ⚠ NON-EDIFICE ON PURPOSE. `isEdifice=false` is what lets the riser share its cell with
+    the wall instead of replacing it, and `clearBuildingArea=false` is what stops placement
+    demolishing that wall. Both are load-bearing - drop either and the riser either cannot
+    be placed or eats the structure it is supposed to sit inside.
   -->
   <ThingDef Name="AB_RiserBase" ParentName="BuildingBase" Abstract="True">
     <thingClass>Building</thingClass>
     <category>Building</category>
     <size>(1,1)</size>
     <altitudeLayer>BuildingOnTop</altitudeLayer>
-    <passability>Standable</passability>
-    <blockWind>false</blockWind>
+    <passability>PassThroughOnly</passability>
+    <fillPercent>0.75</fillPercent>
+    <blockWind>true</blockWind>
     <blockLight>false</blockLight>
     <canOverlapZones>false</canOverlapZones>
     <rotatable>true</rotatable>
@@ -54,8 +52,9 @@
     <clearBuildingArea>false</clearBuildingArea>
     <terrainAffordanceNeeded>Light</terrainAffordanceNeeded>
     <placeWorkers>
-      <li>Placeworker_AttachedToWall</li>
+      <li>AsAboveSoBelow.PlaceWorker_ABOnWall</li>
     </placeWorkers>
+    <drawPlaceWorkersWhileSelected>true</drawPlaceWorkersWhileSelected>
     <constructEffect>ConstructMetal</constructEffect>
     <repairEffect>Repair</repairEffect>
     <leaveResourcesWhenKilled>true</leaveResourcesWhenKilled>
@@ -72,7 +71,8 @@
     </costList>
     <building>
       <isEdifice>false</isEdifice>
-      <isAttachment>true</isAttachment>
+      <isInert>true</isInert>
+      <canPlaceOverWall>true</canPlaceOverWall>
       <ai_chillDestination>false</ai_chillDestination>
     </building>
     <!--
