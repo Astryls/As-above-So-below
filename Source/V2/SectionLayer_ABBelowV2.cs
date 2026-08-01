@@ -158,6 +158,25 @@ namespace AsAboveSoBelow
                             if (foggedBelow)
                             {
                                 EmitBelowFogFan(map, bands, fog, below, c, fogAlt);
+                                // ROCK AT EVERY LEVEL.
+                                //
+                                // An undug mountain is FOGGED, so its own sprite is never
+                                // printed by the thing loop. At +1 that does not show,
+                                // because SectionLayer_ABMountainCap draws the mass into its
+                                // own band from exactly one Slot down, fog or no fog. From
+                                // +2 and up the cap is deriving from the sky band beneath it
+                                // instead, nothing else draws mass, and all that survives is
+                                // this fog fan - the grey strip in the report.
+                                //
+                                // `drop > slot` keeps this strictly to the levels the cap
+                                // cannot reach, so the +1 view stays byte-identical.
+                                // EmitMassRepresentationAt returns false for anything that is
+                                // not mass, leaving open ground as plain fog fan.
+                                if (slot > 0 && drop > slot)
+                                {
+                                    SectionLayer_ABMountainCap.EmitMassRepresentationAt(
+                                        this, map, below, drop, terrainAlt);
+                                }
                             }
                             printed = true;
                         }

@@ -1197,6 +1197,128 @@ namespace AsAboveSoBelow
 
         private static readonly Color32 ClearWhite = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, 0);
 
+        /// <summary>
+        /// THE MASS ITSELF, DRAWN FROM ANY DEPTH. Rock at every level.
+        ///
+        /// <see cref="EmitMassSilhouetteAt"/> adds a LIP to mass the cap is already drawing
+        /// in its own band, and it opens with three guards that are right there and fatal
+        /// here:
+        ///   1. it returns false when the cell has a mineable edifice ("its own sprite draws
+        ///      the edge") - but from two levels up that sprite is FOGGED and never printed;
+        ///   2. it returns false for non-linked graphics ("variant-mode rocks have no lip") -
+        ///      which is every rock once Better Mountains is installed, and is exactly why
+        ///      the reported bug was BM-only;
+        ///   3. it re-derives its rock from one Slot BELOW the cell handed in - correct when
+        ///      the caller passes a sky cell, wrong when it passes an already-descended one.
+        ///
+        /// Routing the first attempt at this fix through that method meant it could never
+        /// fire. This draws the mass rather than its outline, and carries none of those
+        /// three assumptions.
+        ///
+        /// NO FOG TEST, deliberately: the caller has already established the cell is fogged,
+        /// and that is precisely when this is needed. An undug mountain should read as rock
+        /// from EVERY level, not as rock at +1 (where the cap reaches) and grey fog above it.
+        /// </summary>
+        internal static bool EmitMassRepresentationAt(MapDrawLayer layer, Map map,
+            IntVec3 source, int zOffset, float altitude)
+        {
+            if (layer == null || map == null || !ABGuard.On(ABGuard.Rendering))
+            {
+                return false;
+            }
+            ThingDef rock = MassRockAt(map, source);
+            if (rock == null)
+            {
+                return false; // not mass - the fog fan alone is right for open ground
+            }
+            EnsureQueue();
+            IntVec3 at = new IntVec3(source.x, source.y, source.z + zOffset);
+            bool emitted = false;
+
+            // The field: the rock's own rough terrain, world-position sampled, exactly what
+            // the cap lays down in its own band.
+            TerrainDef rough = rock.building?.naturalTerrain;
+            if (rough != null)
+            {
+                Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
+                LayerSubMesh fsub = fieldMat != null ? layer.GetSubMesh(fieldMat) : null;
+                if (fsub != null)
+                {
+                    AddTerrainQuad(fsub, at, altitude, White, White);
+                    emitted = true;
+                }
+            }
+
+            Graphic live = LiveGraphicFor(rock);
+            if (!(live is Graphic_Linked))
+            {
+                // Variant mode (Better Mountains). Same StableCellIndex the cap uses, so a
+                // column does not reshuffle its rocks as the player changes level.
+                Material[] variants = VariantsFor(rock);
+                if (variants != null && variants.Length > 0)
+                {
+                    Material vmat = QueueClone(variants[StableCellIndex(source, variants.Length)]);
+                    LayerSubMesh vsub = vmat != null ? layer.GetSubMesh(vmat) : null;
+                    if (vsub != null)
+                    {
+                        Vector2 ds = live != null ? live.drawSize : Vector2.one;
+                        float hw = Mathf.Max(ds.x, 1f) * 0.5f;
+                        float hh = Mathf.Max(ds.y, 1f) * 0.5f;
+                        AddQuad(vsub, at.x + 0.5f - hw, at.z + 0.5f - hh,
+                            at.x + 0.5f + hw, at.z + 0.5f + hh, altitude + 0.02f, White, White);
+                        emitted = true;
+                    }
+                }
+                return emitted;
+            }
+
+            // Linked mode (vanilla rock): the atlas tile for this cell's neighbour mask. The
+            // mask is derived from the GROUND map's own mass rather than from the cap's
+            // per-band grids, which is what lets this work at an arbitrary depth.
+            Material baseMat = AtlasBaseFor(rock);
+            if (baseMat == null)
+            {
+                return emitted;
+            }
+            int mask = (IsMass(map, source + IntVec3.North) ? 1 : 0)
+                | (IsMass(map, source + IntVec3.East) ? 2 : 0)
+                | (IsMass(map, source + IntVec3.South) ? 4 : 0)
+                | (IsMass(map, source + IntVec3.West) ? 8 : 0);
+            Material tile = QueueClone(
+                MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask));
+            LayerSubMesh tsub = tile != null ? layer.GetSubMesh(tile) : null;
+            if (tsub != null)
+            {
+                AddQuad(tsub, at.x, at.z, at.x + 1, at.z + 1, altitude + 0.02f, White, White);
+                emitted = true;
+            }
+            return emitted;
+        }
+
+        /// <summary>The rock def of a MASS cell - one whose edifice is mineable or natural
+        /// rock. Null for everything else, which is what keeps this off open ground.
+        ///
+        /// Deliberately NOT <c>ABMinedRockLookup</c>: that maps a mined FLOOR back to the
+        /// rock that produced it, and an undug mass cell has no mined floor to map.</summary>
+        private static ThingDef MassRockAt(Map map, IntVec3 c)
+        {
+            if (map == null || !c.InBounds(map))
+            {
+                return null;
+            }
+            ThingDef d = map.edificeGrid[c]?.def;
+            if (d == null)
+            {
+                return null;
+            }
+            return d.mineable || (d.building != null && d.building.isNaturalRock) ? d : null;
+        }
+
+        private static bool IsMass(Map map, IntVec3 c)
+        {
+            return MassRockAt(map, c) != null;
+        }
+
         /// <summary>Vanilla Printer_Plane tilts every plane: the north (z+) verts
         /// sit +0.01 higher, giving deterministic overlap at row seams. Without it,
         /// horizontal seam dashes appear at cell bottoms (run-19).</summary>
