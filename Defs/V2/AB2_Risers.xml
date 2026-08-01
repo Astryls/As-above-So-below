@@ -14,6 +14,28 @@
     the point: an abstract parent naming only vanilla types is safe everywhere, so every
     gated child can inherit shape, cost and stats from one place instead of repeating them.
 
+    ⚠ EVERY RISER IS A WALL ATTACHMENT, exactly like vanilla's WallLamp and TorchWallLamp:
+    `isAttachment` + `Placeworker_AttachedToWall` + Standable + BuildingOnTop. That keeps
+    the floor clear, puts the riser where the conduits and pipes already run, and gets a
+    behaviour vanilla already supports - `CompPower.ConnectToTransmitter` resolves an
+    attachment's connector position from the WALL it hangs on rather than from its own cell
+    (CompPower.cs:199), so a wall-mounted power riser wires up correctly with no help.
+
+    ⚠⚠ ROTATION IS THE DIRECTION OF THE WALL, NOT THE DIRECTION THE UNIT FACES.
+    `Placeworker_AttachedToWall` requires a Full-fillage `supportsWallAttachments` building
+    at `loc + GenAdj.CardinalDirections[rot.AsInt]`, and CardinalDirections[0] is (0,0,1) -
+    north, up the screen. Rot4.North.AsInt is 0 and Graphic_Multi takes mats[0] as _north.
+    Therefore:
+
+        _north  wall ABOVE  -> unit hugs the top edge, front face points DOWN, fully seen
+        _east   wall RIGHT  -> unit hugs the right edge, front face points LEFT
+        _south  wall BELOW  -> unit hugs the bottom edge, we see its BACK
+        _west   mirrored from _east automatically
+
+    This is the OPPOSITE of the usual RimWorld habit where _south is the hero front view,
+    and it is worth stating loudly because the art cannot tell you it is wrong - swapped
+    north/south files simply look like a unit that turns its back when you rotate it.
+
     ⚠ NON-EDIFICE ON PURPOSE. Risers sit alongside the host mod's own pipes and conduits,
     which are themselves non-edifice and expect to share a cell with walls and floors. An
     edifice riser could not be placed where players will actually want it.
@@ -22,16 +44,18 @@
     <thingClass>Building</thingClass>
     <category>Building</category>
     <size>(1,1)</size>
-    <altitudeLayer>Building</altitudeLayer>
-    <passability>PassThroughOnly</passability>
-    <pathCost>30</pathCost>
-    <fillPercent>0.4</fillPercent>
+    <altitudeLayer>BuildingOnTop</altitudeLayer>
+    <passability>Standable</passability>
     <blockWind>false</blockWind>
     <blockLight>false</blockLight>
     <canOverlapZones>false</canOverlapZones>
-    <rotatable>false</rotatable>
+    <rotatable>true</rotatable>
     <selectable>true</selectable>
+    <clearBuildingArea>false</clearBuildingArea>
     <terrainAffordanceNeeded>Light</terrainAffordanceNeeded>
+    <placeWorkers>
+      <li>Placeworker_AttachedToWall</li>
+    </placeWorkers>
     <constructEffect>ConstructMetal</constructEffect>
     <repairEffect>Repair</repairEffect>
     <leaveResourcesWhenKilled>true</leaveResourcesWhenKilled>
@@ -48,10 +72,17 @@
     </costList>
     <building>
       <isEdifice>false</isEdifice>
+      <isAttachment>true</isAttachment>
       <ai_chillDestination>false</ai_chillDestination>
     </building>
+    <!--
+      ⚠ THREE FILES, NOT FOUR. Graphic_Multi.Init falls back to _east with westFlipped when
+      _west is absent, so north/east/south is a complete set - the same thing Dubs Bad
+      Hygiene ships for its own boilers and vents. A hand-authored _west would only be an
+      opportunity for the two side views to drift apart.
+    -->
     <graphicData>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
       <damageData>
         <rect>(0.1,0.1,0.8,0.8)</rect>
@@ -59,28 +90,12 @@
     </graphicData>
   </ThingDef>
 
-  <!--
-    Wall-mounted variant: three rotations rather than one flat plate.
-
-    ⚠ THREE FILES, NOT FOUR. Graphic_Multi.Init falls back to _east with westFlipped when
-    _west is absent, so authoring north/east/south is complete - the same thing Dubs Bad
-    Hygiene ships for its own boilers and vents. A hand-made _west would only be an
-    opportunity for the two side views to drift apart.
-  -->
-  <ThingDef Name="AB_RiserWallBase" ParentName="AB_RiserBase" Abstract="True">
-    <rotatable>true</rotatable>
-    <graphicData>
-      <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
-    </graphicData>
-  </ThingDef>
-
   <!-- ============================ VANILLA POWER ============================ -->
 
-  <ThingDef ParentName="AB_RiserWallBase">
+  <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserPower</defName>
     <label>power riser</label>
-    <description>A wall-mounted distribution box that carries electricity between levels. Build one on a level and its twin appears on the level above or below, joining the two power grids into one.\n\nWithout a riser, each level's power grid is entirely separate - conduits cannot cross the rock between bands.</description>
+    <description>A distribution box that mounts on a wall and carries electricity between levels. Build one on a level and its twin appears on the level above or below, joining the two power grids into one.\n\nWithout a riser, each level's power grid is entirely separate - conduits cannot cross the rock between bands.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserPower</texPath>
       <graphicClass>Graphic_Multi</graphicClass>

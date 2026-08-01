@@ -16,10 +16,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserChemfuel</defName>
     <label>chemfuel riser</label>
-    <description>A transfer stack that carries chemfuel between levels. Build one and its twin appears on the level above or below, joining the two chemfuel networks into one.</description>
+    <description>A wall-mounted transfer stack that carries chemfuel between levels. Build one and its twin appears on the level above or below, joining the two chemfuel networks into one.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserChemfuel</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>
@@ -41,10 +41,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserDeepchem</defName>
     <label>deepchem riser</label>
-    <description>A transfer stack that carries raw deepchem between levels. Build one and its twin appears on the level above or below, joining the two deepchem networks into one.\n\nDeepchem comes from underground; the refinery rarely wants to be there with it.</description>
+    <description>A wall-mounted transfer stack that carries raw deepchem between levels. Build one and its twin appears on the level above or below, joining the two deepchem networks into one.\n\nDeepchem comes from underground; the refinery rarely wants to be there with it.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserDeepchem</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>

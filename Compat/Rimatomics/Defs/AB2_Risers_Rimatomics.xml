@@ -19,10 +19,10 @@
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_RiserColdWater</defName>
     <label>cold water riser</label>
-    <description>A feed stack that carries cold water between levels. Build one and its twin appears on the level above or below, joining the two cold water loops into one.</description>
+    <description>A wall-mounted feed stack that carries cold water between levels. Build one and its twin appears on the level above or below, joining the two cold water loops into one.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserColdWater</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
@@ -41,10 +41,10 @@
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_RiserSteam</defName>
     <label>steam riser</label>
-    <description>A lagged stack that carries high pressure steam between levels. Build one and its twin appears on the level above or below, joining the two steam loops into one.\n\nLets a reactor in the basement drive turbines on the surface.</description>
+    <description>A wall-mounted lagged stack that carries high pressure steam between levels. Build one and its twin appears on the level above or below, joining the two steam loops into one.\n\nLets a reactor in the basement drive turbines on the surface.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserSteam</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
@@ -63,10 +63,10 @@
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_RiserCoolant</defName>
     <label>coolant riser</label>
-    <description>A stack that carries reactor coolant between levels. Build one and its twin appears on the level above or below, joining the two coolant loops into one.\n\nCooling towers need open sky; reactors do not.</description>
+    <description>A wall-mounted stack that carries reactor coolant between levels. Build one and its twin appears on the level above or below, joining the two coolant loops into one.\n\nCooling towers need open sky; reactors do not.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserCoolant</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
@@ -82,7 +82,7 @@
     </modExtensions>
   </ThingDef>
 
-  <ThingDef ParentName="AB_RiserWallBase" Class="Rimatomics.RimatomicsThingDef">
+  <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_RiserHighVoltage</defName>
     <label>high voltage riser</label>
     <description>A wall-mounted busbar cabinet that carries high voltage between levels. Build one and its twin appears on the level above or below, joining the two high voltage networks into one.</description>
@@ -105,7 +105,7 @@
     </modExtensions>
   </ThingDef>
 
-  <ThingDef ParentName="AB_RiserWallBase" Class="Rimatomics.RimatomicsThingDef">
+  <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_RiserLoom</defName>
     <label>console loom riser</label>
     <description>A wall-mounted junction cabinet that carries reactor control signals between levels. Build one and its twin appears on the level above or below, joining the two control looms into one.\n\nLets a console watch a reactor it does not share a floor with.</description>

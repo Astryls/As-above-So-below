@@ -17,10 +17,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserScarletSludge</defName>
     <label>scarlet sludge riser</label>
-    <description>A transfer stack that carries scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two sludge networks into one.</description>
+    <description>A wall-mounted transfer stack that carries scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two sludge networks into one.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserScarletSludge</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
@@ -42,10 +42,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserCompressedSludge</defName>
     <label>compressed sludge riser</label>
-    <description>A pressurised stack that carries compressed scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two networks into one.</description>
+    <description>A wall-mounted pressurised stack that carries compressed scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two networks into one.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserCompressedSludge</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
@@ -67,10 +67,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserMechanites</defName>
     <label>mechanite riser</label>
-    <description>A sealed conduit that carries scarlet mechanites between levels. Build one and its twin appears on the level above or below, joining the two mechanite networks into one.</description>
+    <description>A wall-mounted sealed conduit that carries scarlet mechanites between levels. Build one and its twin appears on the level above or below, joining the two mechanite networks into one.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserMechanites</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>

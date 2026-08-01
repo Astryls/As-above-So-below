@@ -8,10 +8,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserOil</defName>
     <label>oil pipeline riser</label>
-    <description>A pipeline stack that carries crude oil between levels. Build one and its twin appears on the level above or below, joining the two pipelines into one.\n\nUseful when the derricks are on the surface and the refinery is in the basement.</description>
+    <description>A wall-mounted pipeline stack that carries crude oil between levels. Build one and its twin appears on the level above or below, joining the two pipelines into one.\n\nUseful when the derricks are on the surface and the refinery is in the basement.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserOil</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimefeller</designationCategory>

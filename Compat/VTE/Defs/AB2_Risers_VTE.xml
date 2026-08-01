@@ -8,10 +8,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserVentDuct</defName>
     <label>vent duct riser</label>
-    <description>A ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two duct networks into one.\n\nOne compressor bank can then serve the whole column.</description>
+    <description>A wall-mounted ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two duct networks into one.\n\nOne compressor bank can then serve the whole column.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserVentDuct</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>

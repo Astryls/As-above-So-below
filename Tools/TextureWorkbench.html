@@ -162,11 +162,23 @@ textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line
 </div>
 
 <div class="note" style="border-left-color:#3b5bdb">
-  <b>Rotation — three files, not four.</b> <code>Graphic_Multi.Init</code> falls back to <code>_east</code> with
-  <code>westFlipped</code> when <code>_west</code> is missing, which is exactly what DBH and VTE ship. Author
-  <code>_north _east _south</code> only.
-  VTE's <code>ACUnit</code> is the model: <b>south</b> = front face with its detail band; <b>north</b> = the back, nearly
-  plain; <b>east</b> = side profile, the same colour blocks rearranged into vertical bands.
+  <b>Every riser is a wall attachment — three files each, 45 in total.</b> <code>Graphic_Multi.Init</code> falls back to
+  <code>_east</code> with <code>westFlipped</code> when <code>_west</code> is missing, which is exactly what DBH and VTE
+  ship, so author <code>_north _east _south</code> only.
+  <div style="margin-top:9px;padding:9px 11px;background:#2a1d10;border-radius:6px">
+    <b style="color:var(--accent)">⚠ Rotation is the direction of the WALL, not the way the unit faces.</b>
+    <code>Placeworker_AttachedToWall</code> demands a wall at <code>loc + CardinalDirections[rot]</code>, and
+    <code>CardinalDirections[0]</code> is <code>(0,0,1)</code> — north, up the screen. So:
+    <ul style="margin-top:6px">
+      <li><b style="color:#8ba4ff">north</b> — wall <b>above</b>, unit hugs the top edge, front face points down and is
+        fully visible. <b>This is the hero view.</b></li>
+      <li><b style="color:#8ba4ff">east</b> — wall <b>right</b>, narrow side profile, front points left.</li>
+      <li><b style="color:#8ba4ff">south</b> — wall <b>below</b>, you see the unit's <b>back</b>: plain top plate, no
+        front detail.</li>
+    </ul>
+    This is the reverse of the usual RimWorld habit where <code>_south</code> is the front view, and nothing in the art
+    can tell you it is wrong — swapped north/south files just look like a unit that turns its back when rotated.
+  </div>
 </div>
 
 <div id="app"></div>
@@ -178,6 +190,92 @@ textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line
 <script>
 const DIR = "Textures/Things/Building/Risers";
 const WS  = "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\";
+
+/* =====================================================================
+   Two style blocks, transcribed from the actual sprites:
+     A  DBH Valve, Rimefeller Valve, Rimatomics Coolant/Steam/Water valves,
+        Rimatomics transformer, DBH ElectricBoiler + centralAirVent
+     B  VTE ACUnit + VentValve, VCHE ChemfuelValve/Tap/Pipes,
+        Luciferium ScarletPipes
+   ===================================================================== */
+
+const STYLE_DUBWISE =
+"ART STYLE - copy the attached reference sprite exactly. This mod's 1x1 machines all share one look:\n" +
+"- A ROUNDED-CORNER SQUARE BASE PLATE that fills almost the entire image, in one flat colour with a fine speckled " +
+"noise texture over it.\n" +
+"- A THICK, SOLID, NEAR-BLACK OUTLINE around the base plate and around every element sitting on it. Heavy and even. " +
+"This is the most recognisable feature of the style.\n" +
+"- Flat colour with only a slight soft bevel on the raised grey parts. No gradients across the plate, no ambient " +
+"occlusion, no cast shadow, no glow, no reflections, no texture photography.\n" +
+"- Very few elements: three or four simple shapes at most, each a plain square, circle, bar or rounded rectangle.\n" +
+"- A tiny palette: the plate colour, two greys, and one or two small saturated accents.\n" +
+"- Chunky and readable when shrunk to 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+const STYLE_VE =
+"ART STYLE - copy the attached reference sprite exactly. Vanilla RimWorld / Vanilla Expanded look:\n" +
+"- NO heavy black outline. This style has essentially NO outline: flat blocks of colour butt directly against each " +
+"other, separated at most by a thin slightly-darker edge. Do not draw a cartoon border around the object.\n" +
+"- FLAT BLOCKS OF SOLID COLOUR arranged as simple geometry: a lighter band for the top surface, a darker band for the " +
+"front face, and groups of thin evenly spaced horizontal lines where there are fins, louvres or grilles.\n" +
+"- Cylinders and pipes are the one exception: they carry a soft smooth vertical gradient, lighter along the upper " +
+"edge and darker along the lower, with fully rounded caps.\n" +
+"- Muted, desaturated, slightly dusty palette built around ONE network identity colour. Accents are TINY - a small " +
+"triangle, a narrow band, a single square.\n" +
+"- No ambient occlusion, no specular highlights, no glow, no bloom, no cast shadow, no surface grime, no rivets, no " +
+"panel lines, no scratches.\n" +
+"- Three or four elements at most. Clean, geometric, architectural. Readable at 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+/* The backdrop is a flat solid colour, never "empty". Asking an image model for an
+   absent background makes it paint a decorative stand-in instead of leaving one out,
+   so we name a colour, forbid it inside the object, and cut it later. */
+const BG = {
+  grey:    { label:"neutral mid-grey", desc:"a flat solid neutral mid-grey, hex 8A8A8A" },
+  slate:   { label:"neutral slate",    desc:"a flat solid neutral blue-slate, hex 6E7A85" },
+  magenta: { label:"chroma magenta",   desc:"a flat solid bright magenta, hex FF00FF" }
+};
+let bgKey = "grey";
+
+function FRAME() {
+  return "COMPOSITION:\n" +
+  "- Exactly one object, centred, with a little clear space on every side. Do not let it bleed off the edges.\n" +
+  "- The backdrop behind it is " + BG[bgKey].desc + ", filling the whole canvas edge to edge as ONE uniform flat " +
+  "colour: no gradient, no vignette, no texture, no pattern, no shading, no floor, no ground, no wall, no room, no " +
+  "scene. The object casts no shadow onto it.\n" +
+  "- That backdrop colour must not appear anywhere in the object itself.\n" +
+  "- No text, numbers, labels, callouts, watermarks, borders or UI.\n" +
+  "- One single view only - not a turnaround, not a grid, not multiple angles.";
+}
+
+const OUT = "Output one square image.";
+
+const MATCH =
+"\n\nCONSISTENCY: this is one of three rotation variants of the same object. Keep colours, proportions and element " +
+"placement identical to its siblings - the three must read as one object turned in place.";
+
+/* ---------- views ----------
+   WARNING: ROTATION IS THE DIRECTION OF THE WALL, NOT THE WAY THE UNIT FACES.
+   Placeworker_AttachedToWall requires a wall at loc + GenAdj.CardinalDirections[rot];
+   CardinalDirections[0] is (0,0,1) = north = up the screen, and Graphic_Multi takes
+   mats[0] as _north. So _north is the view WITH THE WALL ABOVE, which makes it the hero
+   view - the opposite of the usual RimWorld habit where _south faces the player. */
+
+const VIEW_ROT = {
+  north: "NORTH variant - THE HERO VIEW. The wall runs along the TOP edge of the frame and the unit " +
+         "is bolted flat against it, hugging that top edge. Because the wall is behind it, the unit's " +
+         "FRONT FACE points DOWN toward the bottom of the frame and every detail listed above is fully " +
+         "visible. The connection stubs leave the TOP of the unit and disappear into the wall. Leave " +
+         "the bottom third of the frame empty.",
+  east:  "EAST variant - the same unit turned a quarter turn. The wall runs along the RIGHT edge of the " +
+         "frame and the unit hugs that right edge, so its front face points LEFT. You see it in narrow " +
+         "side profile, taller than it is wide. The connection stubs leave the RIGHT side into the wall. " +
+         "Front-face detail is edge-on and mostly hidden - keep it simple. Leave the left third empty.",
+  south: "SOUTH variant - the BACK of the unit. The wall runs along the BOTTOM edge of the frame and the " +
+         "unit hugs that bottom edge, facing away from you. You see its plain top plate and rear mounting " +
+         "brackets: NONE of the front-face detail is visible. The connection stubs leave the BOTTOM into " +
+         "the wall. Add at most one small dark fitting. Leave the top third of the frame empty."
+};
 
 /* =====================================================================
    Two style blocks, transcribed from the actual sprites:
@@ -306,82 +404,75 @@ const FAMILIES = [
  ]},
  {id:"dbh", name:"Dubs Bad Hygiene", style:"dubwise", meta:"HygienePipeMapComp.RebuildPipeGrid — 2 of 4 PipeTypes used", risers:[
    {n:"Plumbing riser", d:"AB_RiserPlumbing", f:"AB_RiserPlumbing", gate:"Plumbing",
-    gateNote:'MayRequire="dbhlitemode" — copied from their pipe', net:"PipeType.Sewage", rot:false,
+    gateNote:'MayRequire="dbhlitemode" — copied from their pipe', net:"PipeType.Sewage", rot:true,
     ref:REF.dbhValve, refName:"DBH Valve.png",
-    p:plate("dark charcoal grey", "a flat off-white circle for the pipe mouth ringed by a thin brass-yellow collar.")},
+    p:"A wall-mounted plumbing junction cabinet, built exactly like this mod's valve panel. A rounded-corner dark charcoal plate with fine speckled noise and a thick near-black outline; a chunky mid-grey housing across its middle with an off-white pipe collar at the centre; one small flat green indicator square. Two short pipe stubs leave on the wall side."
+    },
    {n:"Air-con duct riser", d:"AB_RiserAirDuct", f:"AB_RiserAirDuct", gate:"MultiSplitAirCon",
-    gateNote:'MayRequire="dbhlitemode" — copied from their duct', net:"PipeType.Air", rot:false,
+    gateNote:'MayRequire="dbhlitemode" — copied from their duct', net:"PipeType.Air", rot:true,
     ref:REF.dbhVent, refName:"DBH centralAirVent_south.png",
-    p:plate("pale steel blue-grey", "a flat dark grey square duct mouth filled with a small grid of tiny pale grey " +
-      "squares, like the attached vent grille.")}
+    p:"A wall-mounted air-duct junction cabinet, built like this mod's vent panel. A rounded-corner pale steel blue-grey plate with a thick near-black outline; a grey grille panel across the middle made of three evenly spaced dark bars; one small flat green indicator square; two thin copper-orange lines down one side. Two short duct stubs leave on the wall side."
+    }
  ]},
  {id:"rimefeller", name:"Rimefeller", style:"dubwise", meta:"UniversalPipeMapComp.RebuildPipeGrid — 1 PipeType", risers:[
    {n:"Oil pipeline riser", d:"AB_RiserOil", f:"AB_RiserOil", gate:"OilDrilling", gateNote:"copied from their OilPipeline",
-    net:"PipeType.Oil", rot:false, ref:REF.rfValve, refName:"Rimefeller Valve.png",
-    p:plate("very dark near-black grey", "a flat dark olive-green circle for the pipe mouth ringed by a thin dark " +
-      "grey collar.")}
+    net:"PipeType.Oil", rot:true, ref:REF.rfValve, refName:"Rimefeller Valve.png",
+    p:"A wall-mounted crude-oil junction cabinet, built exactly like this mod's valve panel. A rounded-corner near-black plate with fine speckle and a thick near-black outline; a chunky grey housing with a dark olive-green pipe collar at its centre; one small flat green indicator square; one small dark red circular handwheel. Two short heavy pipe stubs leave on the wall side."
+    }
  ]},
  {id:"rimatomics", name:"Dubs Rimatomics", style:"dubwise", meta:"UniversalPipeMapComp.RebuildPipeGrid — 5 PipeTypes, gated by ResearchStepDef.Unlocks", risers:[
    {n:"Cold water riser", d:"AB_RiserColdWater", f:"AB_RiserColdWater", gate:"BuildReactorTurbine",
-    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.ColdWater", rot:false, ref:REF.raWater, refName:"Rimatomics WaterValve.png",
-    p:plate("medium blue", "a flat light steel-grey circle for the pipe mouth crossed by one flat mid-blue bar.")},
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.ColdWater", rot:true, ref:REF.raWater, refName:"Rimatomics WaterValve.png",
+    p:"A wall-mounted cold-water junction cabinet, built exactly like this mod's water valve panel. A rounded-corner medium blue plate with fine speckle and a thick near-black outline; a chunky grey housing with a pale steel collar crossed by one flat mid-blue bar; one small flat green indicator square; one tiny round white gauge. Two short pipe stubs leave on the wall side."
+    },
    {n:"Steam riser", d:"AB_RiserSteam", f:"AB_RiserSteam", gate:"BuildReactorTurbine",
-    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Steam", rot:false, ref:REF.raSteam, refName:"Rimatomics SteamValve.png",
-    p:plate("dark red", "a flat off-white circle for the insulated pipe mouth wrapped by two thin light grey bands.")},
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Steam", rot:true, ref:REF.raSteam, refName:"Rimatomics SteamValve.png",
+    p:"A wall-mounted steam junction cabinet, built exactly like this mod's steam valve panel. A rounded-corner dark red plate with fine speckle and a thick near-black outline; a chunky grey housing with an off-white lagged collar wrapped by two thin light bands; one small flat green indicator square; one small brass relief valve. Two short lagged stubs leave on the wall side."
+    },
    {n:"Coolant riser", d:"AB_RiserCoolant", f:"AB_RiserCoolant", gate:"TestForCore",
-    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Cooling", rot:false, ref:REF.raCoolant, refName:"Rimatomics CoolantValve.png",
-    p:plate("dark teal", "a flat brushed-grey circle for the pipe mouth crossed by one flat teal-cyan bar.")},
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Cooling", rot:true, ref:REF.raCoolant, refName:"Rimatomics CoolantValve.png",
+    p:"A wall-mounted coolant junction cabinet, built exactly like this mod's coolant valve panel. A rounded-corner dark teal plate with fine speckle and a thick near-black outline; a chunky grey housing with a brushed collar crossed by one flat teal-cyan bar; one small flat green indicator square; one small pale blue-green sight glass. Two short pipe stubs leave on the wall side."
+    },
    {n:"High voltage riser", d:"AB_RiserHighVoltage", f:"AB_RiserHighVoltage", gate:"BuildReactorCooling",
     gateNote:"ResearchStepDef.Unlocks", net:"PipeType.HighVoltage", rot:true, ref:REF.raTrans, refName:"Rimatomics transformer.png",
-    p:"A wall-mounted high-voltage busbar cabinet, built exactly like the attached transformer sprite. A rounded " +
-      "rectangle with a thick near-black outline: flat mid-grey top band over a flat darker grey lower band, with a " +
-      "row of small dark squares along the very bottom like a grating. One small flat orange triangle on the lower " +
-      "band. Three evenly spaced dark vertical pill-shaped insulators as the connections, each capped with a small " +
-      "flat dark red circle."},
+    p:"A wall-mounted high-voltage busbar cabinet, built exactly like the attached transformer sprite. A dark grey steel enclosure with a thick near-black outline, a lighter grey band across the top and a darker band below it, a row of small dark squares along the far edge like a grating, and one small flat orange warning triangle. Three heavy brown ceramic insulators capped with small dark red circles leave on the wall side."
+    },
    {n:"Console loom riser", d:"AB_RiserLoom", f:"AB_RiserLoom", gate:"BuildReactorCooling",
     gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Loom", rot:true, ref:REF.raTrans, refName:"Rimatomics transformer.png",
-    p:"A wall-mounted control cable junction cabinet, built like the attached transformer sprite but slimmer. A " +
-      "rounded rectangle with a thick near-black outline: flat light grey top band over a flat mid-grey lower band. " +
-      "A row of four tiny flat amber squares on the lower band. Three thin cable stubs as simple rounded lines - one " +
-      "green, one blue, one yellow."}
+    p:"A wall-mounted control-cable junction cabinet, built like the attached transformer sprite but slimmer and paler. A light grey steel enclosure with a thick near-black outline, a lighter band across the top and a mid-grey band below carrying a row of four tiny amber status squares. Three thin colour-coded cables - one green, one blue, one yellow - leave on the wall side as simple rounded lines."
+    }
  ]},
  {id:"vche", name:"Vanilla Chemfuel Expanded", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
    {n:"Chemfuel riser", d:"AB_RiserChemfuel", f:"AB_RiserChemfuel", gate:"BiofuelRefining",
-    gateNote:"copied from VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:false, ref:REF.vcheChem, refName:"VCHE ChemfuelPipes_MenuIcon.png",
-    p:"A chemfuel riser stub. A flat dark grey collar ring at the base. Standing on it, the rounded end of a tube in " +
-      "the same muted dusty maroon-brown as the attached pipe, with a soft lighter gradient along its upper edge. One " +
-      "narrow lighter rose-brown band wraps the tube near the top. Nothing else."},
+    gateNote:"copied from VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:true, ref:REF.vcheChem, refName:"VCHE ChemfuelPipes_MenuIcon.png",
+    p:"A wall-mounted chemfuel junction box. Flat colour blocks with almost no outline: a dusty amber-orange panel, a lighter band across the top, a darker band below carrying three thin evenly spaced horizontal fins, one small pale yellow sight-glass square, and one small black flammable diamond. Two short dark stubs leave on the wall side."
+    },
    {n:"Deepchem riser", d:"AB_RiserDeepchem", f:"AB_RiserDeepchem", gate:"BiofuelRefining",
-    gateNote:"copied from VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:false, ref:REF.vcheDeep, refName:"VCHE DeepchemPipes_MenuIcon.png",
-    p:"A deepchem riser stub. A flat dark grey collar ring at the base. Standing on it, the rounded end of a tube in " +
-      "the same near-black charcoal as the attached pipe, with a soft lighter gradient along its upper edge. One " +
-      "narrow dark maroon band wraps the tube near the top. Nothing else."}
+    gateNote:"copied from VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:true, ref:REF.vcheDeep, refName:"VCHE DeepchemPipes_MenuIcon.png",
+    p:"A wall-mounted deepchem junction box. Flat colour blocks with almost no outline: a near-black charcoal panel, a slightly lighter band across the top, a darker band below with three thin horizontal fins, and one narrow deep violet identification stripe with a small violet sight port. Two short dark stubs leave on the wall side."
+    }
  ]},
  {id:"vte", name:"Vanilla Temperature Expanded", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
    {n:"Vent duct riser", d:"AB_RiserVentDuct", f:"AB_RiserVentDuct", gate:"VTE_HVAC", gateNote:"copied from VTE_AirDuct",
-    net:"VTE_EfficiencyNet", rot:false, ref:REF.vteVent, refName:"VTE VentValve.png",
-    p:"A vent duct riser stub, built like the attached duct sprite. A flat mid-grey rounded square collar at the base. " +
-      "Standing on it a flat light grey square duct mouth with a soft diagonal fold pattern across it, exactly like " +
-      "the attached sheet-metal duct. One narrow darker grey band along the bottom edge. Nothing else."}
+    net:"VTE_EfficiencyNet", rot:true, ref:REF.vteVent, refName:"VTE VentValve.png",
+    p:"A wall-mounted HVAC vent box, built like the attached AC unit. Flat colour blocks with no outline at all: a clean white panel with a light grey band across the top and a mid-grey band below carrying five thin evenly spaced darker horizontal fins, plus two tiny accent triangles, one blue and one dark red. Two short pale stubs leave on the wall side."
+    }
  ]},
  {id:"luci", name:"Ushankas Luciferium Expansion", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
    {n:"Scarlet sludge riser", d:"AB_RiserScarletSludge", f:"AB_RiserScarletSludge", gate:"BasicMechanitesUnderstanding",
-    gateNote:"copied from USH_UndergroundScarletPipe", net:"ScarletNet", rot:false, ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
-    p:"A scarlet sludge riser stub. A flat dark grey collar ring at the base. Standing on it, the rounded end of a " +
-      "tube in the same dark charcoal as the attached pipe, with a soft lighter gradient along its upper edge, and " +
-      "three thin pale teal-grey banding rings near the top exactly like the attached sprite. Nothing else."},
+    gateNote:"copied from USH_UndergroundScarletPipe", net:"ScarletNet", rot:true, ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
+    p:"A wall-mounted sludge junction box. Flat colour blocks with almost no outline: a dark charcoal panel with a slightly lighter top band and a darker lower band carrying three thin pale teal-grey banding lines, plus one dull red clouded sight glass. Two short dark stubs leave on the wall side."
+    },
    {n:"Compressed sludge riser", d:"AB_RiserCompressedSludge", f:"AB_RiserCompressedSludge", gate:"ScarlettRefining",
-    gateNote:"copied from USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:false,
+    gateNote:"copied from USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:true,
     ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
-    p:"A pressurised sludge riser stub. A flat dark grey collar ring at the base. Standing on it, the rounded end of a " +
-      "tube in dark charcoal with a soft lighter gradient along its upper edge, wrapped by three thin pale teal-grey " +
-      "banding rings, and one narrow deep crimson band across the mouth. Nothing else."},
+    p:"A wall-mounted pressurised sludge cabinet. Flat colour blocks with almost no outline: a mid-grey panel with a lighter top band and a darker lower band, three thin darker banding lines, one narrow deep crimson identification stripe and one small brass pressure gauge with a tiny red needle mark. Two short reinforced stubs leave on the wall side."
+    },
    {n:"Mechanites riser", d:"AB_RiserMechanites", f:"AB_RiserMechanites", gate:"ScarlettRefining",
-    gateNote:"copied from USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:false,
+    gateNote:"copied from USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:true,
     ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
-    p:"A mechanite conduit riser stub. A flat light grey collar ring at the base. Standing on it, the rounded end of a " +
-      "tube in pale silver-white with a soft lighter gradient along its upper edge and thin pale grey banding rings. " +
-      "One narrow bright scarlet bar across the mouth. Nothing else."}
+    p:"A wall-mounted mechanite conduit cabinet. Flat colour blocks with almost no outline: a pale silver-white panel with a lighter top band and a light grey lower band carrying fine thin ribs, one narrow bright scarlet channel stripe and one tiny pale blue indicator square. Two short polished stubs leave on the wall side."
+    }
  ]}
 ];
 
@@ -390,8 +481,8 @@ const ROTS = ["north", "east", "south"];
 function promptFor(riser, slot) {
   const fam = riser.family.style;
   const style = fam === "dubwise" ? STYLE_DUBWISE : STYLE_VE;
-  const view = slot.rot ? VIEW_ROT[slot.rot]
-             : (fam === "dubwise" ? VIEW_PLATE : VIEW_TUBE);
+  // Every riser is a wall attachment now, so there is no single-view branch left.
+  const view = VIEW_ROT[slot.rot];
   return "Draw a single RimWorld game sprite. A reference image from the same mod is attached - match its art style, " +
     "palette, outline weight and level of detail exactly.\n\nSUBJECT: " + riser.p +
     "\n\nVIEW: " + view + (slot.rot ? MATCH : "") +

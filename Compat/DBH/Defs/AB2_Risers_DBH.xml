@@ -21,10 +21,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserPlumbing</defName>
     <label>plumbing riser</label>
-    <description>A plumbing stack that carries water and sewage between levels. Build one and its twin appears on the level above or below, joining the two plumbing networks into one.\n\nWithout a riser each level plumbs separately - pipes cannot cross the rock between bands.</description>
+    <description>A wall-mounted plumbing stack that carries water and sewage between levels. Build one and its twin appears on the level above or below, joining the two plumbing networks into one.\n\nWithout a riser each level plumbs separately - pipes cannot cross the rock between bands.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserPlumbing</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Hygiene</designationCategory>
@@ -46,10 +46,10 @@
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_RiserAirDuct</defName>
     <label>air duct riser</label>
-    <description>A ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two air networks into one.\n\nAir conditioning is otherwise trapped on the level that produced it.</description>
+    <description>A wall-mounted ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two air networks into one.\n\nAir conditioning is otherwise trapped on the level that produced it.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_RiserAirDuct</texPath>
-      <graphicClass>Graphic_Single</graphicClass>
+      <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>
