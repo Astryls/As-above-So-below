@@ -65,6 +65,11 @@ namespace AsAboveSoBelow
 
         private readonly List<int> vertCountsBefore = new List<int>();
 
+        /// <summary>Things already printed during THIS Regenerate pass. Per-instance and
+        /// per-pass, so it never leaks across sections or across maps. See the call site
+        /// for why a multi-cell thing can otherwise elect more than one anchor.</summary>
+        private readonly HashSet<Thing> printedThisPass = new HashSet<Thing>();
+
         private readonly CellTerrain[] adjTerrain = new CellTerrain[8];
 
         private readonly bool[] edgeReach = new bool[8];
@@ -108,6 +113,7 @@ namespace AsAboveSoBelow
                 // sprite printed underneath it. Ordering vs terrain is queue-decided.
                 float fogAlt = AltitudeLayer.FogOfWar.AltitudeFor();
                 bool printed = false;
+                printedThisPass.Clear();
 
                 foreach (IntVec3 c in section.CellRect)
                 {
@@ -197,6 +203,32 @@ namespace AsAboveSoBelow
                             continue;
                         }
                         if (!IsPrintAnchor(t, below, map, bands, terrainGrid, air, drop))
+                        {
+                            continue;
+                        }
+                        // ONE PRINT PER THING PER PASS, unconditionally.
+                        //
+                        // IsPrintAnchor picks the first cell of a multi-cell thing whose
+                        // viewing cell can see it, which is single-valued only when every
+                        // cell of that thing resolves to the SAME drop. It does not: `drop`
+                        // comes from TryResolveVisibleBelow PER VIEWING CELL (§5), so two
+                        // columns over one 2x2 object can descend different distances, each
+                        // then computing a different "first visible cell" and each electing
+                        // itself the anchor.
+                        //
+                        // Reported against Medieval Overhaul's golem formations
+                        // (DankPyon_GolemRock_*, size 2x2, Graphic_Random, drawSize 4x4):
+                        // "drawn four times overlapping" - four cells, four anchors, four
+                        // quads at the same TrueCenter, so the alpha stacks instead of the
+                        // sprite shifting. Any 2x2+ thing is exposed, not just MO's.
+                        //
+                        // Deduping by THING rather than by fixing the anchor rule is
+                        // deliberate: the anchor rule has a real job (a thing whose origin
+                        // cell is hidden but whose far corner is visible must still draw),
+                        // and it is the drop-dependence, not the rule, that is unsound.
+                        // A set membership test is O(1), correct under every drop layout,
+                        // and cannot regress the visible-corner case.
+                        if (!printedThisPass.Add(t))
                         {
                             continue;
                         }
