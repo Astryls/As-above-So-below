@@ -438,9 +438,34 @@ namespace AsAboveSoBelow
             // retract. TryMassFillCoverage asks the fill's own question (does anything draw an
             // outline over this cell, and under whose link rule) and answers false when
             // nothing does, which is what keeps ordinary floors on their full quad.
+            //
+            // ⚠ AND AN ERODED FILL MUST HAVE SOMETHING BEHIND IT, OR IT IS A HOLE.
+            //
+            // This layer's fill IS the backdrop: the viewing cell is see-through terrain,
+            // which is `dontRender`, so vanilla's terrain layer emits only a ShadowMask there
+            // and nothing else paints the cell. Eroding the fill exposed that, and an
+            // uncovered ShadowMask renders as shader garbage - a red rim tracing the mass
+            // outline. The same failure `AirMaskMat` exists to prevent, reintroduced from a
+            // new direction.
+            //
+            // The fix is the one the report proposed: put the ADJACENT GROUND under the rock
+            // instead of leaving a gap. That is also what vanilla shows - a rock's
+            // transparent corners reveal the ground it stands in, never the void - so the
+            // backdrop is not a patch over a hole, it is the correct picture.
+            //
+            // No non-mass neighbour means an INTERIOR cell, where CoverInterior returns full
+            // coverage and the fan is geometrically the quad anyway - so declining to erode
+            // there costs exactly nothing and guarantees a hole can never be emitted.
             if (SectionLayer_ABMountainCap.MassFieldFadeEnabled
-                && SectionLayer_ABMountainCap.TryMassFillCoverage(map, below, massCell, fanCovered))
+                && SectionLayer_ABMountainCap.TryMassFillCoverage(map, below, massCell, fanCovered)
+                && TryBackdropTerrain(map, terrainGrid, below, out CellTerrain backdrop))
             {
+                Material backMat = MaterialFor(map, backdrop);
+                LayerSubMesh backSub = backMat != null ? GetSubMesh(backMat) : null;
+                if (backSub != null)
+                {
+                    AddQuad(backSub, above, altitude, BelowTint);
+                }
                 ABNineFan.AddFan(sub, above.x, above.z, altitude, fanCovered,
                     BelowTint, BelowTintClear);
             }
@@ -522,6 +547,57 @@ namespace AsAboveSoBelow
                 }
             }
             return true;
+        }
+
+        /// <summary>Cardinals before diagonals: a mass edge almost always has an orthogonal
+        /// neighbour on the open side, and taking it keeps the backdrop the ground the rock
+        /// actually abuts rather than something around a corner.</summary>
+        private static readonly IntVec3[] BackdropSearch =
+        {
+            IntVec3.South, IntVec3.East, IntVec3.North, IntVec3.West,
+            IntVec3.South + IntVec3.East, IntVec3.North + IntVec3.East,
+            IntVec3.South + IntVec3.West, IntVec3.North + IntVec3.West
+        };
+
+        /// <summary>
+        /// THE GROUND THE MASS STANDS IN, borrowed from the nearest non-mass neighbour, to be
+        /// laid under an eroded rock fill so the retracted corners show continuous ground
+        /// instead of a hole.
+        ///
+        /// Sampled through CellTerrainAt like any other below cell, so it carries that cell's
+        /// own snow and pollution and matches what the neighbouring column actually draws.
+        /// Ordering against the fill on top is settled by render QUEUE (renderPrecedence),
+        /// not altitude - generated stone sits at 190+, above soil and gravel - which is the
+        /// same mechanism vanilla uses to stack terrain, so no altitude bias is wanted here.
+        ///
+        /// Returns false when every neighbour is mass. That is an INTERIOR cell, where the
+        /// erosion is a no-op anyway (full coverage), so declining costs nothing and makes a
+        /// hole unrepresentable rather than merely unlikely.
+        /// </summary>
+        private bool TryBackdropTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
+            out CellTerrain backdrop)
+        {
+            backdrop = default(CellTerrain);
+            for (int i = 0; i < BackdropSearch.Length; i++)
+            {
+                IntVec3 n = below + BackdropSearch[i];
+                if (!n.InBounds(map) || ABBands.InGutter(map, n))
+                {
+                    continue;
+                }
+                if (SectionLayer_ABMountainCap.CarriesMass(map, n))
+                {
+                    continue;
+                }
+                TerrainDef t = terrainGrid.TerrainAt(n);
+                if (t == null || t.dontRender)
+                {
+                    continue; // see-through or unrendered: no better a backdrop than the hole
+                }
+                backdrop = CellTerrainAt(map, terrainGrid, n);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Vanilla's edge-fade pass: every distinct neighbouring terrain allowed to

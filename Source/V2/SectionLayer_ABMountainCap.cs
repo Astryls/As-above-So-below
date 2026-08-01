@@ -1608,6 +1608,27 @@ namespace AsAboveSoBelow
             return MassRockAt(map, c) != null;
         }
 
+        /// <summary>Cheap "is this cell mass" for neighbour SCANS - the same two
+        /// representations <see cref="MassRockAt"/> resolves (a rock edifice, or sky-band
+        /// AB_MountainTop terrain) without the band lookup and adjacency walk it does in
+        /// order to NAME the stone. Used when hunting for a non-mass neighbour, where the
+        /// yes/no is the whole question and the rock def is not wanted.</summary>
+        internal static bool CarriesMass(Map map, IntVec3 c)
+        {
+            if (map == null || !c.InBounds(map))
+            {
+                return false;
+            }
+            Building ed = map.edificeGrid[c];
+            if (ed != null
+                && (ed.def.mineable
+                    || (ed.def.building != null && ed.def.building.isNaturalRock)))
+            {
+                return true;
+            }
+            return map.terrainGrid.TerrainAt(c) == ABDefOf.AB_MountainTop;
+        }
+
         /// <summary>Vanilla Printer_Plane tilts every plane: the north (z+) verts
         /// sit +0.01 higher, giving deterministic overlap at row seams. Without it,
         /// horizontal seam dashes appear at cell bottoms (run-19).</summary>
