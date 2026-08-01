@@ -40,29 +40,60 @@ namespace AsAboveSoBelow
         ///   size  slot  gutter  cells/band  playable  waste
         ///   126    128     2       16,128     15,876    1.6%
         ///   190    192     2       36,480     36,100    1.0%
-        ///   250    256     6       64,000     62,500    2.3%   &lt;- vanilla Medium, exactly
-        ///   300    320    20       96,000     90,000    6.3%   &lt;- vanilla Large, exactly
+        ///   254    256     2       65,024     64,516    0.8%
         ///
-        /// Paying 2.3% and 6.3% of the cells buys the two sizes players actually recognise
-        /// from vanilla's map-size list. That is worth more than the rounding.
+        /// ⚠ EVERY TIER IS NOW `slot - 2`, WHICH IS WHY THE LADDER LOOKS LIKE THIS.
+        /// There is exactly ONE maximally efficient height per 64-step - the one that sits
+        /// two rows under a slot boundary - so the efficient sizes are 62, 126, 190, 254,
+        /// 318, spaced exactly 64 apart. Anchoring on 190 therefore fixes the whole ladder;
+        /// there is nothing efficient BETWEEN these numbers, only heights that pay for a
+        /// slot they do not fill.
+        ///
+        /// The uniformity is the point, and it is worth more than the two vanilla-parity
+        /// numbers it replaced: every tier now has the same 2-row gutter and the same 3-cell
+        /// band-to-band gap, so gutter behaviour no longer changes with the player's size
+        /// pick. That used to be a hidden variable in our own testing - a gutter-crossing
+        /// bug reproduced at 126 and 190 and was GEOMETRICALLY IMPOSSIBLE at 250 (gap 7) and
+        /// 300 (gap 21), which is the trap §30a walked into.
+        ///
+        /// ⚠ WHAT REPLACING 250 AND 300 COST, STATED SO IT IS NOT REDISCOVERED AS A BUG:
+        ///  - 250 and 300 were vanilla's Medium and Large EXACTLY, and players recognise
+        ///    those numbers. 254 and 318 do not appear in vanilla's list. That parity is the
+        ///    one real thing given up here.
+        ///  - 254 is otherwise a strict upgrade on 250: 1.6% more cells per band buys
+        ///    playable 97.7% -> 99.2% and gutter 6 rows -> 2.
+        ///  - 318 would likewise beat 300 (93.8% -> 99.4%, reclaiming 18 dead rows a band)
+        ///    but is NOT offered: two levels of 318 is 203,520 cells, which exceeds even the
+        ///    old 192,000 budget. A second efficient size above 190 cannot exist while the
+        ///    budget goes DOWN. See CellBudget.
+        ///  - the wide gutter those tiers carried was genuine safety (§14: "a spatial helper
+        ///    that reaches 22 rows will cross a 2-row gutter"). At gap 3 every tier is now
+        ///    inside the reach of a foreign radius helper. Ours is clamped (§30a,
+        ///    ABPowerBandScope); a foreign one is not, and this is where that will show up.
         ///
         /// ⚠ 200 IS THE ONE NUMBER TO AVOID, and it is instructive: it lands just PAST the
         /// 192 boundary, so slot 256, gutter 56, 51,200 cells for 40,000 playable - 21.9%
         /// wasted, the worst point on the curve. Waste is a SAWTOOTH in size, not a smooth
         /// function of it, so recompute the table before ever adding a size.
         ///
-        /// ⚠ A WIDE GUTTER IS A FEATURE, NOT PURELY WASTE. §14 records that "a spatial
-        /// helper that reaches 22 rows will cross a 2-row gutter" - the root of the
-        /// things-in-the-void class (§15a) and of the drag-line ordering bug (§4). The
-        /// gutter is 6 rows at 250 and 20 rows at 300, so those tiers are materially harder
-        /// to punch a spatial helper through than the old 2-row minimum. Those cells were
-        /// being rounded away to slot alignment regardless; this spends them on safety.
+        /// ⚠ 62 IS THE MISSING FOURTH TIER AND IT IS DELIBERATELY ABSENT. It is efficient
+        /// (slot 64, gutter 2) and would extend the ladder downward, but it yields 3,844
+        /// playable cells - 11% of a 190 band - and `ABBandSafety.SeamMarginFor` already
+        /// takes 4 rows off each end, 13% of the band. 126 ALREADY produced "could not find
+        /// cell to generate at" from two scatterers, which is why that margin became derived
+        /// rather than a flat 10. Half of 126 is expected to starve generation, not merely
+        /// play cramped. Do not add it without measuring scatterer failures first.
+        ///
+        /// LEGACY SIZES. 250 and 300 are no longer OFFERED, but existing colonies on them
+        /// load and play normally: `bandHeight` is scribed per map and `SlotFor` is generic
+        /// arithmetic, not a table lookup. This array is consulted only by the new-game
+        /// chooser, Clamp and PlannedSize - never on the load path.
         ///
         /// This all matters because 1.6's PathGridJob is an IJobParallelFor over EVERY cell
         /// of the map, so the stacked total - not the per-level size - is what the
         /// pathfinder pays on a hot per-request path.
         /// </summary>
-        public static readonly int[] Sizes = { 126, 190, 250, 300 };
+        public static readonly int[] Sizes = { 126, 190, 254 };
 
         // ================= THE LEVEL PLAN =================
         // Levels are chosen per colony on the advanced-config screen, and the constraint is
@@ -71,20 +102,25 @@ namespace AsAboveSoBelow
         // stacked total is what the pathfinder pays - a player picking 7 levels is not
         // asking for 7x the cost, they are asking for the same budget sliced differently.
         //
-        // What 192,000 buys (per-level size x levels = stacked cells):
-        //   7 x 126 = 112,896   <- the full seven levels, for well under one 250 colony
-        //   5 x 190 = 182,400
-        //   3 x 250 = 192,000   <- lands EXACTLY on the budget
-        //   2 x 300 = 192,000   <- also exactly; these two tiers are what SET the figure
-        //   6 x 190 = 218,880   <- refused
-        //   4 x 250 = 256,000   <- refused
-        //   3 x 300 = 288,000   <- refused (the footgun the budget exists to refuse)
+        // What 146,000 buys (per-level size x levels = stacked cells):
+        //   7 x 126 = 112,896   <- the full seven levels, for 77% of the budget
+        //   4 x 190 = 145,920   <- lands on the budget; this is what SETS the figure
+        //   2 x 254 = 130,048
+        //   8 x 126 = 129,024   <- refused by the SEVEN-LEVEL CAP, not by the budget
+        //   5 x 190 = 182,400   <- refused
+        //   3 x 254 = 195,072   <- refused
+        //   2 x 318 = 203,520   <- refused, and this is why 318 is not an offered size
         //
-        // The ladder that falls out is 7 / 5 / 3 / 2 levels, monotone in size, and EVERY
-        // tier still yields real z-levels. A tier whose only affordable plan is one level
-        // would be a z-level mod option with no z, which is why 350 and 382 are not offered:
-        // 350 needs 134,400 cells per band and 382 needs 146,688, so a second level costs
-        // more than this entire budget.
+        // The ladder that falls out is 7 / 4 / 2 levels, monotone in size, and EVERY tier
+        // still yields real z-levels. A tier whose only affordable plan is one level would
+        // be a z-level mod option with no z, which is what rules out 318 and everything
+        // above it.
+        //
+        // ⚠ THE SPREAD IS THE POINT. Totals now run 112,896 / 145,920 / 130,048 - a 1.29x
+        // spread, where the old ladder ran 112,896 to 192,000, a 1.70x spread whose ORDER
+        // was counterintuitive: the tier with SEVEN levels was the cheapest and the one with
+        // TWO was the most expensive. Nobody guesses that. Keeping every tier within ~30% of
+        // the same cost is what lets the size pick be about shape rather than about speed.
         // ==================================================
 
         public const int MaxUpperLevels = 3;
@@ -93,14 +129,35 @@ namespace AsAboveSoBelow
 
         /// <summary>Total cells a banded colony may allocate.
         ///
-        /// 192,000 is not a round number picked by feel: it is simultaneously 3 x 64,000
-        /// (250 at three levels) and 2 x 96,000 (300 at two), so both large tiers land dead
-        /// on it. A budget that exactly accommodates the two sizes it is meant to permit is
-        /// tuned rather than guessed.
+        /// 146,000 is set by 4 x 190 = 145,920, the largest plan on the offered ladder.
         ///
-        /// Up from 146,000 (+31.5%). The previous figure was set by 4 x 190 = 145,920 back
-        /// when 190 was the largest tier offered.</summary>
-        public const int CellBudget = 192000;
+        /// ⚠ DOWN FROM 192,000 (-24%), AND THE OLD FIGURE WAS SET BY A TIER NOBODY HAD EVER
+        /// GENERATED. 192,000 existed because it is simultaneously 3 x 64,000 (250 at three
+        /// levels) and 2 x 96,000 (300 at two) - so the ceiling every player carried was
+        /// dictated by the heaviest tier on the list, and 300 was still listed as unverified
+        /// in §13 when it was removed. Three separate lines of evidence say that was too
+        /// high:
+        ///
+        ///  1. IT EXCEEDED EVERY MAP VANILLA SHIPS. 192,000 is 2.13x vanilla Large (90,000)
+        ///     and 1.20x vanilla's 400x400 (160,000), which is already the option players
+        ///     are warned away from. 146,000 is 1.62x Large and 0.91x that 400x400.
+        ///
+        ///  2. GENERATION COST TRACKS BAND SIZE, NOT TOTAL CELLS, so the budget was
+        ///     governing the wrong axis. Measured, same tile class: #238 at 5 x 190 =
+        ///     182,400 cells took 8.3 s; #236 at 3 x 250 = 192,000 cells took 12.4 s. Five
+        ///     percent more cells, forty-nine percent more time, because FillRock is
+        ///     superlinear in BAND size (1.75x cells -> 2.87x time). Dropping the 250 and
+        ///     300 tiers removes the slowest generation cases outright.
+        ///
+        ///  3. THE CEILING WAS ONLY REACHABLE BY THE TWO WORST TIERS. 126 never came within
+        ///     41% of it.
+        ///
+        /// ⚠ WHAT THIS IS *NOT* BASED ON: measured framerate. §10 records that the 59.6 fps
+        /// at 96 pawns benchmark measures steady state, while our cost lives in
+        /// section-regeneration BURSTS which have never been profiled. This figure rests on
+        /// generation timings and the vanilla comparison. If burst cost is ever measured,
+        /// revisit whether even 146,000 is right.</summary>
+        public const int CellBudget = 146000;
 
         public static int UpperLevels =>
             Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
