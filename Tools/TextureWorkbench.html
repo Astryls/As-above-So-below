@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As above, So below II — Riser Texture Workbench</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+  --tx:#e6edf3; --dim:#8b98a5; --accent:#f0883e; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0e1116 70%,rgba(14,17,22,.85));
+  border-bottom:1px solid var(--line);padding:14px 22px}
+h1{margin:0;font-size:17px;letter-spacing:.3px}
+h1 span{color:var(--accent)}
+.sub{color:var(--dim);font-size:12px;margin-top:3px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:11px}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;
+  padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+button:hover{border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:600}
+button.primary:hover{filter:brightness(1.12)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.pill.on{border-color:var(--ok);color:var(--ok)}
+.pill.off{border-color:var(--bad);color:var(--bad)}
+#status{font-size:12px;color:var(--dim);margin-left:auto}
+main{padding:20px 22px 80px;max-width:1500px;margin:0 auto}
+.grp{margin:26px 0 10px;display:flex;align-items:baseline;gap:10px}
+.grp h2{margin:0;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--accent)}
+.grp .meta{font-size:12px;color:var(--dim)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card.done{border-color:#26502f}
+.chead{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:flex-start}
+.chead .t{flex:1;min-width:0}
+.chead b{font-size:14px}
+.defn{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:2px;word-break:break-all}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+.tag.rot{border-color:#3b5bdb;color:#8ba4ff}
+.tag.gate{border-color:#5a4a1e;color:#d8b04a}
+.cbody{padding:12px 14px}
+.slots{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.slot{border:1px dashed var(--line);border-radius:8px;padding:7px;text-align:center;background:var(--panel2);
+  transition:.12s;cursor:pointer;position:relative}
+.slot:hover{border-color:var(--accent)}
+.slot.over{border-color:var(--accent);background:#2a1d10}
+.slot.has{border-style:solid;border-color:#2f5d38}
+.slot .ph{height:74px;display:flex;align-items:center;justify-content:center;color:#4d5866;font-size:26px}
+.slot img{width:100%;height:74px;object-fit:contain;image-rendering:pixelated;
+  background:repeating-conic-gradient(#20262e 0% 25%,#171c23 0% 50%) 50%/12px 12px}
+.slot .nm{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;word-break:break-all}
+.slot .px{font-size:9.5px;color:#5a6672}
+.path{font-family:var(--mono);font-size:10.5px;color:#6e7d8c;margin-top:10px;word-break:break-all}
+.prompt{margin-top:11px;border-top:1px solid var(--line);padding-top:10px}
+.prompt .ph2{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.prompt .ph2 span{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);flex:1}
+textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line);border-radius:6px;
+  font-family:var(--mono);font-size:11px;line-height:1.5;padding:9px;resize:vertical;min-height:104px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:13px 16px;margin-bottom:18px;font-size:13px}
+.note b{color:var(--accent)}
+.note code{font-family:var(--mono);font-size:12px;background:#0b0e13;padding:1px 5px;border-radius:3px}
+.note ol{margin:8px 0 0;padding-left:20px}.note li{margin:4px 0}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel2);
+  border:1px solid var(--accent);border-radius:8px;padding:10px 20px;font-size:13px;opacity:0;
+  transition:.22s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+#drop{position:fixed;inset:0;background:rgba(240,136,62,.13);border:3px dashed var(--accent);
+  z-index:100;display:none;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+#drop.on{display:flex}
+</style>
+</head>
+<body>
+<header>
+  <h1>As above, So below II — <span>Riser Texture Workbench</span></h1>
+  <div class="sub">Cross-level utility risers · one per network type · 15 buildings · <span id="fcount">0</span> texture files</div>
+  <div class="bar">
+    <button class="primary" id="connect">Connect mod folder…</button>
+    <button id="rescan" disabled>Rescan</button>
+    <button id="copyall">Copy all prompts</button>
+    <span class="pill" id="fsapi"></span>
+    <span id="status">Not connected — previews and saving are disabled.</span>
+  </div>
+</header>
+
+<main>
+<div class="note">
+  <b>How to use.</b>
+  <ol>
+    <li>Click <b>Connect mod folder…</b> and pick this mod's root folder — the one containing <code>About/</code> and <code>Textures/</code> (folder name <code>50b4332c2547</code>). Grant write permission.</li>
+    <li>Copy a prompt into Nano Banana (Gemini image gen). Ask for a <b>transparent PNG</b>.</li>
+    <li>Drag the result onto its slot — it is written straight to <code>Textures/Things/Building/Risers/</code> under the exact filename RimWorld expects. Drop anywhere on the page to auto-match many files by name at once.</li>
+  </ol>
+  <div style="margin-top:9px;color:var(--dim);font-size:12px">
+    Saving needs the File System Access API (Chrome / Edge). In other browsers the page still works as a prompt reference and will offer a download with the correct filename instead.
+  </div>
+</div>
+
+<div class="note" style="border-left-color:#3b5bdb">
+  <b>Rotation.</b> Risers marked <span class="tag rot">rotatable ×4</span> are wall-mounted cabinets and need four
+  files (<code>_north _east _south _west</code>) via <code>Graphic_Multi</code> — the mounting face must read correctly
+  from every side, so the box sits against the wall edge with its cable run entering from the wall.
+  Everything else is a floor pipe stub: rotation is meaningless for a vertical pipe, so it is one file via
+  <code>Graphic_Single</code> and RimWorld derives the build-menu icon automatically.
+</div>
+
+<div id="app"></div>
+</main>
+
+<div id="drop">Drop PNGs — matched to slots by filename</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DIR = "Textures/Things/Building/Risers";
+const STYLE = "RimWorld colony-sim building sprite, top-down three-quarter orthographic view, hand-painted 2D game art, muted desaturated palette, soft painted shading with a subtle dark outline, no cast shadow, no ground, no background, fully transparent background, centered, fills the frame edge to edge, single object only, no text, no UI, no border.";
+
+const FAMILIES = [
+ {id:"vanilla", name:"Vanilla power", meta:"RimWorld Core — PowerNetMaker flood fill", risers:[
+   {n:"Power distribution riser", d:"AB_RiserPower", f:"AB_RiserPower", gate:"Electricity", gateNote:"vanilla research", net:"Power conduit", rot:true,
+    p:"A wall-mounted industrial electrical distribution box, roughly 1 metre wide, dull galvanised steel casing with a hinged grey access panel, two heavy black insulated power cables entering from the wall side and a thick cable bundle running down out of the base into the floor, small yellow-and-black hazard stripe along the bottom lip, one tiny green indicator lamp, faint grime and scuffed paint at the corners."}
+ ]},
+ {id:"dbh", name:"Dubs Bad Hygiene", meta:"HygienePipeMapComp.RebuildPipeGrid — 2 of 4 PipeTypes are actually used", risers:[
+   {n:"Plumbing riser", d:"AB_RiserPlumbing", f:"AB_RiserPlumbing", gate:"Plumbing", gateNote:'MayRequire="dbhlitemode" — matches their own pipe', net:"PipeType.Sewage", rot:false,
+    p:"A vertical plumbing stack stub rising out of a floor, one metre square footprint, off-white PVC pipe about 20cm across with a brass union collar and a bolted circular floor flange, a small brass shutoff valve with a red handle on the side, faint water staining and lime scale around the flange, clean domestic-utility look."},
+   {n:"Air-con duct riser", d:"AB_RiserAirDuct", f:"AB_RiserAirDuct", gate:"MultiSplitAirCon", gateNote:'MayRequire="dbhlitemode" — matches their own duct', net:"PipeType.Air", rot:false,
+    p:"A vertical galvanised steel air-conditioning duct stub rising through a floor, square cross-section with rolled seams and a riveted rectangular floor collar, pale silver-grey zinc finish with faint mottling, two small copper refrigerant lines clipped to one side, a narrow louvred inspection grille on the front face."}
+ ]},
+ {id:"rimefeller", name:"Rimefeller", meta:"UniversalPipeMapComp.RebuildPipeGrid — 1 PipeType", risers:[
+   {n:"Oil pipeline riser", d:"AB_RiserOil", f:"AB_RiserOil", gate:"OilDrilling", gateNote:"matches their OilPipeline", net:"PipeType.Oil", rot:false,
+    p:"A heavy industrial crude-oil riser pipe coming up through a floor, thick dark olive-green steel pipe with a bolted flange joint ring at mid height, a chunky black gate valve with a rusted red handwheel on one side, dark oil staining and drips down the pipe body, grimy petrochemical refinery aesthetic."}
+ ]},
+ {id:"rimatomics", name:"Dubs Rimatomics", meta:"UniversalPipeMapComp.RebuildPipeGrid — 5 PipeTypes, gated by ResearchStepDef.Unlocks", risers:[
+   {n:"Cold water riser", d:"AB_RiserColdWater", f:"AB_RiserColdWater", gate:"BuildReactorTurbine", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.ColdWater", rot:false,
+    p:"A vertical cold-water feed pipe rising through a floor, polished stainless steel about 25cm across with a wide bolted floor flange, a painted mid-blue identification band near the top, condensation beading and a faint frost sheen on the metal, a small pressure gauge on a short stub arm, clean power-plant service aesthetic."},
+   {n:"Steam riser", d:"AB_RiserSteam", f:"AB_RiserSteam", gate:"BuildReactorTurbine", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Steam", rot:false,
+    p:"A vertical high-pressure steam pipe rising through a floor, wrapped in off-white lagging insulation held by aluminium banding straps, one section of bare hot steel exposed at a flanged joint showing dull heat discolouration, a painted deep red identification band, a small brass safety relief valve on the side, faint heat haze, heavy industrial powerplant look."},
+   {n:"Coolant riser", d:"AB_RiserCoolant", f:"AB_RiserCoolant", gate:"TestForCore", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Cooling", rot:false,
+    p:"A vertical reactor coolant pipe rising through a floor, brushed steel with a painted teal-cyan identification band and a bolted circular floor flange, a compact inline pump housing bulging on one side with cooling fins, a small round sight glass showing pale blue-green fluid, cold clinical nuclear-plant aesthetic."},
+   {n:"High voltage riser", d:"AB_RiserHighVoltage", f:"AB_RiserHighVoltage", gate:"BuildReactorCooling", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.HighVoltage", rot:true,
+    p:"A wall-mounted high-voltage busbar cabinet, dark grey steel enclosure with heavy ribbed brown ceramic standoff insulators on the exposed face, thick armoured cable trunking entering from the wall side and dropping out of the base into the floor, a bold orange-and-black high-voltage warning triangle plate, heavy hinges and chunky latch bolts, industrial substation feel."},
+   {n:"Console loom riser", d:"AB_RiserLoom", f:"AB_RiserLoom", gate:"BuildReactorCooling", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Loom", rot:true,
+    p:"A wall-mounted control-cable junction cabinet, slim pale grey steel box with a hinged front panel left slightly ajar, a dense bundle of thin colour-coded control wires in green blue and yellow looping out of the wall side and dropping into the floor through a rubber grommet, a small row of tiny amber status LEDs and a printed numbered label strip, tidy reactor-instrumentation aesthetic."}
+ ]},
+ {id:"vche", name:"Vanilla Chemfuel Expanded", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Chemfuel riser", d:"AB_RiserChemfuel", f:"AB_RiserChemfuel", gate:"BiofuelRefining", gateNote:"matches VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:false,
+    p:"A vertical chemfuel transfer pipe rising through a floor, matte industrial pipe painted warm amber-orange with a bolted steel floor flange, a small inline sight glass showing glowing amber liquid, a stencilled black flammable diamond symbol on the body, faint scorch and fuel staining near the base, gritty vanilla-RimWorld industrial style."},
+   {n:"Deepchem riser", d:"AB_RiserDeepchem", f:"AB_RiserDeepchem", gate:"BiofuelRefining", gateNote:"matches VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:false,
+    p:"A vertical raw deepchem extraction pipe rising through a floor, dark gunmetal steel with a deep violet-purple painted identification band, a heavy bolted floor flange crusted with dried purple chemical residue, a small armoured sight port glowing faint violet, corroded pitting on the lower body, raw unrefined petrochemical look."}
+ ]},
+ {id:"vte", name:"Vanilla Temperature Expanded", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Vent duct riser", d:"AB_RiserVentDuct", f:"AB_RiserVentDuct", gate:"VTE_HVAC", gateNote:"matches VTE_AirDuct", net:"VTE_EfficiencyNet", rot:false,
+    p:"A vertical HVAC vent duct stub rising through a floor, clean white powder-coated sheet metal with a square cross-section and a neat riveted floor collar, a chrome louvred vent grille on the front face, a slim digital temperature readout panel showing pale blue digits, crisp modern climate-control aesthetic, very little wear."}
+ ]},
+ {id:"luci", name:"Ushankas Luciferium Expansion", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Scarlet sludge riser", d:"AB_RiserScarletSludge", f:"AB_RiserScarletSludge", gate:"BasicMechanitesUnderstanding", gateNote:"matches USH_UndergroundScarletPipe", net:"ScarletNet", rot:false,
+    p:"A vertical sludge transfer pipe rising through a floor, dark iron pipe heavily stained with thick deep crimson-red residue running down its length, a bolted floor flange with congealed red sludge pooled around it, a clouded sight glass showing sluggish dark red fluid, faint sickly red glow from within the glass, unsettling biotech-industrial look."},
+   {n:"Compressed sludge riser", d:"AB_RiserCompressedSludge", f:"AB_RiserCompressedSludge", gate:"ScarlettRefining", gateNote:"matches USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:false,
+    p:"A vertical high-pressure sludge pipe rising through a floor, reinforced steel body wrapped in tight banded pressure rings, a large round brass pressure gauge on a stub arm with its needle in the red zone, deep crimson identification band, faint red weeping at one flange bolt, heavy reinforced pressurised-vessel aesthetic."},
+   {n:"Mechanites riser", d:"AB_RiserMechanites", f:"AB_RiserMechanites", gate:"ScarlettRefining", gateNote:"matches USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:false,
+    p:"A vertical mechanite transfer conduit rising through a floor, sleek polished silver-white medical-grade tube with fine ribbed segments, a glowing bright scarlet fluid channel visible through a clear armoured window, thin chrome containment bands, a small sterile blue indicator lamp, clean glitterworld nanotech aesthetic contrasting with the red contents."}
+ ]}
+];
+
+const ROTS = ["north","east","south","west"];
+const PX = 256;
+
+/* ---------- build the slot list ---------- */
+const ALL = [];
+FAMILIES.forEach(fam => fam.risers.forEach(r => {
+  r.family = fam;
+  r.slots = r.rot
+    ? ROTS.map(o => ({file:`${r.f}_${o}.png`, label:o, rot:o}))
+    : [{file:`${r.f}.png`, label:"single", rot:null}];
+  r.slots.forEach(s => { s.path = `${DIR}/${s.file}`; s.riser = r; ALL.push(s); });
+}));
+document.getElementById("fcount").textContent = ALL.length;
+
+/* ---------- render ---------- */
+const app = document.getElementById("app");
+FAMILIES.forEach(fam => {
+  const n = fam.risers.reduce((a,r)=>a+r.slots.length,0);
+  const g = document.createElement("div");
+  g.innerHTML = `<div class="grp"><h2>${fam.name}</h2>
+    <span class="meta">${fam.risers.length} riser${fam.risers.length>1?"s":""} · ${n} file${n>1?"s":""} · ${fam.meta}</span></div>
+    <div class="cards" id="c_${fam.id}"></div>`;
+  app.appendChild(g);
+  const wrap = g.querySelector("#c_"+fam.id);
+  fam.risers.forEach(r => {
+    const c = document.createElement("div");
+    c.className = "card"; r.el = c;
+    c.innerHTML = `
+      <div class="chead"><div class="t">
+        <b>${r.n}</b>
+        <div class="defn">${r.d}</div>
+        <div class="tags">
+          <span class="tag ${r.rot?"rot":""}">${r.rot?"rotatable ×4 · Graphic_Multi":"Graphic_Single"}</span>
+          <span class="tag gate">gate: ${r.gate}</span>
+          <span class="tag">${r.net}</span>
+        </div>
+      </div></div>
+      <div class="cbody">
+        <div class="slots"></div>
+        <div class="path">${DIR}/ &nbsp;·&nbsp; ${PX}×${PX}px &nbsp;·&nbsp; ${r.gateNote}</div>
+        <div class="prompt">
+          <div class="ph2"><span>Nano Banana prompt</span>
+            <button data-copy="${r.d}">Copy</button></div>
+          <textarea id="p_${r.d}" readonly>${(r.rot
+            ? `${r.p} The box is mounted flat against a wall running along the TOP edge of the frame, viewed from above; leave the lower half of the frame empty and transparent. Produce this as ONE image; I will generate the other three rotations separately. ${STYLE} Output a ${PX}x${PX} pixel PNG with a transparent background.`
+            : `${r.p} ${STYLE} Output a ${PX}x${PX} pixel PNG with a transparent background.`)}</textarea>
+        </div>
+      </div>`;
+    const sw = c.querySelector(".slots");
+    r.slots.forEach(s => {
+      const d = document.createElement("div");
+      d.className = "slot"; s.el = d;
+      d.innerHTML = `<div class="ph">+</div><div class="nm">${s.file}</div><div class="px">${PX}×${PX}</div>`;
+      d.onclick = () => pick(s);
+      d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
+      d.ondragleave = () => d.classList.remove("over");
+      d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
+        const f = e.dataTransfer.files[0]; if (f) save(s, f); };
+      sw.appendChild(d);
+    });
+    wrap.appendChild(c);
+  });
+});
+
+document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => {
+  navigator.clipboard.writeText(document.getElementById("p_"+b.dataset.copy).value);
+  toast("Prompt copied");
+});
+
+/* ---------- file system ---------- */
+let root = null;
+const hasFS = "showDirectoryPicker" in window;
+const fsPill = document.getElementById("fsapi");
+fsPill.textContent = hasFS ? "File System API available" : "No File System API — download mode";
+fsPill.className = "pill " + (hasFS ? "on" : "off");
+
+document.getElementById("connect").onclick = async () => {
+  if (!hasFS) { toast("Use Chrome or Edge to save directly"); return; }
+  try {
+    root = await window.showDirectoryPicker({ mode:"readwrite" });
+    let ok = true;
+    try { await root.getDirectoryHandle("About"); } catch { ok = false; }
+    if (!ok && !confirm("No About/ folder here — this may not be the mod root. Continue anyway?")) { root = null; return; }
+    document.getElementById("status").textContent = "Connected to " + root.name;
+    document.getElementById("rescan").disabled = false;
+    scan();
+  } catch(e) { if (e.name !== "AbortError") toast("Could not open folder"); }
+};
+document.getElementById("rescan").onclick = scan;
+
+async function dirFor(create) {
+  let h = root;
+  for (const p of DIR.split("/")) h = await h.getDirectoryHandle(p, { create });
+  return h;
+}
+async function scan() {
+  if (!root) return;
+  let d; try { d = await dirFor(false); } catch { markAll(); toast("No Risers folder yet — it is created on first save"); return; }
+  for (const s of ALL) {
+    try { const fh = await d.getFileHandle(s.file); show(s, await fh.getFile()); }
+    catch { clearSlot(s); }
+  }
+  markAll();
+}
+async function save(s, file) {
+  if (!/\.png$/i.test(file.name)) { toast("PNG files only"); return; }
+  if (!root) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = s.file; a.click();
+    toast("Downloaded as " + s.file + " — move it into " + DIR); show(s, file); return;
+  }
+  try {
+    const d = await dirFor(true);
+    const fh = await d.getFileHandle(s.file, { create:true });
+    const w = await fh.createWritable();
+    await w.write(await file.arrayBuffer()); await w.close();
+    show(s, file); markAll(); toast("Saved " + s.file);
+  } catch(e) { toast("Save failed: " + e.message); }
+}
+function pick(s) {
+  const i = document.createElement("input");
+  i.type = "file"; i.accept = "image/png";
+  i.onchange = () => i.files[0] && save(s, i.files[0]);
+  i.click();
+}
+function show(s, file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const warn = (img.width !== img.height) ? " — NOT SQUARE" : "";
+    s.el.classList.add("has");
+    s.el.innerHTML = `<img src="${url}"><div class="nm">${s.file}</div>
+      <div class="px" style="color:${warn?"var(--bad)":"var(--ok)"}">${img.width}×${img.height}${warn}</div>`;
+    rebind(s);
+  };
+  img.src = url;
+  s.done = true;
+}
+function clearSlot(s) {
+  s.done = false;
+  s.el.classList.remove("has");
+  s.el.innerHTML = `<div class="ph">+</div><div class="nm">${s.file}</div><div class="px">${PX}×${PX}</div>`;
+  rebind(s);
+}
+function rebind(s) {
+  const d = s.el;
+  d.onclick = () => pick(s);
+  d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
+  d.ondragleave = () => d.classList.remove("over");
+  d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
+    const f = e.dataTransfer.files[0]; if (f) save(s, f); };
+}
+function markAll() {
+  FAMILIES.forEach(f => f.risers.forEach(r =>
+    r.el.classList.toggle("done", r.slots.every(s => s.done))));
+  const n = ALL.filter(s => s.done).length;
+  document.getElementById("fcount").textContent = `${n} / ${ALL.length}`;
+}
+
+/* ---------- bulk drop ---------- */
+const dz = document.getElementById("drop");
+let dc = 0;
+addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dc++; dz.classList.add("on"); } });
+addEventListener("dragleave", () => { if (--dc <= 0) { dc = 0; dz.classList.remove("on"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", async e => {
+  e.preventDefault(); dc = 0; dz.classList.remove("on");
+  const files = [...e.dataTransfer.files];
+  let hit = 0;
+  for (const f of files) {
+    const s = ALL.find(x => x.file.toLowerCase() === f.name.toLowerCase());
+    if (s) { await save(s, f); hit++; }
+  }
+  if (files.length) toast(hit ? `Matched ${hit} of ${files.length} by filename` : "No filenames matched a slot");
+});
+
+document.getElementById("copyall").onclick = () => {
+  const t = FAMILIES.map(f => `##### ${f.name} #####\n\n` + f.risers.map(r =>
+    `--- ${r.n}  (${r.d})  ${r.rot?"[4 rotations]":"[single]"} ---\nFiles: ${r.slots.map(s=>s.file).join(", ")}\n\n${document.getElementById("p_"+r.d).value}\n`
+  ).join("\n")).join("\n");
+  navigator.clipboard.writeText(t);
+  toast("All 15 prompts copied");
+};
+
+const tEl = document.getElementById("toast");
+let tT;
+function toast(m) { tEl.textContent = m; tEl.classList.add("show");
+  clearTimeout(tT); tT = setTimeout(() => tEl.classList.remove("show"), 2100); }
+</script>
+</body>
+</html>
