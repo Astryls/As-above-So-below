@@ -93,6 +93,23 @@ namespace AsAboveSoBelow
             Log.Warning(ABLog.Tag + " combat logging " + (ABV2Debug.LogCombat ? "ON" : "OFF"));
         }
 
+        /// <summary>A/B for the retracting rock field. OFF = the historical full-cell opaque
+        /// quad, which squares off the mass silhouette past its own black outline once per
+        /// level; ON = the fill eroded to the tile's own link rule so it hides under the art.
+        /// Flips all three emitters at once (cap in-band, cross-level, below-terrain base) -
+        /// they are one look and splitting the switch would invite half-fixing it.</summary>
+        [DebugAction("As above", "AB2: toggle mass field fade", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleMassFieldFade()
+        {
+            SectionLayer_ABMountainCap.MassFieldFadeEnabled =
+                !SectionLayer_ABMountainCap.MassFieldFadeEnabled;
+            Messages.Message(
+                "AB2: mass field fade "
+                    + (SectionLayer_ABMountainCap.MassFieldFadeEnabled ? "ON (retracts under the outline)" : "OFF (full-cell square)"),
+                MessageTypeDefOf.TaskCompletion, false);
+            V2ApplyBisect();
+        }
+
         [DebugAction("As above", "AB2: bisect - toggle below terrain", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2ToggleBelowTerrain()
         {

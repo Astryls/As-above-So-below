@@ -311,6 +311,23 @@ namespace AsAboveSoBelow
             return clone;
         }
 
+        /// <summary>
+        /// DEV A/B SWITCH (debug action "AB2: toggle mass field fade") for the retracting
+        /// field.
+        ///
+        /// OFF restores the historical behaviour: the rock field is a full-cell opaque quad.
+        /// ON erodes it to the same neighbour rule the atlas tile's link mask uses, so the
+        /// fill ends underneath the stylised outline instead of squaring it off.
+        ///
+        /// The reported symptom, from a night shot of a multi-level mountain: "at the
+        /// mountain edges we get both the stylized black border of mineable rock AND the
+        /// square texture", compounding once per level because every level draws its own
+        /// field. The cause is that vanilla rock is ONLY the atlas tile - its transparent
+        /// rounded corners are the silhouette - while we draw an opaque quad underneath and
+        /// fill those corners back in.
+        /// </summary>
+        internal static bool MassFieldFadeEnabled = true;
+
         /// <summary>Field clones: the rock's ROUGH TERRAIN material (world-position
         /// sampled - genuinely textured at any scale, where the atlas' fully-linked
         /// mask-15 tile is near-flat; the run-25 lesson relearned the hard way via the
@@ -335,6 +352,137 @@ namespace AsAboveSoBelow
             clone = new Material(source) { renderQueue = lowQueue };
             fieldClones[source] = clone;
             return clone;
+        }
+
+        /// <summary>Fade-capable field clone. Vanilla's generated stone terrains are
+        /// <c>FadeRough</c> (`TerrainDefGenerator_Stone` sets it on both `_Rough` and
+        /// `_RoughHewn`), so their materials already honour vertex alpha and carry the rough
+        /// alpha-add mask that makes the retreating edge organic rather than a straight
+        /// line. The swap below is for MODDED rock that ships a Hard-edged rough terrain:
+        /// a Hard shader ignores vertex alpha outright, so without it the fan would render
+        /// as a full opaque square and the fix would silently do nothing on that rock.
+        /// Kept separate from <see cref="FieldClone"/> so the cap's opaque in-band quads
+        /// cannot change shader as a side effect.</summary>
+        private static readonly Dictionary<Material, Material> fieldFadeClones = new Dictionary<Material, Material>();
+
+        private static Material FieldFadeClone(Material source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+            if (fieldFadeClones.TryGetValue(source, out Material clone))
+            {
+                return clone;
+            }
+            if (fieldFadeClones.Count > 512)
+            {
+                fieldFadeClones.Clear();
+            }
+            clone = new Material(source);
+            if (clone.shader == ShaderDatabase.TerrainHard && ShaderDatabase.TerrainFadeRough != null)
+            {
+                clone.shader = ShaderDatabase.TerrainFadeRough;
+                clone.SetTexture(ShaderPropertyIDs.AlphaAddTex, TexGame.AlphaAddTex);
+            }
+            // Shader assignment RESETS Unity's renderQueue, so this must come after.
+            clone.renderQueue = lowQueue;
+            fieldFadeClones[source] = clone;
+            return clone;
+        }
+
+        [ThreadStatic]
+        private static bool[] fieldCovered;
+
+        [ThreadStatic]
+        private static Color32[] fieldColors;
+
+        /// <summary>
+        /// THE ROCK FIELD FOR ONE MASS CELL - the single implementation, shared by the cap's
+        /// own in-band pass and by the cross-level emitter, so the two cannot drift.
+        ///
+        /// Emitted as a RETRACTING FAN (<see cref="ABNineFan.CoverInterior"/>) rather than a
+        /// full-cell quad: the atlas tile drawn on top is transparent outside the rock
+        /// outline, and an opaque quad underneath fills those gaps back in, which is what
+        /// turned a stylised silhouette into a square. Eroding the fill to the SAME link
+        /// rule the tile's mask uses hides it under the art exactly.
+        ///
+        /// The caller passes its own link rule's answers, because the two callers legitimately
+        /// disagree: the cap counts MEADOW ground as linked (so its fill does not retract at a
+        /// plateau boundary, where the meadow fade fans own the transition and no lip is
+        /// drawn), while the cross-level emitter counts only mass.
+        ///
+        /// An all-linked cell yields a fully covered fan, which is geometrically the same
+        /// square the quad drew - so mass interiors are unchanged.
+        /// </summary>
+        internal static bool EmitFieldAt(MapDrawLayer layer, Map map, IntVec3 at, float y,
+            TerrainDef rough, Color32 shadeS, Color32 shadeN,
+            bool n, bool s, bool e, bool w, bool sw, bool nw, bool ne, bool se)
+        {
+            if (layer == null || map == null || rough == null)
+            {
+                return false;
+            }
+            Material source = map.terrainGrid.GetMaterial(rough, false, null);
+            Material mat = MassFieldFadeEnabled ? FieldFadeClone(source) : FieldClone(source);
+            LayerSubMesh sub = mat != null ? layer.GetSubMesh(mat) : null;
+            if (sub == null)
+            {
+                return false;
+            }
+            if (!MassFieldFadeEnabled)
+            {
+                AddTerrainQuad(sub, at, y, shadeS, shadeN);
+                return true;
+            }
+            bool[] covered = fieldCovered ?? (fieldCovered = new bool[9]);
+            Color32[] colors = fieldColors ?? (fieldColors = new Color32[9]);
+            ABNineFan.CoverInterior(covered, n, s, e, w, sw, nw, ne, se);
+            // The cliff-face ramp travels across the fan's THREE vertex rows, not two: the
+            // fan has mid-edge and centre vertices at z+0.5 that a quad does not, and giving
+            // them the south tone would step the gradient instead of running it.
+            Color32 mid = MidShade(shadeS, shadeN);
+            colors[0] = WithCoverage(shadeS, covered[0]);
+            colors[1] = WithCoverage(mid, covered[1]);
+            colors[2] = WithCoverage(shadeN, covered[2]);
+            colors[3] = WithCoverage(shadeN, covered[3]);
+            colors[4] = WithCoverage(shadeN, covered[4]);
+            colors[5] = WithCoverage(mid, covered[5]);
+            colors[6] = WithCoverage(shadeS, covered[6]);
+            colors[7] = WithCoverage(shadeS, covered[7]);
+            colors[8] = WithCoverage(mid, covered[8]);
+            ABNineFan.AddFan(sub, at.x, at.z, y, colors);
+            return true;
+        }
+
+        private static Color32 MidShade(Color32 a, Color32 b)
+        {
+            return new Color32((byte)((a.r + b.r) / 2), (byte)((a.g + b.g) / 2),
+                (byte)((a.b + b.b) / 2), byte.MaxValue);
+        }
+
+        private static Color32 WithCoverage(Color32 c, bool covered)
+        {
+            return new Color32(c.r, c.g, c.b, covered ? byte.MaxValue : (byte)0);
+        }
+
+        /// <summary>Retraction coverage for a mass cell under the CAP's link rule, written
+        /// into the caller's scratch. Exposed so the below-terrain mirror can erode its own
+        /// base quad on exactly the cells this class then decorates, without restating the
+        /// rule and letting it drift.</summary>
+        internal static void MassFanCoverage(Map map, IntVec3 source, bool[] covered)
+        {
+            TerrainGrid grid = map.terrainGrid;
+            TerrainDef cap = ABDefOf.AB_MountainTop;
+            ABNineFan.CoverInterior(covered,
+                Linked(map, grid, cap, source + IntVec3.North),
+                Linked(map, grid, cap, source + IntVec3.South),
+                Linked(map, grid, cap, source + IntVec3.East),
+                Linked(map, grid, cap, source + IntVec3.West),
+                Linked(map, grid, cap, source + IntVec3.South + IntVec3.West),
+                Linked(map, grid, cap, source + IntVec3.North + IntVec3.West),
+                Linked(map, grid, cap, source + IntVec3.North + IntVec3.East),
+                Linked(map, grid, cap, source + IntVec3.South + IntVec3.East));
         }
 
         /// <summary>Terrain-mesh-shaped quad: verts + colors + tris, deliberately NO
@@ -503,19 +651,25 @@ namespace AsAboveSoBelow
                     Color32 shadeS = faceDepth >= 0 ? FaceShade(faceDepth, false) : White;
                     Color32 shadeN = faceDepth >= 0 ? FaceShade(faceDepth, true) : White;
 
+                    // Cardinal AND diagonal links, hoisted above the field: the field is now
+                    // eroded to the same rule the atlas mask uses, so both need them and
+                    // computing them twice is how the two rules would drift apart.
+                    // (Graphic_Linked's own order: N=1 E=2 S=4 W=8.)
+                    bool n0 = Linked(map, grid, cap, c + IntVec3.North);
+                    bool e0 = Linked(map, grid, cap, c + IntVec3.East);
+                    bool s0 = Linked(map, grid, cap, c + IntVec3.South);
+                    bool w0 = Linked(map, grid, cap, c + IntVec3.West);
+                    bool nw0 = Linked(map, grid, cap, c + IntVec3.North + IntVec3.West);
+                    bool ne0 = Linked(map, grid, cap, c + IntVec3.North + IntVec3.East);
+                    bool sw0 = Linked(map, grid, cap, c + IntVec3.South + IntVec3.West);
+                    bool se0 = Linked(map, grid, cap, c + IntVec3.South + IntVec3.East);
+
                     // The unified field underlay: the rock's own rough terrain,
                     // world-position sampled, on every open mass cell.
                     TerrainDef rough = rock?.building?.naturalTerrain
                         ?? fallbackRock?.building?.naturalTerrain;
-                    if (rough != null)
-                    {
-                        Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
-                        if (fieldMat != null)
-                        {
-                            AddTerrainQuad(GetSubMesh(fieldMat), c, y, shadeS, shadeN);
-                            emitted = true;
-                        }
-                    }
+                    emitted |= EmitFieldAt(this, map, c, y, rough, shadeS, shadeN,
+                        n0, s0, e0, w0, sw0, nw0, ne0, se0);
                     // NO atlas fallback here, deliberately. Drawing AtlasBaseFor() as a
                     // flat 0..1-uv quad was the "compacted steel looks like strange
                     // text" bug: that material is the whole LINKED ATLAS SHEET, so a
@@ -528,14 +682,9 @@ namespace AsAboveSoBelow
                     // this mass cell (run-44 wanted a soft transition; the flat-tone
                     // skirt yielded to the real fade mechanic).
                     emitted |= EmitMeadowFade(map, grid, c, y);
-                    // Cardinal links in Graphic_Linked's own order (N=1 E=2 S=4
-                    // W=8): a direction links when the mass continues there. Interior
-                    // cells (mask 15) are the field alone - the atlas' fully-linked
-                    // tile is near-flat and adds nothing but a tone seam.
-                    bool n0 = Linked(map, grid, cap, c + IntVec3.North);
-                    bool e0 = Linked(map, grid, cap, c + IntVec3.East);
-                    bool s0 = Linked(map, grid, cap, c + IntVec3.South);
-                    bool w0 = Linked(map, grid, cap, c + IntVec3.West);
+                    // A direction links when the mass continues there. Interior cells
+                    // (mask 15) are the field alone - the atlas' fully-linked tile is
+                    // near-flat and adds nothing but a tone seam.
                     int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
                     if (mask == 15)
                     {
@@ -583,23 +732,19 @@ namespace AsAboveSoBelow
                     emitted = true;
                     if (CornerFillersEnabled)
                     {
-                        bool nw = Linked(map, grid, cap, c + IntVec3.North + IntVec3.West);
-                        bool ne = Linked(map, grid, cap, c + IntVec3.North + IntVec3.East);
-                        bool sw = Linked(map, grid, cap, c + IntVec3.South + IntVec3.West);
-                        bool se = Linked(map, grid, cap, c + IntVec3.South + IntVec3.East);
-                        if (sw && s0 && w0)
+                        if (sw0 && s0 && w0)
                         {
                             AddCornerFiller(sub, map, c, -1, -1, y, shadeS);
                         }
-                        if (nw && n0 && w0)
+                        if (nw0 && n0 && w0)
                         {
                             AddCornerFiller(sub, map, c, -1, 1, y, shadeN);
                         }
-                        if (ne && n0 && e0)
+                        if (ne0 && n0 && e0)
                         {
                             AddCornerFiller(sub, map, c, 1, 1, y, shadeN);
                         }
-                        if (se && s0 && e0)
+                        if (se0 && s0 && e0)
                         {
                             AddCornerFiller(sub, map, c, 1, -1, y, shadeS);
                         }
@@ -1235,6 +1380,20 @@ namespace AsAboveSoBelow
             IntVec3 at = new IntVec3(source.x, source.y, source.z + zOffset);
             bool emitted = false;
 
+            // Links first, cardinals AND diagonals. The mask is derived from the GROUND
+            // map's own mass rather than from the cap's per-band grids, which is what lets
+            // this work at an arbitrary depth - and the FIELD is now eroded to the same rule,
+            // so both must read one set of answers.
+            bool n0 = MassLinked(map, source + IntVec3.North);
+            bool e0 = MassLinked(map, source + IntVec3.East);
+            bool s0 = MassLinked(map, source + IntVec3.South);
+            bool w0 = MassLinked(map, source + IntVec3.West);
+            bool nw = MassLinked(map, source + IntVec3.North + IntVec3.West);
+            bool ne = MassLinked(map, source + IntVec3.North + IntVec3.East);
+            bool sw = MassLinked(map, source + IntVec3.South + IntVec3.West);
+            bool se = MassLinked(map, source + IntVec3.South + IntVec3.East);
+            int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
+
             // The field: the rock's own rough terrain, world-position sampled, exactly what
             // the cap lays down in its own band.
             //
@@ -1247,18 +1406,9 @@ namespace AsAboveSoBelow
             TerrainDef rough = rock.building?.naturalTerrain
                 ?? GroundRockAt(map, source)?.building?.naturalTerrain
                 ?? FallbackRock(map)?.building?.naturalTerrain;
-            bool fieldDrawn = false;
-            if (rough != null)
-            {
-                Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
-                LayerSubMesh fsub = fieldMat != null ? layer.GetSubMesh(fieldMat) : null;
-                if (fsub != null)
-                {
-                    AddTerrainQuad(fsub, at, altitude, White, White);
-                    emitted = true;
-                    fieldDrawn = true;
-                }
-            }
+            bool fieldDrawn = EmitFieldAt(layer, map, at, altitude, rough, White, White,
+                n0, s0, e0, w0, sw, nw, ne, se);
+            emitted |= fieldDrawn;
 
             Graphic live = LiveGraphicFor(rock);
             if (!(live is Graphic_Linked))
@@ -1301,11 +1451,6 @@ namespace AsAboveSoBelow
             {
                 return emitted;
             }
-            bool n0 = MassLinked(map, source + IntVec3.North);
-            bool e0 = MassLinked(map, source + IntVec3.East);
-            bool s0 = MassLinked(map, source + IntVec3.South);
-            bool w0 = MassLinked(map, source + IntVec3.West);
-            int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
             if (mask == 15 && fieldDrawn)
             {
                 // Interior, same rule the cap applies in its own band: the fully-linked tile
@@ -1324,10 +1469,6 @@ namespace AsAboveSoBelow
             emitted = true;
             if (CornerFillersEnabled)
             {
-                bool nw = MassLinked(map, source + IntVec3.North + IntVec3.West);
-                bool ne = MassLinked(map, source + IntVec3.North + IntVec3.East);
-                bool sw = MassLinked(map, source + IntVec3.South + IntVec3.West);
-                bool se = MassLinked(map, source + IntVec3.South + IntVec3.East);
                 if (sw && s0 && w0)
                 {
                     AddCornerFiller(tsub, map, at, -1, -1, altitude + 0.02f, White);

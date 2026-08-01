@@ -413,21 +413,49 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            int count = sub.verts.Count;
-            sub.verts.Add(new Vector3(above.x, altitude, above.z));
-            sub.verts.Add(new Vector3(above.x, altitude, above.z + 1));
-            sub.verts.Add(new Vector3(above.x + 1, altitude, above.z + 1));
-            sub.verts.Add(new Vector3(above.x + 1, altitude, above.z));
-            for (int i = 0; i < 4; i++)
+            // ⚠ THE BASE QUAD IS THE THIRD FULL-CELL FILL UNDER A STYLISED OUTLINE.
+            //
+            // Two others were found first (the cap's own in-band field and the cross-level
+            // emitter's), but a sky-band mass viewed from above gets its rock from HERE - the
+            // AB_MountainTop -> host rough stone substitution a few lines up - and this quad
+            // is opaque corner to corner. The atlas tile emitted below it is transparent
+            // outside the rock outline, so the quad fills those gaps back in and the cell
+            // squares off past the black border, once per level down the mountain.
+            //
+            // Eroded to the CAP's link rule, the same one EmitMassSilhouetteAt uses for the
+            // tile that lands on top, so fill and outline agree by construction. Non-mass
+            // terrain keeps the plain quad: it has no outline to hide under, and vanilla's
+            // own edge fades (below) are what soften it.
+            int drop = above.z - below.z;
+            bool skyMass = def == ABDefOf.AB_MountainTop;
+            bool beyondCapReach = slot > 0
+                && drop > slot
+                && ABMinedRockLookup.TryGetMinedRockDef(def, out _);
+            bool massCell = skyMass || beyondCapReach;
+            if (massCell && SectionLayer_ABMountainCap.MassFieldFadeEnabled)
             {
-                sub.colors.Add(BelowTint);
+                SectionLayer_ABMountainCap.MassFanCoverage(map, below, fanCovered);
+                ABNineFan.AddFan(sub, above.x, above.z, altitude, fanCovered,
+                    BelowTint, BelowTintClear);
             }
-            sub.tris.Add(count);
-            sub.tris.Add(count + 1);
-            sub.tris.Add(count + 2);
-            sub.tris.Add(count);
-            sub.tris.Add(count + 2);
-            sub.tris.Add(count + 3);
+            else
+            {
+                int count = sub.verts.Count;
+                sub.verts.Add(new Vector3(above.x, altitude, above.z));
+                sub.verts.Add(new Vector3(above.x, altitude, above.z + 1));
+                sub.verts.Add(new Vector3(above.x + 1, altitude, above.z + 1));
+                sub.verts.Add(new Vector3(above.x + 1, altitude, above.z));
+                for (int i = 0; i < 4; i++)
+                {
+                    sub.colors.Add(BelowTint);
+                }
+                sub.tris.Add(count);
+                sub.tris.Add(count + 1);
+                sub.tris.Add(count + 2);
+                sub.tris.Add(count);
+                sub.tris.Add(count + 2);
+                sub.tris.Add(count + 3);
+            }
 
             PrintBelowTerrainEdges(map, terrainGrid, below, above, self);
             // Give a mountain mass its EDGE back. The substituted rough terrain above only
@@ -478,12 +506,7 @@ namespace AsAboveSoBelow
             // Handing off on its own return value is what keeps this from double-drawing:
             // the representation runs ONLY where the silhouette refused, so vanilla linked
             // rock keeps its lip and corner fillers untouched and BM rock gets its sprite.
-            int drop = above.z - below.z;
-            bool skyMass = def == ABDefOf.AB_MountainTop;
-            bool beyondCapReach = slot > 0
-                && drop > slot
-                && ABMinedRockLookup.TryGetMinedRockDef(def, out _);
-            if (skyMass || beyondCapReach)
+            if (massCell)
             {
                 if (!SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
                         drop, altitude + 0.02f, fanCovered, meadowAdj))
