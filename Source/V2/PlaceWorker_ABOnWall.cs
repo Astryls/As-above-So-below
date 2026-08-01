@@ -41,8 +41,11 @@ namespace AsAboveSoBelow
             IntVec3 facing = loc + rot.FacingCell;
             if (facing.InBounds(map))
             {
+                // ⚠ IsWall is a PROPERTY in 1.6. VEF's shipped DLL calls it as a method,
+                // so a decompile of their PlaceWorker_OnWall shows `IsWall()` - that is a
+                // stale signature from an older game version, not the current API.
                 Building ahead = facing.GetEdifice(map);
-                if (ahead != null && ahead.def.IsWall())
+                if (ahead != null && ahead.def.IsWall)
                 {
                     return new AcceptanceReport("AB_RiserFaceBlocked".Translate());
                 }
@@ -50,7 +53,7 @@ namespace AsAboveSoBelow
             if (loc.InBounds(map))
             {
                 Building host = loc.GetEdifice(map);
-                if (host != null && host.def.IsWall())
+                if (host != null && host.def.IsWall)
                 {
                     return true;
                 }

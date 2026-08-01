@@ -130,6 +130,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_PowerBreaker</defName>
+    <thingClass>AsAboveSoBelow.Building_ABPowerBreaker</thingClass>
     <label>power breaker box</label>
     <description>A wall-mounted power breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
