@@ -98,6 +98,10 @@ namespace AsAboveSoBelow
                 SnowGrid snow = map.snowGrid;
                 CellRect rect = section.CellRect;
                 bool any = false;
+                // Visibility for the section AND a one-cell apron, resolved once. The kernel
+                // below needs the answer for all eight neighbours of every edge cell, and the
+                // apron is what keeps that from re-entering the shared gate 8x per cell.
+                BuildVisibilityCache(map, bands, rect);
 
                 // Iteration order MUST match MakeBaseGeometry's (x outer, z inner, nine
                 // vertices per cell) or colours land on the wrong corners.
@@ -110,8 +114,8 @@ namespace AsAboveSoBelow
                         // legibility) - identical by construction to the one
                         // SectionLayer_ABBelowV2 applies, which is what stops snow ever
                         // appearing in a cell whose terrain the below layer did not print.
-                        if (!ABBands.TryResolveVisibleFrom(map, bands, c, requireUnfogged: true,
-                                out IntVec3 _, out int drop))
+                        // Read from the cache; the cache is the gate.
+                        if (!VisibleAt(c, out int drop))
                         {
                             // No visible ground below: nine fully transparent vertices.
                             // The count must still be emitted, or every later cell's
@@ -125,26 +129,57 @@ namespace AsAboveSoBelow
 
                         // Nine neighbour samples, all taken at the SAME drop as the centre.
                         //
-                        // Deliberately not re-resolving the descent per neighbour: vanilla
+                        // Deliberately not re-resolving the DESCENT per neighbour: vanilla
                         // smooths snow across a cell's eight neighbours, and mixing samples
                         // from two different bands into one smoothing kernel would put a
                         // visible seam wherever the level below changes depth. The centre
                         // cell decides which level is being looked at; the kernel then reads
                         // that level, which is also what vanilla does within a band.
+                        //
+                        // ⚠ BUT "WHICH LEVEL" AND "IS IT VISIBLE AT ALL" ARE TWO QUESTIONS,
+                        // AND ONLY THE FIRST WAS BEING ASKED.
+                        //
+                        // Skipping the visibility test as well meant a neighbour standing
+                        // under a ROCKY PEAK still contributed the snow lying beneath that
+                        // peak - snow that is not on screen. The kernel therefore held full
+                        // opacity right up to the peak (a hard, cell-aligned edge against the
+                        // rock, since the opaque cell writes alpha 0 across all nine of its
+                        // own vertices), and the only place alpha could ramp down was the
+                        // interior, wherever the level below happened to be bare. Reported as
+                        // "snow fades inward towards other snow covered tiles instead of
+                        // outward toward the rocky peaks", which is precisely that inversion.
+                        //
+                        // An invisible neighbour now reads ZERO, so the fade lands at the
+                        // silhouette of what is actually being looked at - the same way
+                        // vanilla snow fades out as it approaches a wall.
                         float centre = snow.GetDepth(new IntVec3(x, 0, z - drop));
                         for (int k = 0; k < 9; k++)
                         {
                             IntVec3 n = c + GenAdj.AdjacentCellsAndInsideForUV[k];
                             IntVec3 nb = new IntVec3(n.x, 0, n.z - drop);
                             // Vanilla falls back to the centre depth for out-of-bounds
-                            // neighbours; a neighbour that has crossed into the gutter is
-                            // the banded equivalent and gets the same treatment.
-                            adjDepth[k] = (n.InBounds(map) && nb.InBounds(map) && !bands.InGutter(nb))
-                                ? snow.GetDepth(nb)
-                                : centre;
-                            adjPolluted[k] = (nb.InBounds(map) && map.pollutionGrid.IsPolluted(nb))
-                                ? 1f
-                                : 0f;
+                            // neighbours, so snow never fades against the map edge. A
+                            // neighbour outside the playable band - off map, or across the
+                            // gutter at either end - is the banded equivalent of that edge
+                            // and must get the SAME treatment, or every band seam grows a
+                            // fade stripe.
+                            if (!n.InBounds(map) || bands.InGutter(n)
+                                || !nb.InBounds(map) || bands.InGutter(nb))
+                            {
+                                adjDepth[k] = centre;
+                                adjPolluted[k] = 0f;
+                                continue;
+                            }
+                            if (!VisibleAt(n, out int _))
+                            {
+                                // Inside the band but opaque from here (peak, ledge, roof) or
+                                // illegible (fogged): off-screen, so it contributes nothing.
+                                adjDepth[k] = 0f;
+                                adjPolluted[k] = 0f;
+                                continue;
+                            }
+                            adjDepth[k] = snow.GetDepth(nb);
+                            adjPolluted[k] = map.pollutionGrid.IsPolluted(nb) ? 1f : 0f;
                         }
 
                         for (int v = 0; v < 9; v++)
@@ -194,6 +229,67 @@ namespace AsAboveSoBelow
         // family's history is that copies drift and one of them silently loses the descent
         // (see ABBands.TryResolveVisibleFrom, and the lighting overlay it had already
         // happened to). Replaced by the shared gate at the call site above.
+
+        /// <summary>See-below visibility for this section plus a one-cell apron, rebuilt at
+        /// the top of every Regenerate. The apron is the point: the smoothing kernel of an
+        /// edge cell reaches one cell outside the section, and the whole bug this fixes was
+        /// the kernel not asking the question at all.
+        ///
+        /// Cheaper than the code it replaces, not more expensive: one gate call per apron
+        /// cell (19x19 = 361 on a full section) instead of one per section cell plus eight
+        /// per visible cell.</summary>
+        private bool[] visCache;
+
+        private int[] dropCache;
+
+        private int cacheMinX;
+
+        private int cacheMinZ;
+
+        private int cacheWidth;
+
+        private int cacheHeight;
+
+        private void BuildVisibilityCache(Map map, ABBandMap bands, CellRect rect)
+        {
+            cacheMinX = rect.minX - 1;
+            cacheMinZ = rect.minZ - 1;
+            cacheWidth = rect.Width + 2;
+            cacheHeight = rect.Height + 2;
+            int need = cacheWidth * cacheHeight;
+            if (visCache == null || visCache.Length < need)
+            {
+                visCache = new bool[need];
+                dropCache = new int[need];
+            }
+            for (int x = 0; x < cacheWidth; x++)
+            {
+                for (int z = 0; z < cacheHeight; z++)
+                {
+                    IntVec3 p = new IntVec3(cacheMinX + x, 0, cacheMinZ + z);
+                    int i = (x * cacheHeight) + z;
+                    // The shared gate handles off-map cells itself, so the apron needs no
+                    // bounds test of its own.
+                    visCache[i] = ABBands.TryResolveVisibleFrom(map, bands, p,
+                        requireUnfogged: true, out IntVec3 _, out int d);
+                    dropCache[i] = d;
+                }
+            }
+        }
+
+        private bool VisibleAt(IntVec3 c, out int drop)
+        {
+            drop = 0;
+            int x = c.x - cacheMinX;
+            int z = c.z - cacheMinZ;
+            if (x < 0 || z < 0 || x >= cacheWidth || z >= cacheHeight)
+            {
+                return false; // outside the apron: never asked for, never visible
+            }
+            int i = (x * cacheHeight) + z;
+            drop = dropCache[i];
+            return visCache[i];
+        }
 
         private readonly float[] adjDepth = new float[9];
 
