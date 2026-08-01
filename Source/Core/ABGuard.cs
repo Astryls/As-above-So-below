@@ -69,9 +69,26 @@ namespace AsAboveSoBelow
         /// unthrottled error handler turns one bug into an unplayable game.</summary>
         public static readonly ABGuardSwitch Camera = new ABGuardSwitch("camera");
 
+        /// <summary>Cross-level utility networks: the vanilla power band clamp, and the
+        /// riser merge for every foreign pipe system.
+        ///
+        /// Added WITH its first guard, not ahead of one - see the warning above. It is one
+        /// switch rather than one per host mod deliberately: every consumer is the same
+        /// shape (re-scope somebody's cell-adjacency graph search to a band), they share
+        /// ABPowerBandScope's helpers, and a player who has to be told a subsystem died
+        /// wants to hear "cross-level utilities" once, not "the Rimatomics steam merge".
+        ///
+        /// ⚠ FAILING OPEN HERE MEANS THE LEAK COMES BACK, NOT THAT NOTHING HAPPENS. Tripping
+        /// this switch restores vanilla's un-clamped 6-cell search, so power starts crossing
+        /// the gutter again rather than the grid going dead. That is the right failure
+        /// direction (a working colony beats a correct one), but it does mean the symptom of
+        /// a tripped utilities guard is a REAPPEARING bug, not a missing feature.</summary>
+        public static readonly ABGuardSwitch Utilities = new ABGuardSwitch("utilities");
+
         private static readonly ABGuardSwitch[] All =
         {
-            Ui, LevelGen, Rendering, Movement, Combat, RoofSync, Weather, Transit, Camera
+            Ui, LevelGen, Rendering, Movement, Combat, RoofSync, Weather, Transit, Camera,
+            Utilities
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;

@@ -28,14 +28,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .pill.off{border-color:var(--bad);color:var(--bad)}
 #status{font-size:12px;color:var(--dim);margin-left:auto}
 main{padding:20px 22px 80px;max-width:1500px;margin:0 auto}
-.grp{margin:26px 0 10px;display:flex;align-items:baseline;gap:10px}
+.grp{margin:26px 0 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .grp h2{margin:0;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--accent)}
 .grp .meta{font-size:12px;color:var(--dim)}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .card.done{border-color:#26502f}
-.chead{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:flex-start}
-.chead .t{flex:1;min-width:0}
+.chead{padding:12px 14px;border-bottom:1px solid var(--line)}
 .chead b{font-size:14px}
 .defn{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:2px;word-break:break-all}
 .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
@@ -49,6 +48,7 @@ main{padding:20px 22px 80px;max-width:1500px;margin:0 auto}
 .slot:hover{border-color:var(--accent)}
 .slot.over{border-color:var(--accent);background:#2a1d10}
 .slot.has{border-style:solid;border-color:#2f5d38}
+.slot.active{box-shadow:0 0 0 2px var(--accent) inset}
 .slot .ph{height:74px;display:flex;align-items:center;justify-content:center;color:#4d5866;font-size:26px}
 .slot img{width:100%;height:74px;object-fit:contain;image-rendering:pixelated;
   background:repeating-conic-gradient(#20262e 0% 25%,#171c23 0% 50%) 50%/12px 12px}
@@ -56,10 +56,14 @@ main{padding:20px 22px 80px;max-width:1500px;margin:0 auto}
 .slot .px{font-size:9.5px;color:#5a6672}
 .path{font-family:var(--mono);font-size:10.5px;color:#6e7d8c;margin-top:10px;word-break:break-all}
 .prompt{margin-top:11px;border-top:1px solid var(--line);padding-top:10px}
-.prompt .ph2{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.prompt .ph2 span{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);flex:1}
+.ptabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center}
+.ptab{font-size:10.5px;padding:3px 9px;border-radius:5px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;text-transform:uppercase;letter-spacing:.4px}
+.ptab:hover{border-color:var(--accent);color:#fff}
+.ptab.on{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:700}
+.ptabs .sp{flex:1}
 textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line);border-radius:6px;
-  font-family:var(--mono);font-size:11px;line-height:1.5;padding:9px;resize:vertical;min-height:104px}
+  font-family:var(--mono);font-size:11px;line-height:1.55;padding:9px;resize:vertical;min-height:150px}
 .note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
   border-radius:8px;padding:13px 16px;margin-bottom:18px;font-size:13px}
 .note b{color:var(--accent)}
@@ -81,7 +85,7 @@ textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line
   <div class="bar">
     <button class="primary" id="connect">Connect mod folder…</button>
     <button id="rescan" disabled>Rescan</button>
-    <button id="copyall">Copy all prompts</button>
+    <button id="copyall">Copy all 24 prompts</button>
     <span class="pill" id="fsapi"></span>
     <span id="status">Not connected — previews and saving are disabled.</span>
   </div>
@@ -92,20 +96,24 @@ textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line
   <b>How to use.</b>
   <ol>
     <li>Click <b>Connect mod folder…</b> and pick this mod's root folder — the one containing <code>About/</code> and <code>Textures/</code> (folder name <code>50b4332c2547</code>). Grant write permission.</li>
-    <li>Copy a prompt into Nano Banana (Gemini image gen). Ask for a <b>transparent PNG</b>.</li>
-    <li>Drag the result onto its slot — it is written straight to <code>Textures/Things/Building/Risers/</code> under the exact filename RimWorld expects. Drop anywhere on the page to auto-match many files by name at once.</li>
+    <li>Every texture file has its <b>own complete prompt</b>. Click a slot tile to show its prompt, then <b>Copy</b> it into Nano Banana.</li>
+    <li>Drag the result onto that slot — it is written straight to <code>Textures/Things/Building/Risers/</code> under the exact filename RimWorld expects. Drop anywhere on the page to auto-match many files by name at once.</li>
   </ol>
   <div style="margin-top:9px;color:var(--dim);font-size:12px">
-    Saving needs the File System Access API (Chrome / Edge). In other browsers the page still works as a prompt reference and will offer a download with the correct filename instead.
+    Saving needs the File System Access API (Chrome / Edge). Other browsers still get the prompts and will offer a download with the correct filename instead.
   </div>
 </div>
 
 <div class="note" style="border-left-color:#3b5bdb">
-  <b>Rotation.</b> Risers marked <span class="tag rot">rotatable ×4</span> are wall-mounted cabinets and need four
-  files (<code>_north _east _south _west</code>) via <code>Graphic_Multi</code> — the mounting face must read correctly
-  from every side, so the box sits against the wall edge with its cable run entering from the wall.
-  Everything else is a floor pipe stub: rotation is meaningless for a vertical pipe, so it is one file via
-  <code>Graphic_Single</code> and RimWorld derives the build-menu icon automatically.
+  <b>Rotation — four prompts, one per facing.</b> Risers marked <span class="tag rot">rotatable ×4</span> are wall-mounted
+  cabinets using <code>Graphic_Multi</code>, so RimWorld needs <code>_north _east _south _west</code> as four separate images.
+  Each has its own prompt describing that exact facing: which edge of the frame the wall runs along, whether you see the
+  front panel or the rear brackets, and which side of the frame stays empty.
+  <div style="margin-top:8px;color:var(--dim);font-size:12px">
+    <b style="color:#8ba4ff">Tip:</b> generate all four of a unit's views in <i>one</i> Nano Banana conversation, back to back —
+    the model keeps colours and proportions consistent across a thread far better than across four fresh sessions.
+    Each prompt already ends with an instruction to match its siblings.
+  </div>
 </div>
 
 <div id="app"></div>
@@ -116,125 +124,284 @@ textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line
 
 <script>
 const DIR = "Textures/Things/Building/Risers";
-const STYLE = "RimWorld colony-sim building sprite, top-down three-quarter orthographic view, hand-painted 2D game art, muted desaturated palette, soft painted shading with a subtle dark outline, no cast shadow, no ground, no background, fully transparent background, centered, fills the frame edge to edge, single object only, no text, no UI, no border.";
+const PX  = 256;
+
+/* ---------- the shared blocks every prompt ends with ---------- */
+
+const STYLE =
+"Art style: a building sprite for the game RimWorld, matching the vanilla base-game art exactly. " +
+"Hand-painted 2D raster art. NOT pixel art, NOT a 3D render, NOT photorealistic, NOT cel-shaded anime, " +
+"NOT a technical diagram. Straight top-down orthographic view with only a very slight forward tilt, as though the " +
+"camera sits almost directly overhead - no isometric angle, no vanishing point, no perspective distortion. " +
+"Muted, desaturated, slightly dusty colour palette; grounded lo-fi sci-fi industrial materials, never bright, " +
+"neon or candy-coloured. Soft painted shading with gentle ambient occlusion in the recesses and a soft light " +
+"from the upper left; no harsh specular highlights, no rim lighting, no bloom, no glow. Forms are separated by a " +
+"slightly darker painted edge, not a hard uniform black cartoon outline. Low detail density and a strong readable " +
+"silhouette - it must still be legible scaled down to 64 pixels. Light wear, scuffing and grime painted in by hand, " +
+"never a photographic texture overlay.";
+
+const FRAME =
+"Composition: exactly one object, centred, filling the frame with only a few pixels of margin. Fully transparent " +
+"background - no floor, no ground, no wall, no room, no scene, no backdrop, and no cast shadow (the game draws its own). " +
+"Do not add text, labels, numbers, callouts, watermarks, borders, frames, drop shadows, colour swatches or UI. " +
+"Do not produce a turnaround sheet, grid, or multiple angles - one single view only.";
+
+const OUT = "Output one 256x256 pixel PNG with a true alpha transparent background.";
+
+const MATCH =
+" Keep the colours, proportions, materials, wear and level of detail identical to the other three rotation variants " +
+"of this same unit - these four images must read as one object turned in place.";
+
+/* ---------- per-facing framing ---------- */
+
+const VIEW = {
+  single:
+    "This is a floor-standing riser, non-rotatable, drawn once for RimWorld's single fixed camera angle. " +
+    "You look down on it from almost directly above: the circular floor flange reads as a ring at the base, a short " +
+    "stub of pipe rises from it, and you can see the open top of the pipe plus a little of its near side. Side fittings " +
+    "such as valves, gauges and sight glasses sit on the pipe body where they stay visible from overhead.",
+
+  south:
+    "This is the SOUTH-facing variant. The unit is wall-mounted with the wall running along the TOP edge of the frame: " +
+    "the back of the housing is flush against that top edge and the hinged front face points toward the bottom of the " +
+    "frame, fully visible with all its panel detail. Cable trunking enters from the wall behind at the top, and the " +
+    "outgoing conduit drops away at the bottom of the housing into the floor. Leave the bottom quarter of the frame " +
+    "empty and transparent.",
+
+  north:
+    "This is the NORTH-facing variant - the same unit turned to face away from the viewer. The wall runs along the " +
+    "BOTTOM edge of the frame, the housing is flush against that bottom edge, and the unit faces the top of the frame. " +
+    "You therefore see it from BEHIND: its plain top plate, rear hinge barrels and wall mounting brackets, with the " +
+    "front panel and its detail hidden from view. Cable trunking enters from the wall at the bottom. Leave the top " +
+    "quarter of the frame empty and transparent.",
+
+  east:
+    "This is the EAST-facing variant - the same unit turned side-on. The wall runs along the LEFT edge of the frame, " +
+    "the housing is flush against that left edge, and the front face points toward the right edge of the frame. You see " +
+    "the narrow side profile of the box: the long flank, the edge of the front panel on the right, and the hinge line on " +
+    "the left. Cable trunking enters from the wall on the left. Leave the right quarter of the frame empty and transparent.",
+
+  west:
+    "This is the WEST-facing variant - the mirror of the east variant. The wall runs along the RIGHT edge of the frame, " +
+    "the housing is flush against that right edge, and the front face points toward the left edge of the frame. You see " +
+    "the narrow side profile of the box with the edge of the front panel on the left and the hinge line on the right. " +
+    "Cable trunking enters from the wall on the right. Leave the left quarter of the frame empty and transparent."
+};
+
+/* ---------- the roster ---------- */
 
 const FAMILIES = [
  {id:"vanilla", name:"Vanilla power", meta:"RimWorld Core — PowerNetMaker flood fill", risers:[
    {n:"Power distribution riser", d:"AB_RiserPower", f:"AB_RiserPower", gate:"Electricity", gateNote:"vanilla research", net:"Power conduit", rot:true,
-    p:"A wall-mounted industrial electrical distribution box, roughly 1 metre wide, dull galvanised steel casing with a hinged grey access panel, two heavy black insulated power cables entering from the wall side and a thick cable bundle running down out of the base into the floor, small yellow-and-black hazard stripe along the bottom lip, one tiny green indicator lamp, faint grime and scuffed paint at the corners."}
+    p:"A wall-mounted industrial electrical distribution box about one metre across. Dull galvanised steel casing with " +
+      "a hinged grey access panel held by two chunky latch bolts, a narrow yellow-and-black hazard stripe along the " +
+      "bottom lip, and one small green indicator lamp. Two heavy black insulated power cables enter from the wall side, " +
+      "and a thick cable bundle runs down out of the base into the floor. Scuffed paint and faint grime at the corners."}
  ]},
  {id:"dbh", name:"Dubs Bad Hygiene", meta:"HygienePipeMapComp.RebuildPipeGrid — 2 of 4 PipeTypes are actually used", risers:[
-   {n:"Plumbing riser", d:"AB_RiserPlumbing", f:"AB_RiserPlumbing", gate:"Plumbing", gateNote:'MayRequire="dbhlitemode" — matches their own pipe', net:"PipeType.Sewage", rot:false,
-    p:"A vertical plumbing stack stub rising out of a floor, one metre square footprint, off-white PVC pipe about 20cm across with a brass union collar and a bolted circular floor flange, a small brass shutoff valve with a red handle on the side, faint water staining and lime scale around the flange, clean domestic-utility look."},
-   {n:"Air-con duct riser", d:"AB_RiserAirDuct", f:"AB_RiserAirDuct", gate:"MultiSplitAirCon", gateNote:'MayRequire="dbhlitemode" — matches their own duct', net:"PipeType.Air", rot:false,
-    p:"A vertical galvanised steel air-conditioning duct stub rising through a floor, square cross-section with rolled seams and a riveted rectangular floor collar, pale silver-grey zinc finish with faint mottling, two small copper refrigerant lines clipped to one side, a narrow louvred inspection grille on the front face."}
+   {n:"Plumbing riser", d:"AB_RiserPlumbing", f:"AB_RiserPlumbing", gate:"Plumbing", gateNote:'MayRequire="dbhlitemode" — copied from their own pipe', net:"PipeType.Sewage", rot:false,
+    p:"A domestic plumbing stack stub: an off-white PVC pipe roughly 20cm across with a brass union collar near the top " +
+      "and a bolted circular steel floor flange at its base. A small brass shutoff valve with a red handle projects from " +
+      "one side. Faint water staining and pale lime scale around the flange."},
+   {n:"Air-con duct riser", d:"AB_RiserAirDuct", f:"AB_RiserAirDuct", gate:"MultiSplitAirCon", gateNote:'MayRequire="dbhlitemode" — copied from their own duct', net:"PipeType.Air", rot:false,
+    p:"A galvanised steel air-conditioning duct stub with a square cross-section, rolled seams down its corners and a " +
+      "riveted rectangular collar where it meets the floor. Pale silver-grey zinc finish with faint mottled spangle. " +
+      "Two thin copper refrigerant lines are clipped to one side and a narrow louvred inspection grille sits on one face."}
  ]},
  {id:"rimefeller", name:"Rimefeller", meta:"UniversalPipeMapComp.RebuildPipeGrid — 1 PipeType", risers:[
-   {n:"Oil pipeline riser", d:"AB_RiserOil", f:"AB_RiserOil", gate:"OilDrilling", gateNote:"matches their OilPipeline", net:"PipeType.Oil", rot:false,
-    p:"A heavy industrial crude-oil riser pipe coming up through a floor, thick dark olive-green steel pipe with a bolted flange joint ring at mid height, a chunky black gate valve with a rusted red handwheel on one side, dark oil staining and drips down the pipe body, grimy petrochemical refinery aesthetic."}
+   {n:"Oil pipeline riser", d:"AB_RiserOil", f:"AB_RiserOil", gate:"OilDrilling", gateNote:"copied from their OilPipeline", net:"PipeType.Oil", rot:false,
+    p:"A heavy crude-oil riser: a thick dark olive-green steel pipe with a bolted flange joint ring partway up and a " +
+      "chunky black gate valve with a rusted red handwheel on one side. Dark oil staining and slow drips run down the " +
+      "pipe body and pool at the base. Grimy petrochemical refinery hardware."}
  ]},
  {id:"rimatomics", name:"Dubs Rimatomics", meta:"UniversalPipeMapComp.RebuildPipeGrid — 5 PipeTypes, gated by ResearchStepDef.Unlocks", risers:[
    {n:"Cold water riser", d:"AB_RiserColdWater", f:"AB_RiserColdWater", gate:"BuildReactorTurbine", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.ColdWater", rot:false,
-    p:"A vertical cold-water feed pipe rising through a floor, polished stainless steel about 25cm across with a wide bolted floor flange, a painted mid-blue identification band near the top, condensation beading and a faint frost sheen on the metal, a small pressure gauge on a short stub arm, clean power-plant service aesthetic."},
+    p:"A cold-water feed riser in polished stainless steel about 25cm across, with a wide bolted floor flange and a " +
+      "painted mid-blue identification band near the top. Condensation beads on the metal with a faint frost sheen. " +
+      "A small round pressure gauge sits on a short stub arm. Clean power-plant service hardware."},
    {n:"Steam riser", d:"AB_RiserSteam", f:"AB_RiserSteam", gate:"BuildReactorTurbine", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Steam", rot:false,
-    p:"A vertical high-pressure steam pipe rising through a floor, wrapped in off-white lagging insulation held by aluminium banding straps, one section of bare hot steel exposed at a flanged joint showing dull heat discolouration, a painted deep red identification band, a small brass safety relief valve on the side, faint heat haze, heavy industrial powerplant look."},
+    p:"A high-pressure steam riser wrapped in off-white lagging insulation held by aluminium banding straps, with one " +
+      "section of bare steel exposed at a flanged joint showing dull straw-and-blue heat discolouration. A painted deep " +
+      "red identification band circles the lagging and a small brass safety relief valve projects from one side."},
    {n:"Coolant riser", d:"AB_RiserCoolant", f:"AB_RiserCoolant", gate:"TestForCore", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Cooling", rot:false,
-    p:"A vertical reactor coolant pipe rising through a floor, brushed steel with a painted teal-cyan identification band and a bolted circular floor flange, a compact inline pump housing bulging on one side with cooling fins, a small round sight glass showing pale blue-green fluid, cold clinical nuclear-plant aesthetic."},
+    p:"A reactor coolant riser in brushed steel with a painted teal-cyan identification band and a bolted circular floor " +
+      "flange. A compact inline pump housing bulges from one side with shallow cooling fins, and a small round sight " +
+      "glass shows pale blue-green fluid. Cold, clinical nuclear-plant hardware."},
    {n:"High voltage riser", d:"AB_RiserHighVoltage", f:"AB_RiserHighVoltage", gate:"BuildReactorCooling", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.HighVoltage", rot:true,
-    p:"A wall-mounted high-voltage busbar cabinet, dark grey steel enclosure with heavy ribbed brown ceramic standoff insulators on the exposed face, thick armoured cable trunking entering from the wall side and dropping out of the base into the floor, a bold orange-and-black high-voltage warning triangle plate, heavy hinges and chunky latch bolts, industrial substation feel."},
+    p:"A wall-mounted high-voltage busbar cabinet in dark grey steel with heavy ribbed brown ceramic standoff insulators " +
+      "on its exposed face, chunky hinges and latch bolts, and a bold orange-and-black high-voltage warning triangle " +
+      "plate. Thick armoured cable trunking enters from the wall side and drops out of the base into the floor. " +
+      "Substation hardware, heavy and utilitarian."},
    {n:"Console loom riser", d:"AB_RiserLoom", f:"AB_RiserLoom", gate:"BuildReactorCooling", gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Loom", rot:true,
-    p:"A wall-mounted control-cable junction cabinet, slim pale grey steel box with a hinged front panel left slightly ajar, a dense bundle of thin colour-coded control wires in green blue and yellow looping out of the wall side and dropping into the floor through a rubber grommet, a small row of tiny amber status LEDs and a printed numbered label strip, tidy reactor-instrumentation aesthetic."}
+    p:"A wall-mounted control-cable junction cabinet: a slim pale grey steel box with a hinged front panel sitting " +
+      "slightly ajar, a row of tiny amber status LEDs and a printed numbered label strip. A dense bundle of thin " +
+      "colour-coded control wires in green, blue and yellow loops out of the wall side and drops into the floor through " +
+      "a black rubber grommet. Tidy reactor-instrumentation hardware."}
  ]},
  {id:"vche", name:"Vanilla Chemfuel Expanded", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
-   {n:"Chemfuel riser", d:"AB_RiserChemfuel", f:"AB_RiserChemfuel", gate:"BiofuelRefining", gateNote:"matches VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:false,
-    p:"A vertical chemfuel transfer pipe rising through a floor, matte industrial pipe painted warm amber-orange with a bolted steel floor flange, a small inline sight glass showing glowing amber liquid, a stencilled black flammable diamond symbol on the body, faint scorch and fuel staining near the base, gritty vanilla-RimWorld industrial style."},
-   {n:"Deepchem riser", d:"AB_RiserDeepchem", f:"AB_RiserDeepchem", gate:"BiofuelRefining", gateNote:"matches VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:false,
-    p:"A vertical raw deepchem extraction pipe rising through a floor, dark gunmetal steel with a deep violet-purple painted identification band, a heavy bolted floor flange crusted with dried purple chemical residue, a small armoured sight port glowing faint violet, corroded pitting on the lower body, raw unrefined petrochemical look."}
+   {n:"Chemfuel riser", d:"AB_RiserChemfuel", f:"AB_RiserChemfuel", gate:"BiofuelRefining", gateNote:"copied from VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:false,
+    p:"A chemfuel transfer riser: a matte pipe painted warm amber-orange with a bolted steel floor flange and a small " +
+      "inline sight glass showing amber liquid. A stencilled black flammable diamond symbol sits on the body. Faint " +
+      "scorching and fuel staining near the base."},
+   {n:"Deepchem riser", d:"AB_RiserDeepchem", f:"AB_RiserDeepchem", gate:"BiofuelRefining", gateNote:"copied from VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:false,
+    p:"A raw deepchem extraction riser in dark gunmetal steel with a deep violet-purple painted identification band. " +
+      "The heavy bolted floor flange is crusted with dried purple chemical residue, a small armoured sight port shows " +
+      "faint violet within, and the lower body is pitted with corrosion. Raw, unrefined petrochemical hardware."}
  ]},
  {id:"vte", name:"Vanilla Temperature Expanded", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
-   {n:"Vent duct riser", d:"AB_RiserVentDuct", f:"AB_RiserVentDuct", gate:"VTE_HVAC", gateNote:"matches VTE_AirDuct", net:"VTE_EfficiencyNet", rot:false,
-    p:"A vertical HVAC vent duct stub rising through a floor, clean white powder-coated sheet metal with a square cross-section and a neat riveted floor collar, a chrome louvred vent grille on the front face, a slim digital temperature readout panel showing pale blue digits, crisp modern climate-control aesthetic, very little wear."}
+   {n:"Vent duct riser", d:"AB_RiserVentDuct", f:"AB_RiserVentDuct", gate:"VTE_HVAC", gateNote:"copied from VTE_AirDuct", net:"VTE_EfficiencyNet", rot:false,
+    p:"An HVAC vent duct stub in clean white powder-coated sheet metal with a square cross-section and a neat riveted " +
+      "floor collar. A chrome louvred vent grille sits on one face and a slim digital temperature readout panel shows " +
+      "pale blue digits. Crisp modern climate-control hardware with very little wear."}
  ]},
  {id:"luci", name:"Ushankas Luciferium Expansion", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
-   {n:"Scarlet sludge riser", d:"AB_RiserScarletSludge", f:"AB_RiserScarletSludge", gate:"BasicMechanitesUnderstanding", gateNote:"matches USH_UndergroundScarletPipe", net:"ScarletNet", rot:false,
-    p:"A vertical sludge transfer pipe rising through a floor, dark iron pipe heavily stained with thick deep crimson-red residue running down its length, a bolted floor flange with congealed red sludge pooled around it, a clouded sight glass showing sluggish dark red fluid, faint sickly red glow from within the glass, unsettling biotech-industrial look."},
-   {n:"Compressed sludge riser", d:"AB_RiserCompressedSludge", f:"AB_RiserCompressedSludge", gate:"ScarlettRefining", gateNote:"matches USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:false,
-    p:"A vertical high-pressure sludge pipe rising through a floor, reinforced steel body wrapped in tight banded pressure rings, a large round brass pressure gauge on a stub arm with its needle in the red zone, deep crimson identification band, faint red weeping at one flange bolt, heavy reinforced pressurised-vessel aesthetic."},
-   {n:"Mechanites riser", d:"AB_RiserMechanites", f:"AB_RiserMechanites", gate:"ScarlettRefining", gateNote:"matches USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:false,
-    p:"A vertical mechanite transfer conduit rising through a floor, sleek polished silver-white medical-grade tube with fine ribbed segments, a glowing bright scarlet fluid channel visible through a clear armoured window, thin chrome containment bands, a small sterile blue indicator lamp, clean glitterworld nanotech aesthetic contrasting with the red contents."}
+   {n:"Scarlet sludge riser", d:"AB_RiserScarletSludge", f:"AB_RiserScarletSludge", gate:"BasicMechanitesUnderstanding", gateNote:"copied from USH_UndergroundScarletPipe", net:"ScarletNet", rot:false,
+    p:"A sludge transfer riser in dark iron, heavily stained with thick deep crimson residue running down its length. " +
+      "Congealed red sludge has pooled around the bolted floor flange, and a clouded sight glass shows sluggish dark " +
+      "red fluid with a faint sickly inner glow. Unsettling biotech-industrial hardware."},
+   {n:"Compressed sludge riser", d:"AB_RiserCompressedSludge", f:"AB_RiserCompressedSludge", gate:"ScarlettRefining", gateNote:"copied from USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:false,
+    p:"A high-pressure sludge riser: a reinforced steel body wrapped in tight banded pressure rings, with a large round " +
+      "brass pressure gauge on a stub arm whose needle sits in the red zone. A deep crimson identification band circles " +
+      "the pipe and one flange bolt weeps a thin red stain. Heavy pressurised-vessel hardware."},
+   {n:"Mechanites riser", d:"AB_RiserMechanites", f:"AB_RiserMechanites", gate:"ScarlettRefining", gateNote:"copied from USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:false,
+    p:"A mechanite transfer conduit: a sleek polished silver-white medical-grade tube with fine ribbed segments and thin " +
+      "chrome containment bands. A clear armoured window reveals a bright scarlet fluid channel within, and a small " +
+      "sterile blue indicator lamp sits beside it. Clean glitterworld nanotech hardware contrasting with its red contents."}
  ]}
 ];
 
 const ROTS = ["north","east","south","west"];
-const PX = 256;
 
-/* ---------- build the slot list ---------- */
+/* ---------- build slots + their individual prompts ---------- */
+
+function promptFor(riser, slot) {
+  const view = slot.rot ? VIEW[slot.rot] : VIEW.single;
+  const match = slot.rot ? MATCH : "";
+  return "Subject: " + riser.p +
+    "\n\nView: " + view + match +
+    "\n\n" + STYLE +
+    "\n\n" + FRAME +
+    "\n\n" + OUT;
+}
+
 const ALL = [];
 FAMILIES.forEach(fam => fam.risers.forEach(r => {
   r.family = fam;
   r.slots = r.rot
-    ? ROTS.map(o => ({file:`${r.f}_${o}.png`, label:o, rot:o}))
-    : [{file:`${r.f}.png`, label:"single", rot:null}];
-  r.slots.forEach(s => { s.path = `${DIR}/${s.file}`; s.riser = r; ALL.push(s); });
+    ? ROTS.map(o => ({ file: r.f + "_" + o + ".png", rot: o, label: o }))
+    : [{ file: r.f + ".png", rot: null, label: "texture" }];
+  r.slots.forEach(s => { s.riser = r; s.prompt = promptFor(r, s); ALL.push(s); });
 }));
 document.getElementById("fcount").textContent = ALL.length;
 
 /* ---------- render ---------- */
+
 const app = document.getElementById("app");
 FAMILIES.forEach(fam => {
-  const n = fam.risers.reduce((a,r)=>a+r.slots.length,0);
+  const n = fam.risers.reduce((a, r) => a + r.slots.length, 0);
   const g = document.createElement("div");
-  g.innerHTML = `<div class="grp"><h2>${fam.name}</h2>
-    <span class="meta">${fam.risers.length} riser${fam.risers.length>1?"s":""} · ${n} file${n>1?"s":""} · ${fam.meta}</span></div>
-    <div class="cards" id="c_${fam.id}"></div>`;
+  g.innerHTML = '<div class="grp"><h2>' + fam.name + '</h2>' +
+    '<span class="meta">' + fam.risers.length + ' riser' + (fam.risers.length > 1 ? 's' : '') +
+    ' · ' + n + ' file' + (n > 1 ? 's' : '') + ' · ' + fam.meta + '</span></div>' +
+    '<div class="cards" id="c_' + fam.id + '"></div>';
   app.appendChild(g);
-  const wrap = g.querySelector("#c_"+fam.id);
+  const wrap = g.querySelector("#c_" + fam.id);
+
   fam.risers.forEach(r => {
     const c = document.createElement("div");
     c.className = "card"; r.el = c;
-    c.innerHTML = `
-      <div class="chead"><div class="t">
-        <b>${r.n}</b>
-        <div class="defn">${r.d}</div>
-        <div class="tags">
-          <span class="tag ${r.rot?"rot":""}">${r.rot?"rotatable ×4 · Graphic_Multi":"Graphic_Single"}</span>
-          <span class="tag gate">gate: ${r.gate}</span>
-          <span class="tag">${r.net}</span>
-        </div>
-      </div></div>
-      <div class="cbody">
-        <div class="slots"></div>
-        <div class="path">${DIR}/ &nbsp;·&nbsp; ${PX}×${PX}px &nbsp;·&nbsp; ${r.gateNote}</div>
-        <div class="prompt">
-          <div class="ph2"><span>Nano Banana prompt</span>
-            <button data-copy="${r.d}">Copy</button></div>
-          <textarea id="p_${r.d}" readonly>${(r.rot
-            ? `${r.p} The box is mounted flat against a wall running along the TOP edge of the frame, viewed from above; leave the lower half of the frame empty and transparent. Produce this as ONE image; I will generate the other three rotations separately. ${STYLE} Output a ${PX}x${PX} pixel PNG with a transparent background.`
-            : `${r.p} ${STYLE} Output a ${PX}x${PX} pixel PNG with a transparent background.`)}</textarea>
-        </div>
-      </div>`;
+    c.innerHTML =
+      '<div class="chead">' +
+        '<b>' + r.n + '</b>' +
+        '<div class="defn">' + r.d + '</div>' +
+        '<div class="tags">' +
+          '<span class="tag ' + (r.rot ? 'rot' : '') + '">' +
+            (r.rot ? 'rotatable \u00d74 \u00b7 Graphic_Multi' : 'Graphic_Single') + '</span>' +
+          '<span class="tag gate">gate: ' + r.gate + '</span>' +
+          '<span class="tag">' + r.net + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cbody">' +
+        '<div class="slots"></div>' +
+        '<div class="path">' + DIR + '/ &nbsp;\u00b7&nbsp; ' + PX + '\u00d7' + PX + 'px &nbsp;\u00b7&nbsp; ' + r.gateNote + '</div>' +
+        '<div class="prompt"><div class="ptabs"></div><textarea readonly></textarea></div>' +
+      '</div>';
+
     const sw = c.querySelector(".slots");
-    r.slots.forEach(s => {
+    const tw = c.querySelector(".ptabs");
+    const ta = c.querySelector("textarea");
+    r.ta = ta;
+
+    r.select = function (i) {
+      r.active = i;
+      ta.value = r.slots[i].prompt;
+      r.slots.forEach((s, j) => {
+        s.el.classList.toggle("active", j === i);
+        s.tab.classList.toggle("on", j === i);
+      });
+    };
+
+    r.slots.forEach((s, i) => {
       const d = document.createElement("div");
       d.className = "slot"; s.el = d;
-      d.innerHTML = `<div class="ph">+</div><div class="nm">${s.file}</div><div class="px">${PX}×${PX}</div>`;
-      d.onclick = () => pick(s);
-      d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
-      d.ondragleave = () => d.classList.remove("over");
-      d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
-        const f = e.dataTransfer.files[0]; if (f) save(s, f); };
+      paint(s);
       sw.appendChild(d);
+
+      const t = document.createElement("div");
+      t.className = "ptab"; t.textContent = s.label; s.tab = t;
+      t.onclick = () => r.select(i);
+      tw.appendChild(t);
     });
+
+    const sp = document.createElement("div"); sp.className = "sp"; tw.appendChild(sp);
+    const cp = document.createElement("button");
+    cp.textContent = "Copy prompt";
+    cp.onclick = () => { navigator.clipboard.writeText(ta.value); toast("Copied " + r.slots[r.active].file); };
+    tw.appendChild(cp);
+
+    r.select(0);
     wrap.appendChild(c);
   });
 });
 
-document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => {
-  navigator.clipboard.writeText(document.getElementById("p_"+b.dataset.copy).value);
-  toast("Prompt copied");
-});
+/* ---------- slot painting + binding ---------- */
+
+function paint(s, file) {
+  const d = s.el;
+  if (file) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const warn = (img.width !== img.height) ? " \u2014 NOT SQUARE" : "";
+      d.classList.add("has");
+      d.innerHTML = '<img src="' + url + '"><div class="nm">' + s.file + '</div>' +
+        '<div class="px" style="color:' + (warn ? 'var(--bad)' : 'var(--ok)') + '">' +
+        img.width + '\u00d7' + img.height + warn + '</div>';
+      bind(s);
+    };
+    img.src = url;
+    s.done = true;
+  } else {
+    s.done = false;
+    d.classList.remove("has");
+    d.innerHTML = '<div class="ph">+</div><div class="nm">' + s.file + '</div>' +
+      '<div class="px">' + PX + '\u00d7' + PX + '</div>';
+  }
+  bind(s);
+}
+function bind(s) {
+  const d = s.el, r = s.riser, i = r.slots.indexOf(s);
+  d.onclick = () => { r.select(i); pick(s); };
+  d.onmouseenter = () => r.select(i);
+  d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
+  d.ondragleave = () => d.classList.remove("over");
+  d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
+    const f = e.dataTransfer.files[0]; if (f) save(s, f); };
+  if (r.active === i) d.classList.add("active");
+}
 
 /* ---------- file system ---------- */
+
 let root = null;
 const hasFS = "showDirectoryPicker" in window;
 const fsPill = document.getElementById("fsapi");
@@ -244,14 +411,14 @@ fsPill.className = "pill " + (hasFS ? "on" : "off");
 document.getElementById("connect").onclick = async () => {
   if (!hasFS) { toast("Use Chrome or Edge to save directly"); return; }
   try {
-    root = await window.showDirectoryPicker({ mode:"readwrite" });
+    root = await window.showDirectoryPicker({ mode: "readwrite" });
     let ok = true;
     try { await root.getDirectoryHandle("About"); } catch { ok = false; }
     if (!ok && !confirm("No About/ folder here — this may not be the mod root. Continue anyway?")) { root = null; return; }
     document.getElementById("status").textContent = "Connected to " + root.name;
     document.getElementById("rescan").disabled = false;
     scan();
-  } catch(e) { if (e.name !== "AbortError") toast("Could not open folder"); }
+  } catch (e) { if (e.name !== "AbortError") toast("Could not open folder"); }
 };
 document.getElementById("rescan").onclick = scan;
 
@@ -262,10 +429,12 @@ async function dirFor(create) {
 }
 async function scan() {
   if (!root) return;
-  let d; try { d = await dirFor(false); } catch { markAll(); toast("No Risers folder yet — it is created on first save"); return; }
+  let d;
+  try { d = await dirFor(false); }
+  catch { ALL.forEach(s => paint(s)); markAll(); toast("No Risers folder yet — created on first save"); return; }
   for (const s of ALL) {
-    try { const fh = await d.getFileHandle(s.file); show(s, await fh.getFile()); }
-    catch { clearSlot(s); }
+    try { const fh = await d.getFileHandle(s.file); paint(s, await fh.getFile()); }
+    catch { paint(s); }
   }
   markAll();
 }
@@ -274,15 +443,16 @@ async function save(s, file) {
   if (!root) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(file); a.download = s.file; a.click();
-    toast("Downloaded as " + s.file + " — move it into " + DIR); show(s, file); return;
+    toast("Downloaded as " + s.file + " — move it into " + DIR);
+    paint(s, file); return;
   }
   try {
     const d = await dirFor(true);
-    const fh = await d.getFileHandle(s.file, { create:true });
+    const fh = await d.getFileHandle(s.file, { create: true });
     const w = await fh.createWritable();
     await w.write(await file.arrayBuffer()); await w.close();
-    show(s, file); markAll(); toast("Saved " + s.file);
-  } catch(e) { toast("Save failed: " + e.message); }
+    paint(s, file); markAll(); toast("Saved " + s.file);
+  } catch (e) { toast("Save failed: " + e.message); }
 }
 function pick(s) {
   const i = document.createElement("input");
@@ -290,41 +460,15 @@ function pick(s) {
   i.onchange = () => i.files[0] && save(s, i.files[0]);
   i.click();
 }
-function show(s, file) {
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => {
-    const warn = (img.width !== img.height) ? " — NOT SQUARE" : "";
-    s.el.classList.add("has");
-    s.el.innerHTML = `<img src="${url}"><div class="nm">${s.file}</div>
-      <div class="px" style="color:${warn?"var(--bad)":"var(--ok)"}">${img.width}×${img.height}${warn}</div>`;
-    rebind(s);
-  };
-  img.src = url;
-  s.done = true;
-}
-function clearSlot(s) {
-  s.done = false;
-  s.el.classList.remove("has");
-  s.el.innerHTML = `<div class="ph">+</div><div class="nm">${s.file}</div><div class="px">${PX}×${PX}</div>`;
-  rebind(s);
-}
-function rebind(s) {
-  const d = s.el;
-  d.onclick = () => pick(s);
-  d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
-  d.ondragleave = () => d.classList.remove("over");
-  d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
-    const f = e.dataTransfer.files[0]; if (f) save(s, f); };
-}
 function markAll() {
   FAMILIES.forEach(f => f.risers.forEach(r =>
     r.el.classList.toggle("done", r.slots.every(s => s.done))));
   const n = ALL.filter(s => s.done).length;
-  document.getElementById("fcount").textContent = `${n} / ${ALL.length}`;
+  document.getElementById("fcount").textContent = n + " / " + ALL.length;
 }
 
 /* ---------- bulk drop ---------- */
+
 const dz = document.getElementById("drop");
 let dc = 0;
 addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dc++; dz.classList.add("on"); } });
@@ -338,21 +482,28 @@ addEventListener("drop", async e => {
     const s = ALL.find(x => x.file.toLowerCase() === f.name.toLowerCase());
     if (s) { await save(s, f); hit++; }
   }
-  if (files.length) toast(hit ? `Matched ${hit} of ${files.length} by filename` : "No filenames matched a slot");
+  if (files.length) toast(hit ? "Matched " + hit + " of " + files.length + " by filename" : "No filenames matched a slot");
 });
 
 document.getElementById("copyall").onclick = () => {
-  const t = FAMILIES.map(f => `##### ${f.name} #####\n\n` + f.risers.map(r =>
-    `--- ${r.n}  (${r.d})  ${r.rot?"[4 rotations]":"[single]"} ---\nFiles: ${r.slots.map(s=>s.file).join(", ")}\n\n${document.getElementById("p_"+r.d).value}\n`
-  ).join("\n")).join("\n");
+  const t = FAMILIES.map(f =>
+    "#################### " + f.name + " ####################\n\n" +
+    f.risers.map(r =>
+      r.slots.map(s =>
+        "----- " + r.n + " (" + r.d + ") \u2014 " + s.label + " \u2014 " + s.file + " -----\n\n" + s.prompt + "\n"
+      ).join("\n")
+    ).join("\n")
+  ).join("\n");
   navigator.clipboard.writeText(t);
-  toast("All 15 prompts copied");
+  toast("All " + ALL.length + " prompts copied");
 };
 
 const tEl = document.getElementById("toast");
 let tT;
-function toast(m) { tEl.textContent = m; tEl.classList.add("show");
-  clearTimeout(tT); tT = setTimeout(() => tEl.classList.remove("show"), 2100); }
+function toast(m) {
+  tEl.textContent = m; tEl.classList.add("show");
+  clearTimeout(tT); tT = setTimeout(() => tEl.classList.remove("show"), 2100);
+}
 </script>
 </body>
 </html>
