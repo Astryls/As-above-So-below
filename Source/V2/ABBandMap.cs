@@ -135,6 +135,27 @@ namespace AsAboveSoBelow
             }
             ABWormholeRearmHook.Register(map);
 
+            // REPAIR THE SKY BAND BEFORE ANYTHING LOOKS AT IT.
+            //
+            // Placed here rather than in a load hook because this is the first point at
+            // which the damage for THIS load has already happened: Map.FinalizeLoading
+            // respawns every building first, and every one of those re-registers with the
+            // edifice grid and re-fires ABSkySync (see the load note in that file). Running
+            // earlier would repair a map that is about to be broken again.
+            //
+            // Map.FinalizeInit calls components LAST, after RebuildAllRegionsAndRooms, so
+            // the AB_WallTop -> AB_MountainTop rows change passability after the region
+            // build - TerrainGrid.SetTerrain's own change effects handle that incrementally,
+            // and the queued RegenerateEverythingNow still runs after this.
+            try
+            {
+                ABSkySync.RepairAfterLoad(map, this);
+            }
+            catch (System.Exception e)
+            {
+                Log.Error(ABLog.Tag + " V2: sky-sync repair threw (map left as-is): " + e);
+            }
+
             // Always open on the ground floor. Runs for a new colony AND for a loaded save,
             // so a save taken while looking at the sky or the basement still comes back to
             // the surface. The camera has to be moved explicitly rather than left to the
