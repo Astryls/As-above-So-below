@@ -432,9 +432,15 @@ namespace AsAboveSoBelow
                 && drop > slot
                 && ABMinedRockLookup.TryGetMinedRockDef(def, out _);
             bool massCell = skyMass || beyondCapReach;
-            if (massCell && SectionLayer_ABMountainCap.MassFieldFadeEnabled)
+            // ⚠ `massCell` alone is the DECORATION gate and is NOT the right question here.
+            // It carries `drop > slot`, which exists so the cap and the cross-level emitter
+            // do not both decorate at one level down - irrelevant to whether this FILL should
+            // retract. TryMassFillCoverage asks the fill's own question (does anything draw an
+            // outline over this cell, and under whose link rule) and answers false when
+            // nothing does, which is what keeps ordinary floors on their full quad.
+            if (SectionLayer_ABMountainCap.MassFieldFadeEnabled
+                && SectionLayer_ABMountainCap.TryMassFillCoverage(map, below, massCell, fanCovered))
             {
-                SectionLayer_ABMountainCap.MassFanCoverage(map, below, fanCovered);
                 ABNineFan.AddFan(sub, above.x, above.z, altitude, fanCovered,
                     BelowTint, BelowTintClear);
             }

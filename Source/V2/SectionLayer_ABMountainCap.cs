@@ -466,6 +466,74 @@ namespace AsAboveSoBelow
             return new Color32(c.r, c.g, c.b, covered ? byte.MaxValue : (byte)0);
         }
 
+        /// <summary>
+        /// COVERAGE FOR A BELOW CELL'S BASE FILL - and WHICH RULE APPLIES DEPENDS ON WHO
+        /// DRAWS THE OUTLINE OVER IT. Returns false when nothing will, in which case the
+        /// caller must keep its full-cell quad: retracting a fill that nothing covers just
+        /// punches a transparent notch.
+        ///
+        /// ⚠ THE FIRST VERSION OF THIS GATED ON THE DECORATION TEST AND MISSED THE COMMONEST
+        /// CASE. The below-terrain mirror asked "is this cell one I emit mass decoration
+        /// for?", which carries a `drop > slot` condition that exists to stop the CAP and the
+        /// cross-level emitter double-drawing at one level down. That condition belongs to
+        /// the DECORATION, not to the FILL. An undug rock outcrop exactly one level below the
+        /// viewer therefore kept its hard quad while its own sprite - transparent at the
+        /// rounded corners - sat on top, which is the "outcrops still show the floor texture"
+        /// report. Two different questions had been collapsed into one gate again.
+        ///
+        /// A ROCK EDIFICE brings its own outline (the Mineable's sprite, printed by the thing
+        /// loop because reaching this code path already proves the cell is unfogged), and
+        /// vanilla rock links with rock and the MAP EDGE - never with soil. So it retracts on
+        /// the MASS rule. Sky mass and deep mined floors are decorated by our own atlas tile,
+        /// which uses the CAP's rule, where meadow counts as linked and no lip is drawn
+        /// against grass. Matching each fill to its own outline's rule is the whole point;
+        /// using one rule for both would either square off the outcrops or eat the fill at
+        /// every plateau/meadow boundary.
+        /// </summary>
+        internal static bool TryMassFillCoverage(Map map, IntVec3 c, bool decorated, bool[] covered)
+        {
+            if (map == null || covered == null || !c.InBounds(map))
+            {
+                return false;
+            }
+            Building ed = map.edificeGrid[c];
+            if (ed != null
+                && (ed.def.mineable
+                    || (ed.def.building != null && ed.def.building.isNaturalRock)))
+            {
+                bool n = MassLinked(map, c + IntVec3.North);
+                bool s = MassLinked(map, c + IntVec3.South);
+                bool e = MassLinked(map, c + IntVec3.East);
+                bool w = MassLinked(map, c + IntVec3.West);
+                // ⚠ AN ISOLATED ROCK KEEPS ITS FULL QUAD, and this guard is load-bearing.
+                //
+                // Nothing is drawn BEHIND a retracted fill: in an open-air column vanilla's
+                // terrain layer emits nothing (AB_OpenAir is dontRender), so the fill IS the
+                // backdrop and eroding it exposes the map background. On a mass edge that is
+                // harmless and in fact desirable - the gap falls exactly where the atlas
+                // outline lands, which is black anyway. A lone rock with no linked cardinal
+                // erodes to the centre vertex alone, which would ring it with a dark halo
+                // instead of the clean terrain vanilla shows. It also has nothing to square
+                // off AGAINST: its sprite is the isolated tile, outlined on all four sides.
+                if (!(n || s || e || w))
+                {
+                    return false;
+                }
+                ABNineFan.CoverInterior(covered, n, s, e, w,
+                    MassLinked(map, c + IntVec3.South + IntVec3.West),
+                    MassLinked(map, c + IntVec3.North + IntVec3.West),
+                    MassLinked(map, c + IntVec3.North + IntVec3.East),
+                    MassLinked(map, c + IntVec3.South + IntVec3.East));
+                return true;
+            }
+            if (decorated)
+            {
+                MassFanCoverage(map, c, covered);
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Retraction coverage for a mass cell under the CAP's link rule, written
         /// into the caller's scratch. Exposed so the below-terrain mirror can erode its own
         /// base quad on exactly the cells this class then decorates, without restating the

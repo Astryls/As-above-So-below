@@ -62,11 +62,16 @@ namespace AsAboveSoBelow
 
         public static string StateSummary()
         {
+            // massFieldFade lives on the cap layer rather than here, but it is a RENDERING
+            // toggle a tester can leave flipped mid-session, and an UNSTAMPED toggle is
+            // exactly how a later reading gets poisoned - the reason the bisect flags are
+            // stamped at all.
             return "terrain=" + DrawBelowTerrain
                 + " things=" + DrawBelowThings
                 + " airMask=" + DrawBelowAirMask
                 + " lighting=" + DrawBelowLighting
-                + " belowWater=" + DrawBelowWater;
+                + " belowWater=" + DrawBelowWater
+                + " massFieldFade=" + SectionLayer_ABMountainCap.MassFieldFadeEnabled;
         }
     }
 }
