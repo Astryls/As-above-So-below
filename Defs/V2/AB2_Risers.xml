@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    CROSS-LEVEL UTILITY RISERS - shared base.
+
+    A riser is placed on one level and pairs with its twin on the level above or below,
+    joining the two levels' networks into one. The pairing mechanic is not built yet
+    (§30b-d); until it is, a riser behaves as an ordinary member of its own level's
+    network, which is a coherent thing to build and cannot break a save.
+
+    ⚠ THIS BASE LIVES IN Defs/ AND IS ALWAYS LOADED, while most of its children live under
+    Compat/ and load only with their host mod (see LoadFolders.xml). That is fine and is
+    the point: an abstract parent naming only vanilla types is safe everywhere, so every
+    gated child can inherit shape, cost and stats from one place instead of repeating them.
+
+    ⚠ NON-EDIFICE ON PURPOSE. Risers sit alongside the host mod's own pipes and conduits,
+    which are themselves non-edifice and expect to share a cell with walls and floors. An
+    edifice riser could not be placed where players will actually want it.
+  -->
+  <ThingDef Name="AB_RiserBase" ParentName="BuildingBase" Abstract="True">
+    <thingClass>Building</thingClass>
+    <category>Building</category>
+    <size>(1,1)</size>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <pathCost>30</pathCost>
+    <fillPercent>0.4</fillPercent>
+    <blockWind>false</blockWind>
+    <blockLight>false</blockLight>
+    <canOverlapZones>false</canOverlapZones>
+    <rotatable>false</rotatable>
+    <selectable>true</selectable>
+    <terrainAffordanceNeeded>Light</terrainAffordanceNeeded>
+    <constructEffect>ConstructMetal</constructEffect>
+    <repairEffect>Repair</repairEffect>
+    <leaveResourcesWhenKilled>true</leaveResourcesWhenKilled>
+    <designationHotKey>Misc4</designationHotKey>
+    <statBases>
+      <MaxHitPoints>120</MaxHitPoints>
+      <WorkToBuild>1100</WorkToBuild>
+      <Flammability>0.4</Flammability>
+      <Beauty>-3</Beauty>
+    </statBases>
+    <costList>
+      <Steel>35</Steel>
+      <ComponentIndustrial>1</ComponentIndustrial>
+    </costList>
+    <building>
+      <isEdifice>false</isEdifice>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <graphicData>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+      <damageData>
+        <rect>(0.1,0.1,0.8,0.8)</rect>
+      </damageData>
+    </graphicData>
+  </ThingDef>
+
+  <!--
+    Wall-mounted variant: three rotations rather than one flat plate.
+
+    ⚠ THREE FILES, NOT FOUR. Graphic_Multi.Init falls back to _east with westFlipped when
+    _west is absent, so authoring north/east/south is complete - the same thing Dubs Bad
+    Hygiene ships for its own boilers and vents. A hand-made _west would only be an
+    opportunity for the two side views to drift apart.
+  -->
+  <ThingDef Name="AB_RiserWallBase" ParentName="AB_RiserBase" Abstract="True">
+    <rotatable>true</rotatable>
+    <graphicData>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+  </ThingDef>
+
+  <!-- ============================ VANILLA POWER ============================ -->
+
+  <ThingDef ParentName="AB_RiserWallBase">
+    <defName>AB_RiserPower</defName>
+    <label>power riser</label>
+    <description>A wall-mounted distribution box that carries electricity between levels. Build one on a level and its twin appears on the level above or below, joining the two power grids into one.\n\nWithout a riser, each level's power grid is entirely separate - conduits cannot cross the rock between bands.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserPower</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Power</designationCategory>
+    <uiOrder>2100</uiOrder>
+    <researchPrerequisites>
+      <li>Electricity</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="CompProperties_Power">
+        <compClass>CompPowerTransmitter</compClass>
+        <transmitsPower>true</transmitsPower>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Power</network>
+        <wallMounted>true</wallMounted>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

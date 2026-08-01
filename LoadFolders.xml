@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ⚠ THE ROOT ENTRY IS LOAD-BEARING. The moment this file exists RimWorld stops loading the
+  mod folder implicitly and loads ONLY what is listed here, so dropping "/" silently
+  unloads every Def, Texture, Language file and Assembly in the mod.
+
+  Everything under Compat/ is gated because those defs name types and defs that belong to
+  another mod - DubsBadHygiene.CompProperties_Pipe, PipeSystem.CompProperties_Resource,
+  Rimatomics.RimatomicsThingDef, VCHE_ChemfuelNet. A def naming an absent class is a parse
+  error at load, not a graceful skip, so the gate is what makes the riser set safe to ship
+  to someone who owns none of these mods.
+
+  MayRequire on a <li> would cover a comp entry, but not a Class= on the ThingDef itself
+  (Rimatomics) nor a <designationCategory> pointing at a foreign category, so folder-level
+  gating is the only thing that covers every case uniformly.
+-->
+<loadFolders>
+  <v1.6>
+    <li>/</li>
+    <li IfModActive="Dubwise.DubsBadHygiene">Compat/DBH</li>
+    <li IfModActive="Dubwise.Rimefeller">Compat/Rimefeller</li>
+    <li IfModActive="Dubwise.Rimatomics">Compat/Rimatomics</li>
+    <li IfModActive="VanillaExpanded.VChemfuelE">Compat/VCHE</li>
+    <li IfModActive="VanillaExpanded.Temperature">Compat/VTE</li>
+    <li IfModActive="Ushanka.LuciferiumExpansion">Compat/Luciferium</li>
+  </v1.6>
+</loadFolders>

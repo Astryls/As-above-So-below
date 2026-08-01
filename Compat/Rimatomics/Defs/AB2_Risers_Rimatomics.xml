@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Loads only with Dubwise.Rimatomics active (LoadFolders.xml).
+
+    ⚠ EVERY DEF HERE IS Class="Rimatomics.RimatomicsThingDef", AND THAT IS NOT COSMETIC.
+    Rimatomics does not use vanilla research at all: `RimatomicsThingDef.ResolveReferences`
+    scans every ResearchStepDef and records which steps list this def in their <Unlocks>,
+    and the build menu is gated on that. A plain ThingDef here would carry no unlock
+    information and would simply never become available.
+
+    That is also why `<researchPrerequisites>` is absent - it would do nothing. The gate is
+    added by Patches/AB2_RiserUnlocks.xml, which appends each riser to the same step that
+    unlocks the pipe it rides on. An empty research field on a Rimatomics building means
+    "look for another gate", not "no gate".
+  -->
+
+  <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
+    <defName>AB_RiserColdWater</defName>
+    <label>cold water riser</label>
+    <description>A feed stack that carries cold water between levels. Build one and its twin appears on the level above or below, joining the two cold water loops into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserColdWater</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimatomics</designationCategory>
+    <comps>
+      <li Class="Rimatomics.CompProperties_Pipe">
+        <mode>ColdWater</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimatomics.ColdWater</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
+    <defName>AB_RiserSteam</defName>
+    <label>steam riser</label>
+    <description>A lagged stack that carries high pressure steam between levels. Build one and its twin appears on the level above or below, joining the two steam loops into one.\n\nLets a reactor in the basement drive turbines on the surface.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserSteam</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimatomics</designationCategory>
+    <comps>
+      <li Class="Rimatomics.CompProperties_Pipe">
+        <mode>Steam</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimatomics.Steam</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
+    <defName>AB_RiserCoolant</defName>
+    <label>coolant riser</label>
+    <description>A stack that carries reactor coolant between levels. Build one and its twin appears on the level above or below, joining the two coolant loops into one.\n\nCooling towers need open sky; reactors do not.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserCoolant</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimatomics</designationCategory>
+    <comps>
+      <li Class="Rimatomics.CompProperties_Pipe">
+        <mode>Cooling</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimatomics.Cooling</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserWallBase" Class="Rimatomics.RimatomicsThingDef">
+    <defName>AB_RiserHighVoltage</defName>
+    <label>high voltage riser</label>
+    <description>A wall-mounted busbar cabinet that carries high voltage between levels. Build one and its twin appears on the level above or below, joining the two high voltage networks into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserHighVoltage</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimatomics</designationCategory>
+    <comps>
+      <li Class="Rimatomics.CompProperties_Pipe">
+        <mode>HighVoltage</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimatomics.HighVoltage</network>
+        <wallMounted>true</wallMounted>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserWallBase" Class="Rimatomics.RimatomicsThingDef">
+    <defName>AB_RiserLoom</defName>
+    <label>console loom riser</label>
+    <description>A wall-mounted junction cabinet that carries reactor control signals between levels. Build one and its twin appears on the level above or below, joining the two control looms into one.\n\nLets a console watch a reactor it does not share a floor with.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserLoom</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimatomics</designationCategory>
+    <comps>
+      <li Class="Rimatomics.CompProperties_Pipe">
+        <mode>Loom</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimatomics.Loom</network>
+        <wallMounted>true</wallMounted>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

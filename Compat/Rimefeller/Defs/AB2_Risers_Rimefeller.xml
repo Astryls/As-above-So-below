@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Loads only with Dubwise.Rimefeller active (LoadFolders.xml). Rimefeller.PipeType has
+       exactly one member, Oil, so this is the complete set. Gate copied from their own
+       OilPipeline. -->
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserOil</defName>
+    <label>oil pipeline riser</label>
+    <description>A pipeline stack that carries crude oil between levels. Build one and its twin appears on the level above or below, joining the two pipelines into one.\n\nUseful when the derricks are on the surface and the refinery is in the basement.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserOil</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Rimefeller</designationCategory>
+    <researchPrerequisites>
+      <li>OilDrilling</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="Rimefeller.CompProperties_Pipe">
+        <mode>Oil</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>Rimefeller.Oil</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

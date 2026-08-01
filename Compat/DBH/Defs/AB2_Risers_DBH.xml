@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Dubs Bad Hygiene risers. This whole folder loads only with Dubwise.DubsBadHygiene
+    active (LoadFolders.xml), which is what makes naming DubsBadHygiene.CompProperties_Pipe
+    safe here.
+
+    ⚠ TWO RISERS, NOT FOUR. DubsBadHygiene.PipeType declares Sewage, Air, Heating and
+    Water, but only Sewage (29 uses) and Air (4) appear anywhere in their defs. Heating and
+    Water are declared capability with no content behind them, so risers for them would be
+    permanently dead buildings. Count usage in the DEFS, not members in the enum.
+
+    ⚠ THE RESEARCH GATE IS COPIED VERBATIM, MayRequire INCLUDED. DBH's own pipes carry
+    `<li MayRequire="dbhlitemode">Plumbing</li>` - the requirement applies ONLY when DBH
+    Lite is installed and is free otherwise. Hard-gating on Plumbing would leave the riser
+    unbuildable for every normal DBH player while their actual plumbing was free from the
+    first tick. A research gate can be conditional; copy the attribute, not just the value.
+  -->
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserPlumbing</defName>
+    <label>plumbing riser</label>
+    <description>A plumbing stack that carries water and sewage between levels. Build one and its twin appears on the level above or below, joining the two plumbing networks into one.\n\nWithout a riser each level plumbs separately - pipes cannot cross the rock between bands.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserPlumbing</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Hygiene</designationCategory>
+    <researchPrerequisites>
+      <li MayRequire="dbhlitemode">Plumbing</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="DubsBadHygiene.CompProperties_Pipe">
+        <mode>Sewage</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>DBH.Sewage</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserAirDuct</defName>
+    <label>air duct riser</label>
+    <description>A ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two air networks into one.\n\nAir conditioning is otherwise trapped on the level that produced it.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserAirDuct</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Temperature</designationCategory>
+    <researchPrerequisites>
+      <li MayRequire="dbhlitemode">MultiSplitAirCon</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="DubsBadHygiene.CompProperties_Pipe">
+        <mode>Air</mode>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>DBH.Air</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

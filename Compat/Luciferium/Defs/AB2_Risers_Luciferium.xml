@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Loads only with Ushanka.LuciferiumExpansion active (LoadFolders.xml).
+
+    ⚠ CATEGORY IS DELIBERATELY `Misc` RATHER THAN THE ONE THEIR OWN PIPES USE. Luciferium's
+    three pipes are all filed under `VCHE_PipeNetworks` - but that category is defined by
+    Vanilla Chemfuel Expanded (Defs/Designation.xml), and Luciferium's only mod dependency
+    is Vanilla Expanded Framework. Anyone running Luciferium WITHOUT Chemfuel Expanded is
+    already looking at pipes filed under a category that does not exist. Copying that would
+    reproduce their bug in our defs, and our folder gate only guarantees Luciferium is
+    present, not VCHE. Misc is vanilla and always resolves; Luciferium itself uses it
+    elsewhere.
+  -->
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserScarletSludge</defName>
+    <label>scarlet sludge riser</label>
+    <description>A transfer stack that carries scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two sludge networks into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserScarletSludge</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Misc</designationCategory>
+    <researchPrerequisites>
+      <li>BasicMechanitesUnderstanding</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>ScarletNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.ScarletNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserCompressedSludge</defName>
+    <label>compressed sludge riser</label>
+    <description>A pressurised stack that carries compressed scarlet sludge between levels. Build one and its twin appears on the level above or below, joining the two networks into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserCompressedSludge</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Misc</designationCategory>
+    <researchPrerequisites>
+      <li>ScarlettRefining</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>USH_CompressedScarletSludgeNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.USH_CompressedScarletSludgeNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserMechanites</defName>
+    <label>mechanite riser</label>
+    <description>A sealed conduit that carries scarlet mechanites between levels. Build one and its twin appears on the level above or below, joining the two mechanite networks into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserMechanites</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Misc</designationCategory>
+    <researchPrerequisites>
+      <li>ScarlettRefining</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>USH_ScarletMechanitesNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.USH_ScarletMechanitesNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

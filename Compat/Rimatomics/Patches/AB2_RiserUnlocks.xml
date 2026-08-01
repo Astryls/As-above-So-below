@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!--
+    Rimatomics gates its buildings through its OWN research tree, not vanilla's: a building
+    becomes available when some ResearchStepDef lists it in <Unlocks>. So each riser is
+    appended to the very step that unlocks the pipe it carries - the riser and its pipe
+    arrive together, and we never invent a research project of our own.
+
+    ⚠ THE XPATH TARGETS `Def`, NOT `ResearchStepDef`. Rimatomics authors these as
+    `<Def Class="Rimatomics.TestForCore">` - the element name is the generic `Def` with the
+    worker supplied by the Class attribute - so an xpath of Defs/ResearchStepDef[...] would
+    match nothing and fail silently.
+
+    This file loads only with Dubwise.Rimatomics active (LoadFolders.xml), so the targets
+    are guaranteed present and no MayRequire is needed.
+  -->
+
+  <!-- BuildReactorTurbine already unlocks waterPipe and steamPipe. -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/Def[defName="BuildReactorTurbine"]/Unlocks</xpath>
+    <value>
+      <li>AB_RiserColdWater</li>
+      <li>AB_RiserSteam</li>
+    </value>
+  </Operation>
+
+  <!-- TestForCore already unlocks coolingPipe. -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/Def[defName="TestForCore"]/Unlocks</xpath>
+    <value>
+      <li>AB_RiserCoolant</li>
+    </value>
+  </Operation>
+
+  <!-- BuildReactorCooling already unlocks HighVoltage and controllerLoom. -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/Def[defName="BuildReactorCooling"]/Unlocks</xpath>
+    <value>
+      <li>AB_RiserHighVoltage</li>
+      <li>AB_RiserLoom</li>
+    </value>
+  </Operation>
+
+</Patch>

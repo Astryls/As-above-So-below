@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Loads only with VanillaExpanded.Temperature active (LoadFolders.xml). VTE's ducting
+       is a PipeSystem net (AcPipeNet) exactly like VCHE's, so the comp is the framework's.
+       The category is vanilla Temperature, which VTE also uses. -->
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserVentDuct</defName>
+    <label>vent duct riser</label>
+    <description>A ducting stack that carries conditioned air between levels. Build one and its twin appears on the level above or below, joining the two duct networks into one.\n\nOne compressor bank can then serve the whole column.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserVentDuct</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>Temperature</designationCategory>
+    <researchPrerequisites>
+      <li>VTE_HVAC</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>VTE_EfficiencyNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.VTE_EfficiencyNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

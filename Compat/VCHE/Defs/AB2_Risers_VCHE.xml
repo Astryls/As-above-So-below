@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Loads only with VanillaExpanded.VChemfuelE active (LoadFolders.xml).
+
+    The comp is Vanilla Expanded Framework's, not VCHE's - VCHE.dll contains four classes
+    and no network code at all; the pipes are PipeSystem defs pointing at a PipeNetDef that
+    VCHE supplies. Gating on VCHE is still correct because VCHE_ChemfuelNet and
+    VCHE_DeepchemNet are VCHE's defs, and VCHE hard-depends on the framework.
+
+    `VCHE_PipeNetworks` is VCHE's own designation category (Defs/Designation.xml), so it is
+    only safe to name inside this gated folder.
+  -->
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserChemfuel</defName>
+    <label>chemfuel riser</label>
+    <description>A transfer stack that carries chemfuel between levels. Build one and its twin appears on the level above or below, joining the two chemfuel networks into one.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserChemfuel</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>VCHE_PipeNetworks</designationCategory>
+    <researchPrerequisites>
+      <li>BiofuelRefining</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>VCHE_ChemfuelNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.VCHE_ChemfuelNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_RiserBase">
+    <defName>AB_RiserDeepchem</defName>
+    <label>deepchem riser</label>
+    <description>A transfer stack that carries raw deepchem between levels. Build one and its twin appears on the level above or below, joining the two deepchem networks into one.\n\nDeepchem comes from underground; the refinery rarely wants to be there with it.</description>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_RiserDeepchem</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <designationCategory>VCHE_PipeNetworks</designationCategory>
+    <researchPrerequisites>
+      <li>BiofuelRefining</li>
+    </researchPrerequisites>
+    <comps>
+      <li Class="PipeSystem.CompProperties_Resource">
+        <pipeNet>VCHE_DeepchemNet</pipeNet>
+      </li>
+    </comps>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABRiserExt">
+        <network>VEF.VCHE_DeepchemNet</network>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>
