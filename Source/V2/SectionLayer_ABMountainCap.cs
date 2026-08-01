@@ -1307,11 +1307,30 @@ namespace AsAboveSoBelow
                 return null;
             }
             ThingDef d = map.edificeGrid[c]?.def;
-            if (d == null)
+            if (d != null && (d.mineable || (d.building != null && d.building.isNaturalRock)))
             {
-                return null;
+                return d; // undug ground mountain: the rock wall itself
             }
-            return d.mineable || (d.building != null && d.building.isNaturalRock) ? d : null;
+            // ⚠ SKY-BAND MASS HAS NO EDIFICE AT ALL.
+            //
+            // A carved sky level's mountain is AB_MountainTop TERRAIN; there is no rock wall
+            // to find, because the rock LOOK is supplied entirely by the cap drawing into
+            // that band's own mesh. An edifice-only test therefore returns null for exactly
+            // the cells that produced "+2 does not show the rock ledge of +1".
+            //
+            // Type it the way the cap itself does - from the band one Slot below - so the
+            // stone matches what the level beneath is made of and a column stays consistent
+            // as the player climbs.
+            if (map.terrainGrid.TerrainAt(c) == ABDefOf.AB_MountainTop)
+            {
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands != null && bands.Banded && bands.Slot > 0)
+                {
+                    return GroundRockAt(map, c + new IntVec3(0, 0, -bands.Slot))
+                        ?? FallbackRock(map);
+                }
+            }
+            return null;
         }
 
         private static bool IsMass(Map map, IntVec3 c)

@@ -466,6 +466,18 @@ namespace AsAboveSoBelow
             // mountain edge at +1. The lookup keeps it to rock-derived terrain, and
             // EmitMassSilhouetteAt self-guards anyway (it returns false when the cell has a
             // mineable edifice whose own sprite draws the edge).
+            // ⚠ AND THE SILHOUETTE ALONE IS NOT ENOUGH - USE ITS RETURN VALUE.
+            //
+            // EmitMassSilhouetteAt covers the vanilla LINKED case (lip plus corner fillers)
+            // and RETURNS FALSE when it declines: a mineable edifice, or a variant-mode
+            // graphic - which is every rock once Better Mountains is installed. Nothing
+            // then drew the mass at all, so a sky ledge one level down rendered as bare
+            // substituted stone with no rock on it. Reported as "+2 does not show the rock
+            // ledge of +1", and BM-only for exactly that reason.
+            //
+            // Handing off on its own return value is what keeps this from double-drawing:
+            // the representation runs ONLY where the silhouette refused, so vanilla linked
+            // rock keeps its lip and corner fillers untouched and BM rock gets its sprite.
             int drop = above.z - below.z;
             bool skyMass = def == ABDefOf.AB_MountainTop;
             bool beyondCapReach = slot > 0
@@ -473,8 +485,12 @@ namespace AsAboveSoBelow
                 && ABMinedRockLookup.TryGetMinedRockDef(def, out _);
             if (skyMass || beyondCapReach)
             {
-                SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
-                    drop, altitude + 0.02f, fanCovered, meadowAdj);
+                if (!SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
+                        drop, altitude + 0.02f, fanCovered, meadowAdj))
+                {
+                    SectionLayer_ABMountainCap.EmitMassRepresentationAt(this, map, below,
+                        drop, altitude);
+                }
             }
             return true;
         }
