@@ -194,13 +194,23 @@ namespace AsAboveSoBelow
                         // one above it.
                         int levels = BuildDepthStack(map, bands, terrainGrid, fog, below);
                         bool drew = false;
+                        bool opaqueBelow = false;
                         for (int d = levels - 1; d >= 0; d--)
                         {
-                            // The bottom entry never erodes - it is the opaque backdrop the
-                            // whole stack stands on, which is what makes a hole structurally
-                            // impossible rather than merely unlikely.
+                            // ⚠ EROSION IS PERMITTED ONLY ONCE SOMETHING OPAQUE HAS ACTUALLY
+                            // BEEN LAID UNDER US - MEASURED, NOT ASSUMED.
+                            //
+                            // The first version said "the bottom entry never erodes, therefore
+                            // the bottom is opaque", which is an assumption about the bottom
+                            // rather than a fact about the mesh. PrintBelowTerrain returns
+                            // early and draws NOTHING when the cell's terrain is dontRender or
+                            // its material is missing, and then every level above it eroded
+                            // onto a hole - the staircase of missing floor along a mass edge.
+                            // Carrying the answer up the stack makes it impossible to erode
+                            // onto nothing regardless of which entries decline.
                             drew |= PrintBelowTerrain(map, terrainGrid, depthCell[d], c,
-                                terrainAlt, slot, d, levels, d < levels - 1);
+                                terrainAlt, slot, d, levels, opaqueBelow, out bool laidOpaque);
+                            opaqueBelow |= laidOpaque;
                         }
                         if (!drew && ABV2Debug.DrawBelowAirMask)
                         {
@@ -397,8 +407,10 @@ namespace AsAboveSoBelow
         ///    altitude.
         /// </summary>
         private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
-            IntVec3 above, float altitude, int slot, int depth, int levels, bool mayErode)
+            IntVec3 above, float altitude, int slot, int depth, int levels, bool mayErode,
+            out bool laidOpaque)
         {
+            laidOpaque = false;
             TerrainDef def = terrainGrid.TerrainAt(below);
             if (def == null || def.dontRender)
             {
@@ -502,6 +514,7 @@ namespace AsAboveSoBelow
                     {
                         AddQuad(backSub, above, altitude, BelowTint);
                         eroded = true;
+                        laidOpaque = true; // the borrowed ground covers the cell
                     }
                 }
             }
@@ -527,9 +540,10 @@ namespace AsAboveSoBelow
                 sub.tris.Add(count);
                 sub.tris.Add(count + 2);
                 sub.tris.Add(count + 3);
+                laidOpaque = true; // a full-cell quad: everything above may erode onto it
             }
 
-            PrintBelowTerrainEdges(map, terrainGrid, below, above, self);
+            PrintBelowTerrainEdges(map, terrainGrid, below, above, self, depth, levels);
             // Give a mountain mass its EDGE back. The substituted rough terrain above only
             // restores its stone; the lip, outline and corner fillers that make it read as a
             // mountain are emitted by the cap layer into its own band's mesh, so they have to
@@ -666,14 +680,22 @@ namespace AsAboveSoBelow
         /// A single-level column (the overwhelming majority) is left completely alone - the
         /// unmodified material, byte-identical to before the stack existed.
         /// </summary>
-        private const int DepthQueueTop = 2064;
+        /// <summary>Terrain family base. Levels are a stride apart, precedence is the
+        /// tiebreak inside a level, and 8 levels x 32 keeps the whole band at 2000-2255 -
+        /// inside the terrain range, nowhere near the cutout family where pawns live.</summary>
+        private const int DepthQueueBase = 2000;
+
+        private const int DepthQueueStride = 32;
 
         private static readonly Dictionary<Material, Material[]> depthQueued =
             new Dictionary<Material, Material[]>();
 
         private static Material DepthQueue(Material source, int depth, int levels)
         {
-            if (source == null || levels <= 1 || depth <= 0)
+            // ⚠ A SINGLE-LEVEL COLUMN IS LEFT COMPLETELY ALONE. Ordering only ever matters
+            // WITHIN a column - two columns never overlap - so a one-level column keeps its
+            // untouched material and stays byte-identical to the verified behaviour.
+            if (source == null || levels <= 1)
             {
                 return source;
             }
@@ -686,13 +708,18 @@ namespace AsAboveSoBelow
                 byDepth = new Material[8];
                 depthQueued[source] = byDepth;
             }
-            int slot = Mathf.Clamp(depth, 1, 7);
+            int slot = Mathf.Clamp(depth, 0, 7);
             if (byDepth[slot] == null)
             {
-                int tie = Mathf.Clamp(source.renderQueue - 2000, 0, 7);
+                // ⚠ DEPTH 0 MUST BE RE-QUEUED TOO. Leaving the nearest level on its natural
+                // queue was the inversion bug: a shallow soil sits near 2000 while a deep
+                // stone (renderPrecedence 190+) had been re-queued ABOVE it, so the deeper
+                // level painted straight over the nearer one. Every level in a stack has to
+                // live in the same controlled band or the ordering is only half-imposed.
+                int tie = Mathf.Clamp(source.renderQueue - DepthQueueBase, 0, DepthQueueStride - 1);
                 byDepth[slot] = new Material(source)
                 {
-                    renderQueue = DepthQueueTop - (slot * 8) + tie
+                    renderQueue = DepthQueueBase + ((7 - slot) * DepthQueueStride) + tie
                 };
             }
             return byDepth[slot];
@@ -753,7 +780,7 @@ namespace AsAboveSoBelow
         /// bleed over this cell gets a 9-vertex fan whose alpha marks which of the eight
         /// perimeter points it reaches.</summary>
         private void PrintBelowTerrainEdges(Map map, TerrainGrid terrainGrid, IntVec3 below,
-            IntVec3 above, CellTerrain self)
+            IntVec3 above, CellTerrain self, int depth, int levels)
         {
             edgeSet.Clear();
             IntVec3[] around = GenAdj.AdjacentCellsAroundBottom;
@@ -790,7 +817,9 @@ namespace AsAboveSoBelow
             float z = above.z;
             foreach (CellTerrain other in edgeSet)
             {
-                Material mat = MaterialFor(map, other);
+                // Depth-queued with the base fill it belongs to, or a fade from a DEEP level
+                // would out-queue a nearer level's floor and bleed up through it.
+                Material mat = DepthQueue(MaterialFor(map, other), depth, levels);
                 LayerSubMesh sub = mat != null ? GetSubMesh(mat) : null;
                 if (sub == null)
                 {

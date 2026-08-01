@@ -343,6 +343,15 @@ namespace AsAboveSoBelow
         /// regenerate, not a cell). If a mountainous map ever starts stuttering while panning,
         /// turn this off FIRST - it is the cheapest way to confirm or clear it.
         /// </summary>
+        /// <summary>⚠ DEFAULTS ON, ACCEPTED ON LOOK ONLY (run #260, `massDepthCut=True` in the
+        /// bisect stamp, three stone types, Mountain+Caves). It briefly defaulted OFF while
+        /// the hole bug was open; that is no longer the shipped state.
+        ///
+        /// ⚠ THE FRAME COST WAS NEVER MEASURED. A column over deep mass emits up to one fill
+        /// and one outline PER LEVEL, and section regeneration is this mod's documented hot
+        /// spot. If a mountainous map stutters while panning, this is the FIRST switch to
+        /// throw - and if it turns out to be the cause, flipping this default back is the
+        /// whole fix.</summary>
         internal static bool MassDepthCutEnabled = true;
 
         /// <summary>Field clones: the rock's ROUGH TERRAIN material (world-position
