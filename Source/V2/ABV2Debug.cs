@@ -71,7 +71,8 @@ namespace AsAboveSoBelow
                 + " airMask=" + DrawBelowAirMask
                 + " lighting=" + DrawBelowLighting
                 + " belowWater=" + DrawBelowWater
-                + " massFieldFade=" + SectionLayer_ABMountainCap.MassFieldFadeEnabled;
+                + " massFieldFade=" + SectionLayer_ABMountainCap.MassFieldFadeEnabled
+                + " massDepthCut=" + SectionLayer_ABMountainCap.MassDepthCutEnabled;
         }
     }
 }

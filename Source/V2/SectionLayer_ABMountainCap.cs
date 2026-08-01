@@ -328,6 +328,23 @@ namespace AsAboveSoBelow
         /// </summary>
         internal static bool MassFieldFadeEnabled = true;
 
+        /// <summary>
+        /// DEV A/B SWITCH (debug action "AB2: toggle mass depth cut") for the multi-level
+        /// descent.
+        ///
+        /// OFF resolves one level per column, the shared descent's own answer. ON keeps
+        /// descending THROUGH mass and stops at the first solid floor, drawing each level
+        /// deepest-first so a mountain reads as one mass continuing down instead of a stack of
+        /// tiers each lying on the next.
+        ///
+        /// ⚠ THIS IS THE ONE TOGGLE WITH A REAL RUNTIME COST. A column over deep mass emits up
+        /// to one fill and one outline PER LEVEL rather than one of each, and section
+        /// regeneration is this mod's documented hot spot (the unit of waste is a section
+        /// regenerate, not a cell). If a mountainous map ever starts stuttering while panning,
+        /// turn this off FIRST - it is the cheapest way to confirm or clear it.
+        /// </summary>
+        internal static bool MassDepthCutEnabled = true;
+
         /// <summary>Field clones: the rock's ROUGH TERRAIN material (world-position
         /// sampled - genuinely textured at any scale, where the atlas' fully-linked
         /// mask-15 tile is near-flat; the run-25 lesson relearned the hard way via the

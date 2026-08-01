@@ -183,12 +183,30 @@ namespace AsAboveSoBelow
                         continue;
                     }
 
-                    if (ABV2Debug.DrawBelowTerrain
-                        && !PrintBelowTerrain(map, terrainGrid, below, c, terrainAlt, slot)
-                        && ABV2Debug.DrawBelowAirMask)
+                    if (ABV2Debug.DrawBelowTerrain)
                     {
-                        // Below terrain is itself dontRender: still needs a backdrop.
-                        AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
+                        // THE DEPTH STACK. A mass cell is opaque to the shared descent rule,
+                        // so a column used to resolve exactly ONE level and stop - which is
+                        // why a mountain read as each tier lying on top of the next rather
+                        // than one mass continuing down. Here the descent keeps going THROUGH
+                        // mass and stops at the first solid floor, and the levels are drawn
+                        // DEEPEST FIRST so each one shows through the eroded margins of the
+                        // one above it.
+                        int levels = BuildDepthStack(map, bands, terrainGrid, fog, below);
+                        bool drew = false;
+                        for (int d = levels - 1; d >= 0; d--)
+                        {
+                            // The bottom entry never erodes - it is the opaque backdrop the
+                            // whole stack stands on, which is what makes a hole structurally
+                            // impossible rather than merely unlikely.
+                            drew |= PrintBelowTerrain(map, terrainGrid, depthCell[d], c,
+                                terrainAlt, slot, d, levels, d < levels - 1);
+                        }
+                        if (!drew && ABV2Debug.DrawBelowAirMask)
+                        {
+                            // Below terrain is itself dontRender: still needs a backdrop.
+                            AddQuad(GetSubMesh(AirMaskMat), c, maskAlt, OpaqueWhite);
+                        }
                     }
                     printed = true;
 
@@ -379,7 +397,7 @@ namespace AsAboveSoBelow
         ///    altitude.
         /// </summary>
         private bool PrintBelowTerrain(Map map, TerrainGrid terrainGrid, IntVec3 below,
-            IntVec3 above, float altitude, int slot)
+            IntVec3 above, float altitude, int slot, int depth, int levels, bool mayErode)
         {
             TerrainDef def = terrainGrid.TerrainAt(below);
             if (def == null || def.dontRender)
@@ -407,7 +425,7 @@ namespace AsAboveSoBelow
                     self.def = host;
                 }
             }
-            Material baseMat = MaterialFor(map, self);
+            Material baseMat = DepthQueue(MaterialFor(map, self), depth, levels);
             LayerSubMesh sub = baseMat != null ? GetSubMesh(baseMat) : null;
             if (sub == null)
             {
@@ -456,16 +474,39 @@ namespace AsAboveSoBelow
             // No non-mass neighbour means an INTERIOR cell, where CoverInterior returns full
             // coverage and the fan is geometrically the quad anyway - so declining to erode
             // there costs exactly nothing and guarantees a hole can never be emitted.
-            if (SectionLayer_ABMountainCap.MassFieldFadeEnabled
-                && SectionLayer_ABMountainCap.TryMassFillCoverage(map, below, massCell, fanCovered)
-                && TryBackdropTerrain(map, terrainGrid, below, out CellTerrain backdrop))
+            //
+            // ⚠ THE BOTTOM OF THE STACK NEVER ERODES (`mayErode` is false for it). It is the
+            // solid floor everything above is seen against, so it must stay opaque - that is
+            // what makes a hole unrepresentable rather than merely unlikely, and it is why the
+            // lateral backdrop below is now only a FALLBACK for a single-level column.
+            //
+            // With a stack, the correct thing under an eroded mass cell is the level
+            // BENEATH it, not a neighbour beside it. Borrowing sideways is what made every
+            // tier read as a separate slab laid on the next: the rock was being drawn against
+            // its own level's ground instead of against the mountain continuing downward.
+            bool eroded = false;
+            if (mayErode
+                && SectionLayer_ABMountainCap.MassFieldFadeEnabled
+                && SectionLayer_ABMountainCap.TryMassFillCoverage(map, below, massCell, fanCovered))
             {
-                Material backMat = MaterialFor(map, backdrop);
-                LayerSubMesh backSub = backMat != null ? GetSubMesh(backMat) : null;
-                if (backSub != null)
+                if (levels > 1)
                 {
-                    AddQuad(backSub, above, altitude, BelowTint);
+                    // The next level down is already drawn underneath: erode straight onto it.
+                    eroded = true;
                 }
+                else if (TryBackdropTerrain(map, terrainGrid, below, out CellTerrain backdrop))
+                {
+                    Material backMat = MaterialFor(map, backdrop);
+                    LayerSubMesh backSub = backMat != null ? GetSubMesh(backMat) : null;
+                    if (backSub != null)
+                    {
+                        AddQuad(backSub, above, altitude, BelowTint);
+                        eroded = true;
+                    }
+                }
+            }
+            if (eroded)
+            {
                 ABNineFan.AddFan(sub, above.x, above.z, altitude, fanCovered,
                     BelowTint, BelowTintClear);
             }
@@ -547,6 +588,114 @@ namespace AsAboveSoBelow
                 }
             }
             return true;
+        }
+
+        /// <summary>Levels resolved for one column, nearest first. Sized to the hard level
+        /// cap (7) plus the terminating floor.</summary>
+        private readonly IntVec3[] depthCell = new IntVec3[8];
+
+        /// <summary>
+        /// DESCEND THROUGH MASS, STOP AT THE FIRST SOLID FLOOR. Returns how many levels this
+        /// column shows, nearest at index 0.
+        ///
+        /// ⚠ DELIBERATELY NOT AN EXTENSION OF <c>ABBands.TryResolveVisibleBelow</c>. That is
+        /// THE shared descent rule, and ten systems - reachability, click-through, combat,
+        /// selection, snow - depend on it answering ONE question: what does this column
+        /// genuinely show. This is a RENDERING-ONLY descent that treats mass as translucent,
+        /// which is true of how it is drawn and false of everything else about it. Widening
+        /// the shared rule to match would make rock reachable and clickable through three
+        /// levels. The single-step bug came back nine times by way of copies of that rule;
+        /// this is not a copy of it, it is a different question asked beside it, and it must
+        /// stay that way.
+        ///
+        /// The walk steps one Slot at a time, re-entering the shared descent whenever it
+        /// lands on see-through terrain, so an air gap between two masses is crossed exactly
+        /// as the normal view crosses it. It stops on: a non-mass cell (the solid floor, which
+        /// is INCLUDED as the opaque bottom of the stack), fog (illegible - the level above
+        /// stays opaque instead), the gutter, or the map floor.
+        /// </summary>
+        private int BuildDepthStack(Map map, ABBandMap bands, TerrainGrid terrainGrid,
+            FogGrid fog, IntVec3 first)
+        {
+            depthCell[0] = first;
+            int count = 1;
+            if (!SectionLayer_ABMountainCap.MassDepthCutEnabled || bands.Slot <= 0)
+            {
+                return count;
+            }
+            IntVec3 cur = first;
+            while (count < depthCell.Length
+                && SectionLayer_ABMountainCap.CarriesMass(map, cur))
+            {
+                IntVec3 probe = new IntVec3(cur.x, cur.y, cur.z - bands.Slot);
+                if (!probe.InBounds(map) || bands.InGutter(probe))
+                {
+                    break;
+                }
+                if (ABBands.ShowsBelow(terrainGrid.TerrainAt(probe)))
+                {
+                    if (!ABBands.TryResolveVisibleBelow(map, bands, probe,
+                            out IntVec3 deeper, out int _))
+                    {
+                        break;
+                    }
+                    probe = deeper;
+                }
+                if (fog.IsFogged(probe))
+                {
+                    break;
+                }
+                depthCell[count++] = probe;
+                cur = probe;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// DEPTH-ORDERED TERRAIN QUEUE. Draw order between two terrain materials is decided
+        /// by render QUEUE, not by altitude or submission order, so a painter's-algorithm
+        /// stack cannot simply emit deepest-first and hope: a deep stone (high
+        /// renderPrecedence) would still paint over a shallow soil.
+        ///
+        /// Every level of the stack is therefore re-queued into one controlled band, eight
+        /// units apart, with the material's own precedence preserved as a 0-7 tiebreak inside
+        /// its level. Depth dominates; precedence still orders terrains within a level; and
+        /// the whole band stays inside the terrain family so nothing escapes into the cutout
+        /// range where pawns and buildings live.
+        ///
+        /// A single-level column (the overwhelming majority) is left completely alone - the
+        /// unmodified material, byte-identical to before the stack existed.
+        /// </summary>
+        private const int DepthQueueTop = 2064;
+
+        private static readonly Dictionary<Material, Material[]> depthQueued =
+            new Dictionary<Material, Material[]>();
+
+        private static Material DepthQueue(Material source, int depth, int levels)
+        {
+            if (source == null || levels <= 1 || depth <= 0)
+            {
+                return source;
+            }
+            if (!depthQueued.TryGetValue(source, out Material[] byDepth))
+            {
+                if (depthQueued.Count > 512)
+                {
+                    depthQueued.Clear();
+                }
+                byDepth = new Material[8];
+                depthQueued[source] = byDepth;
+            }
+            int slot = Mathf.Clamp(depth, 1, 7);
+            if (byDepth[slot] == null)
+            {
+                int tie = Mathf.Clamp(source.renderQueue - 2000, 0, 7);
+                byDepth[slot] = new Material(source)
+                {
+                    renderQueue = DepthQueueTop - (slot * 8) + tie
+                };
+            }
+            return byDepth[slot];
         }
 
         /// <summary>Cardinals before diagonals: a mass edge almost always has an orthogonal

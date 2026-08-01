@@ -110,6 +110,22 @@ namespace AsAboveSoBelow
             V2ApplyBisect();
         }
 
+        /// <summary>A/B for the multi-level descent. OFF = one level per column (the shared
+        /// descent's own answer); ON = keep descending through mass to the first solid floor.
+        /// Kept separate from the field fade because they fail differently: the fade is a
+        /// look, this one is a COST.</summary>
+        [DebugAction("As above", "AB2: toggle mass depth cut", allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ToggleMassDepthCut()
+        {
+            SectionLayer_ABMountainCap.MassDepthCutEnabled =
+                !SectionLayer_ABMountainCap.MassDepthCutEnabled;
+            Messages.Message(
+                "AB2: mass depth cut "
+                    + (SectionLayer_ABMountainCap.MassDepthCutEnabled ? "ON (through to the first floor)" : "OFF (one level)"),
+                MessageTypeDefOf.TaskCompletion, false);
+            V2ApplyBisect();
+        }
+
         [DebugAction("As above", "AB2: bisect - toggle below terrain", allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2ToggleBelowTerrain()
         {
