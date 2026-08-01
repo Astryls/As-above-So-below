@@ -185,7 +185,20 @@ namespace AsAboveSoBelow
             foreach (SectionLayer layer in SectionLayersOf(target))
             {
                 string name = layer.GetType().Name;
-                bool ours = name.StartsWith("SectionLayer_ABBelow");
+                // "SectionLayer_AB", NOT "SectionLayer_ABBelow".
+                //
+                // The narrower prefix silently excluded SectionLayer_ABMountainCap from
+                // every report this tool has ever produced - and the cap is one of the
+                // layers that draws INTO the below view (§6a), so the instrument was blind
+                // in exactly the place the below view is most likely to be wrong. A report
+                // that omits a layer reads identically to a report proving that layer
+                // emitted nothing, which is worse than no report at all: it invites the
+                // conclusion that the cap is innocent.
+                //
+                // Found while diagnosing MO's golem formations rendering as four Better
+                // Mountains rock sprites from above; the first report came back with no cap
+                // line and nearly closed that hypothesis.
+                bool ours = name.StartsWith("SectionLayer_AB");
                 bool shadowy = name.Contains("Shadow");
                 if (!ours && !shadowy)
                 {

@@ -416,10 +416,46 @@ namespace AsAboveSoBelow
             // mountain are emitted by the cap layer into its own band's mesh, so they have to
             // be re-emitted here at our offset. Slightly above the terrain quad so the tile
             // sits over it rather than fighting for the same depth.
-            if (def == ABDefOf.AB_MountainTop)
+            //
+            // ⚠ AND THE GATE HAS TO ALLOW FOR THE CAP'S ONE-SLOT REACH.
+            //
+            // SectionLayer_ABMountainCap derives its whole cap from `-bands.Slot`, exactly
+            // ONE band down (its `groundOffset`). That is right for a sky band's own mass -
+            // each level's mass is projected from the level beneath it, which is what makes
+            // mountains taper as they rise - but it means the cap can only ever represent
+            // rock ONE level below the viewer.
+            //
+            // Testing `def == AB_MountainTop` alone inherited that limit, because
+            // AB_MountainTop is the terrain WE give sky-band mass; ordinary ground rock
+            // carries its own rough-stone terrain and never matched. So nothing at all drew
+            // ground rock from two levels up:
+            //
+            //   +1  cap reaches the ground        -> rock drawn (as cap field + silhouette,
+            //                                        which is why it reads as a COLOUR SHIFT
+            //                                        rather than the real sprite)
+            //   +2  cap now derives from +1       -> ground rock simply absent
+            //   +3  same shift one level up       -> +1's rock absent
+            //
+            // Reported exactly that way, and it is the same family as the `- Slot` bug in
+            // §5: a single-step assumption standing in for the descent rule. It survived the
+            // standing `grep '- Slot'` audit because it is written as a TERRAIN-DEF GATE
+            // rather than as arithmetic - the ninth instance, and the first with no `- Slot`
+            // in it to find.
+            //
+            // `drop > slot` is load-bearing: at exactly one slot the cap already draws this
+            // mass, and firing here as well would double the lip and corner fillers on every
+            // mountain edge at +1. The lookup keeps it to rock-derived terrain, and
+            // EmitMassSilhouetteAt self-guards anyway (it returns false when the cell has a
+            // mineable edifice whose own sprite draws the edge).
+            int drop = above.z - below.z;
+            bool skyMass = def == ABDefOf.AB_MountainTop;
+            bool beyondCapReach = slot > 0
+                && drop > slot
+                && ABMinedRockLookup.TryGetMinedRockDef(def, out _);
+            if (skyMass || beyondCapReach)
             {
                 SectionLayer_ABMountainCap.EmitMassSilhouetteAt(this, map, below,
-                    above.z - below.z, altitude + 0.02f, fanCovered, meadowAdj);
+                    drop, altitude + 0.02f, fanCovered, meadowAdj);
             }
             return true;
         }
