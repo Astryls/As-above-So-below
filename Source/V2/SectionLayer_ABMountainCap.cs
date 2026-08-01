@@ -1237,7 +1237,17 @@ namespace AsAboveSoBelow
 
             // The field: the rock's own rough terrain, world-position sampled, exactly what
             // the cap lays down in its own band.
-            TerrainDef rough = rock.building?.naturalTerrain;
+            //
+            // ⚠ AN ORE DEF HAS NO naturalTerrain (TerrainDefGenerator_Stone only builds the
+            // _Rough terrains for isNaturalRock && !isResourceRock), and MassRockAt hands
+            // back whatever edifice stands in the cell - ore included. Falling back to the
+            // HOST stone beside it keeps every mass cell floored, which the mask-15 skip
+            // below depends on: skipping the interior tile is only safe when something else
+            // is already covering the cell.
+            TerrainDef rough = rock.building?.naturalTerrain
+                ?? GroundRockAt(map, source)?.building?.naturalTerrain
+                ?? FallbackRock(map)?.building?.naturalTerrain;
+            bool fieldDrawn = false;
             if (rough != null)
             {
                 Material fieldMat = FieldClone(map.terrainGrid.GetMaterial(rough, false, null));
@@ -1246,6 +1256,7 @@ namespace AsAboveSoBelow
                 {
                     AddTerrainQuad(fsub, at, altitude, White, White);
                     emitted = true;
+                    fieldDrawn = true;
                 }
             }
 
@@ -1275,22 +1286,64 @@ namespace AsAboveSoBelow
             // Linked mode (vanilla rock): the atlas tile for this cell's neighbour mask. The
             // mask is derived from the GROUND map's own mass rather than from the cap's
             // per-band grids, which is what lets this work at an arbitrary depth.
+            //
+            // ⚠ AN ATLAS TILE IS HALF OF VANILLA'S LINKED DRAWER, NOT ALL OF IT. Every tile
+            // in the rock atlas has its four corners ROUNDED AWAY; vanilla covers that with
+            // Graphic_LinkedCornerFiller's quarter-cell fillers, and the cap's own in-band
+            // pass mirrors them. Emitting bare tiles here reproduced the rounding across a
+            // whole mass interior: a grid of pale pillows separated by dark diamonds at
+            // every four-cell junction, reported as "corners on the inner bound, it looks
+            // like holes". BM players never saw it because BM rock returns above, in the
+            // variant branch - which is why the regression shipped with the BM support and
+            // is the exact inverse of the bug that support fixed.
             Material baseMat = AtlasBaseFor(rock);
             if (baseMat == null)
             {
                 return emitted;
             }
-            int mask = (IsMass(map, source + IntVec3.North) ? 1 : 0)
-                | (IsMass(map, source + IntVec3.East) ? 2 : 0)
-                | (IsMass(map, source + IntVec3.South) ? 4 : 0)
-                | (IsMass(map, source + IntVec3.West) ? 8 : 0);
+            bool n0 = MassLinked(map, source + IntVec3.North);
+            bool e0 = MassLinked(map, source + IntVec3.East);
+            bool s0 = MassLinked(map, source + IntVec3.South);
+            bool w0 = MassLinked(map, source + IntVec3.West);
+            int mask = (n0 ? 1 : 0) | (e0 ? 2 : 0) | (s0 ? 4 : 0) | (w0 ? 8 : 0);
+            if (mask == 15 && fieldDrawn)
+            {
+                // Interior, same rule the cap applies in its own band: the fully-linked tile
+                // is near-flat, adds nothing but a tone seam, and carries the corner rounding
+                // that produced the holes. The rough-stone field alone is the interior.
+                return emitted;
+            }
             Material tile = QueueClone(
                 MaterialAtlasPool.SubMaterialFromAtlas(baseMat, (LinkDirections)mask));
             LayerSubMesh tsub = tile != null ? layer.GetSubMesh(tile) : null;
-            if (tsub != null)
+            if (tsub == null)
             {
-                AddQuad(tsub, at.x, at.z, at.x + 1, at.z + 1, altitude + 0.02f, White, White);
-                emitted = true;
+                return emitted;
+            }
+            AddQuad(tsub, at.x, at.z, at.x + 1, at.z + 1, altitude + 0.02f, White, White);
+            emitted = true;
+            if (CornerFillersEnabled)
+            {
+                bool nw = MassLinked(map, source + IntVec3.North + IntVec3.West);
+                bool ne = MassLinked(map, source + IntVec3.North + IntVec3.East);
+                bool sw = MassLinked(map, source + IntVec3.South + IntVec3.West);
+                bool se = MassLinked(map, source + IntVec3.South + IntVec3.East);
+                if (sw && s0 && w0)
+                {
+                    AddCornerFiller(tsub, map, at, -1, -1, altitude + 0.02f, White);
+                }
+                if (nw && n0 && w0)
+                {
+                    AddCornerFiller(tsub, map, at, -1, 1, altitude + 0.02f, White);
+                }
+                if (ne && n0 && e0)
+                {
+                    AddCornerFiller(tsub, map, at, 1, 1, altitude + 0.02f, White);
+                }
+                if (se && s0 && e0)
+                {
+                    AddCornerFiller(tsub, map, at, 1, -1, altitude + 0.02f, White);
+                }
             }
             return emitted;
         }
@@ -1333,8 +1386,16 @@ namespace AsAboveSoBelow
             return null;
         }
 
-        private static bool IsMass(Map map, IntVec3 c)
+        /// <summary>Does the mass CONTINUE into this cell, in the link-mask sense? Off-map
+        /// counts as linked - vanilla rock carries the MapEdge link flag and the cap's own
+        /// <see cref="Linked"/> says the same - so a mountain running off the map edge does
+        /// not draw a phantom lip along it.</summary>
+        private static bool MassLinked(Map map, IntVec3 c)
         {
+            if (map == null || !c.InBounds(map))
+            {
+                return true;
+            }
             return MassRockAt(map, c) != null;
         }
 
