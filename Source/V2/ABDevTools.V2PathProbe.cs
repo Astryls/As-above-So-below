@@ -62,6 +62,42 @@ namespace AsAboveSoBelow
                 bool canReach = pawn.CanReach(dest, PathEndMode.OnCell, Danger.Deadly);
                 sb.AppendLine("  CanReach = " + canReach);
 
+                // §34: the five ways the same-island router can decline, separated. Without
+                // these the failure modes are indistinguishable from outside - "the pawn just
+                // stands there" looks identical whether the component map missed the split,
+                // the router found no wormhole chain, or segmentation was never attempted.
+                int pc = ABBandComponents.ComponentOf(map, pawn.Position);
+                int dc = ABBandComponents.ComponentOf(map, c);
+                bool sameBand = ABBands.SameBand(map, pawn.Position, c);
+                bool knownDiff = ABBandComponents.KnownDifferentComponents(map, pawn.Position, c);
+                sb.AppendLine("  component: pawn=" + pc + " dest=" + dc
+                    + "  sameBand=" + sameBand + "  knownDifferentIslands=" + knownDiff);
+                if (pc < 0 || dc < 0)
+                {
+                    sb.AppendLine("    >> AN ENDPOINT HAS NO REGION (component -1). Segmentation "
+                        + "is deliberately DECLINED here - unknown must mean leave it alone.");
+                }
+                else if (sameBand && !knownDiff)
+                {
+                    sb.AppendLine("    >> SAME ISLAND: no segmentation wanted. If the pawn "
+                        + "cannot walk it, the component map disagrees with the pathfinder "
+                        + "and THAT is the bug.");
+                }
+                else if (sameBand)
+                {
+                    sb.AppendLine("    >> SAME BAND, DIFFERENT ISLAND: phase 3 SHOULD segment "
+                        + "this. See the transit line below.");
+                }
+                bool gotTransit = ABWormhole.TryGetTransit(map, pawn.Position, c,
+                    out Building_Door tNear, out Building_Door tFar);
+                sb.AppendLine("  TryGetTransit = " + (gotTransit
+                    ? ("YES via " + tNear.Position + " (comp "
+                       + ABBandComponents.ComponentOf(map, tNear.Position) + ") -> "
+                       + tFar.Position + " (comp "
+                       + ABBandComponents.ComponentOf(map, tFar.Position) + ")")
+                    : "NONE - no wormhole chain joins these islands"));
+                sb.AppendLine("  wormhole pairs on map = " + ABWormhole.PairCount(map));
+
                 PawnPath path = null;
                 bool found = false;
                 try
