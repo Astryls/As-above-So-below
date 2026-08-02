@@ -269,6 +269,13 @@ namespace AsAboveSoBelow
                 }
                 if (pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
                 {
+                    // Hold briefly at the stairwell so the entry animation can play. Bounded
+                    // and self-cancelling - see ABStairAnim. The record is deliberately LEFT
+                    // PENDING while it returns false, so the next tick offers the pawn again.
+                    if (!ABStairAnim.ReadyToCarry(pawn))
+                    {
+                        continue;
+                    }
                     tmpDone.Add(kv.Key);
                     tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
                 }
@@ -463,6 +470,21 @@ namespace AsAboveSoBelow
                     Clear(pawn);
                 }
                 return false; // arrived somewhere else; not our transit
+            }
+
+            // Same gate the tick sweep uses, and it MUST be the same one. These two triggers
+            // ask one question from two places, and §3 records what happened last time they
+            // disagreed: whether a transit completed depended on which fired first. Gating
+            // only the sweep would make the animation play or not depending on exactly how
+            // the pawn finished its leg.
+            //
+            // Returning true here is the honest answer rather than a trick: it means "do not
+            // tell the JobDriver it arrived, the journey is not over", which is precisely the
+            // state a pawn standing in the doorway shrinking is in. The tick sweep carries it
+            // a few ticks later.
+            if (!ABStairAnim.ReadyToCarry(pawn))
+            {
+                return true;
             }
 
             // Clear BEFORE re-dispatching: StartPath re-enters TrySegment, and after the

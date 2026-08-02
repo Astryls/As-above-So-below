@@ -48,14 +48,17 @@ namespace AsAboveSoBelow
         private sealed class Route
         {
             public readonly List<IntVec3> nodes = new List<IntVec3>();
+
+            /// <summary>Indices i where segment i -> i+1 is a WORMHOLE HOP and must not be
+            /// drawn: zero travel, arbitrary distance apart once both ends are lifted.</summary>
+            public readonly List<int> hops = new List<int>();
+
             public IntVec3 anchor = IntVec3.Invalid;
             public IntVec3 dest = IntVec3.Invalid;
             public int computedTick = -99999;
         }
 
         private static readonly Dictionary<int, Route> routes = new Dictionary<int, Route>();
-
-        private static readonly List<IntVec3> tmpNodes = new List<IntVec3>();
 
         public static void Clear(Pawn p)
         {
@@ -102,11 +105,17 @@ namespace AsAboveSoBelow
                 // between them is a no-op. Drawing them UNLIFTED instead would put a line
                 // straight through the gutter and every level between, which is the visual
                 // this whole file exists to avoid.
-                IntVec3 a = r.nodes[i];
-                IntVec3 b = r.nodes[i + 1];
+                // The assumption above held only for RISERS, whose partner cell is
+                // (x, z +/- Slot). STAIRS pairs are arbitrary, so a staircase with its two
+                // ends in different corners drew a long diagonal streak for a journey that
+                // takes zero travel. Skip the hop segments explicitly instead.
+                if (r.hops.Contains(i))
+                {
+                    continue;
+                }
                 GenDraw.DrawLineBetween(
-                    ABUIGeometry.LiftToView(bands, viewBand, a, alt),
-                    ABUIGeometry.LiftToView(bands, viewBand, b, alt));
+                    ABUIGeometry.LiftToView(bands, viewBand, r.nodes[i], alt),
+                    ABUIGeometry.LiftToView(bands, viewBand, r.nodes[i + 1], alt));
             }
         }
 
@@ -130,13 +139,15 @@ namespace AsAboveSoBelow
             r.dest = realDest.Cell;
             r.computedTick = now;
             r.nodes.Clear();
+            r.hops.Clear();
             try
             {
-                Build(pawn, map, nearCell, farCell, realDest, r.nodes);
+                Build(pawn, map, nearCell, farCell, realDest, r.nodes, r.hops);
             }
             catch (Exception e)
             {
                 r.nodes.Clear();
+                r.hops.Clear();
                 Log.WarningOnce(ABLog.Tag + " V2: transit route preview failed: " + e.Message,
                     762195934);
             }
@@ -152,9 +163,10 @@ namespace AsAboveSoBelow
         /// drain the whole band pocket inside a draw call.
         /// </summary>
         private static void Build(Pawn pawn, Map map, IntVec3 nearCell, IntVec3 farCell,
-            LocalTargetInfo realDest, List<IntVec3> into)
+            LocalTargetInfo realDest, List<IntVec3> into, List<int> hopBreaks)
         {
             into.Add(nearCell);
+            hopBreaks.Add(into.Count - 1); // nearCell -> farCell IS the hop
             IntVec3 cur = farCell;
             into.Add(cur);
 
@@ -169,6 +181,7 @@ namespace AsAboveSoBelow
                     return; // no further route known; stop where we are
                 }
                 AppendLeg(pawn, map, cur, nextNear.Position, PathEndMode.OnCell, into);
+                hopBreaks.Add(into.Count - 1);
                 cur = nextFar.Position;
                 into.Add(cur);
             }
@@ -196,16 +209,18 @@ namespace AsAboveSoBelow
                     into.Add(to); // no route: a straight hint beats nothing
                     return;
                 }
-                tmpNodes.Clear();
-                for (int i = path.NodesLeftCount - 1; i >= 0; i--)
+                // ⚠ ASCENDING, AND THIS WAS WRONG THE FIRST TIME. `Peek(n)` returns
+                // `nodes[curNodeIndex - n]`, so Peek(0) is the NEXT cell and the index counts
+                // FORWARD toward the destination - which is exactly why vanilla's own
+                // DrawPath joins the pawn to Peek(0) and then walks i upward. Iterating
+                // downward appended every leg destination-first, so the preview shot to the
+                // end of each leg and doubled back: one reversed list per leg, drawn as a
+                // zigzag. The bug is invisible on a straight corridor and obvious anywhere
+                // the route turns.
+                for (int i = 0; i < path.NodesLeftCount; i++)
                 {
-                    tmpNodes.Add(path.Peek(i));
+                    into.Add(path.Peek(i));
                 }
-                for (int i = 0; i < tmpNodes.Count; i++)
-                {
-                    into.Add(tmpNodes[i]);
-                }
-                tmpNodes.Clear();
             }
         }
     }
