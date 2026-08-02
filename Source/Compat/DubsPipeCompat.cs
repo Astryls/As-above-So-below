@@ -50,6 +50,7 @@ namespace AsAboveSoBelow
             public FieldInfo pipeNetRef;    // Net on CompPipe
             public FieldInfo pipedThings;   // ICollection on Net
             public MethodInfo initNet;      // Net.InitNet()
+            public MethodInfo addThing;     // PipedThings.Add(T), resolved on first use
             public string prefix;           // our network-id prefix, e.g. "DBH."
         }
 
@@ -80,8 +81,8 @@ namespace AsAboveSoBelow
                     {
                         continue;
                     }
-                    int count = (fam.pipedThings.GetValue(net) as ICollection)?.Count ?? -1;
-                    return net.GetType().Name + "#" + net.GetHashCode() + " things=" + count;
+                    return net.GetType().Name + "#" + net.GetHashCode()
+                        + " things=" + CountOf(fam.pipedThings.GetValue(net));
                 }
             }
             catch
@@ -231,27 +232,70 @@ namespace AsAboveSoBelow
                 lastSkipReason = "already the same net - nothing to merge";
                 return;
             }
-            if (!(fam.pipedThings.GetValue(keep) is ICollection keepThings)
-                || !(fam.pipedThings.GetValue(drop) is IEnumerable dropThings))
+            object keepThings = fam.pipedThings.GetValue(keep);
+            // ⚠ DO NOT CAST TO NON-GENERIC ICollection. `PipedThings` is a
+            // HashSet<ThingWithComps>, and HashSet<T> implements ICollection<T> but NOT the
+            // non-generic System.Collections.ICollection - unlike List<T>, which does both.
+            // An `is ICollection` guard therefore fails on every single call and the merge
+            // silently never runs. Only IEnumerable is safe to lean on here.
+            if (keepThings == null || !(fam.pipedThings.GetValue(drop) is IEnumerable dropThings))
             {
-                lastSkipReason = "PipedThings did not read back as a collection";
+                lastSkipReason = "PipedThings was null or not enumerable";
                 return;
             }
-            // HashSet<ThingWithComps>.Add via reflection - the collection type differs per
-            // family, so go through the interface rather than naming it.
-            MethodInfo add = keepThings.GetType().GetMethod("Add");
+            MethodInfo add = AddMethodFor(fam, keepThings);
             if (add == null)
             {
-                lastSkipReason = "no Add method on " + keepThings.GetType().Name;
+                lastSkipReason = "no single-argument Add on " + keepThings.GetType().Name;
                 return;
             }
+            // Snapshot: the loser's set is read while the winner's is written. They are
+            // different objects today, but copying first makes that independent of whether a
+            // future host ever shares one instance between nets.
+            List<object> moving = new List<object>();
             foreach (object t in dropThings)
             {
-                add.Invoke(keepThings, new[] { t });
-                RepointPipes(fam, t, keep);
+                moving.Add(t);
+            }
+            for (int i = 0; i < moving.Count; i++)
+            {
+                add.Invoke(keepThings, new[] { moving[i] });
+                RepointPipes(fam, moving[i], keep);
             }
             RemoveNet(fam, holder, drop);
             fam.initNet.Invoke(keep, null);
+        }
+
+        /// <summary>`Add` resolved by shape rather than by name-plus-signature, so it works
+        /// whatever element type a host used. Cached per family - this runs inside a network
+        /// rebuild.</summary>
+        private static MethodInfo AddMethodFor(Family fam, object collection)
+        {
+            if (fam.addThing != null)
+            {
+                return fam.addThing;
+            }
+            MethodInfo[] all = collection.GetType().GetMethods();
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i].Name == "Add" && all[i].GetParameters().Length == 1)
+                {
+                    fam.addThing = all[i];
+                    break;
+                }
+            }
+            return fam.addThing;
+        }
+
+        /// <summary>Count without assuming a non-generic interface. See the warning in Join.</summary>
+        private static int CountOf(object collection)
+        {
+            if (collection == null)
+            {
+                return -1;
+            }
+            PropertyInfo p = collection.GetType().GetProperty("Count");
+            return p != null ? (int)p.GetValue(collection) : -1;
         }
 
         private static object NetOf(Family fam, Thing t)
