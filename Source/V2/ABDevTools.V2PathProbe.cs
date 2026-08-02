@@ -123,5 +123,37 @@ namespace AsAboveSoBelow
             Messages.Message("AB2: stuck probe written to log.",
                 MessageTypeDefOf.TaskCompletion, false);
         }
+
+        /// <summary>
+        /// Counters for the three pathing scope patches in ABPathBandScope.
+        ///
+        /// ⚠ RUN THIS BEFORE THEORISING ABOUT PATHING COST, for the same reason the riser
+        /// report exists. All three patches are guard clauses that early-return, and a guard
+        /// that never fires is indistinguishable from a feature that was never built. The
+        /// numbers separate the cases outright: guardCalls at zero means the map is not
+        /// banded (or Banded is still false, which it is during generation), rejections at
+        /// zero with guardCalls climbing means nothing ever asked for a cross band path, and
+        /// a filter skip share near zero means the colony lives on one band.
+        ///
+        /// Log.Warning rather than Log.Message on purpose: info level is filtered out of the
+        /// bridge, so a diagnostic that has to reach the log must be a warning.
+        /// </summary>
+        [DebugAction("As above", "AB2: pathing report",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2PathingReport()
+        {
+            Log.Warning(ABLog.Tag + " " + ABPathBandScope.Report());
+            Messages.Message("AB2: pathing report written to log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        [DebugAction("As above", "AB2: reset pathing counters",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2PathingReset()
+        {
+            ABPathBandScope.ResetStats();
+            Messages.Message("AB2: pathing counters reset.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
     }
 }

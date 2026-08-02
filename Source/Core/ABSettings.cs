@@ -29,15 +29,27 @@ namespace AsAboveSoBelow
         // ---- performance ---------------------------------------------------
 
         /// <summary>Lift the total-cell budget on colony maps. See ABMapSizeLimit for why
-        /// the budget exists: 1.6's path grid is an IJobParallelFor over EVERY cell, and a
-        /// banded map is every level plus gutters tall, so the stacked total is what the
-        /// pathfinder pays.
+        /// the budget exists: a banded map is every level plus gutters tall, and the
+        /// pathfinder allocates and CLEARS map-sized arrays per request, so the stacked
+        /// total is what it pays. (⚠ The old wording here said "the path grid is an
+        /// IJobParallelFor over EVERY cell, on a hot per-request path". That is wrong on
+        /// the second half and sent optimisation work to the wrong place twice: PathGridJob
+        /// is deduped per variant per tick. The genuinely per-request map-sized cost is
+        /// calcGrid.Clear() inside PathFinderJob. Both are Burst compiled and unpatchable;
+        /// see ABPathBandScope.)
         ///
         /// ONLY EVER SET TRUE THROUGH THE CONFIRMATION DIALOG. The checkbox writes to a
         /// local, so the state itself encodes "the player read the warning and accepted it"
         /// and no separate acknowledgement flag is needed. Turning it back OFF is immediate -
         /// there is never a reason to make returning to a supported configuration harder.</summary>
         public bool unclampMapSize;
+
+        /// <summary>Multiplier on the A* heuristic for pawns on a banded map. 1.0 is vanilla
+        /// accuracy; higher searches greedily, expanding far fewer cells for a path that may
+        /// be slightly longer. See ABPathBandScope for why this is a vanilla trade rather
+        /// than a new one, and for the two pathing costs that are NOT reachable by any
+        /// patch.</summary>
+        public float pathHeuristic = 1f;
 
         // ---- climate -------------------------------------------------------
         //
@@ -211,6 +223,7 @@ namespace AsAboveSoBelow
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
+            Scribe_Values.Look(ref pathHeuristic, "pathHeuristic", 1f);
             Scribe_Values.Look(ref upperLevels, "upperLevels", 1);
             Scribe_Values.Look(ref lowerLevels, "lowerLevels", 1);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
@@ -430,6 +443,19 @@ namespace AsAboveSoBelow
             Color dim = GUI.color;
             GUI.color = NoteDim;
             list.Label("AB_BudgetExplain".Translate(budget));
+            GUI.color = dim;
+
+            list.Gap(12f);
+            list.Label("AB_PathHeadingLabel".Translate());
+            list.Label("AB_PathHeuristicAmount".Translate(
+                Mathf.Approximately(pathHeuristic, 1f)
+                    ? "AB_PathHeuristicOff".Translate().ToString()
+                    : pathHeuristic.ToString("0.00") + "x"));
+            pathHeuristic = Mathf.Round(list.Slider(pathHeuristic,
+                ABPathBandScope.MinHeuristic, ABPathBandScope.MaxHeuristic) * 20f) / 20f;
+
+            GUI.color = NoteDim;
+            list.Label("AB_PathHeuristicTip".Translate());
             GUI.color = dim;
         }
 
