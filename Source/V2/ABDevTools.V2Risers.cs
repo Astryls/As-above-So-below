@@ -39,6 +39,10 @@ namespace AsAboveSoBelow
 
             List<ThingDef> defs = ABRiserDefs.All;
             sb.AppendLine("  riser defs loaded: " + defs.Count + " (30 with every host mod active)");
+            sb.AppendLine("  DUBWISE MERGE: rebuilds seen=" + Patch_DubsPipes_ABRiserLink.rebuildsSeen
+                + "  joins attempted=" + Patch_DubsPipes_ABRiserLink.joinsAttempted
+                + "  nets dropped=" + Patch_DubsPipes_ABRiserLink.netsDropped);
+            sb.AppendLine("  last skip reason: " + Patch_DubsPipes_ABRiserLink.lastSkipReason);
 
             int total = 0;
             List<Thing> partners = new List<Thing>();
@@ -58,6 +62,13 @@ namespace AsAboveSoBelow
                         + "  band=" + (bands != null ? bands.BandOf(t.Position) : 0)
                         + "  net=" + ext.network + "  role=" + ext.role
                         + "  live=" + ABRiserLink.EndIsLive(t));
+                    // The decisive line for a Dubwise link: two ends showing the same net id
+                    // means the merge worked and the fault is downstream of us.
+                    string net = Patch_DubsPipes_ABRiserLink.DescribeNet(t);
+                    if (net != null)
+                    {
+                        sb.AppendLine("      live net: " + net);
+                    }
 
                     if (!ABRiserLink.TryPartnerCells(map, t.Position, out IntVec3 up, out IntVec3 down))
                     {

@@ -55,6 +55,42 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<Type, Family> families = new Dictionary<Type, Family>();
 
+        /// <summary>Instrumentation. The riser report reads these so "the pair resolved but
+        /// nothing merged" can be told apart from "the postfix never ran at all" - two very
+        /// different bugs that look identical from inside the game.</summary>
+        public static int rebuildsSeen;
+
+        public static int joinsAttempted;
+
+        public static int netsDropped;
+
+        public static string lastSkipReason = "(none)";
+
+        /// <summary>A short identity for the net a riser currently sits on, for the report.
+        /// Two ends showing the SAME id means the merge worked and the fault is downstream;
+        /// different ids means the merge did not take.</summary>
+        public static string DescribeNet(Thing t)
+        {
+            try
+            {
+                foreach (Family fam in families.Values)
+                {
+                    object net = NetOf(fam, t);
+                    if (net == null)
+                    {
+                        continue;
+                    }
+                    int count = (fam.pipedThings.GetValue(net) as ICollection)?.Count ?? -1;
+                    return net.GetType().Name + "#" + net.GetHashCode() + " things=" + count;
+                }
+            }
+            catch
+            {
+                // diagnostics must never be the thing that throws
+            }
+            return null;
+        }
+
         private static readonly (string comp, string net, string prefix)[] Hosts =
         {
             ("DubsBadHygiene.HygienePipeMapComp", "DubsBadHygiene.PlumbingNet",  "DBH."),
@@ -124,9 +160,16 @@ namespace AsAboveSoBelow
                 {
                     families.TryGetValue(t, out fam);
                 }
+                rebuildsSeen++;
                 Map map = (__instance as MapComponent)?.map;
-                if (fam == null || map == null || !ABBands.Banded(map))
+                if (fam == null)
                 {
+                    lastSkipReason = "no Family for " + __instance.GetType().FullName;
+                    return;
+                }
+                if (map == null || !ABBands.Banded(map))
+                {
+                    lastSkipReason = "map null or unbanded";
                     return;
                 }
                 MergeFor(map, fam, __instance);
@@ -174,15 +217,24 @@ namespace AsAboveSoBelow
         /// just rebuilt its own grid is sitting right there in `__instance`; use it.</summary>
         private static void Join(Family fam, object holder, Thing junction, Thing breaker)
         {
+            joinsAttempted++;
             object keep = NetOf(fam, junction);
             object drop = NetOf(fam, breaker);
-            if (keep == null || drop == null || ReferenceEquals(keep, drop))
+            if (keep == null || drop == null)
             {
+                lastSkipReason = "net was null (keep=" + (keep != null) + " drop=" + (drop != null)
+                    + ") - the riser's CompPipe has no pipeNetRef yet";
+                return;
+            }
+            if (ReferenceEquals(keep, drop))
+            {
+                lastSkipReason = "already the same net - nothing to merge";
                 return;
             }
             if (!(fam.pipedThings.GetValue(keep) is ICollection keepThings)
                 || !(fam.pipedThings.GetValue(drop) is IEnumerable dropThings))
             {
+                lastSkipReason = "PipedThings did not read back as a collection";
                 return;
             }
             // HashSet<ThingWithComps>.Add via reflection - the collection type differs per
@@ -190,6 +242,7 @@ namespace AsAboveSoBelow
             MethodInfo add = keepThings.GetType().GetMethod("Add");
             if (add == null)
             {
+                lastSkipReason = "no Add method on " + keepThings.GetType().Name;
                 return;
             }
             foreach (object t in dropThings)
@@ -262,7 +315,7 @@ namespace AsAboveSoBelow
                 rebuilt.SetValue(kept[i], i);
             }
             fam.pipeNets.SetValue(holder, rebuilt);
-            ABLog.Dev("Dubs pipe merge: dropped a net, " + arr.Length + " -> " + kept.Count);
+            netsDropped++;
         }
     }
 }
