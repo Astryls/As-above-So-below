@@ -90,6 +90,29 @@ namespace AsAboveSoBelow
             version++;
         }
 
+        /// <summary>Monotonic stamp of the island data. Consumers caching anything DERIVED
+        /// from islands (the wormhole chain cache) key on this so region rebuilds invalidate
+        /// them for free.</summary>
+        public static int Version => version;
+
+        /// <summary>Is the band containing this cell split into 2+ islands worth naming?
+        /// The hot-path gate for every island-aware consumer: one cached bool on a settled
+        /// band. Triggers the lazy per-band rebuild when stale, which is intended.</summary>
+        public static bool FragmentedBandAt(Map map, IntVec3 cell)
+        {
+            if (map == null || !cell.IsValid || !cell.InBounds(map))
+            {
+                return false;
+            }
+            int band = ABBands.BandOf(map, cell);
+            if (band < 0)
+            {
+                return false;
+            }
+            BandData bd = BandFor(map, band);
+            return bd != null && bd.fragmented;
+        }
+
         /// <summary>
         /// Subscribe invalidation to the ONE vanilla signal meaning "regions actually changed".
         ///

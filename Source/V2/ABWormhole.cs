@@ -496,6 +496,17 @@ namespace AsAboveSoBelow
             return near != null;
         }
 
+        private sealed class ChainCache
+        {
+            public int builtVersion = -1;
+
+            public readonly Dictionary<int, Dictionary<int, int>> byTarget =
+                new Dictionary<int, Dictionary<int, int>>();
+        }
+
+        private static readonly ConditionalWeakTable<Map, ChainCache> chainCache =
+            new ConditionalWeakTable<Map, ChainCache>();
+
         /// <summary>
         /// Hops from every reachable component to <paramref name="target"/> over the wormhole
         /// graph. Absent key means unreachable.

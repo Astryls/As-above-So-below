@@ -128,7 +128,11 @@ namespace AsAboveSoBelow
             sb.AppendLine("    providers kept " + providersKept + " dropped " + providersDropped
                 + Share(providersKept, providersDropped));
             sb.AppendLine("  heuristic multiplier: " + HeuristicBoost().ToString("0.00")
-                + (Mathf.Approximately(HeuristicBoost(), 1f) ? " (off, vanilla accuracy)" : ""));
+                + (Mathf.Approximately(HeuristicBoost(), 1f) ? " (off, vanilla accuracy)" : "")
+                + "; transit-leg floor " + TransitLegHeuristic.ToString("0.00"));
+            sb.AppendLine("  same-island-first: "
+                + Patch_GenClosest_ABSameIslandFirst.localHits + " local picks, "
+                + Patch_GenClosest_ABSameIslandFirst.fallbacks + " cross-island fallbacks");
             return sb.ToString();
         }
 
@@ -147,6 +151,23 @@ namespace AsAboveSoBelow
         public const float MinHeuristic = 1f;
 
         public const float MaxHeuristic = 2.5f;
+
+        /// <summary>
+        /// Heuristic floor for the LEGS OF A SEGMENTED CROSS-ISLAND TRIP, applied even when
+        /// the player's slider is at 1.00 (off).
+        ///
+        /// ⚠ WHY A FLOOR AND NOT A CHANGED DEFAULT. Turning the slider's shipped default up
+        /// would silently make ALL pathing greedier for every user; this instead prices only
+        /// the trips §34 newly enabled - long down-across-up hauls where a slightly longer
+        /// route is invisible but the A* expansion count is not. Vanilla precedent for the
+        /// magnitude: 1.5 for colonists in darkness, 1.75 for animals; 1.35 is milder than
+        /// both.
+        ///
+        /// ⚠ COMPOSED BY MAX(), NEVER MULTIPLIED, with the slider. A player at 2.5 already
+        /// gets more than the floor asks for; 2.5 x 1.35 = 3.4 would be a different (and
+        /// unrequested) trade.
+        /// </summary>
+        public const float TransitLegHeuristic = 1.35f;
 
         // ---- the cross band test --------------------------------------------
 
@@ -504,13 +525,21 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            float boost = ABPathBandScope.HeuristicBoost();
-            if (boost <= 1f)
+            Map map = pawn.Map;
+            if (map == null || !ABBands.Banded(map))
             {
                 return;
             }
-            Map map = pawn.Map;
-            if (map == null || !ABBands.Banded(map))
+            float boost = ABPathBandScope.HeuristicBoost();
+            // A leg of an in-flight segmented trip gets the floor even with the slider off.
+            // HasPending is a dictionary probe gated behind a plain count read, and a pending
+            // record exists for exactly the legs that belong to a cross-island journey:
+            // TrySegment creates it BEFORE the pather builds the leg's path.
+            if (ABWormholePather.AnyPending && ABWormholePather.HasPending(pawn))
+            {
+                boost = Mathf.Max(boost, ABPathBandScope.TransitLegHeuristic);
+            }
+            if (boost <= 1f)
             {
                 return;
             }
