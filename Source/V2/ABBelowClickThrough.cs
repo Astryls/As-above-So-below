@@ -85,7 +85,37 @@ namespace AsAboveSoBelow
                     }
                 }
             }
-            if (pawnBand >= 0 && bands.BandOf(cell) != pawnBand)
+            // ⚠ THE ONE CASE WHERE PULLING THE ORDER ONTO THE PAWNS' BAND IS WRONG: the
+            // player is LOOKING at another level and clicking solid ground on it. That is an
+            // explicit "come up here" (or down here), and rewriting it onto the pawns' own
+            // band silently turned every upward force-move into a same-band shuffle. It read
+            // as "ordering a drafted pawn upward does nothing at all", because there is no
+            // upward direction anywhere else in the click model either: the see-through
+            // fallback below only ever descends (clickPos.z - drop), so DOWN worked purely
+            // because the cursor and the pawn shared a band and the descent rule took over.
+            //
+            // The discriminator is the VIEW band. Clicking a cell on the level you are
+            // actually looking at means that level. Clicking a cell on some other level
+            // (which happens when the cursor is over open air) still means "my own level",
+            // which is what the translation below is for.
+            //
+            // CanReach is the gate, and it is the same one the descent branch uses: it is
+            // transitive through the wormhole RegionLinks, so it answers "is there a
+            // staircase joining these levels" for free. With no route we fall through and
+            // translate as before, so a player with no stairs built keeps the old, useful
+            // behaviour instead of issuing orders that quietly fail.
+            //
+            // Applies to ALL orders, not just drafted ones, by the user's call.
+            int clickBand = bands.BandOf(cell);
+            if (pawnBand >= 0 && clickBand != pawnBand
+                && clickBand == ABBandView.CurrentBand(map)
+                && !bands.InGutter(cell)
+                && AnyCanReach(map, pawns, cell))
+            {
+                return false; // deliberate cross-band order; leave it for the wormhole router
+            }
+
+            if (pawnBand >= 0 && clickBand != pawnBand)
             {
                 IntVec3 onPawnBand = bands.Translate(cell, pawnBand);
                 if (onPawnBand.InBounds(map) && !bands.InGutter(onPawnBand)
@@ -431,16 +461,12 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>A cell's draw position, lifted from its own band into the viewed one.</summary>
+        /// <summary>A cell's draw position, lifted from its own band into the viewed one.
+        /// Delegates to the canonical transform - this method used to be the third private
+        /// copy of it. See ABUIGeometry.LiftToView.</summary>
         private static Vector3 Lift(ABBandMap bands, int viewBand, IntVec3 c, float altitude)
         {
-            Vector3 v = c.ToVector3ShiftedWithAltitude(altitude);
-            int band = bands.BandOf(c);
-            if (band >= 0 && band != viewBand)
-            {
-                v.z += (viewBand - band) * bands.Slot;
-            }
-            return v;
+            return ABUIGeometry.LiftToView(bands, viewBand, c, altitude);
         }
     }
 

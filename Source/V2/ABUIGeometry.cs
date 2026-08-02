@@ -22,26 +22,67 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABUIGeometry
     {
-        /// <summary>Translate a job/target line endpoint into the pawn's own band so the
-        /// line reads as the short vertical hop it actually is.</summary>
+        /// <summary>
+        /// THE ONE TRANSFORM: a world position, lifted from whatever band it sits on into the
+        /// band currently being VIEWED.
+        ///
+        /// ⚠ VIEW BAND, NOT PAWN BAND, AND THAT IS A BUG FIX. This used to localize onto the
+        /// commanded pawn's own band, which is identical whenever you are looking at that
+        /// pawn's level - so it was right in every situation anyone tested. It is wrong the
+        /// moment you look DOWN at a pawn, because `ABBelowDynamicDraw` draws a below pawn at
+        /// `DrawPos.z + drop`, i.e. lifted into the viewed band. Localizing its overlays onto
+        /// the pawn's real band therefore drew them a full Slot below the sprite they belong
+        /// to - off screen. Every selection overlay must agree with where the pawn is DRAWN,
+        /// and the renderer is the authority on that.
+        ///
+        /// ⚠ THIS TRANSFORM EXISTED THREE TIMES BEFORE THIS WAS WRITTEN and the copies had
+        /// drifted apart: `LocalizeForPawn` here (pawn band), `Lift` inside the
+        /// MultiPawnGotoController patch (view band), and `loc.z += drop` inside
+        /// ABBelowDynamicDraw (view band). Two of three were right, which is exactly how a
+        /// duplicated invariant dies. Everything routes through here now - do not write a
+        /// fourth.
+        /// </summary>
+        public static Vector3 LiftToView(Map map, Vector3 world)
+        {
+            ABBandMap bands = ABBands.CompOf(map);
+            if (bands == null || !bands.Banded)
+            {
+                return world;
+            }
+            return LiftToView(bands, ABBandView.CurrentBand(map), world);
+        }
+
+        /// <summary>Same transform with the band comp and view band already resolved, for
+        /// callers drawing many points in one pass.</summary>
+        public static Vector3 LiftToView(ABBandMap bands, int viewBand, Vector3 world)
+        {
+            if (bands == null || !bands.Banded)
+            {
+                return world;
+            }
+            int band = bands.BandOf(world.ToIntVec3());
+            if (band < 0 || band == viewBand)
+            {
+                return world;
+            }
+            return new Vector3(world.x, world.y, world.z + (viewBand - band) * bands.Slot);
+        }
+
+        /// <summary>Cell overload, shifted to the cell centre at a fixed altitude.</summary>
+        public static Vector3 LiftToView(ABBandMap bands, int viewBand, IntVec3 c, float altitude)
+        {
+            return LiftToView(bands, viewBand, c.ToVector3ShiftedWithAltitude(altitude));
+        }
+
+        /// <summary>Kept as the name every UI call site already uses. Delegates to the view
+        /// band transform; the pawn argument now only supplies the map.</summary>
         public static Vector3 LocalizeForPawn(Pawn pawn, Vector3 world)
         {
             if (pawn == null || !pawn.Spawned)
             {
                 return world;
             }
-            ABBandMap bands = ABBands.CompOf(pawn.Map);
-            if (bands == null || !bands.Banded)
-            {
-                return world;
-            }
-            int bandPawn = bands.BandOf(pawn.Position);
-            int bandTarget = bands.BandOf(world.ToIntVec3());
-            if (bandPawn == bandTarget)
-            {
-                return world;
-            }
-            return new Vector3(world.x, world.y, world.z + (bandPawn - bandTarget) * bands.Slot);
+            return LiftToView(pawn.Map, world);
         }
     }
 

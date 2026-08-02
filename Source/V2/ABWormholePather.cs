@@ -112,6 +112,39 @@ namespace AsAboveSoBelow
 
         public static bool HasPending(Pawn p) => p != null && pending.ContainsKey(p.thingIDNumber);
 
+        /// <summary>Is ANY transit in flight. A plain count read, so the renderer can skip
+        /// the dictionary probe entirely on the hot path - see ABStairAnim.ProgressFor.</summary>
+        public static bool AnyPending => pending.Count > 0;
+
+        /// <summary>
+        /// The in-flight transit for a pawn, for the SELECTION OVERLAYS to draw.
+        ///
+        /// ⚠ THE PATH LINE IS NOT MISSING PAST THE STAIRS, IT GENUINELY DOES NOT EXIST.
+        /// TrySegment rewrites the destination to the near anchor BEFORE the pather builds a
+        /// path, so `curPath` correctly ends at the stairwell and the rest of the journey
+        /// lives only here. Anything that wants to show the whole trip has to read this
+        /// record and compute the far side itself - see ABTransitVisuals.
+        /// </summary>
+        public static bool TryGetPending(Pawn p, out IntVec3 nearCell, out IntVec3 farCell,
+            out LocalTargetInfo realDest)
+        {
+            nearCell = IntVec3.Invalid;
+            farCell = IntVec3.Invalid;
+            realDest = LocalTargetInfo.Invalid;
+            if (p == null || !pending.TryGetValue(p.thingIDNumber, out Transit t))
+            {
+                return false;
+            }
+            if (t.near == null || t.far == null || !t.near.Spawned || !t.far.Spawned)
+            {
+                return false;
+            }
+            nearCell = t.near.Position;
+            farCell = t.far.Position;
+            realDest = t.realDest;
+            return true;
+        }
+
         public static void Clear(Pawn p)
         {
             if (p != null)
@@ -199,6 +232,7 @@ namespace AsAboveSoBelow
         [ABGameTick(70)]
         public static void TickTransits()
         {
+            ABStairAnim.Sweep();
             if (pending.Count == 0)
             {
                 return;
@@ -348,6 +382,10 @@ namespace AsAboveSoBelow
             everSegmented.Remove(pawn.thingIDNumber);
             pawn.Position = landing;
             pawn.Notify_Teleported(false, true);
+            // Cosmetic only, and deliberately AFTER the move: the animation is a pop-out on
+            // the far side, never a delay on the near one. See ABStairAnim.
+            ABStairAnim.NotifyTransited(pawn);
+            ABTransitVisuals.Clear(pawn);
             // The real destination was captured when the trip STARTED, and the walk to the
             // stairwell takes time - the target can die, be hauled away or be deconstructed
             // in the meantime. Resuming onto a destroyed thing makes vanilla log
@@ -439,6 +477,8 @@ namespace AsAboveSoBelow
             pawn.Position = landing;
             // endCurrentJob:false - the job is mid-flight and must survive the hop.
             pawn.Notify_Teleported(false, true);
+            ABStairAnim.NotifyTransited(pawn);
+            ABTransitVisuals.Clear(pawn);
 
             if (t.realDest.IsValid && !pawn.Position.Equals(t.realDest.Cell))
             {

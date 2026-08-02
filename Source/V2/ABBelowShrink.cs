@@ -29,18 +29,40 @@ namespace AsAboveSoBelow
     {
         private static void Postfix(ref PawnDrawParms __result)
         {
-            float s = ABBelowDynamicDraw.BelowDrawScale;
-            if (s > 0.999f || s <= 0f)
-            {
-                return; // not inside the see-below pass, or falloff disabled
-            }
             try
             {
-                // Right-multiplied: scaling happens in the pawn's LOCAL space, so the pawn
-                // shrinks about its own draw position and stays on its cell. A left
-                // multiply would scale the world position too and slide every below pawn
-                // towards the map origin.
-                __result.matrix *= Matrix4x4.Scale(new Vector3(s, 1f, s));
+                // ⚠ TWO EFFECTS, ONE MATRIX, ONE PATCH. The depth cue (how far below the
+                // viewed band this pawn is) and the stair animation (is it stepping into a
+                // stairwell right now) are both a scale about the pawn's own draw root, and
+                // they must MULTIPLY. Adding a second [HarmonyPatch] on GetDrawParms to carry
+                // the second one would appear to work and would silently depend on patch
+                // order forever after.
+                //
+                // ⚠ AND THEIR GUARDS ARE NOT THE SAME. BelowDrawScale is armed only inside the
+                // see-below pass, so an early return on it would mean a pawn taking the
+                // stairs on the band you are LOOKING AT never animated at all - which is the
+                // common case.
+                float s = ABBelowDynamicDraw.BelowDrawScale;
+                if (s <= 0f)
+                {
+                    return; // falloff disabled
+                }
+                float stair = ABStairAnim.ScaleFor(__result.pawn);
+                float shimmy = ABStairAnim.ShimmyFor(__result.pawn);
+                float total = s * stair;
+                if (total > 0.999f && Mathf.Abs(shimmy) < 0.0005f)
+                {
+                    return; // nothing to do: the overwhelmingly common path
+                }
+
+                // Right-multiplied: the transform happens in the pawn's LOCAL space, so it
+                // scales about its own draw position and stays on its cell. A left multiply
+                // would scale the world position too and slide every below pawn towards the
+                // map origin.
+                __result.matrix *= Matrix4x4.TRS(
+                    new Vector3(shimmy, 0f, 0f),
+                    Quaternion.identity,
+                    new Vector3(total, 1f, total));
             }
             catch (Exception e)
             {
@@ -67,13 +89,33 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(PawnRenderer), "ParallelGetPreRenderResults")]
     public static class Patch_PawnRenderer_ABBelowDisableCache
     {
-        private static void Prefix(ref bool disableCache)
+        private static void Prefix(PawnRenderer __instance, ref bool disableCache)
         {
             float s = ABBelowDynamicDraw.BelowDrawScale;
             if (s < 0.999f && s > 0f)
             {
                 disableCache = true;
+                return;
+            }
+            // ⚠ THE STAIR ANIMATION FALLS INTO THE SAME TRAP AND FOR THE SAME REASON. A pawn
+            // animating on the band you are looking at is NOT in the see-below pass, so the
+            // check above misses it - and past ZoomRootSize 18 the cached atlas blit ignores
+            // PawnDrawParms.matrix outright, so the shimmy and shrink would evaporate at
+            // exactly the zoom a player uses to watch someone take the stairs.
+            try
+            {
+                if (ABStairAnim.IsAnimating(PawnRef(__instance)))
+                {
+                    disableCache = true;
+                }
+            }
+            catch
+            {
+                // Never break rendering over a cosmetic effect.
             }
         }
+
+        private static readonly AccessTools.FieldRef<PawnRenderer, Pawn> PawnRef =
+            AccessTools.FieldRefAccess<PawnRenderer, Pawn>("pawn");
     }
 }
