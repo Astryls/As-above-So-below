@@ -65,72 +65,27 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// The path line. Drawn node by node from the pawn's current path; when the pawn is a
-    /// band below the camera the whole polyline sits off screen, so the route "disappears
-    /// across levels".
-    ///
-    /// Replaced rather than corrected afterwards because the line is a chain of segments -
-    /// every node has to be localized before the polyline is built.
-    /// </summary>
-    [HarmonyPatch(typeof(PawnPath), nameof(PawnPath.DrawPath))]
-    public static class Patch_PawnPath_ABBelowPathLine
-    {
-        private static bool Prefix(PawnPath __instance, Pawn pathingPawn)
-        {
-            try
-            {
-                if (pathingPawn == null || !pathingPawn.Spawned || !__instance.Found)
-                {
-                    return true;
-                }
-                Map map = pathingPawn.Map;
-                if (!ABBelowSelectionDraw.TryLocalize(map, pathingPawn.DrawPos, out Vector3 _))
-                {
-                    return true; // pawn is on the viewed band: vanilla
-                }
-                int left = __instance.NodesLeftCount;
-                if (left <= 0)
-                {
-                    return false;
-                }
-                float y = AltitudeLayer.Item.AltitudeFor();
-                for (int i = 0; i < left - 1; i++)
-                {
-                    Vector3 a = Localized(map, __instance.Peek(i).ToVector3Shifted(), y);
-                    Vector3 b = Localized(map, __instance.Peek(i + 1).ToVector3Shifted(), y);
-                    GenDraw.DrawLineBetween(a, b);
-                }
-                Vector3 from = pathingPawn.DrawPos;
-                if (ABBelowSelectionDraw.TryLocalize(map, from, out Vector3 fromLocal))
-                {
-                    from = fromLocal;
-                }
-                from.y = y;
-                Vector3 first = Localized(map, __instance.Peek(0).ToVector3Shifted(), y);
-                if ((from - first).sqrMagnitude > 0.01f)
-                {
-                    GenDraw.DrawLineBetween(from, first);
-                }
-                return false;
-            }
-            catch (Exception e)
-            {
-                Log.ErrorOnce(ABLog.Tag + " V2: below path line threw: " + e, 762195883);
-                return true;
-            }
-        }
-
-        private static Vector3 Localized(Map map, Vector3 v, float y)
-        {
-            if (ABBelowSelectionDraw.TryLocalize(map, v, out Vector3 local))
-            {
-                v = local;
-            }
-            v.y = y;
-            return v;
-        }
-    }
+    // ⚠⚠ THE PATH LINE PATCH THAT LIVED HERE HAS BEEN DELETED. ONE OWNER ONLY.
+    //
+    // `Patch_PawnPath_ABLiftPathLine` in ABTransitVisuals.cs now owns `PawnPath.DrawPath`.
+    // For a while BOTH existed as prefixes on the same method - this one, and the newer one
+    // added without checking whether the job was already done - which is the "two resolvers
+    // for one quantity" trap recorded in §14, walked into by the agent that wrote the note.
+    //
+    // The old implementation is also the one that produced the "line goes half way then
+    // straight down" report, and the reason is worth keeping: it localized each node through
+    // `ABBelowSelectionDraw.TryLocalize`, which is VISIBILITY GATED (it lifts a position only
+    // when the thing is genuinely visible through open air). That gate is exactly right for
+    // selection brackets and forbidden markers - do not draw a bracket for something you
+    // cannot see - and exactly wrong for a POLYLINE, because a chain needs every node in the
+    // same frame of reference. One node under an opaque floor failed to localize, got drawn
+    // at its true coordinates a whole Slot away, and the segment reaching it ran vertically
+    // off the screen. Trapped at `GenDraw.DrawLineBetween` with a=band 2, b=band 1, dz=127
+    // against slot=128.
+    //
+    // ⚠ SO THE RULE IS PER-SURFACE, NOT GLOBAL: VISIBILITY-GATE A MARKER, GEOMETRICALLY LIFT
+    // A CHAIN. The replacement uses `ABUIGeometry.LiftToView`, which always lifts by the band
+    // delta and never asks whether the cell can be seen.
 
     /// <summary>
     /// Forbidden markers for the band below.

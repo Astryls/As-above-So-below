@@ -134,6 +134,9 @@ namespace AsAboveSoBelow
                 return;
             }
             ABWormholeRearmHook.Register(map);
+            // Same event, same reason: RegionsRoomsChanged is the only cheap, truthful signal
+            // that regions moved. See the banner in ABBandComponents.
+            ABBandComponents.Register(map);
 
             // REPAIR THE SKY BAND BEFORE ANYTHING LOOKS AT IT.
             //

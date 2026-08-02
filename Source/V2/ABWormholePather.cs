@@ -166,9 +166,29 @@ namespace AsAboveSoBelow
                 return false;
             }
             IntVec3 destCell = dest.Cell;
-            if (ABBands.SameBand(map, pawn.Position, destCell))
+            // PHASE 3 (§34): SAME BAND IS NOT THE SAME QUESTION AS SAME ISLAND.
+            //
+            // This used to early-out on SameBand alone, which silently assumed that sharing a
+            // level means being able to walk between them. On a fragmented band it does not:
+            // two plateaus on a sky level, or two buildings' upper floors separated by open
+            // air, are the same band and different islands, and the trip genuinely requires
+            // going down, across and back up. We declined to segment, vanilla correctly found
+            // no path - but `CanReach` had already said TRUE, because the region graph IS
+            // connected through our wormholes. That mismatch is the `CanReach=True` +
+            // `path=NOT FOUND` stall.
+            //
+            // ⚠ THE TEST IS "KNOWN DIFFERENT", NOT "NOT SAME". An endpoint with no region
+            // (a wall, the gutter, unfogged rock) must fall through to the old behaviour and
+            // be left alone - reading unknown as "different island" would route every
+            // ordinary intra-band order through a staircase.
+            //
+            // ⚠ AND IT IS ORDERED CHEAP-FIRST. `KnownDifferentComponents` returns on a single
+            // bool when no band on the map is fragmented, which is the common case and the
+            // only reason this is affordable on StartPath.
+            if (ABBands.SameBand(map, pawn.Position, destCell)
+                && !ABBandComponents.KnownDifferentComponents(map, pawn.Position, destCell))
             {
-                // Same band: nothing to segment. The record is deliberately LEFT ALONE.
+                // Same island: nothing to segment. The record is deliberately LEFT ALONE.
                 //
                 // Clearing here was wrong. This method rewrites the destination to the near
                 // anchor - in the pawn's own band - so every re-issue of that leg comes back
@@ -190,7 +210,9 @@ namespace AsAboveSoBelow
             // feature working. Both look identical as bare coordinates.
             ABV2Debug.Transit(pawn.LabelShort + " " + pawn.Position
                 + " (band " + ABBands.BandOf(map, pawn.Position) + ")"
+                + " comp " + ABBandComponents.ComponentOf(map, pawn.Position)
                 + " -> " + destCell + " (band " + ABBands.BandOf(map, destCell) + ")"
+                + " comp " + ABBandComponents.ComponentOf(map, destCell)
                 + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
                 + " | pairs=" + ABWormhole.PairCount(map)
                 + " | transit=" + (got

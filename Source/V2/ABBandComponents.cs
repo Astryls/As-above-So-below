@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
-using HarmonyLib;
 using Verse;
 
 namespace AsAboveSoBelow
@@ -71,6 +70,12 @@ namespace AsAboveSoBelow
             public readonly List<int> componentCells = new List<int>();
 
             public int skippedBandless;
+
+            /// <summary>True when ANY band holds more than one component. ⚠ THIS IS THE HOT
+            /// PATH'S EARLY-OUT: on a map where every band is one island the same-component
+            /// question cannot possibly change an answer, so `TrySegment` must not pay for
+            /// two region lookups per StartPath to discover that.</summary>
+            public bool anyFragmented;
         }
 
         private static readonly ConditionalWeakTable<Map, Snapshot> byMap =
@@ -81,6 +86,38 @@ namespace AsAboveSoBelow
         public static void Invalidate()
         {
             version++;
+        }
+
+        /// <summary>Maps already subscribed, so a repeated FinalizeInit cannot stack duplicate
+        /// handlers on one map's event.</summary>
+        private static readonly ConditionalWeakTable<Map, object> hooked =
+            new ConditionalWeakTable<Map, object>();
+
+        /// <summary>
+        /// Subscribe component invalidation to the ONE vanilla signal that means "regions
+        /// actually changed". Called from ABBandMap alongside the wormhole re-arm hook.
+        ///
+        /// ⚠ `MapEvents.RegionsRoomsChanged` FIRES ON THE LAST LINE OF
+        /// `TryRebuildDirtyRegionsAndRooms`, ON THE ONLY PATH THAT ACTUALLY REBUILT. That is
+        /// what makes it free: the method itself is called ~4,500 times per frame and
+        /// early-outs, and the event fires only for the handful of calls that did work.
+        /// </summary>
+        public static void Register(Map map)
+        {
+            if (map?.events == null || hooked.TryGetValue(map, out _))
+            {
+                return;
+            }
+            try
+            {
+                hooked.Add(map, new object());
+            }
+            catch (System.ArgumentException)
+            {
+                return; // benign race; already registered
+            }
+            // MapEvents dies with the map, so there is nothing to unsubscribe.
+            map.events.RegionsRoomsChanged += delegate { version++; };
         }
 
         /// <summary>Component id for a cell, or -1 when the cell has no valid region (a wall,
@@ -120,6 +157,36 @@ namespace AsAboveSoBelow
                 return false;
             }
             return ca == ComponentOf(map, b);
+        }
+
+        /// <summary>
+        /// True ONLY when both cells resolve to a component AND those components differ.
+        ///
+        /// ⚠ THIS IS NOT `!SameComponent`, AND THE DIFFERENCE IS THE WHOLE SAFETY MARGIN.
+        /// An unknown component (-1) means a wall, the gutter, or unfogged rock. `SameComponent`
+        /// answers false for those, which is right for "can I definitely walk there" but would
+        /// be catastrophic here: `TrySegment` would read unknown as "different island" and
+        /// start routing every ordinary intra-band order through a staircase. Unknown must
+        /// mean LEAVE IT ALONE.
+        ///
+        /// ⚠ AND IT EARLY-OUTS ON AN UNFRAGMENTED MAP BEFORE TOUCHING THE REGION GRID. This
+        /// runs on `Pawn_PathFollower.StartPath`, which every pawn hits constantly; on a map
+        /// with no fragmented band the answer is always false and must cost one bool read.
+        /// </summary>
+        public static bool KnownDifferentComponents(Map map, IntVec3 a, IntVec3 b)
+        {
+            Snapshot s = SnapshotFor(map);
+            if (s == null || !s.anyFragmented)
+            {
+                return false;
+            }
+            int ca = ComponentOf(map, a);
+            if (ca < 0)
+            {
+                return false;
+            }
+            int cb = ComponentOf(map, b);
+            return cb >= 0 && ca != cb;
         }
 
         private static Snapshot SnapshotFor(Map map)
@@ -197,6 +264,19 @@ namespace AsAboveSoBelow
                 s.componentRegions.Add(regions);
                 s.componentCells.Add(cells);
             }
+
+            s.anyFragmented = false;
+            for (int i = 0; i < s.componentBand.Count && !s.anyFragmented; i++)
+            {
+                for (int j = i + 1; j < s.componentBand.Count; j++)
+                {
+                    if (s.componentBand[i] == s.componentBand[j])
+                    {
+                        s.anyFragmented = true;
+                        break;
+                    }
+                }
+            }
         }
 
         /// <summary>Band of a region, via a cell known to belong to it. ⚠ `AnyCell`, NOT
@@ -233,7 +313,8 @@ namespace AsAboveSoBelow
             sb.AppendLine("  version=" + version + " rebuilds=" + rebuilds
                 + " components=" + s.componentBand.Count
                 + " regions mapped=" + s.regionToComponent.Count
-                + " bandless regions skipped=" + s.skippedBandless);
+                + " bandless regions skipped=" + s.skippedBandless
+                + " anyFragmented=" + s.anyFragmented);
             for (int b = 0; b < bandCount; b++)
             {
                 int n = 0;
@@ -295,64 +376,24 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// Full-rebuild invalidation. Runs at map load and on any explicit rebuild, and always
-    /// invalidates.
-    ///
-    /// ⚠ BOTH ENTRY POINTS MUST BE COVERED. Patching only the dirty-rebuild below would leave
-    /// a freshly loaded map holding a component map built against the PREVIOUS game.
-    /// </summary>
-    [HarmonyPatch(typeof(RegionAndRoomUpdater),
-        nameof(RegionAndRoomUpdater.RebuildAllRegionsAndRooms))]
-    public static class Patch_RegionUpdater_ABInvalidateAll
-    {
-        private static void Postfix()
-        {
-            ABBandComponents.Invalidate();
-        }
-    }
-
-    /// <summary>
-    /// Dirty-rebuild invalidation - ONLY WHEN THERE WAS ACTUALLY SOMETHING DIRTY.
-    ///
-    /// ⚠⚠ THE UNCONDITIONAL VERSION OF THIS WAS A LATENT DISASTER AND PHASE 1 CAUGHT IT.
-    /// `TryRebuildDirtyRegionsAndRooms` is called every tick regardless of whether anything
-    /// changed, so bumping the version in a bare postfix invalidated the component map
-    /// CONSTANTLY: the first report on a quiet map read `version=759324`. As a diagnostic that
-    /// is harmless - one rebuild when you press the button. The moment phase 3 puts
-    /// `SameComponent` on `TrySegment`, which is on `StartPath`, it becomes a full 570-region
-    /// BFS per query on the hottest path in the mod.
-    ///
-    /// `AnythingToRebuild` is public and cheap, so the prefix captures it and the postfix only
-    /// invalidates when work was genuinely pending. Watch `version` vs `rebuilds` in the
-    /// report: on a settled map both should now crawl.
-    ///
-    /// ⚠ THIS IS WHY PHASE 1 IS DATA-ONLY. The defect was invisible in the code and obvious in
-    /// one line of output, and it would have shipped straight into the movement path.
-    /// </summary>
-    [HarmonyPatch(typeof(RegionAndRoomUpdater),
-        nameof(RegionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms))]
-    public static class Patch_RegionUpdater_ABInvalidateDirty
-    {
-        private static void Prefix(RegionAndRoomUpdater __instance, out bool __state)
-        {
-            __state = false;
-            try
-            {
-                __state = __instance.AnythingToRebuild;
-            }
-            catch
-            {
-                __state = true; // cannot tell: assume dirty rather than serve stale data
-            }
-        }
-
-        private static void Postfix(bool __state)
-        {
-            if (__state)
-            {
-                ABBandComponents.Invalidate();
-            }
-        }
-    }
+    // ⚠⚠ THE HARMONY PATCHES THAT LIVED HERE HAVE BEEN DELETED. INVALIDATION IS AN EVENT
+    // SUBSCRIPTION NOW - see ABBandComponents.Register, called from ABBandMap.
+    //
+    // They were a postfix on `RebuildAllRegionsAndRooms` and a prefix+postfix on
+    // `TryRebuildDirtyRegionsAndRooms` gated on `AnythingToRebuild`. Both were wrong, and the
+    // reason was ALREADY WRITTEN DOWN in ABWormhole.cs by an earlier session that made the
+    // identical mistake for the wormhole re-arm:
+    //
+    //   - `TryRebuildDirtyRegionsAndRooms` is called **~4,500 times per frame**. That is why
+    //     the first component report read `version=759324` on a quiet map.
+    //   - Gating it with a prefix that samples `AnythingToRebuild` recovers only ~22%,
+    //     because the gate ADDS A SECOND PATCH to an extremely hot method and the residue is
+    //     Harmony dispatch cost, not work. Measured there at 0.339 -> 0.266 ms/frame.
+    //   - Vanilla already publishes the exact signal: `MapEvents.RegionsRoomsChanged` is
+    //     invoked on the LAST line of `TryRebuildDirtyRegionsAndRooms`, on the only path that
+    //     actually rebuilt (after `SetAllClean` and `initialized = true`). Subscribing costs
+    //     nothing on the millions of no-op calls and fires exactly once per real rebuild.
+    //
+    // ⚠ SO: NEVER PATCH `TryRebuildDirtyRegionsAndRooms`. If you need to know that regions
+    // changed, subscribe to `map.events.RegionsRoomsChanged`.
 }

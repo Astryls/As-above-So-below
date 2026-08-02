@@ -457,19 +457,29 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            int bandFrom = ABBands.BandOf(map, from);
-            int bandTo = ABBands.BandOf(map, to);
-            if (bandFrom == bandTo)
+            // PHASE 2: NODES ARE (BAND, COMPONENT), NOT BANDS.
+            //
+            // The old version keyed everything on band and early-returned when
+            // `bandFrom == bandTo`. That was unsound in two directions at once:
+            //  - it REFUSED a legitimate trip between two islands of the SAME band (two
+            //    plateaus on a sky level, two buildings' upper floors) - the §34 report case;
+            //  - it could ACCEPT a hop whose near anchor sat in an island the pawn cannot
+            //    walk to, because "same band" was treated as "reachable".
+            // Both vanish once the node is the island rather than the level.
+            int compFrom = ABBandComponents.ComponentOf(map, from);
+            int compTo = ABBandComponents.ComponentOf(map, to);
+            if (compFrom < 0 || compTo < 0 || compFrom == compTo)
             {
+                // Same island (or an endpoint with no region at all): an ordinary intra-band
+                // path, or genuinely nothing we can help with. Either way, not our business.
                 return false;
             }
-            int[] hopsToDest = HopDistances(map, list, bandTo);
-            if (hopsToDest == null || bandFrom < 0 || bandFrom >= hopsToDest.Length
-                || hopsToDest[bandFrom] <= 0)
+            Dictionary<int, int> hopsToDest = HopDistances(map, list, compTo);
+            if (hopsToDest == null || !hopsToDest.TryGetValue(compFrom, out int hops)
+                || hops <= 0)
             {
-                return false; // no chain of wormholes joins these bands at all
+                return false; // no chain of wormholes joins these islands at all
             }
-            int hops = hopsToDest[bandFrom];
             float best = float.MaxValue;
             for (int i = 0; i < list.Count; i++)
             {
@@ -478,27 +488,34 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Consider(map, from, to, bandFrom, hops, hopsToDest, p.a, p.b,
+                Consider(map, from, to, compFrom, hops, hopsToDest, p.a, p.b,
                     ref best, ref near, ref far);
-                Consider(map, from, to, bandFrom, hops, hopsToDest, p.b, p.a,
+                Consider(map, from, to, compFrom, hops, hopsToDest, p.b, p.a,
                     ref best, ref near, ref far);
             }
             return near != null;
         }
 
-        /// <summary>Hops from every band to <paramref name="target"/> over the wormhole
-        /// graph; -1 where unreachable. Arrays rather than dictionaries because bands are a
-        /// dense 0..bandCount-1 range and this runs on the StartPath path.</summary>
-        private static int[] HopDistances(Map map, List<Pair> list, int target)
+        /// <summary>
+        /// Hops from every reachable component to <paramref name="target"/> over the wormhole
+        /// graph. Absent key means unreachable.
+        ///
+        /// ⚠ A DICTIONARY, NOT AN ARRAY, AND THAT IS THE ONE REAL COST OF PHASE 2. Bands were
+        /// a dense 0..bandCount-1 range so an int[] indexed directly; component ids are dense
+        /// too but there are far more of them (12 on a first real map, and player building
+        /// only adds islands), and more importantly the set CHANGES as walls go up. Sizing an
+        /// array to the live component count every call would allocate just as much. The
+        /// graph is still tiny - one entry per island that can reach the target.
+        /// </summary>
+        private static Dictionary<int, int> HopDistances(Map map, List<Pair> list, int target)
         {
-            int bandCount = ABBands.BandCount(map);
-            if (bandCount <= 1 || target < 0 || target >= bandCount)
+            if (target < 0)
             {
                 return null;
             }
-            // Adjacency as a bitmask per band: at most a handful of bands, so this is one
-            // small array instead of a dictionary of lists.
-            int[] adj = new int[bandCount];
+            // Adjacency between components, built from the wormhole pairs. A pair joins the
+            // component containing anchor A to the component containing anchor B.
+            var adj = new Dictionary<int, List<int>>();
             for (int i = 0; i < list.Count; i++)
             {
                 Pair p = list[i];
@@ -506,55 +523,70 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                int ba = ABBands.BandOf(map, p.a.Position);
-                int bb = ABBands.BandOf(map, p.b.Position);
-                if (ba == bb || ba < 0 || bb < 0 || ba >= bandCount || bb >= bandCount)
+                int ca = ABBandComponents.ComponentOf(map, p.a.Position);
+                int cb = ABBandComponents.ComponentOf(map, p.b.Position);
+                // ⚠ AN ANCHOR WITH NO COMPONENT IS AN ANCHOR NOBODY CAN STAND ON. Dropping it
+                // is the whole point: the old band-keyed version would happily route a pawn
+                // to a staircase sealed inside rock.
+                if (ca < 0 || cb < 0 || ca == cb)
                 {
                     continue;
                 }
-                adj[ba] |= 1 << bb;
-                adj[bb] |= 1 << ba;
+                if (!adj.TryGetValue(ca, out List<int> la))
+                {
+                    adj[ca] = la = new List<int>();
+                }
+                la.Add(cb);
+                if (!adj.TryGetValue(cb, out List<int> lb))
+                {
+                    adj[cb] = lb = new List<int>();
+                }
+                lb.Add(ca);
             }
-            int[] dist = new int[bandCount];
-            for (int i = 0; i < bandCount; i++)
-            {
-                dist[i] = -1;
-            }
-            dist[target] = 0;
-            List<int> queue = new List<int> { target };
+
+            var dist = new Dictionary<int, int> { [target] = 0 };
+            var queue = new List<int> { target };
             for (int head = 0; head < queue.Count; head++)
             {
                 int cur = queue[head];
-                int mask = adj[cur];
-                for (int n = 0; n < bandCount; n++)
+                if (!adj.TryGetValue(cur, out List<int> ns))
                 {
-                    if ((mask & (1 << n)) != 0 && dist[n] < 0)
+                    continue;
+                }
+                for (int n = 0; n < ns.Count; n++)
+                {
+                    if (!dist.ContainsKey(ns[n]))
                     {
-                        dist[n] = dist[cur] + 1;
-                        queue.Add(n);
+                        dist[ns[n]] = dist[cur] + 1;
+                        queue.Add(ns[n]);
                     }
                 }
             }
             return dist;
         }
 
-        private static void Consider(Map map, IntVec3 from, IntVec3 to, int bandFrom,
-            int hops, int[] hopsToDest, Building_Door candNear, Building_Door candFar,
-            ref float best, ref Building_Door near, ref Building_Door far)
+        private static void Consider(Map map, IntVec3 from, IntVec3 to, int compFrom,
+            int hops, Dictionary<int, int> hopsToDest, Building_Door candNear,
+            Building_Door candFar, ref float best, ref Building_Door near,
+            ref Building_Door far)
         {
-            if (ABBands.BandOf(map, candNear.Position) != bandFrom)
+            // ⚠ THE NEAR ANCHOR MUST BE IN THE PAWN'S OWN ISLAND, NOT MERELY ITS OWN BAND.
+            // This one line is the soundness fix: under the band-keyed version a pawn could be
+            // dispatched to a staircase on the correct level that it had no way of walking to,
+            // and would then stall at the edge of its island re-issuing the same order.
+            if (ABBandComponents.ComponentOf(map, candNear.Position) != compFrom)
             {
                 return;
             }
-            int farBand = ABBands.BandOf(map, candFar.Position);
-            if (farBand < 0 || farBand >= hopsToDest.Length)
+            int farComp = ABBandComponents.ComponentOf(map, candFar.Position);
+            if (farComp < 0 || !hopsToDest.TryGetValue(farComp, out int farHops))
             {
                 return;
             }
-            // Only hops that get strictly CLOSER to the destination band. Without this a
+            // Only hops that get strictly CLOSER to the destination island. Without this a
             // pawn could be sent sideways or back the way it came and ping-pong forever,
             // because each hop re-plans from scratch with no memory of the last one.
-            if (hopsToDest[farBand] != hops - 1)
+            if (farHops != hops - 1)
             {
                 return;
             }
