@@ -233,6 +233,9 @@ namespace AsAboveSoBelow
         public static void TickTransits()
         {
             ABStairAnim.Sweep();
+            // Route previews are built HERE, on the tick, never from a draw callback.
+            // See the banner on ABTransitVisuals.DrawRemainingRoute.
+            ABTransitVisuals.TickRoutes();
             if (pending.Count == 0)
             {
                 return;

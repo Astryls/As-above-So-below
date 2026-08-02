@@ -84,14 +84,20 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            if (!ABWormholePather.TryGetPending(pawn, out IntVec3 nearCell, out IntVec3 farCell,
-                    out LocalTargetInfo realDest))
-            {
-                Clear(pawn);
-                return;
-            }
-            Route r = Resolve(pawn, map, nearCell, farCell, realDest);
-            if (r == null || r.nodes.Count < 2)
+            // ⚠⚠ READ ONLY. THIS METHOD MUST NEVER COMPUTE A PATH.
+            //
+            // It used to call Resolve() here, which calls FindPathNow, which is a SYNCHRONOUS
+            // A* that begins with `ForceCompleteScheduledJobs()`. Running that from a draw
+            // callback reaches into the pathfinder mid-frame, outside PathFinderTick, and
+            // force-completes and recycles path jobs that the tick loop still has in flight.
+            // It fires only while a pawn with a pending transit is SELECTED - which is exactly
+            // the situation in which anyone tests cross-level movement, so the blast radius
+            // and the test case are the same thing.
+            //
+            // Routes are now built on the game tick (TickRoutes) and this only draws what is
+            // already cached. A route that has not been built yet simply draws nothing for one
+            // tick, which is invisible.
+            if (!routes.TryGetValue(pawn.thingIDNumber, out Route r) || r.nodes.Count < 2)
             {
                 return;
             }
@@ -116,6 +122,48 @@ namespace AsAboveSoBelow
                 GenDraw.DrawLineBetween(
                     ABUIGeometry.LiftToView(bands, viewBand, r.nodes[i], alt),
                     ABUIGeometry.LiftToView(bands, viewBand, r.nodes[i + 1], alt));
+            }
+        }
+
+        /// <summary>
+        /// Build or refresh route previews, ON THE GAME TICK. Only for pawns the player has
+        /// selected: the preview exists to be looked at, and this is the call that costs a
+        /// synchronous pathfind.
+        /// </summary>
+        public static void TickRoutes()
+        {
+            if (routes.Count > 0 && Find.Selector == null)
+            {
+                routes.Clear();
+                return;
+            }
+            if (Find.Selector == null)
+            {
+                return;
+            }
+            List<object> selected = Find.Selector.SelectedObjects;
+            if (selected == null)
+            {
+                return;
+            }
+            for (int i = 0; i < selected.Count; i++)
+            {
+                if (!(selected[i] is Pawn pawn) || !pawn.Spawned)
+                {
+                    continue;
+                }
+                if (!ABWormholePather.TryGetPending(pawn, out IntVec3 nearCell,
+                        out IntVec3 farCell, out LocalTargetInfo realDest))
+                {
+                    Clear(pawn);
+                    continue;
+                }
+                Map map = pawn.Map;
+                if (map == null || !ABBands.Banded(map))
+                {
+                    continue;
+                }
+                Resolve(pawn, map, nearCell, farCell, realDest);
             }
         }
 

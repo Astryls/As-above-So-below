@@ -536,6 +536,30 @@ namespace AsAboveSoBelow
     /// Normalising the two endpoints into the commanded pawns' band fixes the cause and
     /// leaves vanilla's formation maths completely untouched - which is what makes this
     /// preferable to rewriting each pawn's destination individually.
+    ///
+    /// ⚠⚠ BUT IT MUST ONLY FIRE WHEN THE TWO ENDPOINTS DISAGREE WITH EACH OTHER, AND
+    /// DOING IT UNCONDITIONALLY BROKE EVERY GROUP CROSS-LEVEL ORDER (runs #297-#300).
+    /// Read the trigger above again: the interpolation is only unsafe when `start` and `end`
+    /// are a Slot apart FROM ONE ANOTHER, because that is what puts the midpoint in the
+    /// gutter. Two endpoints that both sit on the viewed band interpolate perfectly safely
+    /// within it, whichever band that is - so pulling them onto the PAWNS' band in that case
+    /// achieves nothing except destroying a deliberate cross-level order.
+    ///
+    /// The symptom was precise and took four runs to corner: a group ordered onto the level
+    /// above walked to the stairwell's own cell on their CURRENT level and stopped, with no
+    /// pending transit. `AB2: why is this pawn stuck` read destination (35, 0, 219) for a
+    /// click at (35, 347) - exactly one Slot down, i.e. this method's arithmetic.
+    ///
+    /// ⚠ AND IT IS THE SAME DEFECT §33b FIXED FOR SINGLE PAWNS, IN THE PATH NOBODY AUDITED.
+    /// A single pawn is ordered through `FloatMenuMakerMap.GetOptions` ->
+    /// `TryTranslateForOrder`, which learned the view-band rule; a GROUP is ordered through
+    /// `MultiPawnGotoController`, which did not. Two entry points for one user action, and
+    /// fixing one of them looked like fixing the feature. **When a fix lands in a click
+    /// handler, find every other handler for the same gesture.**
+    ///
+    /// Per-pawn resolution is already correct and needs nothing from us:
+    /// `Patch_RCellFinder_ABOrderedGotoBand` checks `CanReach` first and leaves genuine
+    /// cross-level destinations to the wormhole router.
     /// </summary>
     [HarmonyPatch(typeof(MultiPawnGotoController),
         nameof(MultiPawnGotoController.RecomputeDestinations))]
@@ -585,6 +609,49 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // ⚠ THE TRIGGER IS THE TWO ENDS DISAGREEING WITH EACH OTHER - that is the only
+                // case that can put the interpolation midpoint (j/(count-1)) in the gutter,
+                // and it is the only reason this patch exists. Agreeing ends are left exactly
+                // where they are, including on a band that is not the pawns' own: that is a
+                // deliberate cross-level group order and the wormhole router's job.
+                IntVec3 s = Patch_MultiPawnGotoController_ABDrawInViewBand.StartRef(__instance);
+                IntVec3 e2 = Patch_MultiPawnGotoController_ABDrawInViewBand.EndRef(__instance);
+                if (!s.IsValid || !e2.IsValid)
+                {
+                    return;
+                }
+                int bandStart = bands.BandOf(s);
+                if (bandStart < 0 || bandStart == bands.BandOf(e2))
+                {
+                    return;
+                }
+
+                // ⚠⚠ RESOLVE ONTO THE *START'S* BAND, NOT THE PAWNS'. THIS IS WHY DOWNWARD
+                // GROUP ORDERS FAILED WHILE UPWARD ONES WORKED.
+                //
+                // `MultiPawnGotoController.ProcessInputEvents` assigns `end = UI.MouseCell()`
+                // RAW, so the drag end never passes through our see-through translation -
+                // only `start` does, via the float-menu click. Upward that is harmless,
+                // because you are LOOKING at the destination band and both cells land on it
+                // anyway. Downward you are looking THROUGH open air: `start` gets translated
+                // down to the level you can see, `end` stays on the viewed band, the two
+                // disagree, and normalising both onto the PAWNS' band threw the deliberate
+                // descent away. Exactly the same class of bug as §33b and §33f, one layer
+                // further in.
+                //
+                // `start` is the cell the player actually aimed at and it has been resolved
+                // correctly; `end` is raw cursor noise. So the line is made coplanar by
+                // bringing END to START, which preserves the destination band AND keeps the
+                // formation inside one band, which is all the original fix ever needed.
+                IntVec3 movedEnd = bands.Translate(e2, bandStart);
+                if (movedEnd.InBounds(map) && !bands.InGutter(movedEnd))
+                {
+                    Patch_MultiPawnGotoController_ABDrawInViewBand.EndRef(__instance) = movedEnd;
+                    return;
+                }
+                // END could not be brought onto START's band (out of bounds or gutter): fall
+                // back to the original behaviour and put BOTH on the pawns' band, which is
+                // never a cross-level order but is always a valid one.
                 Normalise(map, bands, band,
                     Patch_MultiPawnGotoController_ABDrawInViewBand.StartRef, __instance);
                 Normalise(map, bands, band,
