@@ -4,7 +4,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_VentDuctJunction</defName>
-    <label>vent duct junction box</label>
+    <label>vent riser</label>
     <description>A wall-mounted vent duct junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_VentDuctJunction</texPath>
@@ -40,7 +40,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_VentDuctBreaker</defName>
-    <label>vent duct breaker box</label>
+    <label>vent damper</label>
     <description>A wall-mounted vent duct breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_VentDuctBreaker</texPath>

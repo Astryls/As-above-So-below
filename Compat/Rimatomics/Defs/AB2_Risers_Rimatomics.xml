@@ -4,7 +4,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_ColdWaterJunction</defName>
-    <label>cold water junction box</label>
+    <label>cold water riser</label>
     <description>A wall-mounted cold water junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ColdWaterJunction</texPath>
@@ -37,7 +37,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_ColdWaterBreaker</defName>
-    <label>cold water breaker box</label>
+    <label>cold water isolator</label>
     <description>A wall-mounted cold water breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ColdWaterBreaker</texPath>
@@ -71,7 +71,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_SteamJunction</defName>
-    <label>steam junction box</label>
+    <label>steam riser</label>
     <description>A wall-mounted steam junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_SteamJunction</texPath>
@@ -104,7 +104,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_SteamBreaker</defName>
-    <label>steam breaker box</label>
+    <label>steam isolator</label>
     <description>A wall-mounted steam breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_SteamBreaker</texPath>
@@ -138,7 +138,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_CoolantJunction</defName>
-    <label>coolant junction box</label>
+    <label>coolant riser</label>
     <description>A wall-mounted coolant junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_CoolantJunction</texPath>
@@ -171,7 +171,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_CoolantBreaker</defName>
-    <label>coolant breaker box</label>
+    <label>coolant isolator</label>
     <description>A wall-mounted coolant breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_CoolantBreaker</texPath>
@@ -205,7 +205,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_HighVoltageJunction</defName>
-    <label>high voltage junction box</label>
+    <label>high voltage riser</label>
     <description>A wall-mounted high voltage junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_HighVoltageJunction</texPath>
@@ -238,7 +238,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_HighVoltageBreaker</defName>
-    <label>high voltage breaker box</label>
+    <label>high voltage disconnector</label>
     <description>A wall-mounted high voltage breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_HighVoltageBreaker</texPath>
@@ -272,7 +272,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_LoomJunction</defName>
-    <label>console loom junction box</label>
+    <label>loom riser</label>
     <description>A wall-mounted console loom junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_LoomJunction</texPath>
@@ -305,7 +305,7 @@
 
   <ThingDef ParentName="AB_RiserBase" Class="Rimatomics.RimatomicsThingDef">
     <defName>AB_LoomBreaker</defName>
-    <label>console loom breaker box</label>
+    <label>loom patch panel</label>
     <description>A wall-mounted console loom breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_LoomBreaker</texPath>

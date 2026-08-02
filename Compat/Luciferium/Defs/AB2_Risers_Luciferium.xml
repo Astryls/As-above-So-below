@@ -4,7 +4,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_ScarletSludgeJunction</defName>
-    <label>scarlet sludge junction box</label>
+    <label>sludge riser</label>
     <description>A wall-mounted scarlet sludge junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ScarletSludgeJunction</texPath>
@@ -40,7 +40,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_ScarletSludgeBreaker</defName>
-    <label>scarlet sludge breaker box</label>
+    <label>sludge valve</label>
     <description>A wall-mounted scarlet sludge breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ScarletSludgeBreaker</texPath>
@@ -78,7 +78,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_CompressedSludgeJunction</defName>
-    <label>compressed sludge junction box</label>
+    <label>pressure riser</label>
     <description>A wall-mounted compressed sludge junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_CompressedSludgeJunction</texPath>
@@ -114,7 +114,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_CompressedSludgeBreaker</defName>
-    <label>compressed sludge breaker box</label>
+    <label>pressure relief valve</label>
     <description>A wall-mounted compressed sludge breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_CompressedSludgeBreaker</texPath>
@@ -152,7 +152,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_MechanitesJunction</defName>
-    <label>mechanites junction box</label>
+    <label>mechanite riser</label>
     <description>A wall-mounted mechanites junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_MechanitesJunction</texPath>
@@ -188,7 +188,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_MechanitesBreaker</defName>
-    <label>mechanites breaker box</label>
+    <label>mechanite isolator</label>
     <description>A wall-mounted mechanites breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_MechanitesBreaker</texPath>

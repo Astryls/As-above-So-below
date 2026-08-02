@@ -4,7 +4,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_ChemfuelJunction</defName>
-    <label>chemfuel junction box</label>
+    <label>chemfuel riser</label>
     <description>A wall-mounted chemfuel junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ChemfuelJunction</texPath>
@@ -40,7 +40,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_ChemfuelBreaker</defName>
-    <label>chemfuel breaker box</label>
+    <label>chemfuel shutoff</label>
     <description>A wall-mounted chemfuel breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_ChemfuelBreaker</texPath>
@@ -78,7 +78,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_DeepchemJunction</defName>
-    <label>deepchem junction box</label>
+    <label>deepchem riser</label>
     <description>A wall-mounted deepchem junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_DeepchemJunction</texPath>
@@ -114,7 +114,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_DeepchemBreaker</defName>
-    <label>deepchem breaker box</label>
+    <label>deepchem shutoff</label>
     <description>A wall-mounted deepchem breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_DeepchemBreaker</texPath>

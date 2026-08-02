@@ -4,7 +4,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_PlumbingJunction</defName>
-    <label>plumbing junction box</label>
+    <label>plumbing riser</label>
     <description>A wall-mounted plumbing junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_PlumbingJunction</texPath>
@@ -40,7 +40,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_PlumbingBreaker</defName>
-    <label>plumbing breaker box</label>
+    <label>plumbing stopcock</label>
     <description>A wall-mounted plumbing breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_PlumbingBreaker</texPath>
@@ -77,7 +77,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_AirDuctJunction</defName>
-    <label>air duct junction box</label>
+    <label>air duct riser</label>
     <description>A wall-mounted air duct junction box. It bridges its network to a matching breaker box in the same cell one level above and one level below, merging those levels' networks into this one.\n\nBuild the junction where the machinery is; build a breaker on each level you want to reach.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_AirDuctJunction</texPath>
@@ -113,7 +113,7 @@
 
   <ThingDef ParentName="AB_RiserBase">
     <defName>AB_AirDuctBreaker</defName>
-    <label>air duct breaker box</label>
+    <label>air duct damper</label>
     <description>A wall-mounted air duct breaker box. Place it in the same cell as a junction box one level above or below and the two levels' networks merge.\n\nFlick it off to cut the link without deconstructing anything.</description>
     <graphicData>
       <texPath>Things/Building/Risers/AB_AirDuctBreaker</texPath>
