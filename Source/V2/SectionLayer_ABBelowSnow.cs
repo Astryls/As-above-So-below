@@ -45,11 +45,13 @@ namespace AsAboveSoBelow
             // Cross-band propagation is already solved: Patch_MapDrawer_ABMirrorDirtyUp
             // mirrors every dirty flag verbatim to EVERY band above, so a melt on the
             // surface invalidates the sky sections that look down on it without any extra
-            // work here. That patch is flag-agnostic, which is why adding a new layer costs
-            // one line rather than a new propagation path.
+            // work here. ⚠ §36c-B1: the mirror is NO LONGER flag-agnostic - it sends only
+            // AB_BelowThings upward, so every below layer must list that flag or it goes
+            // stale on below-band changes. The vanilla flags below cover OWN-band inputs.
             relevantChangeTypes = (ulong)MapMeshFlagDefOf.Snow
                 | (ulong)MapMeshFlagDefOf.Terrain
-                | (ulong)MapMeshFlagDefOf.FogOfWar;
+                | (ulong)MapMeshFlagDefOf.FogOfWar
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         /// <summary>Mirrors vanilla's own gate so the snow debug toggle keeps working on

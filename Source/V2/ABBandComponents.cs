@@ -246,7 +246,11 @@ namespace AsAboveSoBelow
             BandData bd = md.bands[band] ?? (md.bands[band] = new BandData());
             if (bd.builtVersion != version)
             {
+                // §34f: the open measurement. NoteFlood is two adds; the flood itself is
+                // what we are finally putting a number on.
+                long perfT0 = ABPerfStats.Now();
                 Build(map, band, bd);
+                ABPerfStats.NoteFlood(ABPerfStats.Now() - perfT0);
                 bd.builtVersion = version;
                 rebuilds++;
             }

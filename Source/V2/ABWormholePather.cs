@@ -208,16 +208,24 @@ namespace AsAboveSoBelow
             // transit line cannot be told apart from an idle pawn commuting across a band to
             // wander - which is a bug - versus a pawn crossing to haul or eat, which is the
             // feature working. Both look identical as bare coordinates.
-            ABV2Debug.Transit(pawn.LabelShort + " " + pawn.Position
-                + " (band " + ABBands.BandOf(map, pawn.Position) + ")"
-                + " comp " + ABBandComponents.ComponentOf(map, pawn.Position)
-                + " -> " + destCell + " (band " + ABBands.BandOf(map, destCell) + ")"
-                + " comp " + ABBandComponents.ComponentOf(map, destCell)
-                + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
-                + " | pairs=" + ABWormhole.PairCount(map)
-                + " | transit=" + (got
-                    ? ("YES via " + near.Position + " -> " + far.Position)
-                    : "NONE (pawn will try to walk it and fail)"));
+            //
+            // ⚠ GUARDED AT THE CALL SITE, NOT JUST INSIDE Transit(). The argument string
+            // was built on every segmentation attempt even with LogTransit off - including
+            // two ComponentOf calls that can trigger a lazy band flood purely for a line
+            // that was about to be discarded (2026-08 survey, applied with §36e-C1).
+            if (ABV2Debug.LogTransit)
+            {
+                ABV2Debug.Transit(pawn.LabelShort + " " + pawn.Position
+                    + " (band " + ABBands.BandOf(map, pawn.Position) + ")"
+                    + " comp " + ABBandComponents.ComponentOf(map, pawn.Position)
+                    + " -> " + destCell + " (band " + ABBands.BandOf(map, destCell) + ")"
+                    + " comp " + ABBandComponents.ComponentOf(map, destCell)
+                    + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
+                    + " | pairs=" + ABWormhole.PairCount(map)
+                    + " | transit=" + (got
+                        ? ("YES via " + near.Position + " -> " + far.Position)
+                        : "NONE (pawn will try to walk it and fail)"));
+            }
             if (!got)
             {
                 // No wormhole joins these bands. Let vanilla fail honestly rather than

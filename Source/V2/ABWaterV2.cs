@@ -435,9 +435,12 @@ namespace AsAboveSoBelow
 
         public SectionLayer_ABBelowWatergen(Section section) : base(section)
         {
-            // Terrain only, matching vanilla's Watergen: depth geometry is a pure function
-            // of which cell holds which water terrain.
-            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain;
+            // Terrain for OWN-band cells, matching vanilla's Watergen: depth geometry is a
+            // pure function of which cell holds which water terrain. AB_BelowThings is the
+            // mirrored below-change signal (§36c-B1) - the water this layer draws lives on
+            // the band BELOW, so its terrain changes arrive only through the mirror.
+            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible

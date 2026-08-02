@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using HarmonyLib;
 using RimWorld;
@@ -217,8 +218,15 @@ namespace AsAboveSoBelow
     /// (<c>0.046f * map.weatherManager.SnowRate</c>) for the amount and only uses the cached
     /// field for the <c>&gt; 0.001f</c> gate - so forcing the field would pass the gate and
     /// then add exactly zero snow.
+    ///
+    /// ⚠ NO [HarmonyPatch] ATTRIBUTE, ON PURPOSE (§36e-C1). DoCellSteadyEffects runs per
+    /// cell per steady-effects tick - #315 measured this pair at 254 ms / 1.13M calls in a
+    /// 33.5 s window at 15x speed, 40% of the mod's entire in-patch time, almost all of it
+    /// Harmony DISPATCH on calls whose body then did nothing (a desert map cannot melt snow
+    /// it does not have). No guard clause can take a patch below its dispatch cost, so the
+    /// PATCH LIFETIME is gated instead: ABBandSnowPatchLifetime installs the pair only while
+    /// demand exists and removes it when demand lapses. The bodies below are UNCHANGED.
     /// </summary>
-    [HarmonyPatch(typeof(SteadyEnvironmentEffects), "DoCellSteadyEffects")]
     public static class Patch_SteadyEnvironmentEffects_ABBandSnow
     {
         private static readonly AccessTools.FieldRef<SteadyEnvironmentEffects, Map> MapRef =
@@ -289,7 +297,176 @@ namespace AsAboveSoBelow
             }
             catch (Exception e)
             {
-                Log.ErrorOnce(ABLog.Tag + " V2: rain-to-snow postfix threw: " + e, 118843302);
+                Log.ErrorOnce(ABLog.Tag + " V2: band snow postfix threw: " + e, 118843302);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Demand-gated LIFETIME for the band snow/melt pair (§36e-C1).
+    ///
+    /// The pair is exactly relevant when one of two things is true on some banded map:
+    ///  1. SNOW EXISTS (<c>snowGrid.TotalDepth</c>) - the prefix's per-band melt value is
+    ///     only ever CONSUMED by vanilla's melt branch, which no-ops on snowless cells, so
+    ///     with zero snow the prefix is provably behaviour-free;
+    ///  2. IT IS RAINING AND SOME UPPER LEVEL IS SUB-ZERO - the postfix CREATES snow from
+    ///     rain, so it must be armed before snow exists; its own first gates are exactly
+    ///     RainRate and the band temperature, so absent both it is provably behaviour-free.
+    ///
+    /// ⚠ THE PATCH/UNPATCH RUNS FROM THE GAME TICK, NEVER FROM A PATCH BODY - re-JITting a
+    /// method that may be on the stack is the one genuinely dangerous use of the runtime
+    /// API (perf lore: unpatch on demand). Cadence facts: checks every 250 ticks by elapsed
+    /// time (not modulo - survives time-skips and load); INSTALL is immediate on demand,
+    /// REMOVAL needs 4 consecutive no-demand checks (~1000 ticks of hysteresis) so a
+    /// drizzle flickering around 0.001 RainRate cannot flap the patch (each apply is a
+    /// re-JIT). The ≤50-tick arming latency after snow appears means at most a few hundred
+    /// ticks of map-wide melt rates on trace snow - visually nothing.
+    ///
+    /// ⚠ A GUARD THAT SILENTLY EARLY-RETURNS IS INDISTINGUISHABLE FROM AN UNIMPLEMENTED
+    /// FEATURE (§14): install state + transition counts are surfaced in the render report,
+    /// and a broken install latches loudly ONCE rather than retrying every check.
+    /// </summary>
+    public static class ABBandSnowPatchLifetime
+    {
+        private const int CheckIntervalTicks = 250;
+
+        private const int UninstallStreak = 4;
+
+        /// <summary>Trace-snow floor for the DEMAND flag only (§14: a threshold on a
+        /// fast-path flag needs a minimum magnitude). A few float-dust cells left behind by
+        /// a melt cannot flap the patch; the hysteresis handles the rest.</summary>
+        private const float MinSnowDepth = 0.05f;
+
+        private static int lastCheckTick = -1;
+
+        private static int noDemandStreak;
+
+        private static bool installed;
+
+        private static bool broken;
+
+        public static int installs;
+
+        public static int uninstalls;
+
+        public static bool Installed => installed;
+
+        private static MethodBase target;
+
+        private static MethodInfo prefixMI;
+
+        private static MethodInfo postfixMI;
+
+        [ABGameTick(90)]
+        public static void Tick()
+        {
+            if (broken)
+            {
+                return;
+            }
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            if (lastCheckTick >= 0 && now >= lastCheckTick && now - lastCheckTick < CheckIntervalTicks)
+            {
+                return;
+            }
+            lastCheckTick = now;
+            if (AnyDemand())
+            {
+                noDemandStreak = 0;
+                if (!installed)
+                {
+                    Install();
+                }
+            }
+            else if (installed && ++noDemandStreak >= UninstallStreak)
+            {
+                Uninstall();
+            }
+        }
+
+        private static bool AnyDemand()
+        {
+            if (!ABGuard.On(ABGuard.Weather))
+            {
+                return false;
+            }
+            List<Map> maps = Find.Maps;
+            if (maps == null)
+            {
+                return false;
+            }
+            for (int i = 0; i < maps.Count; i++)
+            {
+                Map map = maps[i];
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded)
+                {
+                    continue;
+                }
+                if (map.snowGrid != null && map.snowGrid.TotalDepth > MinSnowDepth)
+                {
+                    return true; // prefix demand: snow exists to melt
+                }
+                if (map.weatherManager != null && map.weatherManager.RainRate > 0.001f)
+                {
+                    // postfix demand: rain falling onto a sub-zero upper level. Levels run
+                    // 1..(bandCount - 1 - surfaceBand); higher is colder, but check them all
+                    // rather than bake in the monotonicity assumption.
+                    int maxLevel = bands.bandCount - 1 - bands.surfaceBand;
+                    for (int lvl = 1; lvl <= maxLevel; lvl++)
+                    {
+                        if (ABBandWeather.BandOutdoorTemp(map, bands, lvl) < 0f)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static void Install()
+        {
+            try
+            {
+                if (target == null)
+                {
+                    target = AccessTools.Method(typeof(SteadyEnvironmentEffects), "DoCellSteadyEffects");
+                    prefixMI = AccessTools.Method(
+                        typeof(Patch_SteadyEnvironmentEffects_ABBandSnow), "Prefix");
+                    postfixMI = AccessTools.Method(
+                        typeof(Patch_SteadyEnvironmentEffects_ABBandSnow), "Postfix");
+                }
+                HarmonyBoot.Harmony.Patch(target,
+                    new HarmonyMethod(prefixMI), new HarmonyMethod(postfixMI));
+                installed = true;
+                installs++;
+                ABLog.Dev("Band snow/melt patch INSTALLED (snow or cold rain present).");
+            }
+            catch (Exception e)
+            {
+                broken = true;
+                Log.Error(ABLog.Tag + " V2: band snow/melt patch failed to install; falling"
+                    + " back to vanilla map-wide melt for this session. " + e);
+            }
+        }
+
+        private static void Uninstall()
+        {
+            try
+            {
+                HarmonyBoot.Harmony.Unpatch(target, prefixMI);
+                HarmonyBoot.Harmony.Unpatch(target, postfixMI);
+                installed = false;
+                uninstalls++;
+                noDemandStreak = 0;
+                ABLog.Dev("Band snow/melt patch REMOVED (no snow, no cold rain).");
+            }
+            catch (Exception e)
+            {
+                broken = true;
+                Log.Error(ABLog.Tag + " V2: band snow/melt patch failed to unpatch; leaving"
+                    + " it installed for this session. " + e);
             }
         }
     }

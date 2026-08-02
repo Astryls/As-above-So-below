@@ -110,6 +110,7 @@ namespace AsAboveSoBelow
             providersKept = 0;
             providersDropped = 0;
             lastReject = "none yet";
+            ABPerfStats.ResetPath();
         }
 
         public static string Report()
@@ -133,6 +134,7 @@ namespace AsAboveSoBelow
             sb.AppendLine("  same-island-first: "
                 + Patch_GenClosest_ABSameIslandFirst.localHits + " local picks, "
                 + Patch_GenClosest_ABSameIslandFirst.fallbacks + " cross-island fallbacks");
+            sb.Append(ABPerfStats.PathReport());
             return sb.ToString();
         }
 
@@ -413,6 +415,7 @@ namespace AsAboveSoBelow
         private static bool Prefix(Map ___map, IntVec3 start, LocalTargetInfo target,
             ref PawnPath __result)
         {
+            ABPerfStats.NoteRequest(___map, sync: true);
             if (!ABPathBandScope.CrossBand(___map, start, target, out string why))
             {
                 return true;
@@ -445,6 +448,7 @@ namespace AsAboveSoBelow
             {
                 return true;
             }
+            ABPerfStats.NoteRequest(request.map, sync: false);
             if (!ABPathBandScope.CrossBand(request.map, request.Start, request.Target, out string why))
             {
                 return true;

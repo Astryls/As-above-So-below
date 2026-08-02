@@ -135,6 +135,7 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                long perfT0 = ABPerfStats.Now();
                 // Test the COLUMN, not one band's rect. Offsetting the view rect by a single
                 // Slot only ever found things exactly one level down, so from level 2 upward
                 // no below overlay was offered a draw at all - stack counts, forbidden
@@ -171,6 +172,7 @@ namespace AsAboveSoBelow
                             + ": " + ex.Message, thing.thingIDNumber ^ 762195882);
                     }
                 }
+                ABPerfStats.NoteOverlay(list.Count, ABPerfStats.Now() - perfT0);
             }
             catch (Exception e)
             {

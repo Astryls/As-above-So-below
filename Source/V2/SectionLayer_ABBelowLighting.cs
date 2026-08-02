@@ -43,9 +43,13 @@ namespace AsAboveSoBelow
 
         public SectionLayer_ABBelowLighting(Section section) : base(section)
         {
+            // AB_BelowThings: the mirrored below-change signal (§36c-B1). The glow, roof
+            // and edifice this layer samples live on the RESOLVED (below) band; their
+            // dirties arrive only through the mirror now.
             relevantChangeTypes = (ulong)MapMeshFlagDefOf.Roofs
                 | (ulong)MapMeshFlagDefOf.GroundGlow
-                | (ulong)MapMeshFlagDefOf.Terrain;
+                | (ulong)MapMeshFlagDefOf.Terrain
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible => ABGuard.On(ABGuard.Rendering)

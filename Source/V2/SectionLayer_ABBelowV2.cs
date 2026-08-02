@@ -78,10 +78,14 @@ namespace AsAboveSoBelow
 
         public SectionLayer_ABBelowV2(Section section) : base(section)
         {
+            // AB_BelowThings is the mirrored "something on a band below changed" signal
+            // (§36c-B1); the vanilla flags cover this section's OWN cells. Both are needed:
+            // the mirror no longer forwards vanilla flags upward.
             relevantChangeTypes = (ulong)MapMeshFlagDefOf.Terrain
                 | (ulong)MapMeshFlagDefOf.Things
                 | (ulong)MapMeshFlagDefOf.Buildings
-                | (ulong)MapMeshFlagDefOf.FogOfWar;
+                | (ulong)MapMeshFlagDefOf.FogOfWar
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible => ABGuard.On(ABGuard.Rendering);
@@ -1053,6 +1057,17 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                int steps = 0;
+                // ⚠ §36c-B1: THE MIRROR SENDS ONLY THE DEDICATED FLAG, NEVER THE VANILLA
+                // FLAGS IT RECEIVED. Forwarding vanilla flags rebuilt the above sections'
+                // VANILLA layers - ThingsGeneral is the 1.6 atlas bake - for content those
+                // layers cannot render; #315 measured that waste at ~15-25 ms per 48-cell
+                // burst, and the session's 83-100 ms worst frames were exactly these bursts.
+                // Every AB below layer now lists AB_BelowThings in relevantChangeTypes;
+                // a below layer that misses the flag goes stale on below changes (the
+                // "mineables disappear on floor 2" class), so ADD THE FLAG when adding a
+                // layer - the mirror is no longer flag-agnostic.
+                ulong mirrorFlag = (ulong)ABDefOf.AB_BelowThings;
                 mirroring = true;
                 try
                 {
@@ -1063,7 +1078,8 @@ namespace AsAboveSoBelow
                         {
                             break; // nothing above a gutter column can look down it
                         }
-                        map.mapDrawer.MapMeshDirty(above, dirtyFlags);
+                        map.mapDrawer.MapMeshDirty(above, mirrorFlag);
+                        steps++;
                         // ⚠ THE ASCENT RULE - the inverse of ABBands.TryResolveVisibleBelow,
                         // and it was missing here while the descent rule was being enforced
                         // in ten other places. A band can only show this cell if EVERY level
@@ -1092,6 +1108,10 @@ namespace AsAboveSoBelow
                 finally
                 {
                     mirroring = false;
+                }
+                if (steps > 0)
+                {
+                    ABPerfStats.NoteMirror(steps);
                 }
             }
             catch (Exception e)

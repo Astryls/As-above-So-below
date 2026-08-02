@@ -74,6 +74,11 @@ namespace AsAboveSoBelow
             }
             int slot = bands.Slot;
             int viewBand = ABBandView.CurrentBand(map);
+            // Perf sampling starts AFTER the cheap early-outs above, so the counters
+            // describe frames where a below view actually exists.
+            long perfT0 = ABPerfStats.Now();
+            int perfConsidered = 0;
+            int perfDrawn = 0;
             CellRect camView = cam.CurrentViewRect;
             // The strip of the band directly below, still used by the realtime-things pass.
             // KNOWN GAP: that pass is still single-band, so motes, fire and other realtime
@@ -114,6 +119,7 @@ namespace AsAboveSoBelow
                 {
                     continue; // same band or above: vanilla draws it
                 }
+                perfConsidered++;
                 IntVec3 above = bands.Translate(pos, viewBand);
                 if (!camView.Contains(above))
                 {
@@ -192,6 +198,7 @@ namespace AsAboveSoBelow
                         BelowDrawOffsetZ = 0f;
                         BelowDrawScale = 1f;
                     }
+                    perfDrawn++;
                 }
                 catch (Exception e)
                 {
@@ -200,7 +207,9 @@ namespace AsAboveSoBelow
                 }
             }
 
-            DrawBelowRealtimeThings(map, belowView, slot, terrain, fog, air);
+            int perfRealtime = DrawBelowRealtimeThings(map, belowView, slot, terrain, fog, air);
+            ABPerfStats.NoteBelowPass(perfConsidered, perfDrawn, perfRealtime,
+                ABPerfStats.Now() - perfT0);
 
             if (ReportNextPass)
             {
@@ -236,14 +245,15 @@ namespace AsAboveSoBelow
         /// ThingsListAtFast instead would repeat the OverlayDrawer mistake that cost
         /// 1.4 ms/frame.
         /// </summary>
-        private static void DrawBelowRealtimeThings(Map map, CellRect belowView, int slot,
+        private static int DrawBelowRealtimeThings(Map map, CellRect belowView, int slot,
             TerrainGrid terrain, FogGrid fog, TerrainDef air)
         {
             IReadOnlyList<Thing> things = map.dynamicDrawManager?.DrawThings;
             if (things == null)
             {
-                return;
+                return 0;
             }
+            int drawn = 0;
             for (int i = 0; i < things.Count; i++)
             {
                 Thing t = things[i];
@@ -286,6 +296,7 @@ namespace AsAboveSoBelow
                     t.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
                     t.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
                     t.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                    drawn++;
                 }
                 catch (Exception e)
                 {
@@ -293,6 +304,7 @@ namespace AsAboveSoBelow
                         + t.LabelCap + ": " + e.Message, t.thingIDNumber ^ 762195874);
                 }
             }
+            return drawn;
         }
     }
 

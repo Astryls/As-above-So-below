@@ -83,7 +83,10 @@ namespace AsAboveSoBelow
 
         public SectionLayer_ABBelowShadows(Section section) : base(section)
         {
-            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.Terrain;
+            // AB_BelowThings: the mirrored below-change signal (§36c-B1). Casters live on
+            // the band below; their appearance/disappearance arrives only via the mirror.
+            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.Terrain
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible
@@ -369,9 +372,11 @@ namespace AsAboveSoBelow
 
         public SectionLayer_ABBelowEdgeShadows(Section section) : base(section)
         {
-            // Buildings: casters below appear and disappear. Terrain: the ShowsBelow mask
-            // above changes when rooftops and caps are laid or removed.
-            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.Terrain;
+            // Buildings: casters below appear and disappear (arrives via the §36c-B1 mirror
+            // flag now). Terrain: the ShowsBelow mask above changes when rooftops and caps
+            // are laid or removed.
+            relevantChangeTypes = (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.Terrain
+                | (ulong)ABDefOf.AB_BelowThings;
         }
 
         public override bool Visible
