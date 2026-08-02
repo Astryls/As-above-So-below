@@ -269,13 +269,12 @@ namespace AsAboveSoBelow
                 }
                 if (pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
                 {
-                    // Hold briefly at the stairwell so the entry animation can play. Bounded
-                    // and self-cancelling - see ABStairAnim. The record is deliberately LEFT
-                    // PENDING while it returns false, so the next tick offers the pawn again.
-                    if (!ABStairAnim.ReadyToCarry(pawn, t.near.Position))
-                    {
-                        continue;
-                    }
+                    // ⚠ NOTHING MAY GATE THIS CARRY. An entry-animation hold was wired in here
+                    // and in TryConsumeArrival and it broke cross-level movement outright
+                    // ("can't command pawns across levels anymore", run #297). Both call sites
+                    // are reverted; ABStairAnim.ReadyToCarry still exists but is NOT WIRED.
+                    // See §33c before re-attempting: a cosmetic effect must never sit on the
+                    // path that decides whether a transit happens at all.
                     tmpDone.Add(kv.Key);
                     tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
                 }
@@ -472,20 +471,12 @@ namespace AsAboveSoBelow
                 return false; // arrived somewhere else; not our transit
             }
 
-            // Same gate the tick sweep uses, and it MUST be the same one. These two triggers
-            // ask one question from two places, and §3 records what happened last time they
-            // disagreed: whether a transit completed depended on which fired first. Gating
-            // only the sweep would make the animation play or not depending on exactly how
-            // the pawn finished its leg.
-            //
-            // Returning true here is the honest answer rather than a trick: it means "do not
-            // tell the JobDriver it arrived, the journey is not over", which is precisely the
-            // state a pawn standing in the doorway shrinking is in. The tick sweep carries it
-            // a few ticks later.
-            if (!ABStairAnim.ReadyToCarry(pawn, t.near.Position))
-            {
-                return true;
-            }
+            // ⚠ AND NOTHING MAY GATE IT HERE EITHER, WHICH IS THE MORE DANGEROUS OF THE TWO.
+            // Returning true suppresses vanilla's PatherArrived entirely, so the pather never
+            // completes the leg, the job re-issues StartPath, TrySegment re-segments (the
+            // real destination is still on another band), and the pawn re-arrives at the same
+            // anchor next tick - a re-segmentation loop that reads exactly like "the order
+            // does nothing". Reverted; see §33c.
 
             // Clear BEFORE re-dispatching: StartPath re-enters TrySegment, and after the
             // teleport the pawn is in the destination band, so it resolves as an

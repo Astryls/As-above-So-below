@@ -5,8 +5,15 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// THE STAIR ANIMATION: a pawn shimmies and shrinks into a stairwell, then pops out the
-    /// other side. Ported in spirit from V1.
+    /// THE STAIR ANIMATION. CURRENTLY THE POP-OUT ONLY: a pawn emerges small on the far side
+    /// and grows to full size. The entry half (shrink into the stairwell) is BUILT BUT NOT
+    /// WIRED - see ReadyToCarry and the history below before touching it.
+    ///
+    /// ⚠⚠ THIS FILE HAS BROKEN CROSS-LEVEL MOVEMENT ONCE. THE RULE THAT CAME OUT OF IT:
+    /// NOTHING COSMETIC MAY SIT ON THE CODE PATH THAT DECIDES WHETHER A TRANSIT HAPPENS.
+    /// The pop-out obeys that rule by construction - it is a pure read of "when did the hop
+    /// occur", recorded AFTER the fact, and no part of the carry consults it. Any future
+    /// entry animation must be driven from outside the carry decision the same way.
     ///
     /// ⚠ THE FIRST VERSION OF THIS DROVE THE SHRINK OFF DISTANCE TO THE ANCHOR SO THAT IT
     /// COULD NEVER DELAY THE TELEPORT. That was over-cautious and it simply did not work, and
@@ -17,24 +24,19 @@ namespace AsAboveSoBelow
     /// can". A stateless effect is worth nothing if the state it reads never gets a chance to
     /// change.
     ///
-    /// ⚠ SO THE HOP IS NOW HELD, AND THE HOLD IS WHAT MAKES THIS SAFE RATHER THAN WHAT MAKES
-    /// IT RISKY. The objection to a hold was that a pawn frozen mid-animation is
-    /// indistinguishable from a jammed one. At 18 ticks - a third of a second, less than a
-    /// pawn already spends opening a door - that is not true. The properties that keep it
-    /// safe are:
-    ///   - It is bounded. `ReadyToCarry` returns true unconditionally once OutTicks have
-    ///     elapsed, so the worst case is a third of a second, not a stall.
-    ///   - It is self-cancelling. The record is refreshed only while the pawn is actually
-    ///     being offered for carry; a pawn that walks away has its record swept and simply
-    ///     stops animating. Nothing has to remember to clean up.
-    ///   - It cannot outlive the transit. `ABWormholePather`'s 4000-tick timeout still drops
-    ///     the pending record regardless of anything here.
+    /// ⚠ THE SECOND VERSION HELD THE HOP FOR 18 TICKS SO THE SHRINK COULD PLAY, AND THAT IS
+    /// WHAT BROKE MOVEMENT (run #297). The reasoning at the time was that the hold was
+    /// bounded, self-cancelling and outlived by the 4000-tick timeout - all true, and all
+    /// beside the point. Gating `TryConsumeArrival` suppresses vanilla's `PatherArrived`
+    /// entirely, so the leg never completes, the job re-issues `StartPath`, `TrySegment`
+    /// segments again (the real destination is still on another band) and the pawn re-arrives
+    /// at the same anchor next tick. The bounded-ness of the hold is irrelevant when the
+    /// thing it blocks is the loop's own exit condition.
     ///
-    /// ⚠ BOTH CARRY TRIGGERS MUST CONSULT THE SAME GATE. The tick sweep and `PatherArrived`
-    /// are the same question asked from two places, and §3 records what happened last time
-    /// they disagreed: whether a transit completed depended on which fired first. Gating only
-    /// the sweep would mean the animation played or not depending on exactly how a pawn
-    /// finished its leg.
+    /// ⚠ THE ARGUMENT THAT LED THERE WAS "BOTH CARRY TRIGGERS MUST CONSULT THE SAME GATE",
+    /// which is correct in itself (§3 records what happens when the sweep and `PatherArrived`
+    /// disagree) and was applied to the wrong thing. Making two triggers agree is right when
+    /// they decide the SAME OUTCOME; it is not a licence to put a new condition on both.
     ///
     /// ⚠ IT COMPOSES WITH THE DEPTH CUE INSTEAD OF COMPETING WITH IT. Both effects are a
     /// scale on the same `PawnDrawParms.matrix`, multiplied together in the ONE existing
@@ -95,12 +97,21 @@ namespace AsAboveSoBelow
         private static readonly List<int> tmpExpired = new List<int>();
 
         /// <summary>
-        /// THE GATE. Called by both carry triggers with a pawn that is standing at its near
-        /// anchor. Returns false while the entry animation is still playing, true once the
-        /// pawn should actually be moved.
+        /// ⚠⚠ BUILT AND DELIBERATELY NOT WIRED. DO NOT RECONNECT THIS WITHOUT READING §33c.
         ///
-        /// ⚠ CALLING THIS IS WHAT KEEPS THE RECORD ALIVE. It doubles as the "still here"
-        /// heartbeat, which is what makes the hold self-cancelling without a second callback.
+        /// This was called from BOTH carry triggers to hold a pawn at the stairwell for 18
+        /// ticks so the entry animation could play. It broke cross-level movement outright
+        /// (run #297: "can't command pawns across levels anymore") and both call sites have
+        /// been reverted. The suspected mechanism, unproven: gating `TryConsumeArrival`
+        /// suppresses vanilla's `PatherArrived`, so the leg never completes, the job re-issues
+        /// `StartPath`, `TrySegment` segments again because the real destination is still on
+        /// another band, and the pawn re-arrives at the same anchor - a re-segmentation loop
+        /// indistinguishable from "the order does nothing".
+        ///
+        /// It is kept, unwired, so the next attempt starts from the analysis rather than
+        /// rebuilding it blind. THE LESSON IS THE POINT: a cosmetic effect must never sit on
+        /// the code path that decides whether a transit happens at all. Any future entry
+        /// animation has to be driven from OUTSIDE the carry decision.
         /// </summary>
         public static bool ReadyToCarry(Pawn p, IntVec3 anchor)
         {

@@ -422,14 +422,34 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ABGuard.On(ABGuard.Rendering) || !ActiveRef(__instance))
+                // ⚠ THESE TWO WERE THE UNINSTRUMENTED RETURNS AND THE ANSWER WAS BEHIND THEM.
+                // Run #298 reported "never ran", which is the initial value of lastGhostSkip -
+                // meaning we exited above every probe. Instrumenting three of five early
+                // returns is the same mistake as instrumenting none, just harder to notice.
+                if (!ABGuard.On(ABGuard.Rendering))
                 {
+                    lastGhostSkip = "ABGuard.Rendering is OFF (a bisect toggle - these persist "
+                        + "across runs); vanilla is drawing, unlifted";
+                    return true;
+                }
+                if (!ActiveRef(__instance))
+                {
+                    // ⚠ NOT A BUG IN THE COMMON CASE. The destination ghost is drawn ONLY by
+                    // MultiPawnGotoController, and both paths that activate it
+                    // (Selector.HandleMultiselectGoto and FloatMenuOptionProvider_DraftedMove)
+                    // take a single-pawn branch that calls PawnGotoAction directly and never
+                    // touches the controller. With ONE drafted pawn selected vanilla draws no
+                    // ghost either. The feature is a 2+ pawn drag.
+                    lastGhostSkip = "gotoController not active - no multi-pawn goto drag in "
+                        + "progress. With a single drafted pawn vanilla draws no ghost either; "
+                        + "select TWO OR MORE and drag to exercise this.";
                     return true;
                 }
                 Map map = Find.CurrentMap;
                 ABBandMap bands = ABBands.CompOf(map);
                 if (bands == null || !bands.Banded)
                 {
+                    lastGhostSkip = "map is not banded";
                     return true;
                 }
                 if (!matsResolved)
