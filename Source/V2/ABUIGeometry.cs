@@ -153,7 +153,17 @@ namespace AsAboveSoBelow
             try
             {
                 float alt = AltitudeLayer.Item.AltitudeFor();
-                Vector3 a = pawn.Position.ToVector3Shifted();
+                // ⚠ THE CHAIN START WAS THE ONE UNLIFTED POINT IN THIS METHOD, AND IT DREW A
+                // LINE STRAIGHT UP OR DOWN THE MAP. Every other endpoint below goes through
+                // LocalizeForPawn; this one used the pawn's raw world position. On the pawn's
+                // own band that is identical, so it was invisible - but when you look DOWN at
+                // a pawn the renderer draws it lifted into the viewed band while this point
+                // stayed a full Slot below, so the first segment ran vertically off the
+                // screen toward the pawn's real coordinates. Exactly the same defect as the
+                // one fixed in LocalizeForPawn itself, in the same file, missed because the
+                // fix was applied to the helper and not audited at the call sites.
+                Vector3 a = ABUIGeometry.LocalizeForPawn(pawn, pawn.DrawPos);
+                a.y = alt;
                 if (pawn.pather.curPath != null)
                 {
                     a = ABUIGeometry.LocalizeForPawn(pawn, pawn.pather.Destination.CenterVector3);

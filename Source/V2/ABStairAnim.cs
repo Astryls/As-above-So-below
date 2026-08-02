@@ -56,6 +56,25 @@ namespace AsAboveSoBelow
 
         private const float ShimmyRate = 17f;
 
+        /// <summary>
+        /// How close the pawn must be to the anchor before the entry animation is allowed to
+        /// hold it.
+        ///
+        /// ⚠ THIS IS DELIBERATELY TIGHTER THAN `ABWormholePather.ArriveRadius` (3), AND THAT
+        /// GAP IS A BUG THIS CONSTANT EXISTS TO FIX. The carry radius is 3 because a pawn can
+        /// legitimately come to rest up to LandingRadius cells short when other pawns are
+        /// standing on the stairwell - tightening it there caused the stairs to jam. But
+        /// reusing it for the ANIMATION meant the hold began the moment the pawn came within
+        /// three cells, so it stopped and shrank in the middle of the floor. Reported as
+        /// "yes but they do so before they reach the stairs".
+        ///
+        /// A pawn that is blocked out at 2-3 cells simply carries with no entry animation.
+        /// That is the right degradation: there is no stairwell mouth to animate INTO from
+        /// over there, and refusing to carry would re-create the jam ArriveRadius exists to
+        /// prevent.
+        /// </summary>
+        private const float AnimateRadius = 1.5f;
+
         /// <summary>A record older than this without being re-offered belongs to a pawn that
         /// walked away. Deliberately only a few ticks: the sweep runs every tick, so a pawn
         /// still queueing to descend is refreshed constantly.</summary>
@@ -83,11 +102,17 @@ namespace AsAboveSoBelow
         /// ⚠ CALLING THIS IS WHAT KEEPS THE RECORD ALIVE. It doubles as the "still here"
         /// heartbeat, which is what makes the hold self-cancelling without a second callback.
         /// </summary>
-        public static bool ReadyToCarry(Pawn p)
+        public static bool ReadyToCarry(Pawn p, IntVec3 anchor)
         {
             if (p == null || Find.TickManager == null)
             {
                 return true; // never block a carry because the animation is unavailable
+            }
+            if (!anchor.IsValid || !p.Position.InHorDistOf(anchor, AnimateRadius))
+            {
+                // Standing off the stairwell (blocked by other pawns): no animation, no hold.
+                entering.Remove(p.thingIDNumber);
+                return true;
             }
             int now = Find.TickManager.TicksGame;
             int id = p.thingIDNumber;

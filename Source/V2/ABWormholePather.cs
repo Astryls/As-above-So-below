@@ -272,7 +272,7 @@ namespace AsAboveSoBelow
                     // Hold briefly at the stairwell so the entry animation can play. Bounded
                     // and self-cancelling - see ABStairAnim. The record is deliberately LEFT
                     // PENDING while it returns false, so the next tick offers the pawn again.
-                    if (!ABStairAnim.ReadyToCarry(pawn))
+                    if (!ABStairAnim.ReadyToCarry(pawn, t.near.Position))
                     {
                         continue;
                     }
@@ -482,7 +482,7 @@ namespace AsAboveSoBelow
             // tell the JobDriver it arrived, the journey is not over", which is precisely the
             // state a pawn standing in the doorway shrinking is in. The tick sweep carries it
             // a few ticks later.
-            if (!ABStairAnim.ReadyToCarry(pawn))
+            if (!ABStairAnim.ReadyToCarry(pawn, t.near.Position))
             {
                 return true;
             }

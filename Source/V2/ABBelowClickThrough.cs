@@ -386,6 +386,23 @@ namespace AsAboveSoBelow
         internal static readonly AccessTools.FieldRef<MultiPawnGotoController, IntVec3> EndRef =
             AccessTools.FieldRefAccess<MultiPawnGotoController, IntVec3>("end");
 
+        /// <summary>
+        /// Why the destination ghost was not drawn last frame, read by
+        /// `AB2: goto ghost report`.
+        ///
+        /// ⚠ INSTRUMENTED RATHER THAN GUESSED, BY THE §14 RULE. The ghost is NOT missing
+        /// because we deleted it: the RenderPawnAt call below is vanilla's own, at a lifted
+        /// position. So "no ghost on a cross-level order" has at least four candidate causes
+        /// that look identical from the outside - the controller never went active for this
+        /// order, the per-pawn destination came back invalid, the destination cell is FOGGED
+        /// (other bands start fogged, which is why `AB2: open all bands` exists), or vanilla's
+        /// materials could not be resolved and we bailed to vanilla entirely. Guessing between
+        /// them costs a test cycle each; this string separates them in one.
+        /// </summary>
+        internal static string lastGhostSkip = "never ran";
+
+        internal static int ghostsDrawn;
+
         private static bool matsResolved;
 
         private static Material circleMat;
@@ -421,6 +438,7 @@ namespace AsAboveSoBelow
                 }
                 if (circleMat == null || lineMat == null)
                 {
+                    lastGhostSkip = "vanilla materials unresolved; fell through to vanilla";
                     return true; // could not reach vanilla's materials; let it draw normally
                 }
                 int viewBand = ABBandView.CurrentBand(map);
@@ -428,6 +446,7 @@ namespace AsAboveSoBelow
                 System.Collections.Generic.List<IntVec3> dests = DestsRef(__instance);
                 if (pawns == null || dests == null)
                 {
+                    lastGhostSkip = "pawns or dests list was null";
                     return true;
                 }
                 // Vanilla's own constants, kept verbatim so the preview looks identical.
@@ -442,8 +461,17 @@ namespace AsAboveSoBelow
                     IntVec3 c = dests[i];
                     if (pawn == null || !c.IsValid || !pawn.Spawned || c.Fogged(pawn.Map))
                     {
+                        lastGhostSkip = pawn == null ? "pawn null"
+                            : !c.IsValid ? (pawn.LabelShort + ": dest cell invalid")
+                            : !pawn.Spawned ? (pawn.LabelShort + ": not spawned")
+                            : pawn.LabelShort + ": dest " + c + " band "
+                              + bands.BandOf(c) + " is FOGGED (pawn band "
+                              + bands.BandOf(pawn.Position) + ", view band " + viewBand + ")";
                         continue;
                     }
+                    lastGhostSkip = "drawn ok for " + pawn.LabelShort + " at " + c
+                        + " band " + bands.BandOf(c);
+                    ghostsDrawn++;
                     pawn.Drawer.renderer.RenderPawnAt(Lift(bands, viewBand, c, alt), Rot4.South);
                     Graphics.DrawMesh(MeshPool.plane10,
                         Matrix4x4.TRS(Lift(bands, viewBand, c, altCircle), Quaternion.identity, size),

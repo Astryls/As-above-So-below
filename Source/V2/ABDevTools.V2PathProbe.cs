@@ -147,6 +147,20 @@ namespace AsAboveSoBelow
                 MessageTypeDefOf.TaskCompletion, false);
         }
 
+        /// <summary>Why the drafted destination ghost did or did not draw. Four causes look
+        /// identical in game; this separates them. Hold the goto drag, then run this.</summary>
+        [DebugAction("As above", "AB2: goto ghost report",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2GotoGhostReport()
+        {
+            Log.Warning(ABLog.Tag + " AB2 GOTO GHOST REPORT\n  ghosts drawn this session: "
+                + Patch_MultiPawnGotoController_ABDrawInViewBand.ghostsDrawn
+                + "\n  last outcome: "
+                + Patch_MultiPawnGotoController_ABDrawInViewBand.lastGhostSkip);
+            Messages.Message("AB2: goto ghost report written to log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: reset pathing counters",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2PathingReset()
