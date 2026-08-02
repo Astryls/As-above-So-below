@@ -161,6 +161,46 @@ namespace AsAboveSoBelow
                 MessageTypeDefOf.TaskCompletion, false);
         }
 
+        /// <summary>
+        /// Phase 1 of the same-band-island work: per-band component census, plus the selected
+        /// pawn's component against its destination. **Nothing in the mod reads this data
+        /// yet** - the point is to prove it correct on a real fragmented map before movement
+        /// depends on it.
+        ///
+        /// What to look for: a sky or basement band reporting `components &gt; 1` is a
+        /// fragmented band, and a selected pawn showing `sameBand=True sameComponent=False`
+        /// is the exact stall this design exists to fix.
+        /// </summary>
+        [DebugAction("As above", "AB2: component report",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2ComponentReport()
+        {
+            Map map = Find.CurrentMap;
+            Pawn sel = Find.Selector?.SingleSelectedThing as Pawn;
+            Log.Warning(ABLog.Tag + " " + ABBandComponents.Report(map, sel));
+            Messages.Message("AB2: component report written to log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        /// <summary>Node-by-node dump of the cross-level route preview, for the "line goes
+        /// half way then straight down" report. Select the transiting pawn first.</summary>
+        [DebugAction("As above", "AB2: route line dump",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void V2RouteLineDump()
+        {
+            Pawn pawn = Find.Selector?.SingleSelectedThing as Pawn;
+            if (pawn == null)
+            {
+                Messages.Message("AB2: select exactly one pawn first.",
+                    MessageTypeDefOf.RejectInput, false);
+                return;
+            }
+            Log.Warning(ABLog.Tag + " AB2 ROUTE LINE DUMP for " + pawn.LabelShortCap + "\n"
+                + ABTransitVisuals.DescribeRoute(pawn));
+            Messages.Message("AB2: route dump written to log.",
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: reset pathing counters",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void V2PathingReset()

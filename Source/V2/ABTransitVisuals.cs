@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -66,6 +67,41 @@ namespace AsAboveSoBelow
             {
                 routes.Remove(p.thingIDNumber);
             }
+        }
+
+        /// <summary>
+        /// Dump the cached preview node-by-node with each node's band, for the "the line goes
+        /// half way then straight down" report.
+        ///
+        /// ⚠ A ONE-SLOT VERTICAL SEGMENT IS AN UNLIFTED ENDPOINT, ALWAYS. Every node here is
+        /// drawn through ABUIGeometry.LiftToView, so a vertical run of exactly Slot means one
+        /// end of that segment came from somewhere else - or that the segment is a HOP whose
+        /// skip-index went missing. Printing the bands next to the coordinates distinguishes
+        /// those two in one reading instead of another round of theorising.
+        /// </summary>
+        public static string DescribeRoute(Pawn p)
+        {
+            if (p == null || p.Map == null)
+            {
+                return "  (no pawn)";
+            }
+            if (!routes.TryGetValue(p.thingIDNumber, out Route r))
+            {
+                return "  no cached route (pawn has no pending transit, or is not selected)";
+            }
+            var sb = new StringBuilder();
+            sb.AppendLine("  route: " + r.nodes.Count + " nodes, anchor=" + r.anchor
+                + " dest=" + r.dest + " builtTick=" + r.computedTick
+                + " hopBreaks=[" + string.Join(",", r.hops.ConvertAll(i => i.ToString()).ToArray()) + "]");
+            int viewBand = ABBandView.CurrentBand(p.Map);
+            sb.AppendLine("  viewBand=" + viewBand);
+            for (int i = 0; i < r.nodes.Count; i++)
+            {
+                IntVec3 c = r.nodes[i];
+                string tag = r.hops.Contains(i) ? "  <-- HOP, segment to next is NOT drawn" : "";
+                sb.AppendLine("    [" + i + "] " + c + " band " + ABBands.BandOf(p.Map, c) + tag);
+            }
+            return sb.ToString();
         }
 
         /// <summary>
