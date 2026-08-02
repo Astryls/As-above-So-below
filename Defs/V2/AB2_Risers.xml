@@ -81,9 +81,32 @@
       Hygiene ships for its own boilers and vents. A hand-authored _west would only be an
       opportunity for the two side views to drift apart.
     -->
+    <!--
+      ⚠ THE SPRITE IS DRAWN ALMOST A WHOLE CELL TOWARD THE FACING DIRECTION, AND WITHOUT
+      THAT IT COVERS THE WALL IT IS MOUNTED IN. The riser occupies the WALL's cell, so a
+      centred sprite paints straight over the wall and the wall visually disappears -
+      leaving a box floating in a gap. Offsetting toward the open side draws it on the
+      wall's face instead: the wall stays visible and the unit reads as attached to it.
+
+      0.9 is not a guess - it is what vanilla's WallLamp/TorchWallLamp and VTE's
+      ACUnitWall, WallMountedHeater, WallMountedVent and WallMountedCooler all use. Both
+      wall-mounting mechanisms converge on the same number because both are solving this
+      same overlap.
+
+      Sign convention is "toward the rotation", and rotation points OUT of the wall (see
+      the note above), so north is +z, south -z, east +x, west -x.
+
+      Tunable in ONE place: every riser inherits this because RimWorld merges graphicData
+      field-by-field down the ParentName chain, so a child redefining texPath and
+      graphicClass keeps these offsets.
+    -->
     <graphicData>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
+      <drawOffsetNorth>(0,0,0.9)</drawOffsetNorth>
+      <drawOffsetSouth>(0,0,-0.9)</drawOffsetSouth>
+      <drawOffsetEast>(0.9,0,0)</drawOffsetEast>
+      <drawOffsetWest>(-0.9,0,0)</drawOffsetWest>
       <damageData>
         <rect>(0.1,0.1,0.8,0.8)</rect>
       </damageData>

@@ -313,6 +313,19 @@
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <!--
+        Carried over from the V1 pass (MORTON's edit): the ladder leans against the wall on
+        its facing edge rather than sitting centred in its cell. NORTH and SOUTH are the
+        swapped pair from that file, verbatim; east has none and west does not exist,
+        because Graphic_Multi mirrors east into west.
+
+        Sign is OPPOSITE to the risers above, and that is not a mistake: a riser is drawn
+        toward the open side it faces, while the ladder is pushed back toward the wall it
+        rests on.
+      -->
+      <drawOffsetNorth>(0,0,-0.33)</drawOffsetNorth>
+      <drawOffsetSouth>(0,0,0.33)</drawOffsetSouth>
+      <drawOffsetEast>(0,0,0)</drawOffsetEast>
     </graphicData>
     <building>
       <blueprintGraphicData>
