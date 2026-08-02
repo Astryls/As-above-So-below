@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ScarletSludgeJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>
@@ -45,7 +44,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ScarletSludgeBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>
@@ -83,7 +81,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_CompressedSludgeJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>
@@ -119,7 +116,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_CompressedSludgeBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>
@@ -157,7 +153,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_MechanitesJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>
@@ -193,7 +188,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_MechanitesBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Misc</designationCategory>
     <researchPrerequisites>

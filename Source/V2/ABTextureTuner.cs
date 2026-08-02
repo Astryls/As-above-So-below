@@ -11,187 +11,159 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// LIVE TEXTURE TUNER. Adjust drawSize, per-rotation offsets and draw altitude on any of
-    /// our buildings while looking at it, then copy the finished XML out.
+    /// LIVE TEXTURE TUNER. Select a building, drag a slider, watch it move.
     ///
-    /// This exists because the alternative is edit-def / rebuild / relaunch / rebuild-colony
-    /// for every quarter-cell nudge, on thirty-odd buildings that each have four rotations.
-    /// Tuning by eye is inherently iterative; the loop has to be seconds, not minutes.
+    /// ⚠ IT FOLLOWS THE SELECTION RATHER THAN OFFERING A DEF LIST, AND THAT IS THE WHOLE
+    /// DESIGN. An earlier version made you page through thirty-seven defs by name and edit
+    /// four rotation rows at once - which is backwards, because the building you want to fix
+    /// is already on screen and already facing the direction you care about. Selecting it
+    /// answers both questions for free: WHICH def, and WHICH rotation.
+    ///
+    /// So there is exactly one offset pair on screen - the one belonging to the rotation the
+    /// selected thing is actually in. Rotate the building (or place another facing a
+    /// different way) and the panel follows.
     ///
     /// ⚠ CHANGING `graphicData` AT RUNTIME DOES NOTHING ON ITS OWN - THE GRAPHIC IS CACHED
     /// TWICE. `GraphicData.Graphic` memoises into a private `cachedGraphic`, and
-    /// `ThingDef.graphic` is baked once at PostLoad and never looked at again. Writing a new
-    /// drawSize updates neither, so the sprite does not move and the value looks ignored.
-    /// `Apply` clears both, then dirties the map mesh for every spawned instance - buildings
-    /// are MapMeshOnly, so without that last step nothing redraws until the section happens
-    /// to regenerate for some other reason.
+    /// `ThingDef.graphic` is baked at PostLoad and never re-read. Clear only one and the
+    /// slider looks ignored. Clear both without dirtying the map mesh and it still will not
+    /// redraw, because these buildings are MapMeshOnly and their vertices are already baked
+    /// into a section. `Apply` does all three.
     ///
-    /// Values are edited on the LIVE def, so they affect every instance immediately and are
-    /// lost on quit. That is deliberate: this is a measuring instrument, not a settings
-    /// panel. Copy the XML out and bake it into the def.
+    /// Edits are live on the DEF, so every instance changes at once, and they are lost on
+    /// quit. This is a measuring instrument - copy the XML out and bake it.
     /// </summary>
     public class Window_ABTextureTuner : Window
     {
         private static readonly FieldInfo CachedGraphic =
             AccessTools.Field(typeof(GraphicData), "cachedGraphic");
 
-        private readonly List<ThingDef> defs = new List<ThingDef>();
-
         private readonly HashSet<ThingDef> touched = new HashSet<ThingDef>();
 
-        private int index;
+        public override Vector2 InitialSize => new Vector2(400f, 400f);
 
-        private Vector2 scroll;
-
-        public override Vector2 InitialSize => new Vector2(560f, 720f);
+        protected override float Margin => 12f;
 
         public Window_ABTextureTuner()
         {
-            // Non-modal on purpose: the whole point is to watch the building change while
-            // dragging a slider, which means the map must stay visible and interactive.
+            // Non-modal, and it must stay that way: the point is to watch the building while
+            // dragging, so the map has to remain visible, clickable and camera-movable.
             draggable = true;
-            resizeable = true;
             doCloseX = true;
             closeOnClickedOutside = false;
             absorbInputAroundWindow = false;
             preventCameraMotion = false;
             onlyOneOfTypeAllowed = true;
-
-            // Everything of ours that draws: risers first (30), then the links.
-            foreach (ThingDef d in ABRiserDefs.All)
-            {
-                defs.Add(d);
-            }
-            foreach (ThingDef d in DefDatabase<ThingDef>.AllDefsListForReading)
-            {
-                if (d.graphicData != null && d.defName.StartsWith("AB2_") && !defs.Contains(d))
-                {
-                    defs.Add(d);
-                }
-            }
-            defs.SortBy(d => d.defName);
+            focusWhenOpened = false;
         }
 
-        private ThingDef Cur => defs.Count > 0 ? defs[Mathf.Clamp(index, 0, defs.Count - 1)] : null;
+        /// <summary>Bottom-left, clear of the architect menu and the inspect pane.</summary>
+        protected override void SetInitialSizeAndPosition()
+        {
+            windowRect = new Rect(12f, UI.screenHeight - InitialSize.y - 160f,
+                InitialSize.x, InitialSize.y);
+        }
 
         public override void DoWindowContents(Rect inRect)
         {
-            ThingDef def = Cur;
-            if (def == null)
+            Thing sel = Find.Selector?.SingleSelectedThing;
+            ThingDef def = sel?.def;
+            if (def?.graphicData == null)
             {
-                Widgets.Label(inRect, "No tunable defs found.");
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Widgets.Label(inRect, "Select a building.\n\nIts scale, offset and draw altitude\nappear here and update live.");
+                Text.Anchor = TextAnchor.UpperLeft;
                 return;
             }
 
-            Rect view = new Rect(0f, 0f, inRect.width - 20f, 940f);
-            Widgets.BeginScrollView(inRect, ref scroll, view);
-            Listing_Standard l = new Listing_Standard();
-            l.Begin(view);
-
-            // ---- def picker
-            Rect head = l.GetRect(30f);
-            if (Widgets.ButtonText(head.LeftPart(0.15f), "<"))
-            {
-                index = (index - 1 + defs.Count) % defs.Count;
-            }
-            if (Widgets.ButtonText(head.RightPart(0.15f), ">"))
-            {
-                index = (index + 1) % defs.Count;
-            }
-            Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(head.MiddlePart(0.68f, 1f),
-                (index + 1) + "/" + defs.Count + "  " + def.defName);
-            Text.Anchor = TextAnchor.UpperLeft;
-            l.Gap(4f);
-            if (touched.Contains(def))
-            {
-                GUI.color = new Color(0.4f, 0.9f, 0.5f);
-                l.Label("  modified");
-                GUI.color = Color.white;
-            }
-            l.GapLine(6f);
-
             GraphicData g = def.graphicData;
+            Rot4 rot = sel.Rotation;
             bool dirty = false;
 
-            // ---- scale
-            l.Label("SCALE  drawSize " + Fmt2(g.drawSize));
-            float sx = l.Slider(g.drawSize.x, 0.2f, 4f);
-            float sy = l.Slider(g.drawSize.y, 0.2f, 4f);
-            if (!Mathf.Approximately(sx, g.drawSize.x) || !Mathf.Approximately(sy, g.drawSize.y))
+            Listing_Standard l = new Listing_Standard();
+            l.Begin(inRect);
+
+            Text.Font = GameFont.Small;
+            GUI.color = new Color(0.95f, 0.75f, 0.45f);
+            l.Label(def.defName);
+            GUI.color = Color.white;
+            l.Label("facing " + RotName(rot) + (touched.Contains(def) ? "   (modified)" : ""));
+            l.GapLine(8f);
+
+            // ---- scale. One slider: these are square sprites in square cells, and two
+            // independent axes invite a stretch nobody wants.
+            l.Label("Scale   " + g.drawSize.x.ToString("0.00"));
+            float s = l.Slider(g.drawSize.x, 0.2f, 3f);
+            if (!Mathf.Approximately(s, g.drawSize.x))
             {
-                g.drawSize = new Vector2(Snap(sx), Snap(sy));
+                float v = Snap(s);
+                g.drawSize = new Vector2(v, v);
                 dirty = true;
             }
-            if (l.ButtonText("Lock Y to X (square)"))
+
+            // ---- offset for THIS rotation only
+            Vector3 off = OffsetFor(g, rot);
+            l.Gap(6f);
+            l.Label("Offset X   " + off.x.ToString("0.00"));
+            float ox = l.Slider(off.x, -1.5f, 1.5f);
+            l.Label("Offset Z   " + off.z.ToString("0.00"));
+            float oz = l.Slider(off.z, -1.5f, 1.5f);
+            if (!Mathf.Approximately(ox, off.x) || !Mathf.Approximately(oz, off.z))
             {
-                g.drawSize = new Vector2(g.drawSize.x, g.drawSize.x);
+                SetOffset(g, rot, new Vector3(Snap(ox), 0f, Snap(oz)));
                 dirty = true;
             }
-            l.GapLine(6f);
 
-            // ---- base offset
-            l.Label("BASE OFFSET  drawOffset " + Fmt3(g.drawOffset));
-            float bx = l.Slider(g.drawOffset.x, -2f, 2f);
-            float bz = l.Slider(g.drawOffset.z, -2f, 2f);
-            if (!Mathf.Approximately(bx, g.drawOffset.x) || !Mathf.Approximately(bz, g.drawOffset.z))
+            l.Gap(6f);
+            if (l.ButtonText("Push out from wall (0.9)"))
             {
-                g.drawOffset = new Vector3(Snap(bx), 0f, Snap(bz));
+                SetOffset(g, rot, PushOut(rot, 0.9f));
                 dirty = true;
             }
-            l.GapLine(6f);
+            if (l.ButtonText("Zero this rotation"))
+            {
+                SetOffset(g, rot, Vector3.zero);
+                dirty = true;
+            }
 
-            // ---- per-rotation offsets
-            l.Label("PER-ROTATION OFFSET  (null = inherit base)");
-            dirty |= RotRow(l, "north", ref g.drawOffsetNorth);
-            dirty |= RotRow(l, "east ", ref g.drawOffsetEast);
-            dirty |= RotRow(l, "south", ref g.drawOffsetSouth);
-            dirty |= RotRow(l, "west ", ref g.drawOffsetWest);
-            l.GapLine(6f);
-
-            // ---- draw altitude (the "overdraw" question: what covers what)
-            l.Label("DRAW ALTITUDE  altitudeLayer = " + def.altitudeLayer);
-            Rect alt = l.GetRect(30f);
+            // ---- overdraw
+            l.GapLine(8f);
+            l.Label("Draw altitude   " + def.altitudeLayer);
+            Rect alt = l.GetRect(28f);
             Array layers = Enum.GetValues(typeof(AltitudeLayer));
             int ai = Array.IndexOf(layers, def.altitudeLayer);
-            if (Widgets.ButtonText(alt.LeftHalf(), "< lower") && ai > 0)
+            if (Widgets.ButtonText(alt.LeftHalf().ContractedBy(2f), "under") && ai > 0)
             {
                 def.altitudeLayer = (AltitudeLayer)layers.GetValue(ai - 1);
                 dirty = true;
             }
-            if (Widgets.ButtonText(alt.RightHalf(), "higher >") && ai < layers.Length - 1)
+            if (Widgets.ButtonText(alt.RightHalf().ContractedBy(2f), "over") && ai < layers.Length - 1)
             {
                 def.altitudeLayer = (AltitudeLayer)layers.GetValue(ai + 1);
                 dirty = true;
             }
-            l.GapLine(6f);
 
-            // ---- output
-            if (l.ButtonText("Copy XML for " + def.defName))
-            {
-                GUIUtility.systemCopyBuffer = XmlFor(def);
-                Messages.Message("Copied " + def.defName + " graphicData.",
-                    MessageTypeDefOf.TaskCompletion, false);
-            }
-            if (l.ButtonText("Copy XML for ALL modified (" + touched.Count + ")"))
+            l.GapLine(8f);
+            if (l.ButtonText("Copy XML" + (touched.Count > 1 ? "  (all " + touched.Count + ")" : "")))
             {
                 StringBuilder sb = new StringBuilder();
-                foreach (ThingDef d in defs)
+                if (touched.Count > 1)
                 {
-                    if (touched.Contains(d))
+                    foreach (ThingDef d in touched)
                     {
                         sb.AppendLine(XmlFor(d)).AppendLine();
                     }
                 }
-                GUIUtility.systemCopyBuffer = sb.ToString();
-                Messages.Message("Copied " + touched.Count + " defs.",
+                else
+                {
+                    sb.Append(XmlFor(def));
+                }
+                GUIUtility.systemCopyBuffer = sb.ToString().TrimEnd();
+                Messages.Message("Copied. Values are lost on quit.",
                     MessageTypeDefOf.TaskCompletion, false);
             }
-            l.Gap(6f);
-            l.Label("Values are live on the def and are LOST ON QUIT. Copy before closing.");
 
             l.End();
-            Widgets.EndScrollView();
 
             if (dirty)
             {
@@ -200,37 +172,47 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>One nullable per-rotation row. The enable toggle matters: a null offset
-        /// inherits the base one, which is a different thing from an explicit zero, and the
-        /// XML has to reflect which was meant.</summary>
-        private static bool RotRow(Listing_Standard l, string label, ref Vector3? v)
+        // ---- offsets -------------------------------------------------------
+
+        /// <summary>The effective offset for a rotation: its own if set, otherwise the base.
+        /// Editing always writes the per-rotation field, so touching one facing never
+        /// silently moves the other three.</summary>
+        private static Vector3 OffsetFor(GraphicData g, Rot4 rot)
         {
-            bool dirty = false;
-            Rect r = l.GetRect(26f);
-            bool on = v.HasValue;
-            bool was = on;
-            Widgets.CheckboxLabeled(r.LeftPart(0.32f), "  " + label, ref on);
-            if (on != was)
+            Vector3? v = rot.AsInt == 0 ? g.drawOffsetNorth
+                       : rot.AsInt == 1 ? g.drawOffsetEast
+                       : rot.AsInt == 2 ? g.drawOffsetSouth
+                       : g.drawOffsetWest;
+            return v ?? g.drawOffset;
+        }
+
+        private static void SetOffset(GraphicData g, Rot4 rot, Vector3 v)
+        {
+            switch (rot.AsInt)
             {
-                v = on ? (Vector3?)Vector3.zero : null;
-                return true;
+                case 0: g.drawOffsetNorth = v; break;
+                case 1: g.drawOffsetEast = v; break;
+                case 2: g.drawOffsetSouth = v; break;
+                default: g.drawOffsetWest = v; break;
             }
-            if (!v.HasValue)
+        }
+
+        /// <summary>Offset that pushes the sprite out of the wall along the way it faces -
+        /// the shortcut for the wall-mounted case, which is most of what needs tuning.</summary>
+        private static Vector3 PushOut(Rot4 rot, float d)
+        {
+            switch (rot.AsInt)
             {
-                return false;
+                case 0: return new Vector3(0f, 0f, d);
+                case 1: return new Vector3(d, 0f, 0f);
+                case 2: return new Vector3(0f, 0f, -d);
+                default: return new Vector3(-d, 0f, 0f);
             }
-            Vector3 cur = v.Value;
-            Text.Anchor = TextAnchor.MiddleRight;
-            Widgets.Label(r.RightPart(0.66f), Fmt3(cur));
-            Text.Anchor = TextAnchor.UpperLeft;
-            float x = l.Slider(cur.x, -2f, 2f);
-            float z = l.Slider(cur.z, -2f, 2f);
-            if (!Mathf.Approximately(x, cur.x) || !Mathf.Approximately(z, cur.z))
-            {
-                v = new Vector3(Snap(x), 0f, Snap(z));
-                dirty = true;
-            }
-            return dirty;
+        }
+
+        private static string RotName(Rot4 r)
+        {
+            return r.AsInt == 0 ? "north" : r.AsInt == 1 ? "east" : r.AsInt == 2 ? "south" : "west";
         }
 
         /// <summary>Round to 0.05 so the copied XML is a number a human would have typed.</summary>
@@ -239,12 +221,7 @@ namespace AsAboveSoBelow
             return Mathf.Round(f * 20f) / 20f;
         }
 
-        private static string Fmt2(Vector2 v)
-        {
-            return "(" + v.x.ToString("0.##") + "," + v.y.ToString("0.##") + ")";
-        }
-
-        private static string Fmt3(Vector3 v)
+        private static string F3(Vector3 v)
         {
             return "(" + v.x.ToString("0.##") + "," + v.y.ToString("0.##") + "," + v.z.ToString("0.##") + ")";
         }
@@ -256,11 +233,8 @@ namespace AsAboveSoBelow
             sb.AppendLine("<!-- " + def.defName + " -->");
             sb.AppendLine("<altitudeLayer>" + def.altitudeLayer + "</altitudeLayer>");
             sb.AppendLine("<graphicData>");
-            sb.AppendLine("  <drawSize>" + Fmt2(g.drawSize) + "</drawSize>");
-            if (g.drawOffset != Vector3.zero)
-            {
-                sb.AppendLine("  <drawOffset>" + Fmt3(g.drawOffset) + "</drawOffset>");
-            }
+            sb.AppendLine("  <drawSize>(" + g.drawSize.x.ToString("0.##") + ","
+                + g.drawSize.y.ToString("0.##") + ")</drawSize>");
             Emit(sb, "drawOffsetNorth", g.drawOffsetNorth);
             Emit(sb, "drawOffsetEast", g.drawOffsetEast);
             Emit(sb, "drawOffsetSouth", g.drawOffsetSouth);
@@ -273,17 +247,15 @@ namespace AsAboveSoBelow
         {
             if (v.HasValue)
             {
-                sb.AppendLine("  <" + tag + ">" + Fmt3(v.Value) + "</" + tag + ">");
+                sb.AppendLine("  <" + tag + ">" + F3(v.Value) + "</" + tag + ">");
             }
         }
 
         /// <summary>
         /// Push a graphicData edit through both caches and force a redraw.
         ///
-        /// ⚠ ALL THREE STEPS ARE REQUIRED. Clearing only `cachedGraphic` leaves the stale
-        /// `ThingDef.graphic` in place; refreshing only that leaves the memoised one; and
-        /// doing both without dirtying the mesh changes nothing on screen, because these
-        /// buildings are MapMeshOnly and their vertices are already baked into a section.
+        /// ⚠ ALL THREE STEPS ARE REQUIRED - see the class note. Miss one and the slider
+        /// appears to do nothing, which reads as a broken tool rather than a missing refresh.
         /// </summary>
         public static void Apply(ThingDef def)
         {

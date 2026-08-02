@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_OilJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimefeller</designationCategory>
     <researchPrerequisites>
@@ -45,7 +44,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_OilBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimefeller</designationCategory>
     <researchPrerequisites>

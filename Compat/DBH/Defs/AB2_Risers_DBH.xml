@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_PlumbingJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Hygiene</designationCategory>
     <researchPrerequisites>
@@ -45,7 +44,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_PlumbingBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Hygiene</designationCategory>
     <researchPrerequisites>
@@ -82,7 +80,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_AirDuctJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>
     <researchPrerequisites>
@@ -118,7 +115,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_AirDuctBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>
     <researchPrerequisites>

@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ColdWaterJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -42,7 +41,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ColdWaterBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -76,7 +74,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_SteamJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -109,7 +106,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_SteamBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -143,7 +139,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_CoolantJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -176,7 +171,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_CoolantBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -210,7 +204,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_HighVoltageJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -243,7 +236,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_HighVoltageBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -277,7 +269,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_LoomJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>
@@ -310,7 +301,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_LoomBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Rimatomics</designationCategory>
     <statBases>

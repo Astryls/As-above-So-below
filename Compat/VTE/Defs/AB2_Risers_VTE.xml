@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_VentDuctJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>
     <researchPrerequisites>
@@ -45,7 +44,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_VentDuctBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Temperature</designationCategory>
     <researchPrerequisites>

@@ -41,7 +41,14 @@
     <thingClass>Building</thingClass>
     <category>Building</category>
     <size>(1,1)</size>
-    <altitudeLayer>BuildingOnTop</altitudeLayer>
+    <!--
+      ⚠ `Item`, NOT `BuildingOnTop`, AND THAT IS TUNED RATHER THAN CHOSEN. A riser shares a
+      cell with the wall it is mounted in, and at BuildingOnTop the wall still won the draw
+      order on some facings, hiding the unit. Item sits one step higher and clears it.
+      Known cost: floor items share this layer, so an item dropped in the same cell can
+      z-fight with the riser. Acceptable - the cell is a wall, so items rarely land there.
+    -->
+    <altitudeLayer>Item</altitudeLayer>
     <passability>PassThroughOnly</passability>
     <fillPercent>0.75</fillPercent>
     <blockWind>true</blockWind>
@@ -93,8 +100,16 @@
       wall-mounting mechanisms converge on the same number because both are solving this
       same overlap.
 
-      Sign convention is "toward the rotation", and rotation points OUT of the wall (see
-      the note above), so north is +z, south -z, east +x, west -x.
+      ⚠ SOUTH IS ZERO WHILE THE OTHER THREE ARE 0.9, AND THAT IS NOT AN OVERSIGHT.
+      Measured in game with the texture tuner, not derived. RimWorld's camera is top-down
+      with a slight forward tilt, so the two directions are not symmetric on screen: a unit
+      on the wall's SOUTH face is already on the side facing the camera and reads as mounted
+      with no offset at all, while north, east and west are on faces turned away and have to
+      be pushed clear of the wall sprite to be seen. Restoring south to -0.9 "for symmetry"
+      pushes it a full cell into the room.
+
+      Sign convention for the other three is "toward the rotation", and rotation points OUT
+      of the wall (see the note above), so north is +z, east +x, west -x.
 
       Tunable in ONE place: every riser inherits this because RimWorld merges graphicData
       field-by-field down the ParentName chain, so a child redefining texPath and
@@ -102,9 +117,9 @@
     -->
     <graphicData>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
+      <drawSize>(0.8,0.8)</drawSize>
       <drawOffsetNorth>(0,0,0.9)</drawOffsetNorth>
-      <drawOffsetSouth>(0,0,-0.9)</drawOffsetSouth>
+      <drawOffsetSouth>(0,0,0)</drawOffsetSouth>
       <drawOffsetEast>(0.9,0,0)</drawOffsetEast>
       <drawOffsetWest>(-0.9,0,0)</drawOffsetWest>
       <damageData>
@@ -128,7 +143,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_PowerJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Power</designationCategory>
     <researchPrerequisites>
@@ -166,7 +180,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_PowerBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>Power</designationCategory>
     <researchPrerequisites>

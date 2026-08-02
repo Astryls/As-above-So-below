@@ -9,7 +9,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ChemfuelJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>
     <researchPrerequisites>
@@ -45,7 +44,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_ChemfuelBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>
     <researchPrerequisites>
@@ -83,7 +81,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_DeepchemJunction</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>
     <researchPrerequisites>
@@ -119,7 +116,6 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_DeepchemBreaker</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
-      <drawSize>(1,1)</drawSize>
     </graphicData>
     <designationCategory>VCHE_PipeNetworks</designationCategory>
     <researchPrerequisites>
