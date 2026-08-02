@@ -6,8 +6,9 @@ namespace AsAboveSoBelow
     /// <summary>
     /// THE DEPTH CUE: one definition of "how much further away is the level below".
     ///
-    /// Each below OBJECT draws smaller, about its OWN centre, compounding once per level of
-    /// drop. Baked into the printed vertices, so it costs nothing per frame and can never
+    /// Each below LOOSE OBJECT draws smaller, about its OWN centre, compounding once per
+    /// level of drop. Buildings are exempt - see CanShrink for why that is a hard rule and
+    /// not a tuning choice. Baked into the printed vertices, so it costs nothing per frame and can never
     /// slide relative to the ground it stands on. This is V1's `belowThingScale`, restored
     /// and generalised: V1 only ever had ONE level below, so a single 0.85 sufficed; here
     /// the drop is the accumulated descent from ABBands.TryResolveVisibleBelow and the scale
@@ -73,16 +74,34 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
-        /// V1'S FILTER, KEPT VERBATIM, because both of its exclusions were paid for.
+        /// LOOSE CONTENTS SHRINK; THE STRUCTURE DOES NOT. An ALLOW-list on
+        /// <see cref="ThingDef.category"/>, not a deny-list on graphics.
         ///
-        /// LINKED graphics (walls, fences, conduits) print one quad per cell, so shrinking
-        /// each cell about its own centre opens a gap at every cell boundary and a wall
-        /// becomes a dotted line.
+        /// ⚠ THIS REPLACED V1'S FILTER ON THE USER'S CALL. V1 shrank everything that was
+        /// not linked-graphic or natural rock, which meant BUILDINGS shrank: a solar panel
+        /// one level down drew at 85%, two levels down at 72%. Seen in play that reads as
+        /// the building being the wrong size rather than as distance, because a building is
+        /// bolted to a floor whose cells are NOT shrunk (terrain is a full-size quad grid),
+        /// so the sprite visibly no longer fits its own footprint. Loose contents have no
+        /// footprint to contradict, so on them the same transform reads as depth.
         ///
-        /// Natural rock is excluded BY DEF rather than by link type - `mineable` or
-        /// `building.isNaturalRock` - because Better Mountains swaps rock graphics to
-        /// non-linked Graphic_Random wholesale, which passes the link test and then tore
-        /// the surface mountains into a gappy field seen from the sky (V1 run #50).
+        /// The allowed set is Item (includes corpses and chunks), Plant (trees and the
+        /// whole ground cover with them - shrinking trees but not grass makes a forest
+        /// canopy float) and Filth. Pawns are NOT decided here: they are realtime, never
+        /// enter the printed mesh, and take Patch_PawnRenderer_ABBelowShrink instead. They
+        /// do shrink, by the user's call, so a colonist matches the items at his feet.
+        ///
+        /// ⚠ BOTH OF V1'S EXCLUSIONS ARE NOW IMPLIED BUT ONE IS STILL SPELLED OUT.
+        /// Walls, fences, conduits and natural rock are all ThingCategory.Building, so the
+        /// category test alone already covers the reason the old filter existed (a linked
+        /// graphic prints one quad per cell; shrinking each about its own centre opens a
+        /// gap at every join and a wall becomes a dotted line). The linkType test is kept
+        /// anyway because it is two field reads and it is the ONLY thing standing between
+        /// us and that artifact if a mod ships a linked PLANT or a linked ITEM - Vanilla
+        /// Furniture Expanded and several farming mods do exactly that for hedges and
+        /// trellises. The `mineable` / `isNaturalRock` test is dropped: it was a workaround
+        /// for Better Mountains serving rock as non-linked Graphic_Random (V1 run #50), and
+        /// rock is a Building either way now, so the category test catches it first.
         /// </summary>
         internal static bool CanShrink(Thing t)
         {
@@ -91,9 +110,15 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            if (d.mineable || (d.building != null && d.building.isNaturalRock))
+            switch (d.category)
             {
-                return false;
+                case ThingCategory.Item:
+                case ThingCategory.Plant:
+                case ThingCategory.Filth:
+                    break;
+                default:
+                    // Building, Attachment, Gas, Ethereal, Pawn, Mote, Projectile, None.
+                    return false;
             }
             GraphicData g = d.graphicData;
             return g == null || g.linkType == LinkDrawerType.None;

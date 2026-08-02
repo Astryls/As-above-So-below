@@ -95,7 +95,7 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_TabVisuals>Visuals</AB_TabVisuals>
   <AB_VisualsNote>How looking down through a level at the ones beneath it is drawn. Purely visual and can be changed at any time; it does not affect generation, pathing or what your colonists can reach.</AB_VisualsNote>
   <AB_DepthFalloff>Distance shrink on lower levels</AB_DepthFalloff>
-  <AB_DepthFalloffTip>Pawns, buildings, plants and items on a level below the one you are viewing draw slightly smaller, and smaller again for each further level down, the way anything further away looks smaller. This is the cue that makes a deep column read as depth instead of as flat levels stacked in a list. Walls, fences and natural rock are left at full size on purpose: each of their cells draws its own tile, so shrinking them would open a gap along every join.</AB_DepthFalloffTip>
+  <AB_DepthFalloffTip>Pawns, plants and loose items on a level below the one you are viewing draw slightly smaller, and smaller again for each further level down, the way anything further away looks smaller. This is the cue that makes a deep column read as depth instead of as flat levels stacked in a list. Buildings never shrink: a solar panel, a wall or a workbench keeps its true size at every depth, so it always matches the floor it is standing on.</AB_DepthFalloffTip>
   <AB_DepthFalloffAmount>Size per level down: {0}   (three levels down: {1})</AB_DepthFalloffAmount>
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
