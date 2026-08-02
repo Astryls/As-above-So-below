@@ -2,105 +2,103 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Verse;
+using Verse.AI;
 
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// INTRA-BAND CONNECTED COMPONENTS. PHASE 1: DATA AND DIAGNOSTIC ONLY - NOTHING READS
-    /// THIS YET, BY DESIGN.
+    /// INTRA-BAND WALKABLE ISLANDS: "where could this pawn get to WITHOUT using a staircase".
     ///
-    /// The problem it exists to solve. `ABWormholePather.TrySegment` opens with
-    /// `if (ABBands.SameBand(pawn.Position, destCell)) return false;` - "same band, nothing to
-    /// segment". That assumes SAME BAND implies REACHABLE WITHIN THE BAND, and on a fragmented
-    /// band it does not: two plateaus on a sky band, or two sealed caverns in a basement, are
-    /// the same band and separate islands. The pawn has to go down, across, and back up.
+    /// Consumed by `ABWormholePather.TrySegment` (should this same-band trip be routed through
+    /// a stairwell) and by `ABWormhole.TryGetTransit` (is this anchor one the pawn can
+    /// actually reach). See §34.
     ///
-    /// Today we decline to segment, vanilla runs, and vanilla correctly finds no path - but
-    /// `CanReach` has already said TRUE, because the region graph genuinely IS connected
-    /// through our synthetic wormhole links (island A -> anchor -> band below -> anchor ->
-    /// island B). So a job gets issued against a destination with no path. That is exactly the
-    /// `CanReach=True` + `path=NOT FOUND` signature `AB2: why is this pawn stuck` was built to
-    /// catch, and it is the "pawns upstairs in one building think they can walk to another
-    /// building's upper floor" report.
+    /// ⚠⚠ THIS IS FLOODED OVER CELLS, NOT OVER REGIONS, AND THE FIRST VERSION GOT THAT WRONG
+    /// IN A WAY THAT MADE IT USELESS. Flooding `Region.Neighbors` produced components that
+    /// exactly matched `CanReach` - which is the thing we are trying to second-guess. Measured
+    /// on a real two-platform fixture: `component: pawn=3 dest=3`, `CanReach=True`,
+    /// `FindPathNow=NOT FOUND`. The map cannot be more pessimistic than its own source, so
+    /// sourcing it from the region graph guaranteed it could never see the failure.
     ///
-    /// ⚠⚠ AND THE SAME WRONG ABSTRACTION IS ALREADY IN THE CROSS-BAND ROUTER.
-    /// `ABWormhole.HopDistances` BFSes over BANDS as graph nodes. On a fragmented band that
-    /// can hand back a wormhole whose near anchor sits in an island the pawn cannot reach, so
-    /// the existing router is unsound on fragmented maps too - it just fails less visibly.
-    /// The correct graph node is not a band. It is a (band, component) PAIR. Phase 2
-    /// generalises `TryGetTransit` onto this; phase 3 relaxes `TrySegment`.
+    /// The gap is documented at the top of `ABDevTools.V2PathProbe` and it is REAL PATHFINDER
+    /// BEHAVIOUR, not a bug: a region is a CELL SET, but path production additionally refuses
+    /// to cut a diagonal corner when either flanking cell is unwalkable
+    /// (`PathUtility.BlocksDiagonalMovement`, applied in `Pawn_PathFollower`). A sky band is
+    /// full of single-cell open-air holes, so two areas joined only by a diagonal touch are
+    /// ONE REGION and NOT WALKABLE. That is the `CanReach=True` + `path=NOT FOUND` re-issue
+    /// loop, and it predates §34 entirely.
     ///
-    /// ⚠ THE ENTIRE TRICK IS ONE FILTER: THE BFS REFUSES A NEIGHBOUR ON A DIFFERENT BAND.
-    /// `Region.Neighbors` is topological, and the ONLY reason it ever spans bands is our own
-    /// wormhole `RegionLink`s (§1). Refusing cross-band neighbours therefore yields exactly
-    /// "what could I walk to without using a staircase", which is the question the pathfinder
-    /// actually answers. No pathfinding is involved and none may be: asking the pathfinder
-    /// first is the expensive failure §32 exists to avoid.
+    /// ⚠ SO THE FLOOD USES THE PATHFINDER'S OWN TWO RULES AND NOTHING ELSE:
+    /// `PathGrid.WalkableFast` for the cell, and `PathUtility.BlocksDiagonalMovement` on BOTH
+    /// flanking cells for a diagonal step - the identical pair `Pawn_PathFollower` applies. If
+    /// this ever disagrees with the pathfinder again, THAT is the bug; do not paper over it
+    /// at the consumer.
     ///
-    /// ⚠ A REGION NEVER STRADDLES THE GUTTER, WHICH IS WHAT MAKES "THE BAND OF A REGION" WELL
-    /// DEFINED. Regions are built only from walkable cells and the gutter is impassable across
-    /// the full map width, so no region flood can cross it. A 12x12 region chunk that happens
-    /// to span a band boundary simply yields two separate regions.
-    ///
-    /// ⚠ INVALIDATION IS DRIVEN BY THE REGION REBUILD, NOT BY A TIMER. A stale component map
-    /// is the dangerous failure mode here - it would route a pawn to a staircase that no
-    /// longer helps - and "recompute every N ticks" cannot be made correct, only less wrong.
+    /// ⚠ NO PATHFINDING IS INVOLVED AND NONE MAY BE. Asking `FindPathNow` whether two cells
+    /// connect is the expensive exhaustive failure §32 exists to avoid.
     /// </summary>
     public static class ABBandComponents
     {
-        /// <summary>Bumped by the region-rebuild postfix. Snapshots older than this rebuild.</summary>
+        /// <summary>
+        /// An island smaller than this does not set the `fragmented` flag.
+        ///
+        /// ⚠ THE FLAG IS A HOT-PATH GATE, NOT A FACT, AND A ONE-CELL POCKET DEFEATED IT.
+        /// Run #307 measured band 1 as "FRAGMENTED" on the strength of a SINGLE isolated cell
+        /// (16155 total, largest 16154), which forced every `StartPath` on the map down the
+        /// slow branch for something no pawn will ever be ordered into. 12 cells is a small
+        /// room: below that an island is scenery, not a destination.
+        ///
+        /// ⚠ THIS GATES THE FLAG ONLY. `ComponentOf` and `KnownDifferentComponents` still
+        /// report tiny islands truthfully; a pawn standing in one is simply not worth slowing
+        /// the whole map down to rescue.
+        /// </summary>
+        private const int MinIslandCells = 12;
+
+        /// <summary>Component ids are `band * BandStride + localId` so ids from independently
+        /// rebuilt bands can never collide.</summary>
+        private const int BandStride = 1000000;
+
         private static int version;
 
-        /// <summary>How many times a snapshot has actually been rebuilt, as opposed to
-        /// invalidated. ⚠ THE GAP BETWEEN `version` AND THIS IS THE WHOLE PERFORMANCE STORY -
-        /// see the invalidation patch at the bottom of this file.</summary>
         public static int rebuilds;
 
-        private sealed class Snapshot
+        private sealed class BandData
         {
             public int builtVersion = -1;
-
-            /// <summary>Region id -> component id.</summary>
-            public readonly Dictionary<int, int> regionToComponent = new Dictionary<int, int>();
-
-            public readonly List<int> componentBand = new List<int>();
-
-            public readonly List<int> componentRegions = new List<int>();
-
-            public readonly List<int> componentCells = new List<int>();
-
-            public int skippedBandless;
-
-            /// <summary>True when ANY band holds more than one component. ⚠ THIS IS THE HOT
-            /// PATH'S EARLY-OUT: on a map where every band is one island the same-component
-            /// question cannot possibly change an answer, so `TrySegment` must not pay for
-            /// two region lookups per StartPath to discover that.</summary>
-            public bool anyFragmented;
+            public CellRect rect;
+            public int width;
+            public int[] comp;       // local cell index -> local component id, -1 unwalkable
+            public List<int> sizes = new List<int>();
+            public bool fragmented;
         }
 
-        private static readonly ConditionalWeakTable<Map, Snapshot> byMap =
-            new ConditionalWeakTable<Map, Snapshot>();
+        private sealed class MapData
+        {
+            public BandData[] bands;
+        }
 
-        private static readonly Queue<Region> queue = new Queue<Region>();
+        private static readonly ConditionalWeakTable<Map, MapData> byMap =
+            new ConditionalWeakTable<Map, MapData>();
+
+        private static readonly ConditionalWeakTable<Map, object> hooked =
+            new ConditionalWeakTable<Map, object>();
+
+        private static readonly List<int> stack = new List<int>();
 
         public static void Invalidate()
         {
             version++;
         }
 
-        /// <summary>Maps already subscribed, so a repeated FinalizeInit cannot stack duplicate
-        /// handlers on one map's event.</summary>
-        private static readonly ConditionalWeakTable<Map, object> hooked =
-            new ConditionalWeakTable<Map, object>();
-
         /// <summary>
-        /// Subscribe component invalidation to the ONE vanilla signal that means "regions
-        /// actually changed". Called from ABBandMap alongside the wormhole re-arm hook.
+        /// Subscribe invalidation to the ONE vanilla signal meaning "regions actually changed".
         ///
-        /// ⚠ `MapEvents.RegionsRoomsChanged` FIRES ON THE LAST LINE OF
-        /// `TryRebuildDirtyRegionsAndRooms`, ON THE ONLY PATH THAT ACTUALLY REBUILT. That is
-        /// what makes it free: the method itself is called ~4,500 times per frame and
-        /// early-outs, and the event fires only for the handful of calls that did work.
+        /// ⚠ NEVER PATCH `RegionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms` FOR THIS. It is
+        /// called ~4,500 times per frame, and a gating prefix on `AnythingToRebuild` recovers
+        /// only ~22% because the gate itself is Harmony dispatch on a hot method - measured
+        /// and rejected in ABWormhole.cs, then rediscovered here the hard way (`version=759324`
+        /// on a quiet map). `MapEvents.RegionsRoomsChanged` is raised on the LAST line of that
+        /// method, on the only path that actually rebuilt. After the switch: `version=4`.
         /// </summary>
         public static void Register(Map map)
         {
@@ -114,71 +112,66 @@ namespace AsAboveSoBelow
             }
             catch (System.ArgumentException)
             {
-                return; // benign race; already registered
+                return; // benign race
             }
-            // MapEvents dies with the map, so there is nothing to unsubscribe.
             map.events.RegionsRoomsChanged += delegate { version++; };
         }
 
-        /// <summary>Component id for a cell, or -1 when the cell has no valid region (a wall,
-        /// the gutter, unfogged rock). -1 never equals -1 for comparison purposes: see
-        /// SameComponent.</summary>
+        // ---- queries ---------------------------------------------------------
+
+        /// <summary>Island id for a cell, or -1 when the cell is unwalkable or off-band.</summary>
         public static int ComponentOf(Map map, IntVec3 cell)
         {
             if (map == null || !cell.IsValid || !cell.InBounds(map))
             {
                 return -1;
             }
-            Snapshot s = SnapshotFor(map);
-            if (s == null)
+            int band = ABBands.BandOf(map, cell);
+            if (band < 0)
             {
                 return -1;
             }
-            Region r = map.regionGrid.GetValidRegionAt_NoRebuild(cell);
-            if (r == null || !r.valid)
+            BandData bd = BandFor(map, band);
+            if (bd == null || !bd.rect.Contains(cell))
             {
                 return -1;
             }
-            return s.regionToComponent.TryGetValue(r.id, out int c) ? c : -1;
+            int local = bd.comp[LocalIndex(bd, cell)];
+            return local < 0 ? -1 : band * BandStride + local;
         }
 
         /// <summary>
-        /// True when both cells are in the same walk-without-stairs island.
+        /// True ONLY when both cells resolve to an island AND those islands differ.
         ///
-        /// ⚠ AN UNKNOWN COMPONENT (-1) IS NEVER "SAME". A cell with no valid region is a wall
-        /// or the void; treating two unknowns as equal would make every pair of unreachable
-        /// cells look mutually reachable, which is the exact inversion of the bug this is for.
-        /// </summary>
-        public static bool SameComponent(Map map, IntVec3 a, IntVec3 b)
-        {
-            int ca = ComponentOf(map, a);
-            if (ca < 0)
-            {
-                return false;
-            }
-            return ca == ComponentOf(map, b);
-        }
-
-        /// <summary>
-        /// True ONLY when both cells resolve to a component AND those components differ.
+        /// ⚠ THIS IS NOT `!SameComponent`, AND THE DIFFERENCE IS THE WHOLE SAFETY MARGIN. An
+        /// unresolved cell (-1) is a wall, the gutter, or unfogged rock. Reading unknown as
+        /// "different island" would route every ordinary intra-band order through a staircase.
+        /// Unknown must mean LEAVE IT ALONE.
         ///
-        /// ⚠ THIS IS NOT `!SameComponent`, AND THE DIFFERENCE IS THE WHOLE SAFETY MARGIN.
-        /// An unknown component (-1) means a wall, the gutter, or unfogged rock. `SameComponent`
-        /// answers false for those, which is right for "can I definitely walk there" but would
-        /// be catastrophic here: `TrySegment` would read unknown as "different island" and
-        /// start routing every ordinary intra-band order through a staircase. Unknown must
-        /// mean LEAVE IT ALONE.
-        ///
-        /// ⚠ AND IT EARLY-OUTS ON AN UNFRAGMENTED MAP BEFORE TOUCHING THE REGION GRID. This
-        /// runs on `Pawn_PathFollower.StartPath`, which every pawn hits constantly; on a map
-        /// with no fragmented band the answer is always false and must cost one bool read.
+        /// ⚠ AND THE FRAGMENTED FLAG IS CHECKED FIRST, PER BAND. This runs on
+        /// `Pawn_PathFollower.StartPath`. On a band with no island worth naming the answer is
+        /// always false and costs one bool - and only THAT band is ever rebuilt, never the
+        /// whole stack.
         /// </summary>
         public static bool KnownDifferentComponents(Map map, IntVec3 a, IntVec3 b)
         {
-            Snapshot s = SnapshotFor(map);
-            if (s == null || !s.anyFragmented)
+            if (map == null)
             {
                 return false;
+            }
+            int ba = ABBands.BandOf(map, a);
+            int bb = ABBands.BandOf(map, b);
+            if (ba < 0 || bb < 0)
+            {
+                return false;
+            }
+            if (ba == bb)
+            {
+                BandData bd = BandFor(map, ba);
+                if (bd == null || !bd.fragmented)
+                {
+                    return false; // the fast path, and the common one
+                }
             }
             int ca = ComponentOf(map, a);
             if (ca < 0)
@@ -189,211 +182,218 @@ namespace AsAboveSoBelow
             return cb >= 0 && ca != cb;
         }
 
-        private static Snapshot SnapshotFor(Map map)
+        public static bool SameComponent(Map map, IntVec3 a, IntVec3 b)
         {
-            if (map == null || !ABBands.Banded(map))
-            {
-                return null;
-            }
-            Snapshot s = byMap.GetValue(map, _ => new Snapshot());
-            if (s.builtVersion != version)
-            {
-                Build(map, s);
-                rebuilds++;
-                s.builtVersion = version;
-            }
-            return s;
+            int ca = ComponentOf(map, a);
+            return ca >= 0 && ca == ComponentOf(map, b);
         }
 
-        private static void Build(Map map, Snapshot s)
+        // ---- build -----------------------------------------------------------
+
+        private static int LocalIndex(BandData bd, IntVec3 c)
         {
-            s.regionToComponent.Clear();
-            s.componentBand.Clear();
-            s.componentRegions.Clear();
-            s.componentCells.Clear();
-            s.skippedBandless = 0;
-
-            // NoRebuild: this can be reached from a diagnostic or (later) from StartPath, and
-            // triggering a region rebuild from either would be a re-entrancy hazard. Invalid
-            // regions are filtered explicitly rather than by asking for a clean list.
-            foreach (Region seed in map.regionGrid.AllRegions_NoRebuild_InvalidAllowed)
-            {
-                if (seed == null || !seed.valid || s.regionToComponent.ContainsKey(seed.id))
-                {
-                    continue;
-                }
-                int band = BandOfRegion(map, seed);
-                if (band < 0)
-                {
-                    s.skippedBandless++;
-                    continue;
-                }
-
-                int comp = s.componentBand.Count;
-                int regions = 0;
-                int cells = 0;
-
-                queue.Clear();
-                queue.Enqueue(seed);
-                s.regionToComponent[seed.id] = comp;
-                while (queue.Count > 0)
-                {
-                    Region cur = queue.Dequeue();
-                    regions++;
-                    cells += cur.CellCount;
-                    foreach (Region n in cur.Neighbors)
-                    {
-                        if (n == null || !n.valid || s.regionToComponent.ContainsKey(n.id))
-                        {
-                            continue;
-                        }
-                        // ⚠ THE ONE LINE THE WHOLE FILE IS ABOUT. A cross-band neighbour can
-                        // only be one of our wormhole links, and walking it requires a
-                        // staircase - which is precisely what a component must NOT include.
-                        if (BandOfRegion(map, n) != band)
-                        {
-                            continue;
-                        }
-                        s.regionToComponent[n.id] = comp;
-                        queue.Enqueue(n);
-                    }
-                }
-                queue.Clear();
-
-                s.componentBand.Add(band);
-                s.componentRegions.Add(regions);
-                s.componentCells.Add(cells);
-            }
-
-            s.anyFragmented = false;
-            for (int i = 0; i < s.componentBand.Count && !s.anyFragmented; i++)
-            {
-                for (int j = i + 1; j < s.componentBand.Count; j++)
-                {
-                    if (s.componentBand[i] == s.componentBand[j])
-                    {
-                        s.anyFragmented = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        /// <summary>Band of a region, via a cell known to belong to it. ⚠ `AnyCell`, NOT
-        /// `extentsClose.CenterCell` - extentsClose is a bounding box and its centre can sit
-        /// outside an L-shaped region entirely.</summary>
-        private static int BandOfRegion(Map map, Region r)
-        {
-            IntVec3 c = r.AnyCell;
-            return c.IsValid && c.InBounds(map) ? ABBands.BandOf(map, c) : -1;
+            return (c.z - bd.rect.minZ) * bd.width + (c.x - bd.rect.minX);
         }
 
         /// <summary>
-        /// Per-band component census, plus the selected pawn's own component against its
-        /// destination. This is the whole point of phase 1: prove the data is right on a real
-        /// fragmented map before anything depends on it.
+        /// Band data, rebuilt on demand.
+        ///
+        /// ⚠ PER BAND, NOT PER MAP - THAT IS ONE OF THE TWO SOFTENINGS. A cell flood costs
+        /// ~16k cells for one 126 band against ~80k for a 5-band stack, and a query only ever
+        /// needs the band it asked about. `RegionsRoomsChanged` does not say WHICH band
+        /// changed, so all bands are marked stale and each re-floods lazily the first time
+        /// something asks. The bound is one flood per band per region rebuild, not per query.
         /// </summary>
+        private static BandData BandFor(Map map, int band)
+        {
+            if (!ABBands.Banded(map) || band < 0)
+            {
+                return null;
+            }
+            MapData md = byMap.GetValue(map, _ => new MapData());
+            int bandCount = ABBands.BandCount(map);
+            if (md.bands == null || md.bands.Length != bandCount)
+            {
+                md.bands = new BandData[bandCount];
+            }
+            if (band >= md.bands.Length)
+            {
+                return null;
+            }
+            BandData bd = md.bands[band] ?? (md.bands[band] = new BandData());
+            if (bd.builtVersion != version)
+            {
+                Build(map, band, bd);
+                bd.builtVersion = version;
+                rebuilds++;
+            }
+            return bd;
+        }
+
+        private static void Build(Map map, int band, BandData bd)
+        {
+            bd.rect = ABBands.RectOfBand(map, band);
+            bd.width = bd.rect.Width;
+            int cells = bd.rect.Width * bd.rect.Height;
+            if (bd.comp == null || bd.comp.Length != cells)
+            {
+                bd.comp = new int[cells];
+            }
+            for (int i = 0; i < cells; i++)
+            {
+                bd.comp[i] = -1;
+            }
+            bd.sizes.Clear();
+            bd.fragmented = false;
+
+            PathingContext pc = map.pathing?.Normal;
+            if (pc?.pathGrid == null)
+            {
+                return;
+            }
+            PathGrid grid = pc.pathGrid;
+
+            int minX = bd.rect.minX;
+            int minZ = bd.rect.minZ;
+            int maxX = bd.rect.maxX;
+            int maxZ = bd.rect.maxZ;
+
+            for (int z = minZ; z <= maxZ; z++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    var seed = new IntVec3(x, 0, z);
+                    int seedLocal = (z - minZ) * bd.width + (x - minX);
+                    if (bd.comp[seedLocal] >= 0 || !grid.WalkableFast(seed))
+                    {
+                        continue;
+                    }
+                    int id = bd.sizes.Count;
+                    int count = 0;
+                    stack.Clear();
+                    stack.Add(seedLocal);
+                    bd.comp[seedLocal] = id;
+                    while (stack.Count > 0)
+                    {
+                        int curLocal = stack[stack.Count - 1];
+                        stack.RemoveAt(stack.Count - 1);
+                        count++;
+                        int cx = minX + (curLocal % bd.width);
+                        int cz = minZ + (curLocal / bd.width);
+                        for (int d = 0; d < 8; d++)
+                        {
+                            int nx = cx + DX[d];
+                            int nz = cz + DZ[d];
+                            if (nx < minX || nx > maxX || nz < minZ || nz > maxZ)
+                            {
+                                continue;
+                            }
+                            int nLocal = (nz - minZ) * bd.width + (nx - minX);
+                            if (bd.comp[nLocal] >= 0)
+                            {
+                                continue;
+                            }
+                            var n = new IntVec3(nx, 0, nz);
+                            if (!grid.WalkableFast(n))
+                            {
+                                continue;
+                            }
+                            // ⚠ THE LINE THAT MAKES THIS DIFFERENT FROM THE REGION GRAPH.
+                            // A diagonal step is refused when either flanking cell blocks it -
+                            // exactly what Pawn_PathFollower does. Without this, two areas
+                            // touching only at a corner past an open-air hole flood as one
+                            // island, the pathfinder disagrees, and the pawn stalls.
+                            if (d >= 4
+                                && (PathUtility.BlocksDiagonalMovement(cx, nz, pc, false)
+                                    || PathUtility.BlocksDiagonalMovement(nx, cz, pc, false)))
+                            {
+                                continue;
+                            }
+                            bd.comp[nLocal] = id;
+                            stack.Add(nLocal);
+                        }
+                    }
+                    stack.Clear();
+                    bd.sizes.Add(count);
+                }
+            }
+
+            int worthNaming = 0;
+            for (int i = 0; i < bd.sizes.Count; i++)
+            {
+                if (bd.sizes[i] >= MinIslandCells)
+                {
+                    worthNaming++;
+                }
+            }
+            bd.fragmented = worthNaming >= 2;
+        }
+
+        private static readonly int[] DX = { 0, 1, 0, -1, 1, 1, -1, -1 };
+
+        private static readonly int[] DZ = { 1, 0, -1, 0, 1, -1, 1, -1 };
+
+        // ---- diagnostic ------------------------------------------------------
+
         public static string Report(Map map, Pawn selected)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("AB2 BAND COMPONENT REPORT");
+            sb.AppendLine("AB2 BAND COMPONENT REPORT (cell flood, pathfinder rules)");
             if (map == null || !ABBands.Banded(map))
             {
                 sb.AppendLine("  map is not banded");
                 return sb.ToString();
             }
-            Snapshot s = SnapshotFor(map);
-            if (s == null)
-            {
-                sb.AppendLine("  no snapshot");
-                return sb.ToString();
-            }
-
-            int bandCount = ABBands.BandCount(map);
             sb.AppendLine("  version=" + version + " rebuilds=" + rebuilds
-                + " components=" + s.componentBand.Count
-                + " regions mapped=" + s.regionToComponent.Count
-                + " bandless regions skipped=" + s.skippedBandless
-                + " anyFragmented=" + s.anyFragmented);
+                + " minIsland=" + MinIslandCells);
+            int bandCount = ABBands.BandCount(map);
             for (int b = 0; b < bandCount; b++)
             {
-                int n = 0;
-                int biggest = 0;
-                int total = 0;
-                for (int i = 0; i < s.componentBand.Count; i++)
+                BandData bd = BandFor(map, b);
+                if (bd == null)
                 {
-                    if (s.componentBand[i] != b)
+                    continue;
+                }
+                int big = 0;
+                int total = 0;
+                int largest = 0;
+                for (int i = 0; i < bd.sizes.Count; i++)
+                {
+                    total += bd.sizes[i];
+                    if (bd.sizes[i] >= MinIslandCells)
                     {
-                        continue;
+                        big++;
                     }
-                    n++;
-                    total += s.componentCells[i];
-                    if (s.componentCells[i] > biggest)
+                    if (bd.sizes[i] > largest)
                     {
-                        biggest = s.componentCells[i];
+                        largest = bd.sizes[i];
                     }
                 }
-                // ⚠ A BAND WITH ONE COMPONENT BEHAVES EXACTLY AS IT DOES TODAY. Bands with
-                // MORE than one are the entire reason this exists, and a band whose largest
-                // island is a small fraction of its cells is where the current SameBand
-                // early-out is actively wrong.
-                sb.AppendLine("  band " + b + ": components=" + n
-                    + " cells=" + total
-                    + (n > 1 ? ("  LARGEST=" + biggest
-                        + " (" + (total > 0 ? (100f * biggest / total).ToString("0") : "0")
-                        + "% of band)  <-- FRAGMENTED") : ""));
+                sb.AppendLine("  band " + b + ": islands=" + bd.sizes.Count
+                    + " (>=" + MinIslandCells + " cells: " + big + ")"
+                    + " walkable=" + total + " largest=" + largest
+                    + (bd.fragmented ? "  <-- FRAGMENTED (phase 3 active here)" : ""));
             }
 
             if (selected != null && selected.Spawned && selected.Map == map)
             {
-                int pc = ComponentOf(map, selected.Position);
+                int pc2 = ComponentOf(map, selected.Position);
                 sb.AppendLine("  " + selected.LabelShortCap + " at " + selected.Position
-                    + " band " + ABBands.BandOf(map, selected.Position)
-                    + " component " + pc);
+                    + " band " + ABBands.BandOf(map, selected.Position) + " island " + pc2);
                 IntVec3 dest = selected.pather != null && selected.pather.Destination.IsValid
                     ? selected.pather.Destination.Cell
                     : IntVec3.Invalid;
                 if (dest.IsValid)
                 {
-                    int dc = ComponentOf(map, dest);
                     sb.AppendLine("    destination " + dest
                         + " band " + ABBands.BandOf(map, dest)
-                        + " component " + dc
+                        + " island " + ComponentOf(map, dest)
                         + "  sameBand=" + ABBands.SameBand(map, selected.Position, dest)
-                        + "  sameComponent=" + (pc >= 0 && pc == dc));
-                    // ⚠ THE SIGNATURE PHASE 3 IS FOR. sameBand=True with sameComponent=False
-                    // is a destination TrySegment currently refuses to route and the
-                    // pathfinder cannot reach - the stall this whole design addresses.
-                    if (ABBands.SameBand(map, selected.Position, dest) && pc >= 0 && pc != dc)
-                    {
-                        sb.AppendLine("    >> SAME BAND, DIFFERENT ISLAND. This is the case "
-                            + "TrySegment currently declines to segment and vanilla cannot "
-                            + "path. Phase 3 target.");
-                    }
+                        + "  knownDifferentIslands="
+                        + KnownDifferentComponents(map, selected.Position, dest));
                 }
             }
             return sb.ToString();
         }
     }
-
-    // ⚠⚠ THE HARMONY PATCHES THAT LIVED HERE HAVE BEEN DELETED. INVALIDATION IS AN EVENT
-    // SUBSCRIPTION NOW - see ABBandComponents.Register, called from ABBandMap.
-    //
-    // They were a postfix on `RebuildAllRegionsAndRooms` and a prefix+postfix on
-    // `TryRebuildDirtyRegionsAndRooms` gated on `AnythingToRebuild`. Both were wrong, and the
-    // reason was ALREADY WRITTEN DOWN in ABWormhole.cs by an earlier session that made the
-    // identical mistake for the wormhole re-arm:
-    //
-    //   - `TryRebuildDirtyRegionsAndRooms` is called **~4,500 times per frame**. That is why
-    //     the first component report read `version=759324` on a quiet map.
-    //   - Gating it with a prefix that samples `AnythingToRebuild` recovers only ~22%,
-    //     because the gate ADDS A SECOND PATCH to an extremely hot method and the residue is
-    //     Harmony dispatch cost, not work. Measured there at 0.339 -> 0.266 ms/frame.
-    //   - Vanilla already publishes the exact signal: `MapEvents.RegionsRoomsChanged` is
-    //     invoked on the LAST line of `TryRebuildDirtyRegionsAndRooms`, on the only path that
-    //     actually rebuilt (after `SetAllClean` and `initialized = true`). Subscribing costs
-    //     nothing on the millions of no-op calls and fires exactly once per real rebuild.
-    //
-    // ⚠ SO: NEVER PATCH `TryRebuildDirtyRegionsAndRooms`. If you need to know that regions
-    // changed, subscribe to `map.events.RegionsRoomsChanged`.
 }
