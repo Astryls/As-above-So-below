@@ -39,10 +39,8 @@ namespace AsAboveSoBelow
 
             List<ThingDef> defs = ABRiserDefs.All;
             sb.AppendLine("  riser defs loaded: " + defs.Count + " (30 with every host mod active)");
-            sb.AppendLine("  DUBWISE MERGE: rebuilds seen=" + Patch_DubsPipes_ABRiserLink.rebuildsSeen
-                + "  joins attempted=" + Patch_DubsPipes_ABRiserLink.joinsAttempted
-                + "  nets dropped=" + Patch_DubsPipes_ABRiserLink.netsDropped);
-            sb.AppendLine("  last skip reason: " + Patch_DubsPipes_ABRiserLink.lastSkipReason);
+            sb.AppendLine("  DUBWISE MERGE, per host:");
+            sb.AppendLine(Patch_DubsPipes_ABRiserLink.CounterReport());
 
             int total = 0;
             List<Thing> partners = new List<Thing>();

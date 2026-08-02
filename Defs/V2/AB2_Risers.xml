@@ -88,6 +88,13 @@
         <rect>(0.1,0.1,0.8,0.8)</rect>
       </damageData>
     </graphicData>
+    <!-- Rimefeller and Rimatomics gate their own flick-rebuild on `is Building_Valve`, so
+         our breakers need this to invalidate their nets. No-op everywhere else. -->
+    <comps>
+      <li Class="CompProperties">
+        <compClass>AsAboveSoBelow.CompABRiserSwitch</compClass>
+      </li>
+    </comps>
   </ThingDef>
 
 

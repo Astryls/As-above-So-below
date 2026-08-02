@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text;
 using HarmonyLib;
 using Verse;
 
@@ -51,21 +52,38 @@ namespace AsAboveSoBelow
             public FieldInfo pipedThings;   // ICollection on Net
             public MethodInfo initNet;      // Net.InitNet()
             public MethodInfo addThing;     // PipedThings.Add(T), resolved on first use
+            public MethodInfo dirtyAll;     // <MapComp>.DirtyAllPipeGrids()
+            public MethodInfo regen;        // <MapComp>.RegenPipeGrids()
             public string prefix;           // our network-id prefix, e.g. "DBH."
+            public string name;             // for the report
+            public int rebuilds, joins, drops;
+            public string skip = "(none)";
         }
 
         private static readonly Dictionary<Type, Family> families = new Dictionary<Type, Family>();
 
-        /// <summary>Instrumentation. The riser report reads these so "the pair resolved but
-        /// nothing merged" can be told apart from "the postfix never ran at all" - two very
-        /// different bugs that look identical from inside the game.</summary>
-        public static int rebuildsSeen;
-
-        public static int joinsAttempted;
-
-        public static int netsDropped;
-
-        public static string lastSkipReason = "(none)";
+        /// <summary>
+        /// Instrumentation, PER HOST rather than global.
+        ///
+        /// ⚠ ONE SHARED COUNTER HIDES A BROKEN FAMILY. A working Bad Hygiene merge makes the
+        /// totals look healthy while a Rimefeller one that never fires is invisible - which
+        /// is exactly the state that produced "water works, oil does not". Three hosts,
+        /// three rows.
+        /// </summary>
+        public static string CounterReport()
+        {
+            if (families.Count == 0)
+            {
+                return "    (no Dubwise host installed)";
+            }
+            StringBuilder sb = new StringBuilder();
+            foreach (Family f in families.Values)
+            {
+                sb.AppendLine("    " + f.name + ": rebuilds=" + f.rebuilds
+                    + " joins=" + f.joins + " dropped=" + f.drops + " | skip: " + f.skip);
+            }
+            return sb.ToString().TrimEnd();
+        }
 
         /// <summary>A short identity for the net a riser currently sits on, for the report.
         /// Two ends showing the SAME id means the merge worked and the fault is downstream;
@@ -139,7 +157,10 @@ namespace AsAboveSoBelow
                 families[mapComp] = new Family
                 {
                     pipeNets = nets, compPipe = comp, pipeNetRef = netRef,
-                    pipedThings = things, initNet = init, prefix = prefix
+                    pipedThings = things, initNet = init, prefix = prefix,
+                    name = compName.Split('.')[0],
+                    dirtyAll = AccessTools.Method(mapComp, "DirtyAllPipeGrids"),
+                    regen = AccessTools.Method(mapComp, "RegenPipeGrids")
                 };
                 found.Add(rebuild);
             }
@@ -161,16 +182,15 @@ namespace AsAboveSoBelow
                 {
                     families.TryGetValue(t, out fam);
                 }
-                rebuildsSeen++;
                 Map map = (__instance as MapComponent)?.map;
                 if (fam == null)
                 {
-                    lastSkipReason = "no Family for " + __instance.GetType().FullName;
                     return;
                 }
+                fam.rebuilds++;
                 if (map == null || !ABBands.Banded(map))
                 {
-                    lastSkipReason = "map null or unbanded";
+                    fam.skip = "map null or unbanded";
                     return;
                 }
                 MergeFor(map, fam, __instance);
@@ -218,18 +238,18 @@ namespace AsAboveSoBelow
         /// just rebuilt its own grid is sitting right there in `__instance`; use it.</summary>
         private static void Join(Family fam, object holder, Thing junction, Thing breaker)
         {
-            joinsAttempted++;
+            fam.joins++;
             object keep = NetOf(fam, junction);
             object drop = NetOf(fam, breaker);
             if (keep == null || drop == null)
             {
-                lastSkipReason = "net was null (keep=" + (keep != null) + " drop=" + (drop != null)
+                fam.skip = "net was null (keep=" + (keep != null) + " drop=" + (drop != null)
                     + ") - the riser's CompPipe has no pipeNetRef yet";
                 return;
             }
             if (ReferenceEquals(keep, drop))
             {
-                lastSkipReason = "already the same net - nothing to merge";
+                fam.skip = "already the same net - nothing to merge";
                 return;
             }
             object keepThings = fam.pipedThings.GetValue(keep);
@@ -240,13 +260,13 @@ namespace AsAboveSoBelow
             // silently never runs. Only IEnumerable is safe to lean on here.
             if (keepThings == null || !(fam.pipedThings.GetValue(drop) is IEnumerable dropThings))
             {
-                lastSkipReason = "PipedThings was null or not enumerable";
+                fam.skip = "PipedThings was null or not enumerable";
                 return;
             }
             MethodInfo add = AddMethodFor(fam, keepThings);
             if (add == null)
             {
-                lastSkipReason = "no single-argument Add on " + keepThings.GetType().Name;
+                fam.skip = "no single-argument Add on " + keepThings.GetType().Name;
                 return;
             }
             // Snapshot: the loser's set is read while the winner's is written. They are
@@ -331,6 +351,61 @@ namespace AsAboveSoBelow
 
         /// <summary>Drop a net from the map component's array so it stops ticking. Rebuilt
         /// as a new array because the field is a plain `Net[]`, not a List.</summary>
+        /// <summary>
+        /// Force the host to rebuild its pipe grids. Called when one of OUR breakers is
+        /// flicked.
+        ///
+        /// ⚠ THE THREE HOSTS DISAGREE ON WHETHER FLICKING REBUILDS, AND ONLY ONE OF THEM
+        /// DOES IT UNCONDITIONALLY. Bad Hygiene's `CompPipe.ReceiveCompSignal` calls
+        /// DirtyPipeGrid + RegenPipeGrids on any FlickedOn/FlickedOff, so our breaker gets a
+        /// rebuild for free. Rimefeller's - and Rimatomics' - gate the very same code on
+        /// `base.parent is Building_Valve`, which our riser is not. So on those two hosts the
+        /// switch toggled, our link check honoured it, and NOTHING EVER RECOMPUTED THE NET.
+        /// That asymmetry is why water worked and oil did not.
+        ///
+        /// `DirtyAllPipeGrids` rather than `DirtyPipeGrid(mode)` so we never have to marshal
+        /// a foreign enum value across the reflection boundary.
+        /// </summary>
+        public static void PokeRebuild(Thing t)
+        {
+            if (t?.Map == null)
+            {
+                return;
+            }
+            try
+            {
+                foreach (Family fam in families.Values)
+                {
+                    if (fam.dirtyAll == null || fam.regen == null)
+                    {
+                        continue;
+                    }
+                    object holder = t.Map.GetComponent(fam.pipeNets.DeclaringType) as MapComponent;
+                    if (holder == null)
+                    {
+                        List<MapComponent> all = t.Map.components;
+                        for (int i = 0; i < all.Count && holder == null; i++)
+                        {
+                            if (fam.dirtyAll.DeclaringType.IsInstanceOfType(all[i]))
+                            {
+                                holder = all[i];
+                            }
+                        }
+                    }
+                    if (holder == null)
+                    {
+                        continue;
+                    }
+                    fam.dirtyAll.Invoke(holder, null);
+                    fam.regen.Invoke(holder, null);
+                }
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Utilities, e, "riser flick rebuild", t);
+            }
+        }
+
         private static void RemoveNet(Family fam, object holder, object drop)
         {
             if (holder == null)
@@ -359,7 +434,7 @@ namespace AsAboveSoBelow
                 rebuilt.SetValue(kept[i], i);
             }
             fam.pipeNets.SetValue(holder, rebuilt);
-            netsDropped++;
+            fam.drops++;
         }
     }
 }
