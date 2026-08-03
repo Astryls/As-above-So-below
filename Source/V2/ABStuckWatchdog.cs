@@ -62,6 +62,17 @@ namespace AsAboveSoBelow
 
         private static readonly List<int> tmpDrop = new List<int>();
 
+        /// <summary>Pawn-id keyed, so it must not cross a game load - see the banner on
+        /// ABWormholePather.ResetForNewGame. Stale entries here only cost a false episode
+        /// (the watchdog would compare a loaded pawn against a previous session's position),
+        /// but a diagnostic that cries wolf after every load is worse than none.</summary>
+        [ABGameReset]
+        public static void ResetForNewGame()
+        {
+            watching.Clear();
+            tmpDrop.Clear();
+        }
+
         [ABGameTick(75)]
         public static void Tick()
         {

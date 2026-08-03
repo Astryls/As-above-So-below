@@ -96,6 +96,16 @@ namespace AsAboveSoBelow
 
         private static readonly List<int> tmpExpired = new List<int>();
 
+        /// <summary>Pawn-id keyed, so it must not cross a game load - see the banner on
+        /// ABWormholePather.ResetForNewGame for what stale ids do to a loaded save.</summary>
+        [ABGameReset]
+        public static void ResetForNewGame()
+        {
+            entering.Clear();
+            popped.Clear();
+            tmpExpired.Clear();
+        }
+
         /// <summary>
         /// ⚠⚠ BUILT AND DELIBERATELY NOT WIRED. DO NOT RECONNECT THIS WITHOUT READING §33c.
         ///

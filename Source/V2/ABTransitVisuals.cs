@@ -61,6 +61,15 @@ namespace AsAboveSoBelow
 
         private static readonly Dictionary<int, Route> routes = new Dictionary<int, Route>();
 
+        /// <summary>Pawn-id keyed, so it must not cross a game load - see the banner on
+        /// ABWormholePather.ResetForNewGame. A stale route here draws a line for a journey
+        /// that belonged to a different session.</summary>
+        [ABGameReset]
+        public static void ResetForNewGame()
+        {
+            routes.Clear();
+        }
+
         public static void Clear(Pawn p)
         {
             if (p != null)

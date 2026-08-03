@@ -153,6 +153,33 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>
+        /// ⚠⚠ EVERY STATIC HERE IS KEYED BY thingIDNumber, AND THOSE IDS ARE STABLE ACROSS A
+        /// SAVE LINEAGE - so without this hook a loaded game inherits the PREVIOUS session's
+        /// transit records and they bind straight onto the live pawns that share those ids.
+        ///
+        /// Reported as "sometimes pawns refuse to move when you load a prior save, until they
+        /// complete an action on the level they're on". The record survives the load holding
+        /// doors from the discarded map; dropping a Game does not despawn its things, so
+        /// `near.Spawned` can still read true and the sweep happily acts on it - hijacking a
+        /// pawn toward a destination that belonged to a different session, or overwriting the
+        /// transit it is legitimately trying to make. Finishing a local job clears it because
+        /// the next segmentation overwrites the entry.
+        ///
+        /// ⚠ AND "PRIOR SAVE" IS THE TELL, NOT A DETAIL. Loading an EARLIER save rewinds
+        /// TicksGame, so `now > expiresAtTick` is false for as long as the rewind lasts and
+        /// the 4000-tick self-cleanup - the thing that would otherwise have hidden this bug -
+        /// cannot fire at all. See the matching guard in TickTransits.
+        /// </summary>
+        [ABGameReset]
+        public static void ResetForNewGame()
+        {
+            pending.Clear();
+            everSegmented.Clear();
+            tmpDone.Clear();
+            tmpCarry.Clear();
+        }
+
         /// <summary>Returns true when the destination was rewritten to a near anchor.</summary>
         public static bool TrySegment(Pawn pawn, ref LocalTargetInfo dest, ref PathEndMode peMode)
         {
@@ -286,7 +313,16 @@ namespace AsAboveSoBelow
             foreach (KeyValuePair<int, Transit> kv in pending)
             {
                 Transit t = kv.Value;
-                if (now > t.expiresAtTick || t.near == null || t.far == null
+                // ⚠ THE SECOND TEST IS THE CLOCK RUNNING BACKWARDS. A record can only ever be
+                // TransitTimeoutTicks in the future; more than that means `now` is BEFORE the
+                // record was made, which happens when an earlier save is loaded. Without it a
+                // rewound clock makes a stale record effectively immortal - it is neither
+                // expired nor expiring - which is precisely why this class of bug only ever
+                // showed up on loading a PRIOR save. ResetForNewGame should have cleared it
+                // already; this is the belt to that pair of braces.
+                int ticksLeft = t.expiresAtTick - now;
+                if (ticksLeft <= 0 || ticksLeft > TransitTimeoutTicks
+                    || t.near == null || t.far == null
                     || !t.near.Spawned || !t.far.Spawned)
                 {
                     tmpDone.Add(kv.Key);

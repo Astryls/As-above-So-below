@@ -26,10 +26,10 @@
       "fix": "Treat cross-level combat as experimental. Reports with a description of the shot (which level, what weapon, what happened) are very welcome."
     },
     {
-      "id": "asb2-no-elevator",
-      "title": "There is no elevator",
-      "explanation": "Vertical links are currently the 1x1 ladder, 2x2 staircase and 3x3 grand staircase, each connecting two adjacent levels. The three-level elevator shaft needs a different internal structure and is planned, not missing by accident.",
-      "fix": "Use paired stairs (one down, one up) to chain all three levels through one location."
+      "id": "asb2-cross-level-mining",
+      "title": "Pawns will not mine rock on a level they are not standing on",
+      "explanation": "A mining target is solid rock, and solid cells are not walkable ground, so the mod's level router has nothing to aim at and does not route the pawn through the stairs. The game still reports the rock as reachable, so the pawn accepts the job and then finds no walkable route to it, and stands still or moves on to other work. The same applies to deconstructing, repairing or smoothing something set into rock on another level.",
+      "fix": "Send the pawn to that level first, by right clicking the stairs or by drafting it down, then give the mining order while it is on the same level. Mining works normally from there. A proper fix is in progress."
     },
     {
       "id": "asb2-stairs-placement-refused",

@@ -315,6 +315,13 @@ namespace AsAboveSoBelow
             sb.AppendLine("  below overlay pass: " + overlayPasses + " repaints, scanned "
                 + overlayScannedSum + " overlay things, " + Ms(overlayTicksTotal)
                 + " ms total, worst " + Ms(overlayTicksMax));
+            // The THIRD emitter (ABBelowFlecks). `considered` counts flecks that survived the
+            // view-band gate; `mirrored` counts those actually visible from above. considered
+            // staying 0 while looking DOWN a level means the gate is wrong, not that the map
+            // is quiet - that distinction is the whole reason both numbers are printed.
+            sb.AppendLine("  below flecks: " + Patch_FleckManager_ABMirrorBelow.mirrored
+                + " mirrored of " + Patch_FleckManager_ABMirrorBelow.considered
+                + " considered (0/0 = never viewed a band from above)");
             sb.AppendLine("  dirty mirror: " + mirrorCalls + " mirrored dirties, "
                 + mirrorSteps + " section-cells stepped, max " + mirrorMaxStepsPerTick
                 + " steps in one tick");
