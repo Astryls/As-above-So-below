@@ -431,14 +431,45 @@ namespace AsAboveSoBelow
             // "pathing to destroyed thing" and fail the pather.
             bool destGone = t.realDest.HasThing
                 && (t.realDest.ThingDestroyed || !t.realDest.Thing.Spawned);
-            if (t.realDest.IsValid && !destGone && !pawn.Position.Equals(t.realDest.Cell))
-            {
-                pawn.pather?.StartPath(t.realDest, t.realPeMode);
-            }
-            else if (destGone)
+            if (destGone)
             {
                 // Land at the far anchor and let the job re-evaluate from there.
                 ABV2Debug.Transit("  destination gone mid-transit; stopping at " + t.far.Position);
+                pawn.jobs?.EndCurrentJob(JobCondition.Incompletable);
+            }
+            else if (t.realDest.IsValid)
+            {
+                // ⚠⚠ NO "ALREADY THERE" SHORTCUT HERE. EVERY EXIT FROM THIS METHOD MUST
+                // EITHER RE-DISPATCH THE PATHER OR END THE JOB.
+                //
+                // This used to be guarded with `&& !pawn.Position.Equals(t.realDest.Cell)`,
+                // on the reasonable-sounding grounds that a pawn standing on its destination
+                // has nothing left to walk. It does not - but its JOB has not been told.
+                // Notify_Teleported above runs Pawn_PathFollower.Notify_Teleported_Int ->
+                // StopDead(), which releases the path and sets moving=false WITHOUT
+                // notifying the JobDriver. A toil with ToilCompleteMode.PatherArrival is
+                // completed only by a pushed Notify_PatherArrived, so skipping the dispatch
+                // left a live job on a dead pather: the pawn stood at the stairwell forever
+                // and only a draft/undraft (jobs.StopAll) freed it.
+                //
+                // It fires exactly when realDest IS the far anchor - LandingCell prefers the
+                // anchor's own cell whenever it is free - i.e. every "go down the stairs"
+                // order, which is how it was reported. Reported for mechs, but nothing here
+                // is mech-specific; any pawn ordered onto a stairwell could hang.
+                //
+                // Handing the case to vanilla is both shorter and more correct: StartPath
+                // opens with `if (AtDestinationPosition()) { PatherArrived(); return; }`, so
+                // an already-arrived pawn gets a REAL arrival - through our own PatherArrived
+                // prefix, which no-ops because the record was already removed in phase 2 -
+                // and the toil completes. An unreachable destination becomes PatherFailed,
+                // which ends the job honestly instead of wedging it.
+                pawn.pather?.StartPath(t.realDest, t.realPeMode);
+            }
+            else
+            {
+                // Unreachable in practice (TrySegment only records a valid destination) but
+                // it must not become a third silent exit if that ever changes.
+                ABV2Debug.Transit("  destination no longer valid; ending job at " + landing);
                 pawn.jobs?.EndCurrentJob(JobCondition.Incompletable);
             }
         }

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
 using RimWorld;
 using Verse;
 using Verse.AI;
@@ -6,21 +8,39 @@ using Verse.AI;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Automatic detector for "pawn is stuck near a stairwell".
+    /// Automatic detector for "pawn is stuck", in the two shapes it actually takes.
     ///
-    /// Manual probing cannot catch this reliably. The pawn reports moving=True with a valid
-    /// short path, so any single sample lands on a frame where everything looks healthy - the
-    /// failure is not a frozen pawn, it is a pawn that keeps stepping and re-targeting without
-    /// making progress. Only a comparison ACROSS ticks can see that.
+    /// Manual probing cannot catch either reliably: any single sample lands on a frame where
+    /// everything looks healthy. Only a comparison ACROSS ticks can see them.
     ///
-    /// Watches only pawns within WatchRadius of a wormhole anchor, so the per-tick cost is a
-    /// handful of distance checks even on a busy colony. A pawn whose position has not changed
-    /// for StuckTicks while its pather still claims to be moving is reported ONCE per episode,
-    /// with everything needed to classify it: the job, the destination, whether a path exists,
-    /// and how often its destination has been changing.
+    /// EPISODE A - WALKING, NOT ARRIVING (the original). The pawn reports moving=True with a
+    /// valid short path but keeps stepping and re-targeting without making progress.
+    ///
+    /// EPISODE B - FROZEN UNDER A LIVE JOB (added after the stairwell hang). moving=False,
+    /// and nothing will ever change that.
+    ///
+    /// ⚠⚠ EPISODE B EXISTED FOR MONTHS AND THIS FILE COULD NOT SEE IT. The original report
+    /// was gated on `moving`, which is precisely the flag a wedged pawn does not have:
+    /// Notify_Teleported -> Pawn_PathFollower.StopDead() clears the path and sets
+    /// moving=false WITHOUT notifying the JobDriver, so a toil that completes on
+    /// ToilCompleteMode.PatherArrival waits forever. The instrument was structurally unable
+    /// to report the bug it was built to find - three of five early returns again.
+    ///
+    /// ⚠ THE DISCRIMINATOR IS THE TOIL'S COMPLETE MODE, NOT THE STILL TIME. Plenty of healthy
+    /// pawns stand motionless under a live job for minutes (crafting, mining, surgery,
+    /// charging, sleeping) - a pure "has not moved" test would drown the log. A toil that can
+    /// ONLY be completed by a pushed pather arrival, on a pather that is not moving, is
+    /// unambiguously wedged: there is no code path left that can finish it. Delay / Never /
+    /// FinishedBusy toils are excluded because something else is still driving them.
+    ///
+    /// Watch set: anything within WatchRadius of a wormhole anchor (episode A happens at the
+    /// stairwell) plus every player-faction pawn anywhere (episode B strands a pawn wherever
+    /// its last leg ended, typically nowhere near the stairs - a mech parked on the surface
+    /// that "forgot" to go back down is the reported case).
     ///
     /// Reading the report:
-    ///   path NOT FOUND        -> connectivity: region graph connected, no walkable route
+    ///   FROZEN                       -> live job on a dead pather; see the toil fields
+    ///   path NOT FOUND               -> connectivity: regions connected, no walkable route
     ///   path FOUND, destChanges high -> re-targeting loop (a job giver re-picking every tick)
     ///   path FOUND, destChanges low  -> movement blocked (traffic, door, reservation)
     /// </summary>
@@ -66,7 +86,10 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                if (!ABWormhole.NearAnyAnchor(map, p.Position, WatchRadius))
+                // Episode B is NOT a stairwell phenomenon - the pawn is stranded wherever its
+                // last leg happened to end - so the anchor filter cannot be the only gate.
+                if (!ABWormhole.NearAnyAnchor(map, p.Position, WatchRadius)
+                    && p.Faction != Faction.OfPlayer)
                 {
                     watching.Remove(p.thingIDNumber);
                     continue;
@@ -107,10 +130,11 @@ namespace AsAboveSoBelow
                 }
 
                 bool moving = p.pather != null && p.pather.Moving;
-                if (!w.reported && moving && now - w.stillSinceTick >= StuckTicks)
+                if (!w.reported && now - w.stillSinceTick >= StuckTicks
+                    && (moving || WedgedOnArrival(p)))
                 {
                     w.reported = true;
-                    Report(map, p, dest, now - w.stillSinceTick, w.destChanges);
+                    Report(map, p, dest, now - w.stillSinceTick, w.destChanges, moving);
                 }
                 watching[p.thingIDNumber] = w;
             }
@@ -122,7 +146,44 @@ namespace AsAboveSoBelow
             tmpDrop.Clear();
         }
 
-        private static void Report(Map map, Pawn p, IntVec3 dest, int stillFor, int destChanges)
+        /// <summary>
+        /// True when the pawn's current toil can only ever be completed by a pather arrival
+        /// that can no longer happen.
+        ///
+        /// `JobDriver.CurToil` is protected, so it is read reflectively - acceptable here and
+        /// nowhere else: this whole file is opt-in behind LogTransit and runs for a handful of
+        /// pawns every 75 ticks. CurToilIndex and CurJob are checked first because the getter
+        /// itself logs an error on an inconsistent driver, and a diagnostic that spams errors
+        /// while diagnosing is worse than no diagnostic.
+        /// </summary>
+        private static readonly MethodInfo CurToilGetter =
+            AccessTools.PropertyGetter(typeof(JobDriver), "CurToil");
+
+        private static bool WedgedOnArrival(Pawn p)
+        {
+            return CurToilMode(p) == ToilCompleteMode.PatherArrival;
+        }
+
+        private static ToilCompleteMode? CurToilMode(Pawn p)
+        {
+            JobDriver driver = p.jobs?.curDriver;
+            if (driver == null || CurToilGetter == null || p.CurJob == null
+                || driver.CurToilIndex < 0)
+            {
+                return null;
+            }
+            try
+            {
+                return (CurToilGetter.Invoke(driver, null) as Toil)?.defaultCompleteMode;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void Report(Map map, Pawn p, IntVec3 dest, int stillFor, int destChanges,
+            bool moving)
         {
             bool canReach = false;
             string pathState = "no destination";
@@ -169,11 +230,15 @@ namespace AsAboveSoBelow
                 }
             }
 
-            string verdict = pathState == "NOT FOUND"
-                ? "CONNECTIVITY - region says reachable, no walkable route"
-                : (destChanges >= 3
-                    ? "RE-TARGETING - destination changed " + destChanges + " times while standing still"
-                    : "BLOCKED - path exists and destination is stable, so movement is obstructed");
+            string verdict = !moving
+                ? "FROZEN - live job on a stopped pather; its toil completes only on a pather "
+                  + "arrival that can no longer fire (teleport without re-dispatch, or a leg "
+                  + "that ended without notifying the driver). Draft/undraft would clear it."
+                : (pathState == "NOT FOUND"
+                    ? "CONNECTIVITY - region says reachable, no walkable route"
+                    : (destChanges >= 3
+                        ? "RE-TARGETING - destination changed " + destChanges + " times while standing still"
+                        : "BLOCKED - path exists and destination is stable, so movement is obstructed"));
 
             // ONE self-contained message: separate Log calls from here would share a stack
             // signature and be folded into a single class by the log monitor.
@@ -181,6 +246,10 @@ namespace AsAboveSoBelow
                 + " at " + p.Position + " band " + ABBands.BandOf(map, p.Position)
                 + " | still for " + stillFor + " ticks"
                 + " | job=" + (p.CurJob?.def?.defName ?? "none")
+                + " | toil=" + (p.jobs?.curDriver != null ? p.jobs.curDriver.CurToilIndex : -1)
+                + "/" + (CurToilMode(p)?.ToString() ?? "unknown")
+                + " ticksLeft=" + (p.jobs?.curDriver != null ? p.jobs.curDriver.ticksLeftThisToil : -1)
+                + " | moving=" + moving
                 + " | carrying=" + (p.carryTracker?.CarriedThing?.LabelCap ?? "nothing")
                 + " | dest=" + dest + " band " + (dest.IsValid ? ABBands.BandOf(map, dest) : -1)
                 + " | CanReach=" + canReach

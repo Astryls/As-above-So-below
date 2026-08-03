@@ -134,6 +134,10 @@ namespace AsAboveSoBelow
             sb.AppendLine("  same-island-first: "
                 + Patch_GenClosest_ABSameIslandFirst.localHits + " local picks, "
                 + Patch_GenClosest_ABSameIslandFirst.fallbacks + " cross-island fallbacks");
+            sb.AppendLine("  mech command range: "
+                + Patch_MechanitorTracker_ABBandLocalRange.rescued
+                + " cross-band orders permitted (0 with no mechanitor, or if no order was "
+                + "ever aimed at another level)");
             sb.Append(ABPerfStats.PathReport());
             return sb.ToString();
         }
