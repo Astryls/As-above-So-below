@@ -5,7 +5,7 @@
       "id": "asb2-subsystem-shutdown",
       "title": "As above, So below II: a subsystem shut itself down after an error",
       "explanation": "The mod wraps each of its systems - rendering, transit, level generation, combat and so on - in its own kill switch. When one throws an error it is logged once, that single system is turned off, and the rest of the mod plus vanilla keep running. The log line names the system and what it was doing. This is containment by design, not a crash.",
-      "fix": "The affected feature stays off until the game is restarted. Please report the logged error so the underlying cause can be fixed."
+      "fix": "Open the mod settings, Diagnostics tab, to see every subsystem's health, what tripped it, and a re-arm button. Re-arming gives it another chance; if the fault is still there it trips again with a fresh log line. Please report the logged error so the underlying cause can be fixed."
     },
     {
       "id": "asb2-mountain-start",
@@ -20,10 +20,10 @@
       "fix": "Choose inland tiles for now. A full fix (generating the surface at normal fidelity and transplanting it) is planned."
     },
     {
-      "id": "asb2-combat-experimental",
-      "title": "Cross-level shooting behaves oddly",
-      "explanation": "Firing down through openings is implemented (range, line of sight, aim and projectile rendering across levels) but is still being play-verified. Shots fired UPWARD are not rendered yet - the see-below view only looks down - and turrets do not target across levels.",
-      "fix": "Treat cross-level combat as experimental. Reports with a description of the shot (which level, what weapon, what happened) are very welcome."
+      "id": "asb2-ce-bridge-experimental",
+      "title": "Combat Extended: cross-level shooting is new and lightly tested",
+      "explanation": "The CE bridge maps CE's own ballistics onto stacked levels: projectiles fly and collide on the correct level, high ground affects accuracy in both directions, and suppression carries across levels. It is shape-checked against the current CE build but has not accumulated real play hours yet. If CE updates its internals, the bridge degrades one seam at a time rather than breaking, and the in-game combat report names any seam that failed to bind.",
+      "fix": "Treat CE colonies as experimental for now. Reports with the weapon, the levels involved and what the projectile did are exactly what gets this verified faster."
     },
     {
       "id": "asb2-cross-level-mining",

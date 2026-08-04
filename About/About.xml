@@ -5,7 +5,7 @@
   <author>astryl</author>
   <url>https://discord.gg/cphgYG3zTF</url>
   <description>[h1]◆ As above, So below II ◆[/h1]
-[b]OPEN BETA.[/b] This is a public test build. It is solid enough to run a real colony start to finish, and it is not finished. Two things to know before you subscribe: most of the utility riser boxes still wear placeholder art, and cross level combat is partial, shooting down through an opening works but shooting upward does not draw yet. Everything else is in. Report anything you hit and it gets fixed: [url=https://discord.gg/cphgYG3zTF]join the Discord[/url].
+[b]OPEN BETA.[/b] This is a public test build. It is solid enough to run a real colony start to finish, and it is not finished. Two things to know before you subscribe: most of the utility riser boxes still wear placeholder art, and the new Combat Extended bridge has not had real play time yet, so treat CE colonies as experimental for now. Everything else is in, including full cross level combat. Report anything you hit and it gets fixed: [url=https://discord.gg/cphgYG3zTF]join the Discord[/url].
 
 RimWorld is flat. As above, So below II stacks up to seven playable levels into one colony: three in the sky, the surface, and three of solid rock beneath it. They are not separate maps stitched together behind the scenes. They are bands of one real map, joined through the engine's own region system, so the game never learns the levels exist. It just finds a path. Your colonists haul, build, cook, sleep, clean and fight up and down the whole column with no special case code anywhere, and reachability, pathfinding and region code are never patched. Harmony is the only requirement.
 
@@ -27,6 +27,23 @@ Colonists cross levels on their own for hauling, construction, meals, rest, clea
 [*][b]Grand staircase[/b], three by three: wide enough that colonists going up and down stop waiting for each other.
 [*][b]Elevator[/b], two by two: connects every level it reaches through one shaft, and colonists ride between any two directly.
 [*][b]Placement tells you the truth[/b]: it shows the cells colonists can enter from and refuses spots that would jam.
+[/list]
+
+[h1]✦ Fighting Across Levels[/h1]
+[list]
+[*][b]One visible rule[/b]: a pawn can shoot anything it can see through a real opening. Balconies, ceiling holes and stairwells are firing positions, not decoration.
+[*][b]Both directions[/b]: shooting down from a ledge and up at one both work, both draw, and both obey the same rule.
+[*][b]Turrets and raiders use it too[/b]: the AI acquires targets across levels in both directions, so a balcony is a real defensive position and a real threat.
+[*][b]Mortars lob over the rule[/b], as they should: map range, any level.
+[*][b]Misses stay honest[/b]: a shot that misses lands on the target's level, never in the seam between levels.
+[*][b]Combat Extended[/b]: bridged, with high ground affecting accuracy and suppression. New this update and marked experimental until the beta has put hours on it.
+[/list]
+
+[h1]✦ Visitors Use The Levels Too[/h1]
+[list]
+[*][b]Raiders, visitors, traders and animals can arrive and leave by other levels[/b]: over the high ground, or up out of the deep, by routes that genuinely connect to your colony.
+[*][b]Per category toggles[/b] in a new Arrivals settings tab decide who may use them. Upper levels on and lower levels off by default, and the master switch turns the whole thing off.
+[*][b]Never a trap[/b]: anyone who can arrive by a route can also leave by one, so a visit cannot strand a caravan in your basement.
 [/list]
 
 [h1]✦ The Sky Levels[/h1]
