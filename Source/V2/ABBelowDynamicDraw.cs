@@ -80,12 +80,6 @@ namespace AsAboveSoBelow
             int perfConsidered = 0;
             int perfDrawn = 0;
             CellRect camView = cam.CurrentViewRect;
-            // The strip of the band directly below, still used by the realtime-things pass.
-            // KNOWN GAP: that pass is still single-band, so motes, fire and other realtime
-            // drawables more than one level down do not show. Pawns no longer depend on it.
-            CellRect belowView = camView.MovedBy(new IntVec3(0, 0, -slot));
-            belowView.ClipInsideMap(map);
-            TerrainDef air = ABDefOf.AB_OpenAir;
             TerrainGrid terrain = map.terrainGrid;
             FogGrid fog = map.fogGrid;
 
@@ -207,7 +201,7 @@ namespace AsAboveSoBelow
                 }
             }
 
-            int perfRealtime = DrawBelowRealtimeThings(map, belowView, slot, terrain, fog, air);
+            int perfRealtime = DrawBelowRealtimeThings(map, bands, camView, viewBand, fog);
             ABPerfStats.NoteBelowPass(perfConsidered, perfDrawn, perfRealtime,
                 ABPerfStats.Now() - perfT0);
 
@@ -244,9 +238,16 @@ namespace AsAboveSoBelow
         /// two passes tile the whole map with no overlap and no gaps. Sweeping cells with
         /// ThingsListAtFast instead would repeat the OverlayDrawer mistake that cost
         /// 1.4 ms/frame.
+        ///
+        /// ⚠ MULTI-BAND SINCE WINDOW 4d. This pass was the documented last single-band
+        /// corner of the below view (a strip exactly one Slot down), so fire, motes and
+        /// construction frames two or more levels down were invisible while the pawns and
+        /// projectiles beside them drew. It now resolves each thing's column with the SAME
+        /// shared descent rule as the pawn loop above - the two loops finally agree, and the
+        /// "one `- Slot` step" class of bug loses its last host in this file.
         /// </summary>
-        private static int DrawBelowRealtimeThings(Map map, CellRect belowView, int slot,
-            TerrainGrid terrain, FogGrid fog, TerrainDef air)
+        private static int DrawBelowRealtimeThings(Map map, ABBandMap bands, CellRect camView,
+            int viewBand, FogGrid fog)
         {
             IReadOnlyList<Thing> things = map.dynamicDrawManager?.DrawThings;
             if (things == null)
@@ -261,20 +262,44 @@ namespace AsAboveSoBelow
                 {
                     continue; // pawns already handled above, with their bed-pose special case
                 }
-                IntVec3 pos = t.Position;
-                if (!belowView.Contains(pos) || fog.IsFogged(pos))
+                // ⚠ CROSS-BAND PROJECTILES HAVE EXACTLY ONE OWNER, AND IT IS NOT THIS PASS.
+                // ABCombatRelay draws every registered cross-band round depth-correctly; this
+                // pass would draw a second copy on top. No isinst gate any more: Combat
+                // Extended's rounds are ThingWithComps, not Verse.Projectile, so a type test
+                // here would re-open the double-draw exactly for CE. Handles() fast-exits on
+                // an empty registry, which is the common case.
+                if (ABCombatRelay.Handles(t))
                 {
                     continue;
                 }
-                IntVec3 above = new IntVec3(pos.x, 0, pos.z + slot);
-                if (!above.InBounds(map) || !ABBands.ShowsBelow(terrain.TerrainAt(above)))
+                IntVec3 pos = t.Position;
+                int band = bands.BandOf(pos);
+                if (band >= viewBand)
                 {
-                    continue; // roofed or capped from above, exactly like the mesh layer
+                    continue; // same band or above: vanilla's job (or nothing's)
+                }
+                IntVec3 above = bands.Translate(pos, viewBand);
+                if (!camView.Contains(above))
+                {
+                    continue; // the cheap screen gate, before any terrain is touched
+                }
+                if (fog.IsFogged(pos) || bands.InGutter(above))
+                {
+                    continue;
+                }
+                // The SAME shared descent rule as pawns: is this thing's cell what the
+                // column actually shows from the view band? Multi-level for free, and roofs
+                // and caps refuse exactly like the mesh layer.
+                if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen,
+                        out int dropRt)
+                    || seen.x != pos.x || seen.z != pos.z)
+                {
+                    continue;
                 }
                 try
                 {
                     Vector3 loc = t.DrawPos;
-                    loc.z += slot;
+                    loc.z += dropRt;
                     // ⚠ NO SHRINK ON THIS PATH. A realtime thing is drawn by its own Graphic
                     // through DynamicDrawPhaseAt, which takes a position and nothing else -
                     // unlike a pawn, whose renderer funnels every draw through

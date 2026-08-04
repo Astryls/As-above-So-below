@@ -72,6 +72,24 @@ namespace AsAboveSoBelow
         /// and skyfallers would vanish entirely.</summary>
         internal static bool Relaying;
 
+        /// <summary>
+        /// Z offset the DROP-SPOT SHADOW must move by, armed around each relayed draw.
+        ///
+        /// ⚠ THE SHADOW IGNORES drawLoc, WHICH IS WHY THIS EXISTS. Skyfaller.DrawAt draws
+        /// the BODY at the position it is handed, but ends with DrawDropSpotShadow(), which
+        /// reads base.DrawPos - the real landing cell in the pod's own band. So when the
+        /// relay lifted a pod into the viewed band, the pod showed and its shadow rendered a
+        /// whole Slot away in the pod's own band: off-camera, invisible. "The drop pod
+        /// shadow does not show across levels" - the shadow was being drawn, just where
+        /// nobody was looking. The prefix below re-issues it at the lifted spot instead.
+        /// </summary>
+        internal static float ShadowLiftZ;
+
+        /// <summary>True while drawing a skyfaller that lands ABOVE the viewed band. Its
+        /// shadow falls on a floor the viewer cannot see (you are looking at that level's
+        /// underside), so the shadow is suppressed rather than lifted.</summary>
+        internal static bool SuppressShadow;
+
         /// <summary>True for skyfallers this file has taken responsibility for drawing.
         ///
         /// Skyfaller_FlyingPawn is excluded deliberately: it OVERRIDES DrawAt, so the
@@ -127,10 +145,15 @@ namespace AsAboveSoBelow
                     list.RemoveAt(i);
                     continue;
                 }
-                int levelsAbove = viewBand - bands.BandOf(s.Position);
+                int podBand = bands.BandOf(s.Position);
+                int levelsAbove = viewBand - podBand;
                 if (levelsAbove < 0)
                 {
-                    continue; // it lands above us; its flight never reaches this level
+                    // It lands ABOVE the level being watched. The old code skipped these
+                    // entirely; now they show through the holes in the ceiling, exactly like
+                    // an upward projectile - same predicate, same one copy of it.
+                    DrawFromBelow(map, bands, s, podBand, viewBand, slot);
+                    continue;
                 }
                 if (!PassingThrough(s, levelsAbove))
                 {
@@ -145,6 +168,11 @@ namespace AsAboveSoBelow
                         pos.y = OverCurtainAltitude;
                     }
                     Relaying = true;
+                    // The body is drawn at the lifted position by the argument below; the
+                    // shadow reads the landing cell on its own and needs the offset handed
+                    // to it separately. Zero on the pod's own level, where vanilla's shadow
+                    // is already right.
+                    ShadowLiftZ = levelsAbove * slot;
                     s.DrawNowAt(pos);
                 }
                 catch (Exception e)
@@ -154,7 +182,55 @@ namespace AsAboveSoBelow
                 finally
                 {
                     Relaying = false;
+                    ShadowLiftZ = 0f;
                 }
+            }
+        }
+
+        /// <summary>
+        /// A skyfaller bound for a band ABOVE the viewed one, drawn through the ceiling's
+        /// open columns - a pod crossing the sky gap overhead on its way to the level above.
+        ///
+        /// Visible for its WHOLE flight wherever the column under its current draw cell is
+        /// open (no PassingThrough budget: it never lands on this level, so there is no
+        /// moment it should stop existing here - it slides out through the hole instead).
+        /// The shadow is suppressed: it falls on the destination floor, which from below is
+        /// the ceiling.
+        /// </summary>
+        private static void DrawFromBelow(Map map, ABBandMap bands, Skyfaller s, int podBand,
+            int viewBand, int slot)
+        {
+            Vector3 drawPos = s.DrawPos;
+            IntVec3 cell = drawPos.ToIntVec3();
+            // The approach animation offsets DrawPos tens of cells from the landing spot, so
+            // mid-flight the draw cell can sit over the gutter or past the band edge. Band
+            // and gutter guards keep the column test honest (§1: a radius - or an offset -
+            // wider than the gutter reaches into the next level).
+            if (!cell.InBounds(map) || bands.BandOf(cell) != podBand || bands.InGutter(cell))
+            {
+                return;
+            }
+            if (!ABShaft.ColumnOpen(map, bands, cell, podBand, viewBand))
+            {
+                return; // ceiling is solid under it right now
+            }
+            try
+            {
+                Vector3 pos = drawPos;
+                pos.z += (viewBand - podBand) * slot;
+                Relaying = true;
+                SuppressShadow = true;
+                s.DrawNowAt(pos);
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: skyfaller below-view draw threw: " + e,
+                    331880418);
+            }
+            finally
+            {
+                Relaying = false;
+                SuppressShadow = false;
             }
         }
 
@@ -173,6 +249,66 @@ namespace AsAboveSoBelow
                 return s.ageTicks >= budget; // leaving: it has to climb to us first
             }
             return s.ticksToImpact > budget; // arriving: it sinks past us before it lands
+        }
+    }
+
+    /// <summary>
+    /// THE DROP-SPOT SHADOW, moved with its pod.
+    ///
+    /// Skyfaller.DrawAt ends with a call to the parameterless DrawDropSpotShadow(), which
+    /// reads base.DrawPos (the landing cell, ignoring the drawLoc DrawAt was handed) and
+    /// forwards to the public static overload. When the relay draws a pod into another band
+    /// that shadow lands off-camera - see ShadowLiftZ. This prefix re-issues the same static
+    /// call with the lifted centre, or skips the shadow entirely for a pod whose floor the
+    /// viewer cannot see.
+    ///
+    /// Vanilla behaviour is untouched: outside a relayed draw (Relaying false) the prefix
+    /// steps aside, and on the pod's own level ShadowLiftZ is zero and it steps aside too.
+    /// </summary>
+    [HarmonyPatch(typeof(Skyfaller), "DrawDropSpotShadow", new Type[] { })]
+    public static class Patch_Skyfaller_ABShadowLift
+    {
+        private static readonly System.Reflection.MethodInfo ShadowMatGetter =
+            AccessTools.PropertyGetter(typeof(Skyfaller), "ShadowMaterial");
+
+        private static bool Prepare()
+        {
+            return AccessTools.Method(typeof(Skyfaller), "DrawDropSpotShadow", new Type[] { })
+                    != null
+                && ShadowMatGetter != null;
+        }
+
+        private static bool Prefix(Skyfaller __instance)
+        {
+            try
+            {
+                if (!ABSkyfallerRelay.Relaying)
+                {
+                    return true; // vanilla draw on an ordinary map or its own level
+                }
+                if (ABSkyfallerRelay.SuppressShadow)
+                {
+                    return false; // lands above the view: its floor is our ceiling
+                }
+                if (ABSkyfallerRelay.ShadowLiftZ == 0f)
+                {
+                    return true; // relayed on its own level: vanilla's spot is correct
+                }
+                Material mat = ShadowMatGetter.Invoke(__instance, null) as Material;
+                if (mat == null)
+                {
+                    return false; // this skyfaller has no shadow at all
+                }
+                Vector3 center = __instance.TrueCenter();
+                center.z += ABSkyfallerRelay.ShadowLiftZ;
+                Skyfaller.DrawDropSpotShadow(center, __instance.Rotation, mat,
+                    __instance.def.skyfaller.shadowSize, __instance.ticksToImpact);
+                return false;
+            }
+            catch
+            {
+                return true; // a broken shadow must never take the pod's draw down with it
+            }
         }
     }
 

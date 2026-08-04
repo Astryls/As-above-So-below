@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -73,35 +75,106 @@ namespace AsAboveSoBelow
 
     /// <summary>
     /// ACCURACY. This is why cross-band shots connected in the log and never in practice:
-    /// distance is measured to the real cell, so every shot was resolved as if fired 256
-    /// cells - far past any weapon's accuracy falloff, giving a near-zero hit chance.
+    /// distance is measured to the real cell, so every shot was resolved as if fired a whole
+    /// Slot away - far past any weapon's accuracy falloff, giving a near-zero hit chance.
+    /// The prefix rewrites the target to a CELL translated into the shooter's band, so every
+    /// distance-derived factor inside HitReportFor comes out band-local.
+    ///
+    /// ⚠⚠ BUT THE CELL REWRITE POISONS THREE OTHER THINGS THE REPORT DERIVES FROM THE
+    /// TARGET, AND THE POSTFIX REPAIRS ALL THREE. HitReportFor also reads the target for:
+    ///   1. COVER - CalculateCoverGiverSet(target, caster.Position): with the localized cell
+    ///      that finds covers around a GHOST COLUMN ON THE SHOOTER'S OWN BAND. Worse than
+    ///      wrong odds: TryCastShot's cover-miss branch launches the round INTO the sampled
+    ///      cover thing, so pellets visibly dived into the shooter's own sandbags and rocks -
+    ///      part of the "fires into the ground" report. Cross-band shots now carry NO cover:
+    ///      the opening's drift cone IS the cover model, and fabricating band-1 furniture
+    ///      into a band-2 firefight was the alternative.
+    ///   2. TARGET SIZE - a cell has no BodySize, so factorFromTargetSize collapsed to 1.0
+    ///      and shooting a scyther through a hole was harder than shooting a rat.
+    ///   3. POSTURE - FactorFromPosture/FactorFromExecution read target.Thing off the stored
+    ///      TargetInfo; a cell target erased the downed-pawn modifiers.
+    /// The postfix writes the ORIGINAL thing back into the report's target field (posture and
+    /// size recover their inputs) while KEEPING the localized distance, then recomputes the
+    /// size factor exactly as vanilla does and empties the covers. Private struct fields via
+    /// one box/unbox - ugly, but reimplementing HitReportFor to avoid it is the §14
+    /// "reproducing a subsystem means all of it" trap.
     /// </summary>
     [HarmonyPatch(typeof(ShotReport), nameof(ShotReport.HitReportFor))]
     public static class Patch_ShotReport_ABCrossBandDistance
     {
-        private static void Prefix(Thing caster, ref LocalTargetInfo target)
+        private static readonly FieldInfo TargetField =
+            AccessTools.Field(typeof(ShotReport), "target");
+
+        private static readonly FieldInfo CoversField =
+            AccessTools.Field(typeof(ShotReport), "covers");
+
+        private static readonly FieldInfo CoversChanceField =
+            AccessTools.Field(typeof(ShotReport), "coversOverallBlockChance");
+
+        private static readonly FieldInfo SizeFactorField =
+            AccessTools.Field(typeof(ShotReport), "factorFromTargetSize");
+
+        private static bool Prepare()
         {
+            return TargetField != null && CoversField != null && CoversChanceField != null
+                && SizeFactorField != null;
+        }
+
+        private static void Prefix(Thing caster, ref LocalTargetInfo target,
+            out LocalTargetInfo __state)
+        {
+            __state = LocalTargetInfo.Invalid;
             try
             {
-                if (!target.IsValid || target.HasThing)
+                if (!target.IsValid)
                 {
-                    // A Thing target keeps resolving its own position; rewrite to a CELL so
-                    // the localized distance survives.
-                    if (target.HasThing && ABCombatGeometry.TryLocalize(caster, target.Cell,
-                        out IntVec3 localThing))
-                    {
-                        target = new LocalTargetInfo(localThing);
-                    }
                     return;
                 }
                 if (ABCombatGeometry.TryLocalize(caster, target.Cell, out IntVec3 local))
                 {
+                    __state = target; // the ORIGINAL, thing-ness intact, for the postfix
                     target = new LocalTargetInfo(local);
                 }
             }
             catch (Exception e)
             {
                 ABGuard.Disable(ABGuard.Combat, e, "V2 cross-band shot report");
+            }
+        }
+
+        private static void Postfix(Thing caster, ref ShotReport __result,
+            LocalTargetInfo __state)
+        {
+            if (!__state.IsValid)
+            {
+                return; // not a cross-band report; vanilla's answer is untouched
+            }
+            try
+            {
+                object boxed = __result;
+                CoversField.SetValue(boxed, new List<CoverInfo>());
+                CoversChanceField.SetValue(boxed, 0f);
+                if (__state.HasThing)
+                {
+                    TargetField.SetValue(boxed,
+                        new TargetInfo(__state.Thing));
+                    float size;
+                    if (__state.Thing is Pawn p)
+                    {
+                        size = p.BodySize;
+                    }
+                    else
+                    {
+                        size = __state.Thing.def.fillPercent
+                            * __state.Thing.def.size.x * __state.Thing.def.size.z * 2.5f;
+                    }
+                    SizeFactorField.SetValue(boxed, Mathf.Clamp(size, 0.5f, 2f));
+                }
+                __result = (ShotReport)boxed;
+            }
+            catch (Exception e)
+            {
+                ABGuard.Disable(ABGuard.Combat, e, "V2 cross-band shot report repair");
             }
         }
     }

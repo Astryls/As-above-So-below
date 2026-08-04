@@ -280,19 +280,31 @@ namespace AsAboveSoBelow
     /// checked first so that legitimate cross-level orders - ones with a staircase - are left
     /// completely alone for the wormhole router to segment.
     ///
-    /// Covers every caller for free: grouped moves, single drafted moves, crates, hackables,
-    /// and jump targeting.
+    /// Covers grouped moves, single drafted moves, crates and hackables for free.
+    ///
+    /// ⚠⚠ BUT NOT JUMPS, AND THE `reachable` FLAG IS HOW THEY ARE TOLD APART. JumpUtility
+    /// calls this with `reachable: false` precisely because a jump does NOT need a walkable
+    /// route - that is the entire purpose of a jump pack. This patch's rule ("if the pawn
+    /// cannot WALK there, bring the destination onto its own band") is therefore exactly
+    /// backwards for a leap: it would drag every cross-level jump back onto the level the
+    /// pawn is already standing on, silently, and the jump would look like it simply did
+    /// nothing. Reading the caller's own flag is better than sniffing the job or the verb,
+    /// because `reachable: false` IS the caller stating that reachability is not the test.
     /// </summary>
     [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.BestOrderedGotoDestNear))]
     public static class Patch_RCellFinder_ABOrderedGotoBand
     {
-        private static void Prefix(ref IntVec3 root, Pawn searcher)
+        private static void Prefix(ref IntVec3 root, Pawn searcher, bool reachable)
         {
             try
             {
                 if (searcher == null || !searcher.Spawned || !ABBelowClickThrough.Enabled)
                 {
                     return;
+                }
+                if (!reachable)
+                {
+                    return; // a jump (or anything else that flies): not a walking question
                 }
                 Map map = searcher.Map;
                 ABBandMap bands = ABBands.CompOf(map);

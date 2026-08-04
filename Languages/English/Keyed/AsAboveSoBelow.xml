@@ -106,4 +106,20 @@ You can turn this back off at any time; existing colonies keep the size they wer
 
   <AB_RiserNeedsWall>Must be built inside a wall.</AB_RiserNeedsWall>
   <AB_RiserFaceBlocked>Must face open space, not another wall.</AB_RiserFaceBlocked>
+
+  <AB_TabArrivals>Arrivals</AB_TabArrivals>
+  <AB_ArrivalsMaster>Cross-level arrivals and departures</AB_ArrivalsMaster>
+  <AB_ArrivalsMasterTip>Master switch. When enabled, raiders, visitors, traders and animals can walk onto and off the map via levels other than the surface, governed by the toggles below. When disabled, everyone arrives and leaves on the surface, as before. Safe to change mid-game; it applies from the next arrival or departure.</AB_ArrivalsMasterTip>
+  <AB_ArrivalsNote>A level can only host arrivals if it has open ground at the map edge and a connected route to your colony. How often a level is used scales with how much walkable map edge it has, so mountain ridges and dug-out tunnels matter more the bigger they are.</AB_ArrivalsNote>
+  <AB_CatRaiders>Raiders</AB_CatRaiders>
+  <AB_CatFriendlies>Visitors, traders and allies</AB_CatFriendlies>
+  <AB_CatAnimals>Wild animals</AB_CatAnimals>
+  <AB_ArriveUpper>May arrive via upper levels</AB_ArriveUpper>
+  <AB_ArriveUpperTip>Groups can walk in over ridge routes and high ledges, appearing at the map edge of a level above the surface.</AB_ArriveUpperTip>
+  <AB_ArriveLower>May arrive via lower levels</AB_ArriveLower>
+  <AB_ArriveLowerTip>Groups can emerge from tunnel mouths, appearing at the map edge of a level below the surface. Note that raiders arriving underground bypass surface defenses entirely.</AB_ArriveLowerTip>
+  <AB_LeaveUpper>May leave via upper levels</AB_LeaveUpper>
+  <AB_LeaveUpperTip>Departing or fleeing groups may exit off the map edge of a level above the surface if that is their nearest reachable way out.</AB_LeaveUpperTip>
+  <AB_LeaveLower>May leave via lower levels</AB_LeaveLower>
+  <AB_LeaveLowerTip>Departing or fleeing groups may exit off the map edge of a level below the surface if that is their nearest reachable way out.</AB_LeaveLowerTip>
 </LanguageData>

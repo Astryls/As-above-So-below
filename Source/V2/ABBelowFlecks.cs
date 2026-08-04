@@ -6,7 +6,7 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// FLECKS SEEN FROM ABOVE.
+    /// FLECKS SEEN FROM ABOVE - AND, SINCE WINDOW 4b, FROM BELOW.
     ///
     /// ⚠ THE BELOW VIEW HAS THREE EMITTERS, NOT TWO, AND THIS IS THE THIRD.
     ///   1. the map mesh      -> SectionLayer_ABBelowV2 and friends (static things, terrain)
@@ -40,6 +40,14 @@ namespace AsAboveSoBelow
     ///
     /// The mirror is a SHORT-LIVED COSMETIC COPY: flecks last well under a second, so a level
     /// switch mid-flight leaves at worst one stale puff, and no state needs reconciling.
+    ///
+    /// ⚠ THE UPWARD HALF (added with cross-level combat, at the user's request): a fleck on a
+    /// band ABOVE the view - a muzzle flash at an opening, impact sparks on a sky-band raider,
+    /// smoke from a shot fired overhead - mirrors DOWN through the holes in the ceiling. The
+    /// predicate is ABShaft.ColumnOpen, the ballistics rule, NOT TryResolveVisibleBelow: that
+    /// method looks DOWN a column and accepts AB_WallTop (seeing a wall top is legitimate),
+    /// but looking UP through your own ceiling requires strict open air the whole way. Same
+    /// pair of rules, same one copy each, as the projectile and skyfaller relays.
     /// </summary>
     [HarmonyPatch(typeof(FleckManager), nameof(FleckManager.CreateFleck))]
     public static class Patch_FleckManager_ABMirrorBelow
@@ -81,12 +89,13 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // The whole hot path ends here on the common case: the player is looking at
-                // the band the fleck is on (or below it), so nothing above can see it.
+                // -1 means "not chosen yet", which the view code resolves to the surface;
+                // resolving it the same way here keeps the mirror honest during the brief
+                // window before the first explicit level switch.
                 int viewBand = bands.viewBand;
-                if (viewBand <= 0)
+                if (viewBand < 0)
                 {
-                    return;
+                    viewBand = bands.surfaceBand;
                 }
                 IntVec3 cell = fleckData.spawnPosition.ToIntVec3();
                 if (!cell.InBounds(map))
@@ -94,7 +103,9 @@ namespace AsAboveSoBelow
                     return;
                 }
                 int srcBand = bands.BandOf(cell);
-                if (viewBand <= srcBand)
+                // The whole hot path ends here on the common case: the fleck is on the band
+                // being watched, so no mirror in either direction can be needed.
+                if (viewBand == srcBand)
                 {
                     return;
                 }
@@ -106,12 +117,24 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
-                // Is this fleck's cell the one the player actually sees when looking down
-                // from the view band? Anything solid in between and the answer is no.
-                if (!ABBands.TryResolveVisibleBelow(map, bands, viewCell, out IntVec3 below, out int _)
-                    || below != cell)
+                if (viewBand > srcBand)
                 {
-                    return;
+                    // Looking DOWN at it: is this fleck's cell the one the player actually
+                    // sees through that column? The shared descent rule answers.
+                    if (!ABBands.TryResolveVisibleBelow(map, bands, viewCell,
+                            out IntVec3 below, out int _) || below != cell)
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    // Looking UP at it: visible only through a strictly open ceiling column.
+                    if (bands.InGutter(cell)
+                        || !ABShaft.ColumnOpen(map, bands, cell, srcBand, viewBand))
+                    {
+                        return;
+                    }
                 }
 
                 FleckCreationData d = fleckData;

@@ -196,6 +196,39 @@ namespace AsAboveSoBelow
         /// <summary>How many passes of Biomes! Caverns' stalagmite scatterer to run.</summary>
         public float cavernFormations = 1f;
 
+        // ---- cross-level travel (arrivals and departures) -------------------
+        // Read at DECISION time only (an arrival being resolved, an exit being picked),
+        // never cached into map state - which is what makes every one of these safe to
+        // flip mid-save. Defaults per the user's call: UPPER routes on, LOWER routes off,
+        // for every category - ridge paths are the default fiction, tunnel raids are the
+        // opt-in spice.
+
+        public bool crossLevelTravel = true;
+
+        public bool raiderArriveUpper = true;
+
+        public bool raiderArriveLower;
+
+        public bool raiderLeaveUpper = true;
+
+        public bool raiderLeaveLower;
+
+        public bool friendlyArriveUpper = true;
+
+        public bool friendlyArriveLower;
+
+        public bool friendlyLeaveUpper = true;
+
+        public bool friendlyLeaveLower;
+
+        public bool animalArriveUpper = true;
+
+        public bool animalArriveLower;
+
+        public bool animalLeaveUpper = true;
+
+        public bool animalLeaveLower;
+
         // --------------------------------------------------------------------
 
         /// <summary>Display label for the current basement-biome choice, resolving a stored
@@ -239,6 +272,19 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.3f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
+            Scribe_Values.Look(ref crossLevelTravel, "crossLevelTravel", true);
+            Scribe_Values.Look(ref raiderArriveUpper, "raiderArriveUpper", true);
+            Scribe_Values.Look(ref raiderArriveLower, "raiderArriveLower", false);
+            Scribe_Values.Look(ref raiderLeaveUpper, "raiderLeaveUpper", true);
+            Scribe_Values.Look(ref raiderLeaveLower, "raiderLeaveLower", false);
+            Scribe_Values.Look(ref friendlyArriveUpper, "friendlyArriveUpper", true);
+            Scribe_Values.Look(ref friendlyArriveLower, "friendlyArriveLower", false);
+            Scribe_Values.Look(ref friendlyLeaveUpper, "friendlyLeaveUpper", true);
+            Scribe_Values.Look(ref friendlyLeaveLower, "friendlyLeaveLower", false);
+            Scribe_Values.Look(ref animalArriveUpper, "animalArriveUpper", true);
+            Scribe_Values.Look(ref animalArriveLower, "animalArriveLower", false);
+            Scribe_Values.Look(ref animalLeaveUpper, "animalLeaveUpper", true);
+            Scribe_Values.Look(ref animalLeaveLower, "animalLeaveLower", false);
             Scribe_Values.Look(ref depthFalloff, "depthFalloff", true);
             Scribe_Values.Look(ref depthFalloffPerLevel, "depthFalloffPerLevel",
                 ABDepthView.DefaultFalloff);
@@ -260,6 +306,7 @@ namespace AsAboveSoBelow
             Climate,
             Sky,
             Basement,
+            Arrivals,
             Diagnostics
         }
 
@@ -272,7 +319,7 @@ namespace AsAboveSoBelow
         /// how tall it was after drawing, so the value always lags a frame. Kept per tab
         /// rather than shared: one shared value meant switching from a short tab to a tall
         /// one sized the scroll region from the WRONG tab for a frame.</summary>
-        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f, 600f };
+        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f, 600f, 600f };
 
         private static readonly Color TabActive = new Color(0.32f, 0.36f, 0.42f);
 
@@ -294,12 +341,13 @@ namespace AsAboveSoBelow
 
             const float TabH = 32f;
             Rect tabRow = new Rect(inRect.x, inRect.y, inRect.width, TabH);
-            DrawTabButton(tabRow, 0, 6, "AB_TabPerformance", Tab.Performance);
-            DrawTabButton(tabRow, 1, 6, "AB_TabVisuals", Tab.Visuals);
-            DrawTabButton(tabRow, 2, 6, "AB_TabClimate", Tab.Climate);
-            DrawTabButton(tabRow, 3, 6, "AB_TabSky", Tab.Sky);
-            DrawTabButton(tabRow, 4, 6, "AB_TabBasement", Tab.Basement);
-            DrawTabButton(tabRow, 5, 6, "AB_TabDiagnostics", Tab.Diagnostics);
+            DrawTabButton(tabRow, 0, 7, "AB_TabPerformance", Tab.Performance);
+            DrawTabButton(tabRow, 1, 7, "AB_TabVisuals", Tab.Visuals);
+            DrawTabButton(tabRow, 2, 7, "AB_TabClimate", Tab.Climate);
+            DrawTabButton(tabRow, 3, 7, "AB_TabSky", Tab.Sky);
+            DrawTabButton(tabRow, 4, 7, "AB_TabBasement", Tab.Basement);
+            DrawTabButton(tabRow, 5, 7, "AB_TabArrivals", Tab.Arrivals);
+            DrawTabButton(tabRow, 6, 7, "AB_TabDiagnostics", Tab.Diagnostics);
 
             Rect body = new Rect(inRect.x, inRect.y + TabH + 6f,
                 inRect.width, inRect.height - TabH - 6f);
@@ -326,6 +374,7 @@ namespace AsAboveSoBelow
                     case Tab.Climate: DoClimate(list); break;
                     case Tab.Sky: DoSky(list); break;
                     case Tab.Basement: DoBasement(list); break;
+                    case Tab.Arrivals: DoArrivals(list); break;
                     default: DoDiagnostics(list); break;
                 }
             }
@@ -703,6 +752,62 @@ namespace AsAboveSoBelow
         }
 
         // ---- diagnostics tab -------------------------------------------------
+
+        /// <summary>
+        /// Cross-level travel for NPCs: who may arrive on, and leave via, levels other than
+        /// the surface. Twelve toggles plus a master switch, per the user's spec - "a robust
+        /// set of toggles" - arranged as three category blocks so the rows read as sentences:
+        /// raiders / arrive via upper levels / arrive via lower levels / leave via...
+        ///
+        /// ⚠ EVERY ONE OF THESE IS READ AT DECISION TIME, so flipping them mid-save is safe
+        /// and takes effect on the next arrival or departure. The proportional band choice
+        /// itself has no slider on purpose: weights come from each level's standable edge
+        /// capacity, so terrain does the tuning (user's call).
+        /// </summary>
+        private void DoArrivals(Listing_Standard list)
+        {
+            list.CheckboxLabeled("AB_ArrivalsMaster".Translate(), ref crossLevelTravel,
+                "AB_ArrivalsMasterTip".Translate());
+            Text.Font = GameFont.Tiny;
+            GUI.color = Color.gray;
+            list.Label("AB_ArrivalsNote".Translate());
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+            list.GapLine();
+
+            if (!crossLevelTravel)
+            {
+                return; // the twelve below are inert; hiding them says so better than text
+            }
+
+            DoArrivalCategory(list, "AB_CatRaiders",
+                ref raiderArriveUpper, ref raiderArriveLower,
+                ref raiderLeaveUpper, ref raiderLeaveLower);
+            DoArrivalCategory(list, "AB_CatFriendlies",
+                ref friendlyArriveUpper, ref friendlyArriveLower,
+                ref friendlyLeaveUpper, ref friendlyLeaveLower);
+            DoArrivalCategory(list, "AB_CatAnimals",
+                ref animalArriveUpper, ref animalArriveLower,
+                ref animalLeaveUpper, ref animalLeaveLower);
+        }
+
+        private static void DoArrivalCategory(Listing_Standard list, string headerKey,
+            ref bool arriveUpper, ref bool arriveLower, ref bool leaveUpper,
+            ref bool leaveLower)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label(headerKey.Translate());
+            Text.Font = GameFont.Small;
+            list.CheckboxLabeled("AB_ArriveUpper".Translate(), ref arriveUpper,
+                "AB_ArriveUpperTip".Translate());
+            list.CheckboxLabeled("AB_ArriveLower".Translate(), ref arriveLower,
+                "AB_ArriveLowerTip".Translate());
+            list.CheckboxLabeled("AB_LeaveUpper".Translate(), ref leaveUpper,
+                "AB_LeaveUpperTip".Translate());
+            list.CheckboxLabeled("AB_LeaveLower".Translate(), ref leaveLower,
+                "AB_LeaveLowerTip".Translate());
+            list.GapLine();
+        }
 
         private void DoDiagnostics(Listing_Standard list)
         {

@@ -44,6 +44,14 @@ namespace AsAboveSoBelow
         {
             if (LogTransit)
             {
+                // ⚠ A DIAGNOSTIC THAT CAN SILENCE ITSELF IS A TRAP. Vanilla stops logging
+                // outright at 1000 messages ("Reached max messages limit"), and one live
+                // firefight with tracing on hits that wall mid-experiment - runs #404 and
+                // #405 both did, and everything after the wall was silently unrecorded.
+                // Resetting the counter while an opt-in trace is running keeps the budget
+                // from ever tripping; the cost is unbounded log growth, which is exactly
+                // what someone who turned on per-shot tracing asked for.
+                Log.ResetMessageCount();
                 Log.Warning(ABLog.Tag + " TRANSIT: " + msg);
             }
         }
@@ -56,6 +64,7 @@ namespace AsAboveSoBelow
         {
             if (LogCombat)
             {
+                Log.ResetMessageCount(); // same reasoning as Transit - see the banner there
                 Log.Warning(ABLog.Tag + " COMBAT: " + msg);
             }
         }
