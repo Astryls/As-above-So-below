@@ -16,8 +16,12 @@ namespace AsAboveSoBelow
     ///   * roof a room after generation and it never appeared from the sky (BUG2);
     ///   * build a wall and there was still only open air above it, so a wall could not be
     ///     stacked on a wall (BUG3).
-    /// V1 had this system - ABGuard still carries an unused `RoofSync` switch from it - and
-    /// it was not carried into V2.
+    /// V1 had this system and it was not carried into V2; this file is its V2 rebuild.
+    /// (ABGuard's `RoofSync` switch, originally a V1 orphan, is now THIS FILE's kill
+    /// switch - all of its consumers are below. An earlier version of this sentence
+    /// called the switch "unused", which became false the moment this file adopted it:
+    /// left uncorrected, a cleanup pass trusting the comment would have deleted a LIVE
+    /// guard. False comments outlive their truth window; date them or delete them.)
     ///
     /// THE RULE, in precedence order, applied to the cell one Slot above `below`:
     ///   1. constructed roof below    -> AB_RoofSurface (buildable AND walkable)

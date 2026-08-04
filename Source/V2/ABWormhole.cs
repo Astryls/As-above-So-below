@@ -655,26 +655,52 @@ namespace AsAboveSoBelow
             }
             // Captures the map, and MapEvents dies with the map, so there is nothing to
             // unsubscribe - the handler becomes unreachable together with its map.
-            map.events.RegionsRoomsChanged += delegate
+            map.events.RegionsRoomsChanged += delegate { Rearm(map); };
+
+            // ⚠⚠ INITIAL ARM - THE SUBSCRIPTION ALONE IS NOT ENOUGH ON THE LOAD PATH.
+            //
+            // The event fires on the LAST line of TryRebuildDirtyRegionsAndRooms, i.e.
+            // only on the NEXT rebuild after this registration. On a NEW banded game that
+            // is fine: carving and the post-FinalizeInit terrain repairs dirty regions
+            // within frames, the event fires, the links arm. On a LOADED game the one big
+            // region rebuild has ALREADY happened by the time we get here -
+            // Map.FinalizeInit rebuilds all regions BEFORE calling MapComponents'
+            // FinalizeInit, which is where Register is called from. So the map sat with
+            // regions built, ZERO synthetic links, and no event due until the first
+            // genuine region change of the session. On a settled colony that can be
+            // hours. Symptom: after save+reload every cross-level bill, haul and
+            // construction job is silently dead until the player builds or destroys
+            // something. (The old Harmony postfix re-armed ~4,500 times per FRAME and hid
+            // this hole by brute force; the event rework removed the accidental initial
+            // arm together with the waste - the perf numbers in the banner above were
+            // real, and so was the regression they smuggled in.)
+            //
+            // Deferred to the main thread: FinalizeInit runs on the LongEvent WORKER
+            // thread during load - the same reason ABBandMap defers its camera move.
+            LongEventHandler.ExecuteWhenFinished(delegate { Rearm(map); });
+        }
+
+        /// <summary>One body for both arm paths (the per-rebuild event and the initial
+        /// post-load arm), so the guard gate and the error handling cannot drift apart.</summary>
+        private static void Rearm(Map map)
+        {
+            if (!ABGuard.On(ABGuard.Transit))
             {
-                if (!ABGuard.On(ABGuard.Transit))
-                {
-                    return;
-                }
-                try
-                {
-                    ABWormhole.RearmAll(map);
-                }
-                catch (Exception e)
-                {
-                    // ⚠ THIS HANDLER FIRES ONCE PER REGION REBUILD. A bare Log.Error here was
-                    // an unbounded error stream on a hot event - the same runaway shape as
-                    // the per-frame camera clamp. Guard-switched: the stairs stop conducting
-                    // (which is honest - a failed re-arm means they are not conducting
-                    // anyway), the player is told once, and the settings panel can re-arm it.
-                    ABGuard.Disable(ABGuard.Transit, e, "V2 wormhole re-arm");
-                }
-            };
+                return;
+            }
+            try
+            {
+                ABWormhole.RearmAll(map);
+            }
+            catch (Exception e)
+            {
+                // ⚠ THIS FIRES ONCE PER REGION REBUILD. A bare Log.Error here was an
+                // unbounded error stream on a hot event - the same runaway shape as the
+                // per-frame camera clamp. Guard-switched: the stairs stop conducting
+                // (which is honest - a failed re-arm means they are not conducting
+                // anyway), the player is told once, and the settings panel can re-arm it.
+                ABGuard.Disable(ABGuard.Transit, e, "V2 wormhole re-arm");
+            }
         }
     }
 }

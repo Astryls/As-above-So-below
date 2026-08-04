@@ -388,15 +388,9 @@ namespace AsAboveSoBelow
                     {
                         found = strict;
                     }
-                    else if (TryFindStartCell(map, safe, seed, requireApron: false, out IntVec3 relaxed))
+                    else if (TryFindSteppedMarginCell(map, surface, seed, out IntVec3 stepped))
                     {
-                        found = relaxed;
-                    }
-                    else if (TryFindStartCell(map, surface, seed, requireApron: false, out IntVec3 wide))
-                    {
-                        // The margin is a preference, not a requirement - better a start
-                        // spot near the band edge than one inside rock.
-                        found = wide;
+                        found = stepped;
                     }
                     else
                     {
@@ -430,6 +424,49 @@ namespace AsAboveSoBelow
                 {
                     Log.Error(ABLog.Tag + " V2: start-spot clamp failed: " + e);
                 }
+            }
+
+            /// <summary>
+            /// The relaxed search as a LADDER of shrinking edge margins (24 -> 12 -> 6 -> 0)
+            /// instead of the old single jump from the full margin straight to the naked
+            /// band. Run #409 proved the jump: on a marshy flat tundra the 24-cell strip
+            /// had no qualifying cell, the whole-band fallback took the nearest dry cell
+            /// to the seed - z=251, THREE cells from the band's top edge - and the spawn
+            /// scatter threw two colonists across the gutter (caught by
+            /// RescueStrandedColonists, which is a backstop, not a placement policy).
+            /// Stepping down keeps "as far from the edge as this terrain allows" instead
+            /// of conceding "anywhere at all".
+            /// </summary>
+            private static bool TryFindSteppedMarginCell(Map map, CellRect surface,
+                IntVec3 seed, out IntVec3 found)
+            {
+                int[] margins = { PodScatterMargin, 12, 6, 0 };
+                for (int i = 0; i < margins.Length; i++)
+                {
+                    int m = margins[i];
+                    CellRect rect = new CellRect(surface.minX, surface.minZ + m,
+                        surface.Width, Mathf.Max(1, surface.Height - 2 * m));
+                    IntVec3 s = rect.Contains(seed)
+                        ? seed
+                        : new IntVec3(Mathf.Clamp(seed.x, rect.minX, rect.maxX), 0,
+                            Mathf.Clamp(seed.z, rect.minZ, rect.maxZ));
+                    if (TryFindStartCell(map, rect, s, requireApron: false, out found))
+                    {
+                        if (m != PodScatterMargin)
+                        {
+                            // lastSearchCensus still describes the LAST FAILED rung -
+                            // exactly why the wider margin was given up. The old wide
+                            // branch took this decision silently, which is why run #409
+                            // had to be diagnosed backwards from a rescue message.
+                            ABLog.Dev("V2: start spot edge margin stepped down to " + m
+                                + " (no standable dry cell at the wider margins)."
+                                + lastSearchCensus);
+                        }
+                        return true;
+                    }
+                }
+                found = IntVec3.Invalid;
+                return false;
             }
         }
 
