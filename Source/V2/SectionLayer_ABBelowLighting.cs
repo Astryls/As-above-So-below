@@ -325,40 +325,44 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// Stop vanilla's overlay BAKING as well as drawing.
-    ///
-    /// Suppressing Visible (above) only stops the DRAW. Section.TryUpdate - the path that
-    /// regenerates dirty layers for sections in view - does NOT consult Visible; only
-    /// RegenerateDirtyLayers/RegenerateAllLayers do. So on a banded map vanilla's overlay
-    /// kept building a full lighting mesh that was then never drawn: measured at 3.92 ms per
-    /// 2000 frames across 46 regenerations, pure waste.
-    ///
-    /// Safe because SectionLayer_ABBelowLighting does not call this INSTANCE method - it
-    /// calls the static SectionLayer_LightingOverlay.Bake(...) helper, which is untouched.
-    /// </summary>
-    [HarmonyPatch(typeof(SectionLayer_LightingOverlay), nameof(SectionLayer_LightingOverlay.Regenerate))]
-    public static class Patch_LightingOverlay_ABSkipBakeOnBanded
-    {
-        private static readonly AccessTools.FieldRef<SectionLayer, Section> SectionRef =
-            AccessTools.FieldRefAccess<SectionLayer, Section>("section");
-
-        private static bool Prefix(SectionLayer_LightingOverlay __instance)
-        {
-            try
-            {
-                Map map = SectionRef(__instance)?.map;
-                if (map != null && ABGuard.On(ABGuard.Rendering) && ABBands.Banded(map))
-                {
-                    return false; // our layer owns lighting on banded maps
-                }
-            }
-            catch
-            {
-                // Any doubt -> let vanilla run. A redundant bake costs frames; a missing one
-                // would leave the map unlit.
-            }
-            return true;
-        }
-    }
+    // ⚠⚠ DO NOT RE-ADD THE "SKIP VANILLA'S BAKE TOO" PREFIX. It existed here until
+    // 2026-08, prefixing SectionLayer_LightingOverlay.Regenerate to return false whenever
+    // Banded(map) && ABGuard.On(Rendering). It was DELETED, and the reasoning is worth the
+    // twenty lines because the optimisation looks free and is not.
+    //
+    // What it bought: 3.92 ms per 2000 frames across 46 regenerations, i.e. ~0.002 ms per
+    // frame. Vanilla's overlay is suppressed from DRAWING by the Visible patch above, and
+    // Section.TryUpdate does not consult Visible, so it kept baking a mesh nobody drew.
+    //
+    // What it cost, all three found by a player reading the patch:
+    //
+    // 1. IT LEFT THE LAYER CLEAN AND EMPTY. Section.TryUpdate sets Dirty = false AFTER
+    //    calling Regenerate - it does not care that a prefix skipped the body. So vanilla's
+    //    layer sat marked-clean holding zero verts, with sectRect and firstCenterInd never
+    //    initialised.
+    //
+    // 2. ⚠ THE SKIP CONDITION WAS A MUTABLE GLOBAL, AND FLIPPING IT DIRTIED NOTHING.
+    //    ABGuard.Rendering is not config: ~10 rendering call sites trip it via
+    //    ABGuard.Disable when they throw, the settings panel re-arms it, and Reset() clears
+    //    it on load. The instant it flipped, BOTH patches stopped applying together -
+    //    vanilla's overlay became Visible again holding the empty mesh from (1), and since
+    //    its relevantChangeTypes are only Roofs | GroundGlow, a settled colony can go a very
+    //    long time before a section re-dirties. Symptom: guard trips, and the map then draws
+    //    with NO lighting overlay at all until the player happens to build something.
+    //
+    // 3. IT HAD A SECOND CONSUMER WE NEVER COUNTED. LudeonTK's EditWindow_DebugInspector
+    //    calls SectionLayer_LightingOverlay.GlowReportAt, which reads the baked mesh's
+    //    colors32 DIRECTLY and never consults Visible. Against an unbaked mesh that is an
+    //    IndexOutOfRange per frame with the glow report open.
+    //
+    // Plus an empty `catch { }` that swallowed every exception silently - in the same file
+    // whose Visible patch above carries a doc comment about why that is wrong. Guards are
+    // per-consumer; fixing one does not fix its neighbour.
+    //
+    // THE RULE: suppressing a vanilla layer's DRAW is safe because Visible is re-read every
+    // frame. Suppressing its BAKE is not, because the mesh persists and the dirty system is
+    // not listening to our global. If a future window really needs those 0.002 ms, the price
+    // is a shared ownership predicate plus a WholeMapChanged(Roofs | GroundGlow) fired
+    // (deferred out of the draw call) on every ABGuard.Rendering transition, AND a guard on
+    // GlowReportAt. That is ~40 lines of hazard for a rounding error. Leave it deleted.
 }
