@@ -822,6 +822,63 @@ namespace AsAboveSoBelow
             GUI.color = NoteDim;
             list.Label("AB_SettingsGenerationNote".Translate());
             GUI.color = oldColor;
+
+            // ---- subsystem health -------------------------------------------------
+            //
+            // The V1 panel had this and the V2 rework only rebuilt the DATA half:
+            // ABGuard.AllSwitches / LastContext / LastCulprit / ReArm sat with ZERO
+            // consumers while their doc comments claimed a settings readout existed.
+            // This block is that readout, wired at last - which retroactively makes
+            // those comments true. One row per kill switch: vanilla's checkbox texture
+            // as the health tick (a Unicode tick glyph is a font gamble in RimWorld's
+            // UI face), the trip context and culprit when down, and a re-arm button
+            // that gives the subsystem another chance - if the fault persists it trips
+            // again on the next error with a fresh report, which is ABGuard.ReArm's
+            // documented contract.
+            list.GapLine();
+            Text.Font = GameFont.Medium;
+            list.Label("AB_GuardHealthTitle".Translate());
+            Text.Font = GameFont.Small;
+            GUI.color = NoteDim;
+            list.Label("AB_GuardHealthNote".Translate());
+            GUI.color = oldColor;
+            list.Gap(4f);
+            ABGuardSwitch[] switches = ABGuard.AllSwitches;
+            for (int i = 0; i < switches.Length; i++)
+            {
+                ABGuardSwitch s = switches[i];
+                Rect row = list.GetRect(26f);
+                Widgets.CheckboxDraw(row.x, row.y + 3f, s.IsOn, disabled: false, 20f);
+                Rect name = new Rect(row.x + 26f, row.y, 150f, row.height);
+                Widgets.Label(name, s.Name);
+                if (s.IsOn)
+                {
+                    GUI.color = NoteDim;
+                    Widgets.Label(new Rect(name.xMax + 4f, row.y,
+                        row.width - name.xMax - 4f, row.height),
+                        "AB_GuardRunning".Translate());
+                    GUI.color = oldColor;
+                    continue;
+                }
+                Rect btn = new Rect(row.xMax - 90f, row.y + 1f, 88f, 24f);
+                Rect info = new Rect(name.xMax + 4f, row.y,
+                    btn.x - name.xMax - 10f, row.height);
+                string why = s.LastContext.NullOrEmpty()
+                    ? "AB_GuardTrippedUnknown".Translate().ToString()
+                    : s.LastContext;
+                if (!s.LastCulprit.NullOrEmpty())
+                {
+                    why += " (" + "AB_GuardCulprit".Translate(s.LastCulprit) + ")";
+                }
+                GUI.color = WarnRed;
+                Widgets.Label(info, why.Truncate(info.width));
+                GUI.color = oldColor;
+                TooltipHandler.TipRegion(info, why);
+                if (Widgets.ButtonText(btn, "AB_GuardReArm".Translate()))
+                {
+                    ABGuard.ReArm(s);
+                }
+            }
         }
     }
 }

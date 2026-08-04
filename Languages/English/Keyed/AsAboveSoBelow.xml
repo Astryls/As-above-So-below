@@ -122,4 +122,12 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_LeaveUpperTip>Departing or fleeing groups may exit off the map edge of a level above the surface if that is their nearest reachable way out.</AB_LeaveUpperTip>
   <AB_LeaveLower>May leave via lower levels</AB_LeaveLower>
   <AB_LeaveLowerTip>Departing or fleeing groups may exit off the map edge of a level below the surface if that is their nearest reachable way out.</AB_LeaveLowerTip>
+
+  <!-- Diagnostics tab: subsystem health readout (the V1 panel's V2 return) -->
+  <AB_GuardHealthTitle>Subsystem health</AB_GuardHealthTitle>
+  <AB_GuardHealthNote>Each subsystem shuts itself down if it hits an error, so one fault cannot break the rest of the mod or your game. Tripped switches reset when a game is loaded or started. Re-arming gives the subsystem another chance; if the fault is still there it will trip again with a fresh report.</AB_GuardHealthNote>
+  <AB_GuardRunning>running</AB_GuardRunning>
+  <AB_GuardTrippedUnknown>shut down after an error</AB_GuardTrippedUnknown>
+  <AB_GuardCulprit>likely cause: {0}</AB_GuardCulprit>
+  <AB_GuardReArm>Re-arm</AB_GuardReArm>
 </LanguageData>
