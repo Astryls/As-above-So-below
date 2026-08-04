@@ -175,7 +175,9 @@ namespace AsAboveSoBelow
             ABBandMap bands = ABBands.CompOf(map);
             if (bands == null || !bands.Banded)
             {
-                Messages.Message("AB2: this map has no bands - stairs do nothing here.",
+                // Backstop only: PlaceWorker_ABLinkApproach refuses this at placement.
+                // Reachable via paths that bypass PlaceWorkers (dev spawn, quest spawn).
+                Messages.Message("AB_StairsNoBands".Translate(),
                     MessageTypeDefOf.RejectInput, false);
                 return;
             }
@@ -206,7 +208,9 @@ namespace AsAboveSoBelow
                 {
                     if (!LinksAllLevels)
                     {
-                        Messages.Message("AB2: no level in that direction.",
+                        // Backstop only: PlaceWorker_ABLinkApproach refuses this at
+                        // placement (§29e). Reachable via dev/quest spawns.
+                        Messages.Message("AB_StairsNoLevel".Translate(),
                             MessageTypeDefOf.RejectInput, false);
                     }
                     continue;

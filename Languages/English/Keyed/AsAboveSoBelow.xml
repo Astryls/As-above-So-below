@@ -130,4 +130,12 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_GuardTrippedUnknown>shut down after an error</AB_GuardTrippedUnknown>
   <AB_GuardCulprit>likely cause: {0}</AB_GuardCulprit>
   <AB_GuardReArm>Re-arm</AB_GuardReArm>
+
+  <!-- Vertical link placement: refusals for links with nowhere to go (§29e), plus the
+       runtime backstops for spawn paths that bypass PlaceWorkers. -->
+  <AB_NotBandedHere>This colony has no levels</AB_NotBandedHere>
+  <AB_NoLevelAbove>No level above this one</AB_NoLevelAbove>
+  <AB_NoLevelBelow>No level below this one</AB_NoLevelBelow>
+  <AB_StairsNoBands>This map has no levels; vertical links have nothing to connect.</AB_StairsNoBands>
+  <AB_StairsNoLevel>No level in that direction; this link connects nothing.</AB_StairsNoLevel>
 </LanguageData>
