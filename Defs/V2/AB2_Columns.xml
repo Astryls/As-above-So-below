@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    TYPED UTILITY COLUMNS (§62). Four buildables replace the thirty riser defs.
+
+    ⚠ THE COLUMN IS THE ONLY VISIBLE PIECE. It stands on its own level; the cell one Slot
+    up receives an INVISIBLE generated carrier (see ABColumnNetworks), never a building,
+    never a blocker. Modelled on vanilla's Column: holdsRoof is what makes ABSkySync
+    resolve the cell above as buildable (AB_WallTop unroofed, walkable AB_RoofSurface once
+    roofed around it), which is the whole "the tile above is the connector" design.
+
+    ⚠ drawSize IS NOT DECOR. The art ships on a 1200x896 canvas with the column occupying
+    a centered vertical band; drawSize x must stay 1.34 times y or the sprite squashes.
+    (1.61, 1.2) plus the +0.18 z offset gives vanilla Column's tall presence.
+
+    ⚠ NO GAS COLUMN BY DESIGN. Fluids and gases share the Pipe column; the classifier
+    (ABColumnNetworks.Classify) buckets every detected network into exactly one of the
+    four types here, and an ABColumnAdapterDef <columnType> can override a wrong guess.
+  -->
+  <ThingDef Name="AB_ColumnBase" ParentName="BuildingBase" Abstract="True">
+    <thingClass>AsAboveSoBelow.Building_ABColumn</thingClass>
+    <category>Building</category>
+    <designationCategory>Structure</designationCategory>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <fillPercent>0.25</fillPercent>
+    <pathCost>0</pathCost>
+    <uiIconScale>1.2</uiIconScale>
+    <holdsRoof>true</holdsRoof>
+    <canOverlapZones>false</canOverlapZones>
+    <rotatable>false</rotatable>
+    <fertility>0</fertility>
+    <specialDisplayRadius>6.9</specialDisplayRadius>
+    <constructEffect>ConstructMetal</constructEffect>
+    <statBases>
+      <MaxHitPoints>250</MaxHitPoints>
+      <WorkToBuild>2800</WorkToBuild>
+      <Mass>20</Mass>
+      <Flammability>0.5</Flammability>
+      <Beauty>0</Beauty>
+    </statBases>
+    <costList>
+      <Steel>60</Steel>
+      <ComponentIndustrial>2</ComponentIndustrial>
+    </costList>
+    <researchPrerequisites>
+      <li>Electricity</li>
+      <li>Machining</li>
+    </researchPrerequisites>
+    <building>
+      <isInert>true</isInert>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <graphicData>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1.61,1.2)</drawSize>
+      <drawOffset>(0,0,0.18)</drawOffset>
+      <shadowData>
+        <volume>(0.35,0.5,0.35)</volume>
+        <offset>(0,0,-0.23)</offset>
+      </shadowData>
+    </graphicData>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_ColumnBase">
+    <defName>AB_ColumnPower</defName>
+    <label>power column</label>
+    <description>A reinforced service column carrying electrical conduit up through the ceiling. Power grids on this level and the level above pool into one, and each connection can be switched off at the column. Sturdy enough to hold a roof.</description>
+    <uiOrder>2041</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Columns/AB_ColumnPower</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Power</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_ColumnBase">
+    <defName>AB_ColumnPipe</defName>
+    <label>pipe column</label>
+    <description>A reinforced service column carrying sealed piping up through the ceiling. Every liquid and gas network it recognizes can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
+    <uiOrder>2042</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Columns/AB_ColumnPipe</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Pipe</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_ColumnBase">
+    <defName>AB_ColumnClimate</defName>
+    <label>climate column</label>
+    <description>A reinforced service column carrying air ducting up through the ceiling. Ventilation and thermal networks can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
+    <uiOrder>2043</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Columns/AB_ColumnClimate</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Climate</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_ColumnBase">
+    <defName>AB_ColumnData</defName>
+    <label>data column</label>
+    <description>A reinforced service column carrying signal and logistics lines up through the ceiling. Data networks can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
+    <uiOrder>2044</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Columns/AB_ColumnData</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Data</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+</Defs>

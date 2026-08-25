@@ -1,4 +1,4 @@
 {
-  "textures": ["UI/AB_RemoveLevel"],
+  "textures": ["UI/AB_ViewLevelUp", "UI/AB_ViewLevelDown"],
   "audio": []
 }

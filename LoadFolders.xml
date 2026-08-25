@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ⚠ THE ROOT ENTRY IS LOAD-BEARING. The moment this file exists RimWorld stops loading the
+  mod folder implicitly and loads ONLY what is listed here, so dropping "/" silently
+  unloads every Def, Texture, Language file and Assembly in the mod.
+
+  The per-host Compat/ gates died with the riser system (§62). Columns generate their
+  carriers at runtime by cloning the host's own conduit defs, so no XML in this mod names
+  a foreign class or def any more and there is nothing left to gate.
+-->
+<loadFolders>
+  <v1.6>
+    <li>/</li>
+  </v1.6>
+</loadFolders>

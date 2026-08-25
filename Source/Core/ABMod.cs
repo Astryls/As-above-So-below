@@ -23,6 +23,38 @@ namespace AsAboveSoBelow
         {
             Settings.DoWindowContents(inRect);
         }
+
+        /// <summary>
+        /// Rebake the map mesh when a setting that lives in VERTICES changed.
+        ///
+        /// The depth falloff is baked at print time (that is the whole reason it is free
+        /// per frame), so the running map keeps drawing the old scale until its sections
+        /// regenerate. Doing it here rather than in the slider means one regeneration when
+        /// the window closes instead of one per frame of a drag - RegenerateEverythingNow
+        /// rebuilds every section of a map that may be seven levels tall.
+        /// </summary>
+        public override void WriteSettings()
+        {
+            base.WriteSettings();
+            if (!ABSettings.ConsumeBakedVisualDirty()
+                || Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
+            try
+            {
+                Map map = Find.CurrentMap;
+                if (map?.mapDrawer != null)
+                {
+                    map.mapDrawer.RegenerateEverythingNow();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Log.Warning(ABLog.Tag + " could not rebake the map mesh after a visual"
+                    + " setting change (it will refresh as sections dirty): " + e.Message);
+            }
+        }
     }
 
     public static class ABLog

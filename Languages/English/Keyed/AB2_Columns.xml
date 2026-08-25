@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- §62 typed utility columns -->
+  <AB2_ColumnToggleNet>Connect: {0}</AB2_ColumnToggleNet>
+  <AB2_ColumnToggleNetDesc>Carry {0} through this column to the level above. Toggling off severs the link at this column only; the networks on each level keep working separately.</AB2_ColumnToggleNetDesc>
+  <AB2_ColumnNeedsResearch>Requires research: {0}</AB2_ColumnNeedsResearch>
+  <AB2_ColumnNoAbove>No level above: connections join this level's grid only.</AB2_ColumnNoAbove>
+  <AB2_ColumnInspect_Connected>Carrying: {0}</AB2_ColumnInspect_Connected>
+  <AB2_ColumnInspect_None>Carrying nothing. Use the connect toggles to link networks.</AB2_ColumnInspect_None>
+
+</LanguageData>

@@ -42,37 +42,64 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABGuard
     {
+        // ⚠ EVERY SWITCH IN THIS LIST IS REFERENCED BY SOMETHING. Twelve more used to live
+        // here - logistics, power, pipes, climate, threats, hostileMove, world, social,
+        // areas, combatAI, async and an unused RoofSync-era duplicate - carried over from V1
+        // and referenced by nothing in V2. They were not harmless: AllSwitches feeds the
+        // settings panel's status readout, so the player was shown twelve subsystems that
+        // could never change state, which makes the readout useless as a diagnostic exactly
+        // when it matters. A kill switch with no call site is not a safety net, it is noise.
+        // Do not add one speculatively; add it in the same commit as its guard.
         public static readonly ABGuardSwitch Ui = new ABGuardSwitch("ui");
         public static readonly ABGuardSwitch LevelGen = new ABGuardSwitch("levelGen");
         public static readonly ABGuardSwitch Rendering = new ABGuardSwitch("rendering");
         public static readonly ABGuardSwitch Movement = new ABGuardSwitch("movement");
         public static readonly ABGuardSwitch Combat = new ABGuardSwitch("combat");
-        public static readonly ABGuardSwitch Logistics = new ABGuardSwitch("logistics");
         public static readonly ABGuardSwitch RoofSync = new ABGuardSwitch("roofSync");
         public static readonly ABGuardSwitch Weather = new ABGuardSwitch("weather");
-        public static readonly ABGuardSwitch Power = new ABGuardSwitch("power");
-        public static readonly ABGuardSwitch Pipes = new ABGuardSwitch("pipes");
-        public static readonly ABGuardSwitch Climate = new ABGuardSwitch("climate");
-        public static readonly ABGuardSwitch Threats = new ABGuardSwitch("threats");
-        public static readonly ABGuardSwitch HostileMove = new ABGuardSwitch("hostileMove");
-        public static readonly ABGuardSwitch World = new ABGuardSwitch("world");
-        public static readonly ABGuardSwitch Social = new ABGuardSwitch("social");
+
+        /// <summary>Cross-band transit: the synthetic RegionLink re-arm and the segmented
+        /// pather. Re-arm runs from MapEvents.RegionsRoomsChanged - i.e. after every region
+        /// rebuild - so an unguarded fault there is an error PER REBUILD. Tripping it stops
+        /// the stairs conducting and says so once, which beats a log full of the same line.</summary>
         public static readonly ABGuardSwitch Transit = new ABGuardSwitch("transit");
-        public static readonly ABGuardSwitch Areas = new ABGuardSwitch("areas");
 
-        /// <summary>CAI 5000 (Krkr.rule56) integration: cross-level fog-of-war
-        /// vision reveal. Tripping it stops feeding sky/surface vision across
-        /// the gap; CAI keeps working per-map and the see-below keeps rendering.</summary>
-        public static readonly ABGuardSwitch CombatAI = new ABGuardSwitch("combatAI");
+        /// <summary>Band camera: the per-frame clamp and the level-switch input. Both sit on
+        /// paths that run every frame / every GUI event, which is precisely where an
+        /// unthrottled error handler turns one bug into an unplayable game.</summary>
+        public static readonly ABGuardSwitch Camera = new ABGuardSwitch("camera");
 
-        /// <summary>Background-thread compute lanes (see-below mask build).
-        /// Tripping this falls back to synchronous rebuilds, never off.</summary>
-        public static readonly ABGuardSwitch Async = new ABGuardSwitch("async");
+        /// <summary>Cross-level utility networks: the vanilla power band clamp, and the
+        /// riser merge for every foreign pipe system.
+        ///
+        /// Added WITH its first guard, not ahead of one - see the warning above. It is one
+        /// switch rather than one per host mod deliberately: every consumer is the same
+        /// shape (re-scope somebody's cell-adjacency graph search to a band), they share
+        /// ABPowerBandScope's helpers, and a player who has to be told a subsystem died
+        /// wants to hear "cross-level utilities" once, not "the Rimatomics steam merge".
+        ///
+        /// ⚠ FAILING OPEN HERE MEANS THE LEAK COMES BACK, NOT THAT NOTHING HAPPENS. Tripping
+        /// this switch restores vanilla's un-clamped 6-cell search, so power starts crossing
+        /// the gutter again rather than the grid going dead. That is the right failure
+        /// direction (a working colony beats a correct one), but it does mean the symptom of
+        /// a tripped utilities guard is a REAPPEARING bug, not a missing feature.</summary>
+        public static readonly ABGuardSwitch Utilities = new ABGuardSwitch("utilities");
+
+        /// <summary>The band curtain: the opaque backdrop over everything outside the
+        /// viewed band. Split out of Rendering (§46): the curtain is LOAD-BEARING for
+        /// level isolation - band seams are not section-aligned, so the sections
+        /// straddling a seam draw up to ~15 rows of the neighbouring level every frame,
+        /// and the curtain is the only thing covering them. When it dies those rows show
+        /// through as "ghosts" that are real, clickable cells of the next level. A fault
+        /// in a cosmetic rendering layer must therefore not take the curtain down with
+        /// the family; this switch trips only on the curtain's own exception, and the
+        /// health panel names it when it does.</summary>
+        public static readonly ABGuardSwitch Curtain = new ABGuardSwitch("curtain");
 
         private static readonly ABGuardSwitch[] All =
         {
-            Ui, LevelGen, Rendering, Movement, Combat, Logistics, RoofSync, Weather, Power, Pipes, Climate,
-            Threats, HostileMove, World, Social, Transit, Areas, CombatAI, Async
+            Ui, LevelGen, Rendering, Movement, Combat, RoofSync, Weather, Transit, Camera,
+            Utilities, Curtain
         };
 
         public static bool On(ABGuardSwitch subsystem) => subsystem.on;

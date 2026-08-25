@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -6,978 +7,953 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Mod settings. Reworked 2026-07-22 into five tabs (Generation / View and
-    /// camera / Work and logistics / Combat and threats / Advanced), each with
-    /// its own measured-height scroll view, per-tab reset, presets on the
-    /// Generation tab, and a kill-switch status panel on Advanced.
+    /// Mod settings.
     ///
-    /// IMGUI discipline (lore-derived, do not undo):
-    ///  - Tab switches are DEFERRED to after the content draw: a mid-frame
-    ///    switch changes the control set between event passes and kills the
-    ///    new tab's controls.
-    ///  - Checkbox-gated rows draw from a visibility SNAPSHOT taken at the
-    ///    top of the tab, so the control set stays constant across passes.
-    ///  - Listing runs with maxOneColumn = true and the scroll gutter is
-    ///    reserved unconditionally, so measured heights stay truthful and
-    ///    content never wraps into a hidden second column.
+    /// REWRITTEN FOR V2. The V1 version carried 79 fields and a seven-tab window covering
+    /// pocket-level generation, vertical links, per-level biomes, incident policy and a
+    /// dozen compat bridges - all of which described a model V2 does not have. Rather than
+    /// prune it field by field, this is the settings surface V2 actually reads, which the
+    /// compiler can confirm: nine fields, every one of them consumed by a live V2 call site.
+    ///
+    /// Dropped settings simply stop being scribed. Old saves and old config files keep their
+    /// unknown keys in Config/Mod_*.xml and RimWorld ignores them, so downgrading is lossy
+    /// but nothing errors on load.
     /// </summary>
     public class ABSettings : ModSettings
     {
+        // ---- diagnostics ---------------------------------------------------
+
+        /// <summary>Chatty logging through ABLog.Dev. Off by default.</summary>
         public bool verboseLogging;
-        public bool showLiveBelow = true;
-        public bool selectBelowInPlace = true;
-        public bool belowItemOverlays = true;
 
-        /// <summary>Draw the lower level's own lighting (glow + roofed-room
-        /// shading) into the see-below view.</summary>
-        public bool belowLighting = true;
-        public bool showCeilingHint = true;
-        public bool showLevelWidget = true;
-        public bool oneColonistBar = true;
-        public bool cameraFollowStairs = true;
-        public bool cameraLockKeybind = true;
-        // Second level-switch input: hold Left Control and scroll the wheel
-        // over the map to move up/down through the column (instead of zooming).
-        public bool scrollLevelKeybind = true;
-        public bool climbAnimations = true;
-        // Depth-cue removal (2026-07-22, user direction): the below view
-        // renders PLUMB (no south shift, no camera parallax) with a low base
-        // dim, thin edge hairlines, and the wall-top reveal - no facades,
-        // shadows, or lips. The painted-depth experiments are retired.
-        public float belowDim = 0.06f;
-        public bool drawSlabEdge = true;
-        public bool drawWallReveal = true;
-        public float wallRevealWidth = 0.5f;
-        public float belowThingScale = 0.85f;
-        public float climbTimeMultiplier = 1f;
-        public bool crossLevelWork = true;
-        public bool priorityCrossLevelWork = true;
-        public bool crossLevelOrders = true;
-        public bool crossLevelCombat = true;
-        public bool crossLevelAutoEngage = true;
-        public bool idleReturnHome = true;
-        public bool crossLevelHauling = true;
-        public bool crossLevelSupply = true;
-        public bool crossLevelNeeds = true;
-        // Job-scan cadence (2026-07-23): how hard the cross-level flows look
-        // for work. Defaults mirror the old hardcoded constants; presets on
-        // the jobs tab set these in one click.
-        public int jobProbeBudget = 2;
-        public int jobEmptyScanCooldown = 450;
-        public int jobMigrationCooldown = 1200;
-        public int jobCacheTtl = 600;
-        public bool supplyConstruction = true;
-        public bool supplyBills = true;
-        public bool supplyMeals = true;
-        public bool supplyFuel = true;
-        public bool fetchFromOtherLevels = true;
-        public bool crossLevelPrisoners = true;
-        public bool crossLevelAnimalWander = true;
-        public bool crossLevelRituals = true;
-        public bool crossLevelSocial = true;
-        public bool crossLevelPipes = true;
-        public bool crossLevelTemperature = true;
-        public bool podTransit = true;
+        // ---- performance ---------------------------------------------------
 
-        public bool skyVisitorArrivals = true;
+        /// <summary>Lift the total-cell budget on colony maps. See ABMapSizeLimit for why
+        /// the budget exists: a banded map is every level plus gutters tall, and the
+        /// pathfinder allocates and CLEARS map-sized arrays per request, so the stacked
+        /// total is what it pays. (⚠ The old wording here said "the path grid is an
+        /// IJobParallelFor over EVERY cell, on a hot per-request path". That is wrong on
+        /// the second half and sent optimisation work to the wrong place twice: PathGridJob
+        /// is deduped per variant per tick. The genuinely per-request map-sized cost is
+        /// calcGrid.Clear() inside PathFinderJob. Both are Burst compiled and unpatchable;
+        /// see ABPathBandScope.)
+        ///
+        /// ONLY EVER SET TRUE THROUGH THE CONFIRMATION DIALOG. The checkbox writes to a
+        /// local, so the state itself encodes "the player read the warning and accepted it"
+        /// and no separate acknowledgement flag is needed. Turning it back OFF is immediate -
+        /// there is never a reason to make returning to a supported configuration harder.</summary>
+        public bool unclampMapSize;
 
-        public bool hospitalityRoaming = true;
-        public bool threatBasementInfest;
-        public bool threatSkyDrops;
-        public float threatDivertChance = 0.25f;
-        public bool columnWealth = true;
-        public bool worldIntegration = true;
-        // Compat opt-ins (each only meaningful, and only shown, when its host
-        // mod is loaded). Ancient urban ruins: allow z-levels on AUR's
-        // exploration submaps (excluded by default - see AncientUrbanRuinsCompat).
-        public bool allowLevelsOnUrbanRuins;
-        // Biomes! Caverns basements (only meaningful when that mod is loaded).
-        public bool cavernBasements = true;
-        public string cavernBiome = BiomesCavernsCompat.RandomChoice;
-        public float cavernOpenness = 0.35f;
-        // Naturalistic mountain peaks on new sky levels.
-        public bool naturalPeaks = true;
-        // New sky levels take the surface map's biome (greenery, regrowth,
-        // weather); off = the stark high-altitude AB_OpenSky placeholder.
-        public bool skyBiomeInherit = true;
-        public float peakSoilFraction = 0.15f;
-        public float peakVegetation = 1f;
-        // 2026-07-22 settings rework: generation knobs, applied when a level
-        // is GENERATED (existing levels keep their look). Defaults equal the
-        // old hardcoded constants, so untouched sliders change nothing.
-        public float peakMeadowCutoff = 0.60f;   // rock-vs-meadow noise threshold
-        public float peakMeadowScale = 0.024f;   // meadow noise frequency (feature size)
-        public int peakTerraceMax = 4;           // deepest walkable edge band, cells
-        public float peakOutcropDensity = 1f;    // outcrop lump multiplier
-        public float peakTarns = 1f;             // mountain lake multiplier
-        public float peakHiddenValleys = 1f;     // share of enclosed meadows kept sealed
-        public float skyOreDensity = 6f;         // ore lumps per 10k mass cells
-        public float basementOreDensity = 6f;    // ore lumps per 10k basement cells
-        public float cavernChamberFreq = 0.02f;  // cavern chamber chance per worm step
-        public float cavernFormations = 1f;      // BC stalagmite scatter multiplier
-        // Basement environment (2026-07-23): unified selector replacing the old
-        // cavernBasements toggle. One of BasementEnv.SolidRock / Caverns /
-        // UrbanRuins, or a curated foreign biome defName. Legacy cavernBasements
-        // (above) is now read only for the one-time migration in ExposeData.
-        public string basementType = BasementEnv.SolidRock;
-        public bool urbanRuinsOccupants = true;   // AUR facility: spawn scavengers
-        public bool basementRevealed = true;      // clear all fog on basement load
-        private bool basementMigrated;
-        // Landmarks on sky levels (Odyssey landmark system; see ABSkyLandmarks).
-        public bool skyLandmarks = true;
-        public float skyLandmarkChance = 0.30f;
-        public int skyLandmarkMax = 1;
-        public Dictionary<string, int> landmarkModes;
+        /// <summary>Multiplier on the A* heuristic for pawns on a banded map. 1.0 is vanilla
+        /// accuracy; higher searches greedily, expanding far fewer cells for a path that may
+        /// be slightly longer. See ABPathBandScope for why this is a vanilla trade rather
+        /// than a new one, and for the two pathing costs that are NOT reachable by any
+        /// patch.</summary>
+        public float pathHeuristic = 1f;
 
-        // --- window state (session only, not scribed) ---
-        private int curTab;
-        private bool landmarksExpanded;
-        private bool? landmarksExpandedPending;
-        private readonly Vector2[] tabScroll = new Vector2[7];
-        private readonly float[] tabHeight = new float[7];
+        // ---- climate -------------------------------------------------------
+        //
+        // Per-level temperature offsets and wind factors. SNAPSHOTTED onto ABBandMap at
+        // generation (see ABBandMap.SnapshotClimate) so changing them never re-climates an
+        // existing colony. Always three entries each: the level plan tops out at 3 up and
+        // 3 down, and showing all six regardless of the current plan lets a player tune a
+        // layout before they choose it.
 
-        private static readonly string[] TabKeys =
+        public List<float> skyTempOffsets;
+
+        public List<float> deepTempOffsets;
+
+        public List<float> skyWindFactors;
+
+        /// <summary>Climate presets. Not just convenience: they give the numbers a story, so
+        /// a player who does not want to reason about lapse rates still gets a coherent
+        /// mountain rather than whatever the sliders happened to be left at.</summary>
+        public static readonly float[][] SkyPresets =
         {
-            "AB_TabGeneration", "AB_TabView", "AB_TabWork", "AB_TabJobs", "AB_TabCombat", "AB_TabCompat", "AB_TabAdvanced"
+            new[] { -4f, -9f, -18f },   // Gentle - the peak is cold, not lethal
+            new[] { -7f, -16f, -35f },  // Standard - +2 is the seasonal line, +3 a permanent cap
+            new[] { -10f, -24f, -50f }  // Alpine - only the surface is comfortable
         };
 
-        private static readonly Color OkGreen = new Color(0.4f, 0.85f, 0.4f);
+        public static readonly float[][] DeepPresets =
+        {
+            new[] { -4f, -4f, -4f },
+            new[] { -6f, -6f, -6f },
+            new[] { -8f, -10f, -12f }
+        };
+
+        /// <summary>Rebuild any climate list that is missing or the wrong length. Called on
+        /// load and before every read: a hand-edited config or a version that shipped a
+        /// different level cap must not produce an index-out-of-range deep inside the
+        /// temperature patch.</summary>
+        public void EnsureClimateLists()
+        {
+            skyTempOffsets = Fix(skyTempOffsets, ABBandEnv.DefaultSkyTempOffsets);
+            deepTempOffsets = Fix(deepTempOffsets, ABBandEnv.DefaultDeepTempOffsets);
+            skyWindFactors = Fix(skyWindFactors, ABBandEnv.DefaultSkyWindFactors);
+        }
+
+        private static List<float> Fix(List<float> list, float[] defaults)
+        {
+            if (list == null)
+            {
+                return new List<float>(defaults);
+            }
+            while (list.Count < defaults.Length)
+            {
+                list.Add(defaults[list.Count]);
+            }
+            if (list.Count > defaults.Length)
+            {
+                list.RemoveRange(defaults.Length, list.Count - defaults.Length);
+            }
+            return list;
+        }
+
+        // ---- level plan ----------------------------------------------------
+        //
+        // Chosen per colony on the advanced-config screen; stored here so the choice
+        // persists as the default for the next colony. The GENERATED layout is scribed on
+        // ABBandMap, so an existing save never depends on these.
+
+        /// <summary>Levels above the surface (0-3).</summary>
+        public int upperLevels = 1;
+
+        /// <summary>Levels below the surface (0-3).</summary>
+        public int lowerLevels = 1;
+
+        // ---- camera ---------------------------------------------------------
+        //
+        // Nothing here any more, deliberately. `freeCameraPan` was a binary between two
+        // unsatisfying extremes that asked the player to reason about rendering internals.
+        // How the view behaves at the edge of a level is an authored, per-level decision:
+        // see ABCameraBounds for the baked table and the in-game calibration tool that
+        // produced its numbers.
+
+        // ---- visuals ---------------------------------------------------------
+        //
+        // The see-below depth cue, documented in full on ABDepthView. Presentation only:
+        // nothing here changes what generates or what a pawn can reach, so it may be
+        // flipped mid-colony.
+        //
+        // A second cue (camera-anchored Perspective Mode) shipped here briefly and was
+        // removed - see ABDepthView for the reasoning and for what re-adding it would cost.
+        // Its settings keys are simply no longer scribed; an old config file keeps them and
+        // RimWorld ignores unknown keys, so nothing errors on a downgrade.
+
+        /// <summary>Content on a level below the one being viewed draws smaller, once per
+        /// level of drop. V1 had this and V2 dropped it; restored ON by default because it
+        /// is the cue that makes a three-deep column read as depth rather than as four
+        /// flat maps stacked in a list.</summary>
+        public bool depthFalloff = true;
+
+        /// <summary>Shrink applied per level of drop. BAKED INTO THE PRINTED VERTICES, so
+        /// changing it forces a map-mesh regeneration - see ABMod.WriteSettings.</summary>
+        public float depthFalloffPerLevel = ABDepthView.DefaultFalloff;
+
+        /// <summary>Whether pawns below the viewed band may render from vanilla's pawn atlas
+        /// (one blit) instead of walking their whole render tree every frame. Off / Auto /
+        /// Aggressive - see ABBelowRenderCache. Auto is lossless by construction: it engages
+        /// only while the atlas holds at least as many pixels per cell as the screen shows,
+        /// which on most displays is every legal zoom. Realtime only, nothing baked, so
+        /// changing it never needs a mesh regeneration.</summary>
+        public int belowPawnCache = ABBelowRenderCache.ModeAuto;
+
+        /// <summary>
+        /// Whether the camera may zoom out further than the level being viewed can fill.
+        ///
+        /// ON is the shipped behaviour and the right default: a level is only ever a band of
+        /// the map, so past half its height the extra screen is guaranteed to be backdrop.
+        /// OFF exists because camera mods that widen the zoom range (Simple Camera Setting,
+        /// Perspective Shift and friends) are widening it on purpose, and a player who has
+        /// installed one would rather see the curtain than have the zoom refuse to move.
+        /// Nothing leaks either way - Patch_CameraDriver_ABClipViewToBand keeps the
+        /// neighbouring level from drawing and ABBandCurtain paints what is left with
+        /// vanilla's own map-edge material.
+        /// </summary>
+        public bool clampZoomToLevel = true;
+
+        // ---- sky band generation -------------------------------------------
+
+        /// <summary>Meadow-Perlin peaks (varied ledges and plateaus) rather than a plain
+        /// projection of the solid mass below.</summary>
+        public bool naturalPeaks = true;
+
+        /// <summary>Sky band inherits the surface tile's biome for plants and temperature.</summary>
+        public bool skyBiomeInherit = true;
+
+        /// <summary>Share of peak surface that is soil rather than bare rock.</summary>
+        public float peakSoilFraction = 0.15f;
+
+        /// <summary>Rock-vs-meadow noise threshold.</summary>
+        public float peakMeadowCutoff = 0.60f;
+
+        /// <summary>Meadow noise frequency, i.e. feature size.</summary>
+        public float peakMeadowScale = 0.024f;
+
+        /// <summary>Deepest walkable edge band, in cells.</summary>
+        public int peakTerraceMax = 4;
+
+        /// <summary>Multiplier on the plateau's starting vegetation. 0 leaves the summit
+        /// bare (the pre-2026-07-28 behaviour, which was not a choice so much as a
+        /// missing feature).</summary>
+        public float skyVegetationDensity = 1f;
+
+        // ---- basement generation -------------------------------------------
+
+        /// <summary>Ore lumps per 10k basement cells.</summary>
+        public float basementOreDensity = 6f;
+
+        /// <summary>Which Biomes! Caverns biome the basement is carved as: a defName,
+        /// "Random" for a weighted pick, or "None" for plain solid rock. Ignored entirely
+        /// when Biomes! Caverns is not loaded.</summary>
+        public string basementBiomeChoice = BiomesCavernsCompat.RandomChoice;
+
+        /// <summary>How much of the basement the tunnel network opens up.</summary>
+        public float cavernOpenness = 0.3f;
+
+        /// <summary>Chance per worm step of widening into a chamber.</summary>
+        public float cavernChamberFreq = 0.02f;
+
+        /// <summary>How many passes of Biomes! Caverns' stalagmite scatterer to run.</summary>
+        public float cavernFormations = 1f;
+
+        // ---- cross-level travel (arrivals and departures) -------------------
+        // Read at DECISION time only (an arrival being resolved, an exit being picked),
+        // never cached into map state - which is what makes every one of these safe to
+        // flip mid-save. Defaults per the user's call: UPPER routes on, LOWER routes off,
+        // for every category - ridge paths are the default fiction, tunnel raids are the
+        // opt-in spice.
+
+        public bool crossLevelTravel = true;
+
+        public bool raiderArriveUpper = true;
+
+        public bool raiderArriveLower;
+
+        public bool raiderLeaveUpper = true;
+
+        public bool raiderLeaveLower;
+
+        public bool friendlyArriveUpper = true;
+
+        public bool friendlyArriveLower;
+
+        public bool friendlyLeaveUpper = true;
+
+        public bool friendlyLeaveLower;
+
+        public bool animalArriveUpper = true;
+
+        public bool animalArriveLower;
+
+        public bool animalLeaveUpper = true;
+
+        public bool animalLeaveLower;
+
+        // --------------------------------------------------------------------
+
+        /// <summary>Display label for the current basement-biome choice, resolving a stored
+        /// defName to its in-game label so the button never shows a raw defName.</summary>
+        private string LabelForBiomeChoice()
+        {
+            if (basementBiomeChoice == BiomesCavernsCompat.NoneChoice)
+            {
+                return "AB_BasementBiomeNone".Translate();
+            }
+            if (basementBiomeChoice == BiomesCavernsCompat.VanillaChoice)
+            {
+                return "AB_BasementBiomeVanilla".Translate();
+            }
+            if (string.IsNullOrEmpty(basementBiomeChoice)
+                || basementBiomeChoice == BiomesCavernsCompat.RandomChoice)
+            {
+                // "Random" with no cavern biomes available resolves to vanilla caves, and
+                // the button must say so - a label that promises a cavern the generator will
+                // not produce is the kind of quiet lie that gets reported as a bug.
+                return BiomesCavernsCompat.Active
+                    ? "AB_BasementBiomeRandom".Translate()
+                    : "AB_BasementBiomeVanilla".Translate();
+            }
+            BiomeDef def = DefDatabase<BiomeDef>.GetNamedSilentFail(basementBiomeChoice);
+            return def != null ? def.LabelCap.ToString() : basementBiomeChoice;
+        }
+
+        private static readonly Color WarnRed = new Color(1f, 0.25f, 0.25f);
         private static readonly Color NoteDim = new Color(1f, 1f, 1f, 0.62f);
-
-        public void DoWindowContents(Rect inRect)
-        {
-            // Deferred landmark-list expansion (same pass-stability rule as
-            // the tab switch: the control set must not change mid-frame).
-            if (landmarksExpandedPending.HasValue)
-            {
-                landmarksExpanded = landmarksExpandedPending.Value;
-                landmarksExpandedPending = null;
-            }
-            // Vanilla TabDrawer draws the tab strip above the rect's top edge.
-            Rect content = inRect;
-            content.yMin += 42f;
-            int clickedTab = -1;
-            List<TabRecord> tabs = new List<TabRecord>(TabKeys.Length);
-            for (int i = 0; i < TabKeys.Length; i++)
-            {
-                int tabIndex = i;
-                tabs.Add(new TabRecord(TabKeys[i].Translate(), () => clickedTab = tabIndex, curTab == i));
-            }
-            Widgets.DrawMenuSection(content);
-            TabDrawer.DrawTabs(content, tabs);
-            Rect outRect = content.ContractedBy(9f);
-            if (curTab == 0)
-            {
-                // Generation tab: the right column is the live preview card
-                // (drawn outside the scroll view, fixed).
-                float pw = Mathf.Min(370f, outRect.width * 0.45f);
-                ABGenPreview.Draw(new Rect(outRect.xMax - pw, outRect.y, pw, outRect.height), this);
-                outRect.width -= pw + 10f;
-            }
-            // Gutter reserved unconditionally so content width (and measured
-            // height) never oscillates with scrollbar visibility.
-            Rect viewRect = new Rect(0f, 0f, outRect.width - 16f,
-                Mathf.Max(tabHeight[curTab], outRect.height));
-            Widgets.BeginScrollView(outRect, ref tabScroll[curTab], viewRect);
-            Listing_Standard listing = new Listing_Standard { maxOneColumn = true };
-            listing.Begin(viewRect);
-            switch (curTab)
-            {
-                case 0:
-                    DoGenerationTab(listing);
-                    break;
-                case 1:
-                    DoViewTab(listing);
-                    break;
-                case 2:
-                    DoWorkTab(listing);
-                    break;
-                case 3:
-                    DoJobsTab(listing);
-                    break;
-                case 4:
-                    DoCombatTab(listing);
-                    break;
-                case 5:
-                    DoCompatTab(listing);
-                    break;
-                default:
-                    DoAdvancedTab(listing);
-                    break;
-            }
-            TabResetRow(listing, curTab);
-            tabHeight[curTab] = listing.CurHeight + 12f;
-            listing.End();
-            Widgets.EndScrollView();
-            // Deferred switch: the drawn control set stays constant across
-            // this frame's Layout/input/Repaint passes.
-            if (clickedTab >= 0 && clickedTab != curTab)
-            {
-                curTab = clickedTab;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 0: Generation
-        // ------------------------------------------------------------------
-        private void DoGenerationTab(Listing_Standard listing)
-        {
-            bool showPeaks = naturalPeaks;
-            // Basement-environment visibility snapshot (constant across the
-            // frame's passes, IMGUI discipline). bt drives which sub-options show.
-            string bt = BasementEnv.Sanitize(basementType);
-            bool showCaverns = bt == BasementEnv.Caverns;
-            bool showCarve = BasementEnv.IsCarveType(bt);
-            bool showUrban = bt == BasementEnv.UrbanRuins;
-
-            GUI.color = NoteDim;
-            listing.Label("AB_GenNote".Translate());
-            GUI.color = Color.white;
-            listing.Gap(4f);
-
-            listing.Label("AB_Presets".Translate(), tooltip: "AB_PresetsTip".Translate());
-            Rect presetRow = listing.GetRect(30f);
-            float bw = (presetRow.width - 18f) / 4f;
-            if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, bw, 30f), "AB_PresetDefault".Translate()))
-            {
-                ResetGeneration();
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + bw + 6f, presetRow.y, bw, 30f), "AB_PresetDramatic".Translate()))
-            {
-                ApplyPeakPreset(0.54f, 0.018f, 5, 1.4f, 1.3f, 0.2f, 1.25f);
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 2f, presetRow.y, bw, 30f), "AB_PresetSubtle".Translate()))
-            {
-                ApplyPeakPreset(0.68f, 0.03f, 2, 0.6f, 0.4f, 0.1f, 0.75f);
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 3f, presetRow.y, bw, 30f), "AB_PresetLush".Translate()))
-            {
-                ApplyPeakPreset(0.52f, 0.02f, 4, 0.8f, 1.6f, 0.35f, 1.6f);
-            }
-            listing.GapLine(10f);
-
-            listing.CheckboxLabeled("AB_SkyBiomeInherit".Translate(), ref skyBiomeInherit, "AB_SkyBiomeInheritTip".Translate());
-            listing.CheckboxLabeled("AB_NaturalPeaks".Translate(), ref naturalPeaks, "AB_NaturalPeaksTip".Translate());
-            if (showPeaks)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                float opennessPct = Mathf.InverseLerp(0.75f, 0.45f, peakMeadowCutoff);
-                listing.Label("AB_PlateauOpenness".Translate() + ": " + opennessPct.ToStringPercent(), tooltip: "AB_PlateauOpennessTip".Translate());
-                peakMeadowCutoff = Mathf.Lerp(0.75f, 0.45f, listing.Slider(opennessPct, 0f, 1f));
-                float scalePct = Mathf.InverseLerp(0.048f, 0.012f, peakMeadowScale);
-                listing.Label("AB_MeadowScale".Translate() + ": " + scalePct.ToStringPercent(), tooltip: "AB_MeadowScaleTip".Translate());
-                peakMeadowScale = Mathf.Lerp(0.048f, 0.012f, listing.Slider(scalePct, 0f, 1f));
-                listing.Label("AB_TerraceMax".Translate() + ": " + peakTerraceMax, tooltip: "AB_TerraceMaxTip".Translate());
-                peakTerraceMax = Mathf.RoundToInt(listing.Slider(peakTerraceMax, 1f, 6f));
-                listing.Label("AB_OutcropDensity".Translate() + ": " + peakOutcropDensity.ToStringPercent(), tooltip: "AB_OutcropDensityTip".Translate());
-                peakOutcropDensity = listing.Slider(peakOutcropDensity, 0f, 2f);
-                listing.Label("AB_Tarns".Translate() + ": " + peakTarns.ToStringPercent(), tooltip: "AB_TarnsTip".Translate());
-                peakTarns = listing.Slider(peakTarns, 0f, 2f);
-                listing.Label("AB_HiddenValleys".Translate() + ": " + peakHiddenValleys.ToStringPercent(), tooltip: "AB_HiddenValleysTip".Translate());
-                peakHiddenValleys = listing.Slider(peakHiddenValleys, 0f, 1f);
-                listing.Label("AB_PeakSoil".Translate() + ": " + peakSoilFraction.ToStringPercent(), tooltip: "AB_PeakSoilTip".Translate());
-                peakSoilFraction = listing.Slider(peakSoilFraction, 0f, 0.5f);
-                listing.Label("AB_PeakVegetation".Translate() + ": " + peakVegetation.ToStringPercent(), tooltip: "AB_PeakVegetationTip".Translate());
-                peakVegetation = listing.Slider(peakVegetation, 0f, 2f);
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            listing.Label("AB_SkyOre".Translate() + ": " + skyOreDensity.ToString("0.0"), tooltip: "AB_SkyOreTip".Translate());
-            skyOreDensity = listing.Slider(skyOreDensity, 0f, 12f);
-            listing.GapLine(10f);
-
-            listing.Label("AB_BasementOre".Translate() + ": " + basementOreDensity.ToString("0.0"), tooltip: "AB_BasementOreTip".Translate());
-            basementOreDensity = listing.Slider(basementOreDensity, 0f, 12f);
-            // Basement environment selector. Options depend on which mods are
-            // loaded (see BasementEnv): solid rock always, Biomes! Caverns,
-            // Ancient urban ruins facility, and curated foreign biomes.
-            if (listing.ButtonTextLabeled("AB_BasementEnv".Translate(), BasementEnv.LabelFor(bt), tooltip: "AB_BasementEnvTip".Translate()))
-            {
-                List<FloatMenuOption> envOptions = new List<FloatMenuOption>();
-                List<BasementEnv.Option> avail = BasementEnv.AvailableOptions();
-                for (int i = 0; i < avail.Count; i++)
-                {
-                    string id = avail[i].id;
-                    envOptions.Add(new FloatMenuOption(avail[i].label, delegate
-                    {
-                        basementType = id;
-                    }));
-                }
-                Find.WindowStack.Add(new FloatMenu(envOptions));
-            }
-            if (showCaverns)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                string current = cavernBiome == BiomesCavernsCompat.RandomChoice
-                    ? "AB_CavernBiomeRandom".Translate().ToString()
-                    : (DefDatabase<BiomeDef>.GetNamedSilentFail(cavernBiome)?.LabelCap.ToString() ?? cavernBiome);
-                if (listing.ButtonTextLabeled("AB_CavernBiome".Translate(), current, tooltip: "AB_CavernBiomeTip".Translate()))
-                {
-                    List<FloatMenuOption> options = new List<FloatMenuOption>
-                    {
-                        new FloatMenuOption("AB_CavernBiomeRandom".Translate(), delegate
-                        {
-                            cavernBiome = BiomesCavernsCompat.RandomChoice;
-                        })
-                    };
-                    List<BiomeDef> pool = BiomesCavernsCompat.CavernBiomes();
-                    for (int i = 0; i < pool.Count; i++)
-                    {
-                        BiomeDef b = pool[i];
-                        options.Add(new FloatMenuOption(b.LabelCap, delegate
-                        {
-                            cavernBiome = b.defName;
-                        }));
-                    }
-                    Find.WindowStack.Add(new FloatMenu(options));
-                }
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            if (showCarve)
-            {
-                // Openness + chamber frequency drive the worm carve for every
-                // carve-type basement (Caverns and foreign biomes alike).
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.Label("AB_CavernOpenness".Translate() + ": " + cavernOpenness.ToStringPercent(), tooltip: "AB_CavernOpennessTip".Translate());
-                cavernOpenness = listing.Slider(cavernOpenness, 0.1f, 0.6f);
-                listing.Label("AB_ChamberFreq".Translate() + ": " + (cavernChamberFreq * 100f).ToString("0.0"), tooltip: "AB_ChamberFreqTip".Translate());
-                cavernChamberFreq = listing.Slider(cavernChamberFreq, 0.01f, 0.05f);
-                if (showCaverns)
-                {
-                    listing.Label("AB_CavernFormations".Translate() + ": " + cavernFormations.ToStringPercent(), tooltip: "AB_CavernFormationsTip".Translate());
-                    cavernFormations = listing.Slider(cavernFormations, 0f, 2f);
-                }
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            if (showUrban)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.CheckboxLabeled("AB_UrbanRuinsOccupants".Translate(), ref urbanRuinsOccupants, "AB_UrbanRuinsOccupantsTip".Translate());
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            listing.CheckboxLabeled("AB_RevealBasement".Translate(), ref basementRevealed, "AB_RevealBasementTip".Translate());
-            listing.GapLine(10f);
-            DoLandmarkSection(listing);
-        }
-
-        private void DoLandmarkSection(Listing_Standard listing)
-        {
-            if (!ABSkyLandmarks.SystemActive)
-            {
-                GUI.color = NoteDim;
-                listing.Label("AB_LandmarksNeedOdyssey".Translate());
-                GUI.color = Color.white;
-                return;
-            }
-            bool showLandmarks = skyLandmarks;
-            bool expanded = landmarksExpanded;
-            listing.CheckboxLabeled("AB_SkyLandmarks".Translate(), ref skyLandmarks, "AB_SkyLandmarksTip".Translate());
-            if (!showLandmarks)
-            {
-                return;
-            }
-            listing.Indent(16f);
-            listing.ColumnWidth -= 16f;
-            listing.Label("AB_LandmarkChance".Translate() + ": " + skyLandmarkChance.ToStringPercent(), tooltip: "AB_LandmarkChanceTip".Translate());
-            skyLandmarkChance = listing.Slider(skyLandmarkChance, 0f, 1f);
-            listing.Label("AB_LandmarkMax".Translate() + ": " + skyLandmarkMax, tooltip: "AB_LandmarkMaxTip".Translate());
-            skyLandmarkMax = Mathf.RoundToInt(listing.Slider(skyLandmarkMax, 1f, 3f));
-            List<LandmarkDef> all = ABSkyLandmarks.AllLandmarks();
-            if (listing.ButtonText((expanded ? "AB_LandmarksCollapse" : "AB_LandmarksExpand").Translate(all.Count)))
-            {
-                landmarksExpandedPending = !expanded;
-            }
-            if (expanded)
-            {
-                for (int i = 0; i < all.Count; i++)
-                {
-                    LandmarkDef def = all[i];
-                    Rect row = listing.GetRect(28f);
-                    Widgets.DrawHighlightIfMouseover(row);
-                    Rect iconRect = new Rect(row.x, row.y + 3f, 22f, 22f);
-                    try
-                    {
-                        if (!def.iconTexturePath.NullOrEmpty())
-                        {
-                            GUI.DrawTexture(iconRect, def.Texture, ScaleMode.ScaleToFit);
-                        }
-                    }
-                    catch
-                    {
-                        // icon missing: label carries the row
-                    }
-                    string label = ABSkyLandmarks.DisplayLabel(def).CapitalizeFirst();
-                    string source = def.modContentPack?.Name;
-                    Widgets.Label(new Rect(row.x + 28f, row.y + 4f, row.width - 28f - 116f, 22f), label);
-                    if (!source.NullOrEmpty())
-                    {
-                        GUI.color = NoteDim;
-                        Text.Font = GameFont.Small;
-                        Vector2 ls = Text.CalcSize(label);
-                        float sx = row.x + 28f + Mathf.Min(ls.x, row.width - 28f - 200f) + 8f;
-                        Widgets.Label(new Rect(sx, row.y + 4f, Mathf.Max(0f, row.xMax - 116f - sx), 22f), source);
-                        GUI.color = Color.white;
-                    }
-                    string tip = ABSkyLandmarks.DescriptionFor(def);
-                    if (!tip.NullOrEmpty())
-                    {
-                        TooltipHandler.TipRegion(new Rect(row.x, row.y, row.width - 116f, row.height), tip);
-                    }
-                    int mode = ABSkyLandmarks.ModeFor(this, def);
-                    if (Widgets.ButtonText(new Rect(row.xMax - 112f, row.y + 2f, 110f, 24f), ABSkyLandmarks.ModeLabel(mode)))
-                    {
-                        ABSkyLandmarks.SetMode(this, def, (mode + 1) % 4);
-                    }
-                }
-            }
-            listing.ColumnWidth += 16f;
-            listing.Outdent(16f);
-        }
-
-        /// <summary>Peak-look preset: cutoff, noise scale, terrace, outcrops,
-        /// tarns, soil, vegetation. Hidden valleys and ore stay untouched.</summary>
-        private void ApplyPeakPreset(float cutoff, float scale, int terrace, float outcrops,
-            float tarns, float soil, float vegetation)
-        {
-            naturalPeaks = true;
-            peakMeadowCutoff = cutoff;
-            peakMeadowScale = scale;
-            peakTerraceMax = terrace;
-            peakOutcropDensity = outcrops;
-            peakTarns = tarns;
-            peakSoilFraction = soil;
-            peakVegetation = vegetation;
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 1: View and camera
-        // ------------------------------------------------------------------
-        private void DoViewTab(Listing_Standard listing)
-        {
-            bool showRevealWidth = drawWallReveal;
-
-            listing.CheckboxLabeled("AB_ShowLiveBelow".Translate(), ref showLiveBelow, "AB_ShowLiveBelowTip".Translate());
-            listing.Label("AB_BelowDim".Translate() + ": " + belowDim.ToStringPercent(), tooltip: "AB_BelowDimTip".Translate());
-            belowDim = listing.Slider(belowDim, 0f, 0.8f);
-            listing.CheckboxLabeled("AB_SlabEdge".Translate(), ref drawSlabEdge, "AB_SlabEdgeTip".Translate());
-            listing.CheckboxLabeled("AB_WallReveal".Translate(), ref drawWallReveal, "AB_WallRevealTip".Translate());
-            if (showRevealWidth)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.Label("AB_WallRevealWidth".Translate() + ": " + wallRevealWidth.ToString("0.00"), tooltip: "AB_WallRevealWidthTip".Translate());
-                float newRevealWidth = listing.Slider(wallRevealWidth, 0.25f, 0.6f);
-                if (Mathf.Abs(newRevealWidth - wallRevealWidth) > 0.0005f)
-                {
-                    // Strip geometry bakes the width into clipped verts;
-                    // reprint so the slider applies live.
-                    DirtyBelowThingsLayers();
-                }
-                wallRevealWidth = newRevealWidth;
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            listing.Label("AB_BelowScale".Translate() + ": " + belowThingScale.ToStringPercent(), tooltip: "AB_BelowScaleTip".Translate());
-            float newBelowScale = listing.Slider(belowThingScale, 0.7f, 1f);
-            if (Mathf.Abs(newBelowScale - belowThingScale) > 0.0005f)
-            {
-                // Printed below-things bake the scale into their vertices;
-                // reprint the layers so the slider applies live.
-                DirtyBelowThingsLayers();
-            }
-            belowThingScale = newBelowScale;
-            listing.GapLine(10f);
-            listing.CheckboxLabeled("AB_SelectBelowInPlace".Translate(), ref selectBelowInPlace, "AB_SelectBelowInPlaceTip".Translate());
-            listing.CheckboxLabeled("AB_BelowItemOverlays".Translate(), ref belowItemOverlays, "AB_BelowItemOverlaysTip".Translate());
-            listing.CheckboxLabeled("AB_BelowLighting".Translate(), ref belowLighting, "AB_BelowLightingTip".Translate());
-            listing.CheckboxLabeled("AB_ShowCeilingHint".Translate(), ref showCeilingHint, "AB_ShowCeilingHintTip".Translate());
-            listing.CheckboxLabeled("AB_ShowLevelWidget".Translate(), ref showLevelWidget, "AB_ShowLevelWidgetTip".Translate());
-            listing.CheckboxLabeled("AB_OneColonistBar".Translate(), ref oneColonistBar, "AB_OneColonistBarTip".Translate());
-            listing.CheckboxLabeled("AB_CameraFollowStairs".Translate(), ref cameraFollowStairs, "AB_CameraFollowStairsTip".Translate());
-            listing.CheckboxLabeled("AB_CameraLockKeybind".Translate(), ref cameraLockKeybind, "AB_CameraLockKeybindTip".Translate());
-            listing.CheckboxLabeled("AB_ScrollLevelKeybind".Translate(), ref scrollLevelKeybind, "AB_ScrollLevelKeybindTip".Translate());
-            listing.CheckboxLabeled("AB_ClimbAnimations".Translate(), ref climbAnimations, "AB_ClimbAnimationsTip".Translate());
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 2: Work and logistics
-        // ------------------------------------------------------------------
-        private void DoWorkTab(Listing_Standard listing)
-        {
-            // Snapshot before the checkbox mutates it, so measure and draw
-            // passes of the same frame agree on row count.
-            bool showPriorityWork = crossLevelWork;
-
-            listing.CheckboxLabeled("AB_CrossLevelWork".Translate(), ref crossLevelWork, "AB_CrossLevelWorkTip".Translate());
-            if (showPriorityWork)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.CheckboxLabeled("AB_PriorityCrossLevelWork".Translate(), ref priorityCrossLevelWork, "AB_PriorityCrossLevelWorkTip".Translate());
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            listing.CheckboxLabeled("AB_CrossLevelOrders".Translate(), ref crossLevelOrders, "AB_CrossLevelOrdersTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelHauling".Translate(), ref crossLevelHauling, "AB_CrossLevelHaulingTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelSupply".Translate(), ref crossLevelSupply, "AB_CrossLevelSupplyTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelNeeds".Translate(), ref crossLevelNeeds, "AB_CrossLevelNeedsTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelPrisoners".Translate(), ref crossLevelPrisoners, "AB_CrossLevelPrisonersTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelSocial".Translate(), ref crossLevelSocial, "AB_CrossLevelSocialTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelRituals".Translate(), ref crossLevelRituals, "AB_CrossLevelRitualsTip".Translate());
-            listing.CheckboxLabeled("AB_AnimalWander".Translate(), ref crossLevelAnimalWander, "AB_AnimalWanderTip".Translate());
-            listing.CheckboxLabeled("AB_IdleReturnHome".Translate(), ref idleReturnHome, "AB_IdleReturnHomeTip".Translate());
-            listing.CheckboxLabeled("AB_CrossLevelPipes".Translate(), ref crossLevelPipes, "AB_CrossLevelPipesTip".Translate());
-            // crossLevelTemperature checkbox removed with the stairwell heat
-            // exchange (user directive); the field stays scribed for old configs.
-            listing.GapLine(10f);
-            listing.Label("AB_ClimbTime".Translate() + ": " + climbTimeMultiplier.ToStringPercent(), tooltip: "AB_ClimbTimeTip".Translate());
-            climbTimeMultiplier = listing.Slider(climbTimeMultiplier, 0.25f, 3f);
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 3: Combat and threats
-        // ------------------------------------------------------------------
-        // ------------------------------------------------------------------
-        // Tab 3: Job scanning
-        // ------------------------------------------------------------------
-        private void DoJobsTab(Listing_Standard listing)
-        {
-            GUI.color = NoteDim;
-            listing.Label("AB_JobsNote".Translate());
-            GUI.color = Color.white;
-            listing.Gap(4f);
-
-            listing.Label("AB_JobsPresets".Translate(), tooltip: "AB_JobsPresetsTip".Translate());
-            Rect presetRow = listing.GetRect(30f);
-            float bw = (presetRow.width - 18f) / 4f;
-            if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, bw, 30f), "AB_JobsPresetRelaxed".Translate()))
-            {
-                ApplyJobPreset(1, 900, 2400, 900);
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + bw + 6f, presetRow.y, bw, 30f), "AB_JobsPresetDefault".Translate()))
-            {
-                ApplyJobPreset(2, 450, 1200, 600);
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 2f, presetRow.y, bw, 30f), "AB_JobsPresetEager".Translate()))
-            {
-                ApplyJobPreset(4, 250, 600, 300);
-            }
-            if (Widgets.ButtonText(new Rect(presetRow.x + (bw + 6f) * 3f, presetRow.y, bw, 30f), "AB_JobsPresetFrantic".Translate()))
-            {
-                ApplyJobPreset(8, 120, 300, 150);
-            }
-            listing.GapLine(10f);
-
-            listing.Label("AB_JobProbeBudget".Translate() + ": " + jobProbeBudget, tooltip: "AB_JobProbeBudgetTip".Translate());
-            jobProbeBudget = Mathf.RoundToInt(listing.Slider(jobProbeBudget, 1f, 8f));
-            listing.Label("AB_JobEmptyScanCooldown".Translate() + ": " + TicksLabel(jobEmptyScanCooldown), tooltip: "AB_JobEmptyScanCooldownTip".Translate());
-            jobEmptyScanCooldown = RoundTicks(listing.Slider(jobEmptyScanCooldown, 100f, 1500f));
-            listing.Label("AB_JobMigrationCooldown".Translate() + ": " + TicksLabel(jobMigrationCooldown), tooltip: "AB_JobMigrationCooldownTip".Translate());
-            jobMigrationCooldown = RoundTicks(listing.Slider(jobMigrationCooldown, 300f, 3600f));
-            listing.Label("AB_JobCacheTtl".Translate() + ": " + TicksLabel(jobCacheTtl), tooltip: "AB_JobCacheTtlTip".Translate());
-            jobCacheTtl = RoundTicks(listing.Slider(jobCacheTtl, 150f, 1500f));
-            listing.GapLine(10f);
-
-            listing.CheckboxLabeled("AB_SupplyConstruction".Translate(), ref supplyConstruction, "AB_SupplyConstructionTip".Translate());
-            listing.CheckboxLabeled("AB_SupplyBills".Translate(), ref supplyBills, "AB_SupplyBillsTip".Translate());
-            listing.CheckboxLabeled("AB_SupplyMeals".Translate(), ref supplyMeals, "AB_SupplyMealsTip".Translate());
-            listing.CheckboxLabeled("AB_SupplyFuel".Translate(), ref supplyFuel, "AB_SupplyFuelTip".Translate());
-            listing.CheckboxLabeled("AB_FetchFromOtherLevels".Translate(), ref fetchFromOtherLevels, "AB_FetchFromOtherLevelsTip".Translate());
-        }
-
-        private void ApplyJobPreset(int budget, int emptyScan, int migration, int ttl)
-        {
-            jobProbeBudget = budget;
-            jobEmptyScanCooldown = emptyScan;
-            jobMigrationCooldown = migration;
-            jobCacheTtl = ttl;
-        }
-
-        private void ResetJobs()
-        {
-            ApplyJobPreset(2, 450, 1200, 600);
-            supplyConstruction = true;
-            supplyBills = true;
-            supplyMeals = true;
-            supplyFuel = true;
-            fetchFromOtherLevels = true;
-        }
-
-        private static string TicksLabel(int ticks)
-        {
-            return ticks + " (" + (ticks / 60f).ToString("0.0") + "s)";
-        }
-
-        private static int RoundTicks(float v)
-        {
-            return Mathf.RoundToInt(v / 10f) * 10;
-        }
-
-        private void DoCombatTab(Listing_Standard listing)
-        {
-            bool showAutoEngage = crossLevelCombat;
-            bool showDivert = threatBasementInfest || threatSkyDrops;
-
-            listing.CheckboxLabeled("AB_CrossLevelCombat".Translate(), ref crossLevelCombat, "AB_CrossLevelCombatTip".Translate());
-            if (showAutoEngage)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.CheckboxLabeled("AB_CrossLevelAutoEngage".Translate(), ref crossLevelAutoEngage, "AB_CrossLevelAutoEngageTip".Translate());
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-            listing.CheckboxLabeled("AB_PodTransit".Translate(), ref podTransit, "AB_PodTransitTip".Translate());
-            listing.CheckboxLabeled("AB_SkyVisitors".Translate(), ref skyVisitorArrivals, "AB_SkyVisitorsTip".Translate());
-            listing.CheckboxLabeled("AB_HospitalityRoaming".Translate(), ref hospitalityRoaming, "AB_HospitalityRoamingTip".Translate());
-            listing.GapLine(10f);
-            listing.CheckboxLabeled("AB_ThreatBasementInfest".Translate(), ref threatBasementInfest, "AB_ThreatBasementInfestTip".Translate());
-            listing.CheckboxLabeled("AB_ThreatSkyDrops".Translate(), ref threatSkyDrops, "AB_ThreatSkyDropsTip".Translate());
-            if (showDivert)
-            {
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.Label("AB_ThreatDivertChance".Translate() + ": " + threatDivertChance.ToStringPercent(), tooltip: "AB_ThreatDivertChanceTip".Translate());
-                threatDivertChance = listing.Slider(threatDivertChance, 0.05f, 1f);
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 5: Compat (per-mod integration options; sections appear only
-        // when the host mod is loaded)
-        // ------------------------------------------------------------------
-        private void DoCompatTab(Listing_Standard listing)
-        {
-            GUI.color = NoteDim;
-            listing.Label("AB_CompatNote".Translate());
-            GUI.color = Color.white;
-            listing.Gap(6f);
-
-            bool any = false;
-
-            if (AncientUrbanRuinsCompat.Active)
-            {
-                any = true;
-                listing.Label("AB_CompatAUR".Translate());
-                listing.Indent(16f);
-                listing.ColumnWidth -= 16f;
-                listing.CheckboxLabeled("AB_AllowUrbanRuinsLevels".Translate(), ref allowLevelsOnUrbanRuins, "AB_AllowUrbanRuinsLevelsTip".Translate());
-                listing.ColumnWidth += 16f;
-                listing.Outdent(16f);
-                listing.GapLine(10f);
-            }
-
-            if (!any)
-            {
-                GUI.color = NoteDim;
-                listing.Label("AB_CompatNoneDetected".Translate());
-                GUI.color = Color.white;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Tab 6: Advanced
-        // ------------------------------------------------------------------
-        private void DoAdvancedTab(Listing_Standard listing)
-        {
-            listing.CheckboxLabeled("AB_ColumnWealth".Translate(), ref columnWealth, "AB_ColumnWealthTip".Translate());
-            listing.CheckboxLabeled("AB_WorldIntegration".Translate(), ref worldIntegration, "AB_WorldIntegrationTip".Translate());
-            listing.CheckboxLabeled("AB_VerboseLogging".Translate(), ref verboseLogging, "AB_VerboseLoggingTip".Translate());
-            listing.GapLine(10f);
-
-            listing.Label("AB_GuardPanel".Translate(), tooltip: "AB_GuardPanelTip".Translate());
-            ABGuardSwitch[] guards = ABGuard.AllSwitches;
-            int tripped = 0;
-            for (int i = 0; i < guards.Length; i++)
-            {
-                ABGuardSwitch g = guards[i];
-                if (g.IsOn)
-                {
-                    continue;
-                }
-                tripped++;
-                Rect row = listing.GetRect(28f);
-                GUI.color = ColorLibrary.RedReadable;
-                TaggedString trippedLabel = g.LastCulprit != null
-                    ? "AB_GuardTrippedBecause".Translate(g.Name, g.LastContext ?? "?", g.LastCulprit)
-                    : "AB_GuardTripped".Translate(g.Name, g.LastContext ?? "?");
-                Widgets.Label(new Rect(row.x, row.y + 3f, row.width - 100f, 24f), trippedLabel);
-                GUI.color = Color.white;
-                if (Widgets.ButtonText(new Rect(row.xMax - 94f, row.y + 1f, 92f, 26f), "AB_ReArm".Translate()))
-                {
-                    ABGuard.ReArm(g);
-                }
-            }
-            if (tripped == 0)
-            {
-                GUI.color = OkGreen;
-                listing.Label("AB_GuardAllGreen".Translate(guards.Length));
-                GUI.color = Color.white;
-            }
-            listing.GapLine(10f);
-
-            if (listing.ButtonText("AB_ResetAll".Translate()))
-            {
-                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "AB_ResetAllConfirm".Translate(), ResetAll, destructive: true));
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Resets
-        // ------------------------------------------------------------------
-        private void TabResetRow(Listing_Standard listing, int tab)
-        {
-            listing.Gap(14f);
-            if (listing.ButtonText("AB_ResetTab".Translate()))
-            {
-                ResetTab(tab);
-            }
-        }
-
-        private void ResetTab(int tab)
-        {
-            switch (tab)
-            {
-                case 0:
-                    ResetGeneration();
-                    break;
-                case 1:
-                    ResetView();
-                    break;
-                case 2:
-                    ResetWork();
-                    break;
-                case 3:
-                    ResetJobs();
-                    break;
-                case 4:
-                    ResetCombat();
-                    break;
-                case 5:
-                    ResetCompat();
-                    break;
-                default:
-                    ResetAdvanced();
-                    break;
-            }
-        }
-
-        // Defaults below must mirror the field initializers above.
-        private void ResetGeneration()
-        {
-            skyLandmarks = true;
-            skyLandmarkChance = 0.30f;
-            skyLandmarkMax = 1;
-            landmarkModes?.Clear();
-            skyBiomeInherit = true;
-            naturalPeaks = true;
-            peakMeadowCutoff = 0.60f;
-            peakMeadowScale = 0.024f;
-            peakTerraceMax = 4;
-            peakOutcropDensity = 1f;
-            peakTarns = 1f;
-            peakHiddenValleys = 1f;
-            peakSoilFraction = 0.15f;
-            peakVegetation = 1f;
-            skyOreDensity = 6f;
-            basementOreDensity = 6f;
-            basementType = BasementEnv.SolidRock;
-            urbanRuinsOccupants = true;
-            basementRevealed = true;
-            cavernBiome = BiomesCavernsCompat.RandomChoice;
-            cavernOpenness = 0.35f;
-            cavernChamberFreq = 0.02f;
-            cavernFormations = 1f;
-        }
-
-        private void ResetView()
-        {
-            showLiveBelow = true;
-            belowItemOverlays = true;
-            belowLighting = true;
-            belowDim = 0.06f;
-            drawSlabEdge = true;
-            drawWallReveal = true;
-            wallRevealWidth = 0.5f;
-            belowThingScale = 0.85f;
-            selectBelowInPlace = true;
-            showCeilingHint = true;
-            showLevelWidget = true;
-            oneColonistBar = true;
-            cameraFollowStairs = true;
-            cameraLockKeybind = true;
-            scrollLevelKeybind = true;
-            climbAnimations = true;
-            DirtyBelowThingsLayers();
-        }
-
-        private void ResetWork()
-        {
-            crossLevelWork = true;
-            priorityCrossLevelWork = true;
-            crossLevelOrders = true;
-            crossLevelHauling = true;
-            crossLevelSupply = true;
-            crossLevelNeeds = true;
-            crossLevelPrisoners = true;
-            crossLevelSocial = true;
-            crossLevelRituals = true;
-            crossLevelAnimalWander = true;
-            idleReturnHome = true;
-            crossLevelPipes = true;
-            climbTimeMultiplier = 1f;
-        }
-
-        private void ResetCombat()
-        {
-            crossLevelCombat = true;
-            crossLevelAutoEngage = true;
-            podTransit = true;
-            threatBasementInfest = false;
-            threatSkyDrops = false;
-            threatDivertChance = 0.25f;
-        }
-
-        private void ResetAdvanced()
-        {
-            columnWealth = true;
-            worldIntegration = true;
-            verboseLogging = false;
-        }
-
-        private void ResetCompat()
-        {
-            allowLevelsOnUrbanRuins = false;
-        }
-
-        private void ResetAll()
-        {
-            ResetGeneration();
-            ResetView();
-            ResetWork();
-            ResetJobs();
-            ResetCombat();
-            ResetCompat();
-            ResetAdvanced();
-        }
-
-        private static void DirtyBelowThingsLayers()
-        {
-            if (Current.ProgramState != ProgramState.Playing)
-            {
-                return;
-            }
-            List<Map> maps = Find.Maps;
-            for (int i = 0; i < maps.Count; i++)
-            {
-                LevelComp comp = maps[i].Levels();
-                if (comp != null && comp.level > 0)
-                {
-                    maps[i].mapDrawer.WholeMapChanged((ulong)ABDefOf.AB_BelowThings);
-                }
-            }
-        }
 
         public override void ExposeData()
         {
             base.ExposeData();
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
-            Scribe_Values.Look(ref showLiveBelow, "showLiveBelow", true);
-            Scribe_Values.Look(ref selectBelowInPlace, "selectBelowInPlace", true);
-            Scribe_Values.Look(ref belowItemOverlays, "belowItemOverlays", true);
-            Scribe_Values.Look(ref belowLighting, "belowLighting", true);
-            Scribe_Values.Look(ref showCeilingHint, "showCeilingHint", true);
-            Scribe_Values.Look(ref showLevelWidget, "showLevelWidget", true);
-            Scribe_Values.Look(ref oneColonistBar, "oneColonistBar", true);
-            Scribe_Values.Look(ref cameraFollowStairs, "cameraFollowStairs", true);
-            Scribe_Values.Look(ref cameraLockKeybind, "cameraLockKeybind", true);
-            Scribe_Values.Look(ref scrollLevelKeybind, "scrollLevelKeybind", true);
-            Scribe_Values.Look(ref climbAnimations, "climbAnimations", true);
-            Scribe_Values.Look(ref climbTimeMultiplier, "climbTimeMultiplier", 1f);
-            // Key renamed (belowDimLight -> belowDimHeight) with the height
-            // rework so the old pit-strength dim does not carry over.
-            Scribe_Values.Look(ref belowDim, "belowDimHeight", 0.06f);
-            Scribe_Values.Look(ref drawSlabEdge, "drawSlabEdge", true);
-            Scribe_Values.Look(ref drawWallReveal, "drawWallReveal", true);
-            Scribe_Values.Look(ref wallRevealWidth, "wallRevealWidth", 0.5f);
-            Scribe_Values.Look(ref belowThingScale, "belowThingScale", 0.85f);
-            Scribe_Values.Look(ref crossLevelWork, "crossLevelWork", true);
-            Scribe_Values.Look(ref priorityCrossLevelWork, "priorityCrossLevelWork", true);
-            Scribe_Values.Look(ref crossLevelOrders, "crossLevelOrders", true);
-            Scribe_Values.Look(ref crossLevelCombat, "crossLevelCombat", true);
-            Scribe_Values.Look(ref crossLevelAutoEngage, "crossLevelAutoEngage", true);
-            Scribe_Values.Look(ref idleReturnHome, "idleReturnHome", true);
-            Scribe_Values.Look(ref crossLevelHauling, "crossLevelHauling", true);
-            Scribe_Values.Look(ref crossLevelSupply, "crossLevelSupply", true);
-            Scribe_Values.Look(ref crossLevelNeeds, "crossLevelNeeds", true);
-            Scribe_Values.Look(ref jobProbeBudget, "jobProbeBudget", 2);
-            Scribe_Values.Look(ref jobEmptyScanCooldown, "jobEmptyScanCooldown", 450);
-            Scribe_Values.Look(ref jobMigrationCooldown, "jobMigrationCooldown", 1200);
-            Scribe_Values.Look(ref jobCacheTtl, "jobCacheTtl", 600);
-            Scribe_Values.Look(ref supplyConstruction, "supplyConstruction", true);
-            Scribe_Values.Look(ref supplyBills, "supplyBills", true);
-            Scribe_Values.Look(ref supplyMeals, "supplyMeals", true);
-            Scribe_Values.Look(ref supplyFuel, "supplyFuel", true);
-            Scribe_Values.Look(ref fetchFromOtherLevels, "fetchFromOtherLevels", true);
-            Scribe_Values.Look(ref crossLevelPrisoners, "crossLevelPrisoners", true);
-            Scribe_Values.Look(ref crossLevelAnimalWander, "crossLevelAnimalWander", true);
-            Scribe_Values.Look(ref crossLevelRituals, "crossLevelRituals", true);
-            Scribe_Values.Look(ref crossLevelSocial, "crossLevelSocial", true);
-            Scribe_Values.Look(ref crossLevelPipes, "crossLevelPipes", true);
-            Scribe_Values.Look(ref podTransit, "podTransit", true);
-            Scribe_Values.Look(ref skyVisitorArrivals, "skyVisitorArrivals", true);
-            Scribe_Values.Look(ref hospitalityRoaming, "hospitalityRoaming", true);
-            Scribe_Values.Look(ref crossLevelTemperature, "crossLevelTemperature", true);
-            Scribe_Values.Look(ref threatBasementInfest, "threatBasementInfest", false);
-            Scribe_Values.Look(ref threatSkyDrops, "threatSkyDrops", false);
-            Scribe_Values.Look(ref threatDivertChance, "threatDivertChance", 0.25f);
-            Scribe_Values.Look(ref columnWealth, "columnWealth", true);
-            Scribe_Values.Look(ref worldIntegration, "worldIntegration", true);
-            Scribe_Values.Look(ref allowLevelsOnUrbanRuins, "allowLevelsOnUrbanRuins", false);
-            Scribe_Values.Look(ref cavernBasements, "cavernBasements", true);
-            Scribe_Values.Look(ref cavernBiome, "cavernBiome", BiomesCavernsCompat.RandomChoice);
-            Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.35f);
+            Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
+            Scribe_Values.Look(ref pathHeuristic, "pathHeuristic", 1f);
+            Scribe_Values.Look(ref upperLevels, "upperLevels", 1);
+            Scribe_Values.Look(ref lowerLevels, "lowerLevels", 1);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
             Scribe_Values.Look(ref skyBiomeInherit, "skyBiomeInherit", true);
             Scribe_Values.Look(ref peakSoilFraction, "peakSoilFraction", 0.15f);
-            Scribe_Values.Look(ref peakVegetation, "peakVegetation", 1f);
             Scribe_Values.Look(ref peakMeadowCutoff, "peakMeadowCutoff", 0.60f);
             Scribe_Values.Look(ref peakMeadowScale, "peakMeadowScale", 0.024f);
             Scribe_Values.Look(ref peakTerraceMax, "peakTerraceMax", 4);
-            Scribe_Values.Look(ref peakOutcropDensity, "peakOutcropDensity", 1f);
-            Scribe_Values.Look(ref peakTarns, "peakTarns", 1f);
-            Scribe_Values.Look(ref peakHiddenValleys, "peakHiddenValleys", 1f);
-            Scribe_Values.Look(ref skyOreDensity, "skyOreDensity", 6f);
+            Scribe_Values.Look(ref skyVegetationDensity, "skyVegetationDensity", 1f);
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
+            Scribe_Values.Look(ref basementBiomeChoice, "basementBiomeChoice",
+                BiomesCavernsCompat.RandomChoice);
+            Scribe_Values.Look(ref cavernOpenness, "cavernOpenness", 0.3f);
             Scribe_Values.Look(ref cavernChamberFreq, "cavernChamberFreq", 0.02f);
             Scribe_Values.Look(ref cavernFormations, "cavernFormations", 1f);
-            Scribe_Values.Look(ref basementType, "basementType", BasementEnv.SolidRock);
-            Scribe_Values.Look(ref urbanRuinsOccupants, "urbanRuinsOccupants", true);
-            Scribe_Values.Look(ref basementRevealed, "basementRevealed", true);
-            Scribe_Values.Look(ref basementMigrated, "basementMigrated", false);
-            // One-time migration from the old cavernBasements bool: a config
-            // predating basementType had caverns on by default, so carry that
-            // choice forward (else solid rock). New configs save basementMigrated
-            // = true and skip this.
-            if (Scribe.mode == LoadSaveMode.LoadingVars && !basementMigrated)
+            Scribe_Values.Look(ref crossLevelTravel, "crossLevelTravel", true);
+            Scribe_Values.Look(ref raiderArriveUpper, "raiderArriveUpper", true);
+            Scribe_Values.Look(ref raiderArriveLower, "raiderArriveLower", false);
+            Scribe_Values.Look(ref raiderLeaveUpper, "raiderLeaveUpper", true);
+            Scribe_Values.Look(ref raiderLeaveLower, "raiderLeaveLower", false);
+            Scribe_Values.Look(ref friendlyArriveUpper, "friendlyArriveUpper", true);
+            Scribe_Values.Look(ref friendlyArriveLower, "friendlyArriveLower", false);
+            Scribe_Values.Look(ref friendlyLeaveUpper, "friendlyLeaveUpper", true);
+            Scribe_Values.Look(ref friendlyLeaveLower, "friendlyLeaveLower", false);
+            Scribe_Values.Look(ref animalArriveUpper, "animalArriveUpper", true);
+            Scribe_Values.Look(ref animalArriveLower, "animalArriveLower", false);
+            Scribe_Values.Look(ref animalLeaveUpper, "animalLeaveUpper", true);
+            Scribe_Values.Look(ref animalLeaveLower, "animalLeaveLower", false);
+            Scribe_Values.Look(ref depthFalloff, "depthFalloff", true);
+            Scribe_Values.Look(ref depthFalloffPerLevel, "depthFalloffPerLevel",
+                ABDepthView.DefaultFalloff);
+            Scribe_Values.Look(ref clampZoomToLevel, "clampZoomToLevel", true);
+            Scribe_Values.Look(ref belowPawnCache, "belowPawnCache",
+                ABBelowRenderCache.ModeAuto);
+            Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
+            Scribe_Collections.Look(ref deepTempOffsets, "deepTempOffsets", LookMode.Value);
+            Scribe_Collections.Look(ref skyWindFactors, "skyWindFactors", LookMode.Value);
+            if (Scribe.mode == LoadSaveMode.PostLoadInit || Scribe.mode == LoadSaveMode.LoadingVars)
             {
-                basementType = cavernBasements ? BasementEnv.Caverns : BasementEnv.SolidRock;
-                basementMigrated = true;
+                EnsureClimateLists();
             }
-            Scribe_Values.Look(ref skyLandmarks, "skyLandmarks", true);
-            Scribe_Values.Look(ref skyLandmarkChance, "skyLandmarkChance", 0.30f);
-            Scribe_Values.Look(ref skyLandmarkMax, "skyLandmarkMax", 1);
-            Scribe_Collections.Look(ref landmarkModes, "landmarkModes", LookMode.Value, LookMode.Value);
+        }
+
+        // ---- window ---------------------------------------------------------
+
+        private enum Tab
+        {
+            Performance,
+            Visuals,
+            Climate,
+            Sky,
+            Basement,
+            Arrivals,
+            Diagnostics
+        }
+
+        private Tab tab = Tab.Performance;
+
+        private Vector2 scroll;
+
+        /// <summary>Content height PER TAB, measured from the previous frame's listing. A
+        /// scroll view needs its content height up front and a Listing_Standard only knows
+        /// how tall it was after drawing, so the value always lags a frame. Kept per tab
+        /// rather than shared: one shared value meant switching from a short tab to a tall
+        /// one sized the scroll region from the WRONG tab for a frame.</summary>
+        private readonly float[] viewHeights = { 600f, 600f, 600f, 600f, 600f, 600f, 600f };
+
+        /// <summary>Rebuilt every frame because <see cref="TabRecord.selected"/> is captured
+        /// by value at construction. One reused list rather than seven allocations a frame.</summary>
+        private readonly List<TabRecord> tabRecords = new List<TabRecord>(7);
+
+        /// <summary>
+        /// VANILLA TABS, DRAWN THE WAY EVERY VANILLA WINDOW DRAWS THEM.
+        ///
+        /// ⚠ THIS WAS A HAND-DRAWN BUTTON ROW AND THE NOTE EXPLAINING WHY WAS WRONG. The
+        /// old comment blamed <c>TabDrawer.DrawTabs</c> for tabs that "rendered but never
+        /// switched", on the theory that its layout contract is owned by the host dialog.
+        /// It was not TabDrawer: the blank panes were the scroll-view height latch fixed
+        /// further down this method, which clipped every tab that did not happen to fit the
+        /// initial 600px on its first frame. Swapping the widget out only hid the real bug
+        /// behind a row of buttons that does not look like tabs - the selected one was a
+        /// flat tinted box with no tab shape at all, which is exactly what the report showed.
+        ///
+        /// TabDrawer paints its row in the strip ABOVE the rect it is handed, so the body
+        /// rect starts one tab-height down and the row lands INSIDE inRect rather than over
+        /// the dialog's own header. That is the same two lines vanilla uses in every
+        /// MainTabWindow and ITab, and it is the whole of the layout contract.
+        /// </summary>
+        public void DoWindowContents(Rect inRect)
+        {
+            EnsureClimateLists();
+
+            Rect body = new Rect(inRect.x, inRect.y + TabDrawer.TabHeight,
+                inRect.width, inRect.height - TabDrawer.TabHeight);
+            Widgets.DrawMenuSection(body);
+
+            tabRecords.Clear();
+            AddTab("AB_TabPerformance", Tab.Performance);
+            AddTab("AB_TabVisuals", Tab.Visuals);
+            AddTab("AB_TabClimate", Tab.Climate);
+            AddTab("AB_TabSky", Tab.Sky);
+            AddTab("AB_TabBasement", Tab.Basement);
+            AddTab("AB_TabArrivals", Tab.Arrivals);
+            AddTab("AB_TabDiagnostics", Tab.Diagnostics);
+            TabDrawer.DrawTabs(body, tabRecords);
+
+            int index = (int)tab;
+            Rect inner = body.ContractedBy(10f);
+
+
+            Rect view = new Rect(0f, 0f, inner.width - 20f, viewHeights[index]);
+            Widgets.BeginScrollView(inner, ref scroll, view);
+            Listing_Standard list = new Listing_Standard();
+            list.Begin(view);
+            // A settings panel that shows its own failure beats one that silently draws
+            // nothing. RimWorld catches exceptions per-window and, depending on which GUI
+            // event they land in, a pane can come up blank with nothing reaching the log at
+            // all - which is precisely the state this panel was in.
+            try
+            {
+                switch (tab)
+                {
+                    case Tab.Performance: DoPerformance(list); break;
+                    case Tab.Visuals: DoVisuals(list); break;
+                    case Tab.Climate: DoClimate(list); break;
+                    case Tab.Sky: DoSky(list); break;
+                    case Tab.Basement: DoBasement(list); break;
+                    case Tab.Arrivals: DoArrivals(list); break;
+                    default: DoDiagnostics(list); break;
+                }
+            }
+            catch (Exception e)
+            {
+                Color prev = GUI.color;
+                GUI.color = WarnRed;
+                list.Label("Settings tab '" + tab + "' failed to draw:");
+                list.Label(e.GetType().Name + ": " + e.Message);
+                GUI.color = prev;
+                Log.ErrorOnce(ABLog.Tag + " settings tab " + tab + " threw: " + e,
+                    0x5E77 ^ (int)tab);
+            }
+            // ⚠ NEVER LET THE MEASURED HEIGHT FALL BELOW THE VIEWPORT.
+            //
+            // This is the whole of the blank-tab bug, and it is a self-sustaining latch.
+            // The scroll view needs its content height a frame in advance, so it is measured
+            // from the previous frame's CurHeight. If any frame draws short - because the
+            // content threw partway, or simply because it was the first frame - the next
+            // frame gets a window that small, which CLIPS everything past it, so the frame
+            // after measures short again. It never recovers. Climate latched at 40px: the
+            // heading drew, everything below it was clipped, and the clipped region included
+            // the error text that would have explained why.
+            //
+            // The Performance tab escaped only because its content happened to fit inside the
+            // initial 600px on the very first frame, which is why exactly one tab worked and
+            // made this look like a dispatch problem for four launches.
+            //
+            // Flooring at the viewport height is also just correct: content shorter than the
+            // viewport should not scroll, and can never need a smaller rect than the window
+            // it sits in.
+            viewHeights[index] = Mathf.Max(list.CurHeight + 16f, inner.height);
+            list.End();
+            Widgets.EndScrollView();
+        }
+
+        private void AddTab(string key, Tab which)
+        {
+            Tab target = which; // captured by the closure, so it must be a local
+            tabRecords.Add(new TabRecord(key.Translate(), delegate
+            {
+                tab = target;
+                scroll = Vector2.zero; // a fresh tab starts at its top, not where the last one sat
+            }, tab == which));
+        }
+
+        // ---- performance tab -------------------------------------------------
+
+        /// <summary>
+        /// The cap, and the one place this mod tells a player it will not help them.
+        ///
+        /// The budget is deliberately NOT a slider. A number a player can nudge invites
+        /// nudging, and every nudge lands them a little further into a configuration that
+        /// cannot be supported without ever showing them a warning. One locked value and one
+        /// gated escape hatch means anyone running an unsupported map made an explicit,
+        /// dated decision to do so.
+        /// </summary>
+        private void DoPerformance(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabPerformance".Translate());
+            Text.Font = GameFont.Small;
+
+            string budget = ABMapSizeLimit.CellBudget.ToString("N0");
+
+            if (unclampMapSize)
+            {
+                Color old = GUI.color;
+                GUI.color = WarnRed;
+                Text.Font = GameFont.Medium;
+                list.Label("AB_UnclampBannerTitle".Translate());
+                Text.Font = GameFont.Small;
+                list.Label("AB_UnclampMapSizeWarning".Translate());
+                GUI.color = old;
+                list.Gap(6f);
+            }
+
+            // The checkbox writes to a LOCAL. unclampMapSize itself only ever becomes true
+            // inside the confirmation callback, so the tick cannot latch on a misclick and
+            // the stored value always means "warning read and accepted".
+            bool want = unclampMapSize;
+            list.CheckboxLabeled("AB_UnclampMapSize".Translate(budget), ref want,
+                "AB_UnclampMapSizeTip".Translate(budget));
+            if (want != unclampMapSize)
+            {
+                if (want)
+                {
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                        "AB_UnclampConfirm".Translate(budget),
+                        delegate
+                        {
+                            unclampMapSize = true;
+                            Write();
+                        },
+                        destructive: true,
+                        "AB_UnclampConfirmTitle".Translate()));
+                }
+                else
+                {
+                    // Going back to a supported configuration is never gated.
+                    unclampMapSize = false;
+                    Write();
+                }
+            }
+
+            list.Gap(8f);
+            list.Label("AB_LevelsDefault".Translate(upperLevels, lowerLevels,
+                ABMapSizeLimit.BandCount));
+
+            Color dim = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_BudgetExplain".Translate(budget));
+            GUI.color = dim;
+
+            list.Gap(12f);
+            list.Label("AB_PathHeadingLabel".Translate());
+            list.Label("AB_PathHeuristicAmount".Translate(
+                Mathf.Approximately(pathHeuristic, 1f)
+                    ? "AB_PathHeuristicOff".Translate().ToString()
+                    : pathHeuristic.ToString("0.00") + "x"));
+            pathHeuristic = Mathf.Round(list.Slider(pathHeuristic,
+                ABPathBandScope.MinHeuristic, ABPathBandScope.MaxHeuristic) * 20f) / 20f;
+
+            GUI.color = NoteDim;
+            list.Label("AB_PathHeuristicTip".Translate());
+            GUI.color = dim;
+        }
+
+        // ---- visuals tab -----------------------------------------------------
+
+        /// <summary>Set when a setting that is BAKED INTO MESH VERTICES changes, so the map
+        /// mesh can be regenerated once on close rather than on every frame of a slider
+        /// drag. Reading it clears it.</summary>
+        private static bool bakedVisualDirty;
+
+        public static bool ConsumeBakedVisualDirty()
+        {
+            bool was = bakedVisualDirty;
+            bakedVisualDirty = false;
+            return was;
+        }
+
+        /// <summary>
+        /// The depth cue. Full reasoning lives on ABDepthView; this pane only has to say
+        /// what it costs the player.
+        ///
+        /// The slider is presented as "per level", not as a final size, because the number
+        /// compounds: at 85% a level-3 basement seen from the peak draws at 61%, and a
+        /// player who read the slider as "how big is the level below" would be surprised by
+        /// that. The readout spells the compounded value out.
+        /// </summary>
+        private void DoVisuals(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabVisuals".Translate());
+            Text.Font = GameFont.Small;
+
+            Color dim = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_VisualsNote".Translate());
+            GUI.color = dim;
+            list.Gap(8f);
+
+            bool falloffWas = depthFalloff;
+            list.CheckboxLabeled("AB_DepthFalloff".Translate(), ref depthFalloff,
+                "AB_DepthFalloffTip".Translate());
+            if (falloffWas != depthFalloff)
+            {
+                bakedVisualDirty = true;
+            }
+            if (depthFalloff)
+            {
+                float three = depthFalloffPerLevel * depthFalloffPerLevel * depthFalloffPerLevel;
+                list.Label("AB_DepthFalloffAmount".Translate(
+                    depthFalloffPerLevel.ToStringPercent(), three.ToStringPercent()));
+                float chosen = list.Slider(depthFalloffPerLevel,
+                    ABDepthView.MinFalloff, ABDepthView.MaxFalloff);
+                if (Mathf.Abs(chosen - depthFalloffPerLevel) > 0.0005f)
+                {
+                    depthFalloffPerLevel = chosen;
+                    bakedVisualDirty = true;
+                }
+            }
+
+            // No bakedVisualDirty on any of these: the pawn cache is a realtime draw path,
+            // nothing about it reaches the printed mesh.
+            list.Gap(10f);
+            list.Label("AB_BelowPawnCache".Translate());
+            if (list.RadioButton("AB_BelowPawnCacheAuto".Translate(),
+                    belowPawnCache == ABBelowRenderCache.ModeAuto, 8f,
+                    "AB_BelowPawnCacheAutoTip".Translate()))
+            {
+                belowPawnCache = ABBelowRenderCache.ModeAuto;
+            }
+            if (list.RadioButton("AB_BelowPawnCacheAggressive".Translate(),
+                    belowPawnCache == ABBelowRenderCache.ModeAggressive, 8f,
+                    "AB_BelowPawnCacheAggressiveTip".Translate()))
+            {
+                belowPawnCache = ABBelowRenderCache.ModeAggressive;
+            }
+            if (list.RadioButton("AB_BelowPawnCacheOff".Translate(),
+                    belowPawnCache == ABBelowRenderCache.ModeOff, 8f,
+                    "AB_BelowPawnCacheOffTip".Translate()))
+            {
+                belowPawnCache = ABBelowRenderCache.ModeOff;
+            }
+
+            list.Gap(10f);
+            list.CheckboxLabeled("AB_ClampZoom".Translate(), ref clampZoomToLevel,
+                "AB_ClampZoomTip".Translate());
+        }
+
+        // ---- climate tab -----------------------------------------------------
+
+        /// <summary>A concrete surface temperature to show the offsets against. The live map
+        /// when there is one, otherwise a plain 20 C - an offset alone ("-35") means nothing
+        /// to most players, but "20 C surface becomes -15 C here" does.</summary>
+        private static float ReferenceTemp()
+        {
+            Map m = Current.ProgramState == ProgramState.Playing ? Find.CurrentMap : null;
+            if (m != null)
+            {
+                try
+                {
+                    return m.mapTemperature.OutdoorTemp;
+                }
+                catch
+                {
+                }
+            }
+            return 20f;
+        }
+
+        private void DoClimate(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabClimate".Translate());
+            Text.Font = GameFont.Small;
+
+            // Defensive: every consumer below indexes these by position. EnsureClimateLists
+            // runs at the top of DoWindowContents, but if it ever failed to produce three
+            // entries the loops would draw nothing and the pane would look empty rather than
+            // broken, which is a much harder thing to diagnose.
+            if (skyTempOffsets.Count < 3 || deepTempOffsets.Count < 3 || skyWindFactors.Count < 3)
+            {
+                Color bad = GUI.color;
+                GUI.color = WarnRed;
+                list.Label("Climate lists not initialised (" + skyTempOffsets.Count + "/"
+                    + deepTempOffsets.Count + "/" + skyWindFactors.Count + ").");
+                GUI.color = bad;
+                return;
+            }
+
+            Color old = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_ClimateNewColonyNote".Translate());
+            GUI.color = old;
+            list.Gap(4f);
+
+            Rect presetRow = list.GetRect(30f);
+            float w = presetRow.width / 3f - 6f;
+            if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, w, 30f),
+                "AB_PresetGentle".Translate()))
+            {
+                ApplyPreset(0);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + w + 9f, presetRow.y, w, 30f),
+                "AB_PresetStandard".Translate()))
+            {
+                ApplyPreset(1);
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + (w + 9f) * 2f, presetRow.y, w, 30f),
+                "AB_PresetAlpine".Translate()))
+            {
+                ApplyPreset(2);
+            }
+            list.Gap(10f);
+
+            float reference = ReferenceTemp();
+
+            list.Label("AB_ClimateSkyHeading".Translate());
+            for (int i = 0; i < skyTempOffsets.Count; i++)
+            {
+                list.Label("AB_ClimateLevelTemp".Translate("+" + (i + 1),
+                    skyTempOffsets[i].ToString("0"),
+                    (reference + skyTempOffsets[i]).ToString("0")));
+                skyTempOffsets[i] = Mathf.Round(list.Slider(skyTempOffsets[i], -60f, 0f));
+            }
+
+            list.Gap(6f);
+            list.Label("AB_ClimateDeepHeading".Translate());
+            for (int i = 0; i < deepTempOffsets.Count; i++)
+            {
+                list.Label("AB_ClimateLevelTemp".Translate("-" + (i + 1),
+                    deepTempOffsets[i].ToString("0"),
+                    (reference + deepTempOffsets[i]).ToString("0")));
+                deepTempOffsets[i] = Mathf.Round(list.Slider(deepTempOffsets[i], -30f, 15f));
+            }
+
+            list.Gap(6f);
+            list.Label("AB_ClimateWindHeading".Translate());
+            GUI.color = NoteDim;
+            list.Label("AB_ClimateWindNote".Translate());
+            GUI.color = old;
+            for (int i = 0; i < skyWindFactors.Count; i++)
+            {
+                list.Label("AB_ClimateLevelWind".Translate("+" + (i + 1),
+                    Mathf.RoundToInt((skyWindFactors[i] - 1f) * 100f).ToString()));
+                skyWindFactors[i] = Mathf.Round(list.Slider(skyWindFactors[i], 1f, 3f) * 20f) / 20f;
+            }
+        }
+
+        private void ApplyPreset(int index)
+        {
+            skyTempOffsets = new List<float>(SkyPresets[index]);
+            deepTempOffsets = new List<float>(DeepPresets[index]);
+        }
+
+        // ---- sky tab ---------------------------------------------------------
+
+        private void DoSky(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_SkyHeading".Translate());
+            Text.Font = GameFont.Small;
+
+            list.CheckboxLabeled("AB_NaturalPeaks".Translate(), ref naturalPeaks,
+                "AB_NaturalPeaksTip".Translate());
+            list.CheckboxLabeled("AB_SkyBiomeInherit".Translate(), ref skyBiomeInherit,
+                "AB_SkyBiomeInheritTip".Translate());
+
+            if (naturalPeaks)
+            {
+                list.Label("AB_PeakSoilFraction".Translate(peakSoilFraction.ToStringPercent()));
+                peakSoilFraction = list.Slider(peakSoilFraction, 0f, 0.5f);
+
+                list.Label("AB_PeakMeadowCutoff".Translate(peakMeadowCutoff.ToString("0.00")));
+                peakMeadowCutoff = list.Slider(peakMeadowCutoff, 0.2f, 0.9f);
+
+                list.Label("AB_PeakMeadowScale".Translate(peakMeadowScale.ToString("0.000")));
+                peakMeadowScale = list.Slider(peakMeadowScale, 0.005f, 0.08f);
+
+                list.Label("AB_PeakTerraceMax".Translate(peakTerraceMax));
+                peakTerraceMax = Mathf.RoundToInt(list.Slider(peakTerraceMax, 1f, 12f));
+            }
+
+            list.Label("AB_SkyVegetationDensity".Translate(skyVegetationDensity.ToString("0.0")));
+            skyVegetationDensity = list.Slider(skyVegetationDensity, 0f, 2f);
+        }
+
+        // ---- basement tab ----------------------------------------------------
+
+        private void DoBasement(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_BasementHeading".Translate());
+            Text.Font = GameFont.Small;
+
+            list.Label("AB_BasementOreDensity".Translate(basementOreDensity.ToString("0.#")));
+            basementOreDensity = list.Slider(basementOreDensity, 0f, 12f);
+
+            // The cave options are ALWAYS shown now. They used to be gated on Biomes!
+            // Caverns being loaded, on the reasoning that dead sliders imply capabilities the
+            // mod does not have - correct in itself, but it hid the whole feature from every
+            // player without that mod and left them with a solid rock basement and no visible
+            // reason why. Vanilla caves need no dependency, so the cave controls are core;
+            // only the cavern BIOMES are conditional.
+            list.Gap(6f);
+            if (list.ButtonText("AB_BasementBiome".Translate(LabelForBiomeChoice())))
+            {
+                List<FloatMenuOption> opts = new List<FloatMenuOption>
+                {
+                    new FloatMenuOption("AB_BasementBiomeVanilla".Translate(),
+                        () => basementBiomeChoice = BiomesCavernsCompat.VanillaChoice),
+                    new FloatMenuOption("AB_BasementBiomeNone".Translate(),
+                        () => basementBiomeChoice = BiomesCavernsCompat.NoneChoice)
+                };
+                if (BiomesCavernsCompat.Active)
+                {
+                    opts.Insert(0, new FloatMenuOption("AB_BasementBiomeRandom".Translate(),
+                        () => basementBiomeChoice = BiomesCavernsCompat.RandomChoice));
+                    foreach (BiomeDef b in BiomesCavernsCompat.CavernBiomes())
+                    {
+                        BiomeDef local = b;
+                        opts.Add(new FloatMenuOption(local.LabelCap,
+                            () => basementBiomeChoice = local.defName));
+                    }
+                }
+                Find.WindowStack.Add(new FloatMenu(opts));
+            }
+
+            if (basementBiomeChoice != BiomesCavernsCompat.NoneChoice)
+            {
+                list.Label("AB_CavernOpenness".Translate(cavernOpenness.ToString("0.00")));
+                cavernOpenness = list.Slider(cavernOpenness, 0.1f, 0.6f);
+
+                list.Label("AB_CavernChamberFreq".Translate(cavernChamberFreq.ToString("0.000")));
+                cavernChamberFreq = list.Slider(cavernChamberFreq, 0.01f, 0.05f);
+
+                // Formations are Biomes! Caverns scatterers; a vanilla cave has none, so the
+                // slider would be a lie in both of the other two states.
+                if (BiomesCavernsCompat.Active
+                    && basementBiomeChoice != BiomesCavernsCompat.VanillaChoice)
+                {
+                    list.Label("AB_CavernFormations".Translate(cavernFormations.ToString("0.0")));
+                    cavernFormations = list.Slider(cavernFormations, 0f, 2f);
+                }
+            }
+        }
+
+        // ---- diagnostics tab -------------------------------------------------
+
+        /// <summary>
+        /// Cross-level travel for NPCs: who may arrive on, and leave via, levels other than
+        /// the surface. Twelve toggles plus a master switch, per the user's spec - "a robust
+        /// set of toggles" - arranged as three category blocks so the rows read as sentences:
+        /// raiders / arrive via upper levels / arrive via lower levels / leave via...
+        ///
+        /// ⚠ EVERY ONE OF THESE IS READ AT DECISION TIME, so flipping them mid-save is safe
+        /// and takes effect on the next arrival or departure. The proportional band choice
+        /// itself has no slider on purpose: weights come from each level's standable edge
+        /// capacity, so terrain does the tuning (user's call).
+        /// </summary>
+        private void DoArrivals(Listing_Standard list)
+        {
+            list.CheckboxLabeled("AB_ArrivalsMaster".Translate(), ref crossLevelTravel,
+                "AB_ArrivalsMasterTip".Translate());
+            Text.Font = GameFont.Tiny;
+            GUI.color = Color.gray;
+            list.Label("AB_ArrivalsNote".Translate());
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+            list.GapLine();
+
+            if (!crossLevelTravel)
+            {
+                return; // the twelve below are inert; hiding them says so better than text
+            }
+
+            DoArrivalCategory(list, "AB_CatRaiders",
+                ref raiderArriveUpper, ref raiderArriveLower,
+                ref raiderLeaveUpper, ref raiderLeaveLower);
+            DoArrivalCategory(list, "AB_CatFriendlies",
+                ref friendlyArriveUpper, ref friendlyArriveLower,
+                ref friendlyLeaveUpper, ref friendlyLeaveLower);
+            DoArrivalCategory(list, "AB_CatAnimals",
+                ref animalArriveUpper, ref animalArriveLower,
+                ref animalLeaveUpper, ref animalLeaveLower);
+        }
+
+        private static void DoArrivalCategory(Listing_Standard list, string headerKey,
+            ref bool arriveUpper, ref bool arriveLower, ref bool leaveUpper,
+            ref bool leaveLower)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label(headerKey.Translate());
+            Text.Font = GameFont.Small;
+            list.CheckboxLabeled("AB_ArriveUpper".Translate(), ref arriveUpper,
+                "AB_ArriveUpperTip".Translate());
+            list.CheckboxLabeled("AB_ArriveLower".Translate(), ref arriveLower,
+                "AB_ArriveLowerTip".Translate());
+            list.CheckboxLabeled("AB_LeaveUpper".Translate(), ref leaveUpper,
+                "AB_LeaveUpperTip".Translate());
+            list.CheckboxLabeled("AB_LeaveLower".Translate(), ref leaveLower,
+                "AB_LeaveLowerTip".Translate());
+            list.GapLine();
+        }
+
+        private void DoDiagnostics(Listing_Standard list)
+        {
+            Text.Font = GameFont.Medium;
+            list.Label("AB_TabDiagnostics".Translate());
+            Text.Font = GameFont.Small;
+
+            list.CheckboxLabeled("AB_VerboseLogging".Translate(), ref verboseLogging,
+                "AB_VerboseLoggingTip".Translate());
+
+            Color oldColor = GUI.color;
+            GUI.color = NoteDim;
+            list.Label("AB_SettingsGenerationNote".Translate());
+            GUI.color = oldColor;
+
+            // ---- subsystem health -------------------------------------------------
+            //
+            // The V1 panel had this and the V2 rework only rebuilt the DATA half:
+            // ABGuard.AllSwitches / LastContext / LastCulprit / ReArm sat with ZERO
+            // consumers while their doc comments claimed a settings readout existed.
+            // This block is that readout, wired at last - which retroactively makes
+            // those comments true. One row per kill switch: vanilla's checkbox texture
+            // as the health tick (a Unicode tick glyph is a font gamble in RimWorld's
+            // UI face), the trip context and culprit when down, and a re-arm button
+            // that gives the subsystem another chance - if the fault persists it trips
+            // again on the next error with a fresh report, which is ABGuard.ReArm's
+            // documented contract.
+            list.GapLine();
+            Text.Font = GameFont.Medium;
+            list.Label("AB_GuardHealthTitle".Translate());
+            Text.Font = GameFont.Small;
+            GUI.color = NoteDim;
+            list.Label("AB_GuardHealthNote".Translate());
+            GUI.color = oldColor;
+            list.Gap(4f);
+            ABGuardSwitch[] switches = ABGuard.AllSwitches;
+            for (int i = 0; i < switches.Length; i++)
+            {
+                ABGuardSwitch s = switches[i];
+                Rect row = list.GetRect(26f);
+                Widgets.CheckboxDraw(row.x, row.y + 3f, s.IsOn, disabled: false, 20f);
+                Rect name = new Rect(row.x + 26f, row.y, 150f, row.height);
+                Widgets.Label(name, s.Name);
+                if (s.IsOn)
+                {
+                    GUI.color = NoteDim;
+                    Widgets.Label(new Rect(name.xMax + 4f, row.y,
+                        row.width - name.xMax - 4f, row.height),
+                        "AB_GuardRunning".Translate());
+                    GUI.color = oldColor;
+                    continue;
+                }
+                Rect btn = new Rect(row.xMax - 90f, row.y + 1f, 88f, 24f);
+                Rect info = new Rect(name.xMax + 4f, row.y,
+                    btn.x - name.xMax - 10f, row.height);
+                string why = s.LastContext.NullOrEmpty()
+                    ? "AB_GuardTrippedUnknown".Translate().ToString()
+                    : s.LastContext;
+                if (!s.LastCulprit.NullOrEmpty())
+                {
+                    why += " (" + "AB_GuardCulprit".Translate(s.LastCulprit) + ")";
+                }
+                GUI.color = WarnRed;
+                Widgets.Label(info, why.Truncate(info.width));
+                GUI.color = oldColor;
+                TooltipHandler.TipRegion(info, why);
+                if (Widgets.ButtonText(btn, "AB_GuardReArm".Translate()))
+                {
+                    ABGuard.ReArm(s);
+                }
+            }
         }
     }
 }

@@ -13,6 +13,13 @@
     <passability>Impassable</passability>
     <avoidWander>true</avoidWander>
     <fertility>0</fertility>
+    <!-- THE FIX FOR "SNOW COVERS THE WHOLE SKY LEVEL".
+         TerrainDef.holdSnowOrSand DEFAULTS TO TRUE, and SnowGrid.CanHaveSnow consults
+         nothing else about the terrain - so open air was accumulating snow like any
+         meadow. On a sky band that is mostly void, that is the entire screen white, and
+         the gutter rows did it too. Water terrains are the vanilla precedent for turning
+         it off. -->
+    <holdSnowOrSand>false</holdSnowOrSand>
   </TerrainDef>
 
   <TerrainDef>
@@ -27,6 +34,44 @@
     <passability>Standable</passability>
     <pathCost>1</pathCost>
     <fertility>0</fertility>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+    </affordances>
+  </TerrainDef>
+
+  <!-- The top of a wall on the level below: you may BUILD on it (so walls stack into a
+       tower) but you may not WALK on it. Impassable + full affordances is exactly how
+       vanilla treats deep water under a bridge - construction only needs the builder to
+       reach an ADJACENT cell, not to stand on the target - so the two properties are not
+       in conflict.
+       Kept distinct from AB_RoofSurface on purpose: a roof is a floor you can walk out
+       onto, a wall top is a ledge you can only build on. -->
+  <TerrainDef>
+    <defName>AB_WallTop</defName>
+    <label>wall top</label>
+    <description>The narrow top of a wall on the level below. Too narrow to walk along, but solid enough to build on - stack another wall here to raise the structure.</description>
+    <!-- dontRender, exactly like AB_OpenAir, and for the same reason: the top of a wall
+         seen from the level above IS the wall, so this cell must show the building below
+         rather than paint over it. Two earlier attempts both painted something here and
+         both looked broken - Terrain/AB_MountainTop (near-black, because the mountain-cap
+         layer shades it) gave an opaque black slab, and a tinted floor tile gave a flat
+         grey square where a wooden wall should be. The terrain exists purely to carry
+         passability and affordance; ABBands.ShowsBelow lets the see-below renderer draw
+         straight through it. -->
+    <texturePath>Terrain/AB_OpenAir</texturePath>
+    <dontRender>true</dontRender>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>232</renderPrecedence>
+    <layerable>false</layerable>
+    <passability>Impassable</passability>
+    <fertility>0</fertility>
+    <!-- Matches vanilla walls exactly: SnowGrid.CanCoexistWithSnow returns false for any
+         Building with Fillage.Full, so a real wall never holds snow. A wall top IS that
+         wall seen from above, so it must not either - otherwise every wall on the level
+         below grows a white cap that the wall itself does not have. -->
+    <holdSnowOrSand>false</holdSnowOrSand>
     <affordances>
       <li>Light</li>
       <li>Medium</li>

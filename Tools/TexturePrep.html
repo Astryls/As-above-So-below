@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As above, So below II — Texture Prep</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+  --tx:#e6edf3; --dim:#8b98a5; --accent:#f0883e; --ok:#3fb950; --bad:#f85149; --warn:#d29922;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+  --check:repeating-conic-gradient(#20262e 0% 25%,#171c23 0% 50%) 50%/12px 12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0e1116 72%,rgba(14,17,22,.9));
+  border-bottom:1px solid var(--line);padding:14px 22px}
+h1{margin:0;font-size:17px}h1 span{color:var(--accent)}
+.sub{color:var(--dim);font-size:12px;margin-top:3px}
+main{padding:20px 22px 90px;max-width:1400px;margin:0 auto}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;
+  padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+button:hover{border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.35;cursor:not-allowed}
+select,input[type=text]{background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+  border-radius:6px;padding:5px 8px;font-family:inherit;font-size:12px}
+input[type=range]{accent-color:var(--accent);vertical-align:middle}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:13px 16px;margin-bottom:16px;font-size:13px}
+.note b{color:var(--accent)}
+.note code{font-family:var(--mono);font-size:11.5px;background:#0b0e13;padding:1px 5px;border-radius:3px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:34px;text-align:center;color:var(--dim);
+  background:var(--panel);cursor:pointer;transition:.15s;margin-bottom:16px}
+#drop:hover,#drop.on{border-color:var(--accent);color:var(--tx);background:#1a2029}
+#drop b{color:var(--accent);font-size:15px}
+.ctrls{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.ctrl label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:5px}
+.ctrl .v{color:var(--accent);font-family:var(--mono);font-size:12px}
+.row{display:flex;gap:10px;align-items:center;margin-bottom:10px;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.row.bad{border-color:#5c2a26}
+.row .thumbs{display:flex;gap:8px;flex:0 0 auto}
+.thumb{width:76px;height:76px;background:var(--check);border:1px solid var(--line);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.thumb img,.thumb canvas{max-width:100%;max-height:100%;image-rendering:pixelated}
+.arrow{color:var(--dim);align-self:center;font-size:18px}
+.meta{flex:1;min-width:0}
+.meta .src{font-family:var(--mono);font-size:11px;color:var(--dim);word-break:break-all}
+.meta .out{font-family:var(--mono);font-size:12.5px;color:var(--ok);margin-top:3px;word-break:break-all}
+.meta .warnline{font-size:11.5px;color:var(--warn);margin-top:3px}
+.meta .badline{font-size:11.5px;color:var(--bad);margin-top:3px}
+.meta select{width:100%;max-width:330px;margin-top:5px}
+.acts{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+.bulk{position:fixed;bottom:0;left:0;right:0;background:rgba(14,17,22,.96);border-top:1px solid var(--line);
+  padding:12px 22px;display:flex;gap:10px;align-items:center;z-index:30}
+.bulk .n{color:var(--dim);font-size:12.5px;margin-right:auto}
+.pathbox{font-family:var(--mono);font-size:11px;color:#7f8c9a;background:#0b0e13;border:1px solid var(--line);
+  border-radius:6px;padding:6px 9px;margin-top:8px;word-break:break-all}
+</style>
+</head>
+<body>
+<header>
+  <h1>As above, So below II — <span>Texture Prep</span></h1>
+  <div class="sub">Trim · pad · resize · rename — everything downloads, nothing needs folder permissions</div>
+</header>
+
+<main>
+
+<div class="note">
+  <b>Why this exists.</b> The workbench's direct-save needs the File System Access API, which Chrome does not expose to
+  pages opened from disk (a <code>file://</code> origin), so the picker silently does nothing. This page uses ordinary
+  downloads instead and works in any browser. Drop your generated images in, and it will
+  <b>cut the flat backdrop, trim to the artwork, add even padding, resize, and rename</b> to the exact filename RimWorld
+  expects — then hand you a ZIP.
+  <div class="pathbox">Unzip into: &lt;mod folder&gt;\Textures\Things\Building\Risers\</div>
+  <div style="margin-top:8px;color:var(--dim);font-size:12px">
+    If you'd rather have the workbench save directly, serve it over http instead of opening the file:
+    <code>python -m http.server 8000</code> in the mod folder, then visit
+    <code>localhost:8000/Tools/TextureWorkbench.html</code>.
+  </div>
+</div>
+
+<div id="drop">
+  <b>Drop images here</b><br>
+  <span>or click to browse — any size, any filename, PNG / JPG / WEBP</span>
+</div>
+
+<div class="ctrls">
+  <div class="ctrl">
+    <label>Output size</label>
+    <select id="size">
+      <option value="128">128 × 128</option>
+      <option value="256" selected>256 × 256</option>
+      <option value="512">512 × 512</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Artwork fills <span class="v" id="fillv">80%</span> of the canvas</label>
+    <input type="range" id="fill" min="50" max="100" value="80" style="width:100%">
+  </div>
+  <div class="ctrl">
+    <label>Trim to artwork first</label>
+    <select id="trim">
+      <option value="1" selected>Yes — crop to alpha bounds, then pad evenly</option>
+      <option value="0">No — keep the original framing</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Flat backdrop removal</label>
+    <select id="key">
+      <option value="auto" selected>Auto — only if the image has no alpha</option>
+      <option value="always">Always</option>
+      <option value="off">Off — my images already have alpha</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Backdrop colour <span class="v" id="keyv">auto-sampled</span></label>
+    <select id="keycol">
+      <option value="auto" selected>Sample from the corners</option>
+      <option value="#8A8A8A">Neutral mid-grey · 8A8A8A</option>
+      <option value="#6E7A85">Neutral slate · 6E7A85</option>
+      <option value="#FF00FF">Chroma magenta · FF00FF</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Key tolerance <span class="v" id="tolv">26</span></label>
+    <input type="range" id="tol" min="0" max="120" value="26" style="width:100%">
+  </div>
+</div>
+
+<div id="rows"></div>
+</main>
+
+<div class="bulk">
+  <span class="n" id="count">Nothing loaded</span>
+  <button id="clear">Clear</button>
+  <button class="primary" id="zip" disabled>Download all as ZIP</button>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ roster */
+/* [key, rotatable, label] — rotatable ships north/east/south only, because
+   Graphic_Multi.Init mirrors _east into _west when _west is absent.        */
+const RISERS = [
+  ["AB_RiserPower",            true,  "Power distribution"],
+  ["AB_RiserPlumbing",         false, "DBH plumbing"],
+  ["AB_RiserAirDuct",          false, "DBH air-con duct"],
+  ["AB_RiserOil",              false, "Rimefeller oil"],
+  ["AB_RiserColdWater",        false, "Rimatomics cold water"],
+  ["AB_RiserSteam",            false, "Rimatomics steam"],
+  ["AB_RiserCoolant",          false, "Rimatomics coolant"],
+  ["AB_RiserHighVoltage",      true,  "Rimatomics high voltage"],
+  ["AB_RiserLoom",             true,  "Rimatomics console loom"],
+  ["AB_RiserChemfuel",         false, "VCHE chemfuel"],
+  ["AB_RiserDeepchem",         false, "VCHE deepchem"],
+  ["AB_RiserVentDuct",         false, "VTE vent duct"],
+  ["AB_RiserScarletSludge",    false, "Luciferium scarlet sludge"],
+  ["AB_RiserCompressedSludge", false, "Luciferium compressed sludge"],
+  ["AB_RiserMechanites",       false, "Luciferium mechanites"]
+];
+const ROTS = ["north", "east", "south"];
+
+const SLOTS = [];
+RISERS.forEach(([k, rot, label]) => {
+  if (rot) ROTS.forEach(o => SLOTS.push({ file: k + "_" + o + ".png", label: label + " — " + o, key: k, rot: o }));
+  else SLOTS.push({ file: k + ".png", label: label, key: k, rot: null });
+});
+
+/* ------------------------------------------------------------------ helpers */
+const $ = id => document.getElementById(id);
+const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/* Guess the destination slot from whatever the model named the file. Exact
+   filename wins; otherwise match the riser key and then the rotation word. */
+function guessSlot(name) {
+  const n = norm(name.replace(/\.[^.]+$/, ""));
+  let exact = SLOTS.findIndex(s => norm(s.file.replace(".png", "")) === n);
+  if (exact >= 0) return exact;
+  let best = -1, bestLen = 0;
+  SLOTS.forEach((s, i) => {
+    const k = norm(s.key);
+    if (!n.includes(k) || k.length <= bestLen) return;
+    if (s.rot && !n.includes(s.rot)) return;
+    best = i; bestLen = k.length;
+  });
+  if (best >= 0) return best;
+  SLOTS.forEach((s, i) => { if (best < 0 && n.includes(norm(s.key))) best = i; });
+  return best;
+}
+
+function colorAt(d, i) { return [d[i], d[i + 1], d[i + 2], d[i + 3]]; }
+
+/* Corner-sampled backdrop colour: the modal of the four corners, which is what a
+   flat generated backdrop always is. */
+function sampleBackdrop(data, w, h) {
+  const pts = [[2, 2], [w - 3, 2], [2, h - 3], [w - 3, h - 3]];
+  const cols = pts.map(([x, y]) => colorAt(data, (y * w + x) * 4));
+  const counts = new Map();
+  cols.forEach(c => { const k = c.slice(0, 3).join(","); counts.set(k, (counts.get(k) || 0) + 1); });
+  let bk = null, bn = 0;
+  counts.forEach((n, k) => { if (n > bn) { bn = n; bk = k; } });
+  return bk.split(",").map(Number);
+}
+
+function hexToRgb(h) {
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+}
+
+/* Alpha bounding box, so padding ends up even regardless of how the model framed it. */
+function alphaBounds(data, w, h) {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+function anyAlpha(data) {
+  for (let i = 3; i < data.length; i += 4) if (data[i] < 16) return true;
+  return false;
+}
+
+/* ------------------------------------------------------------------ pipeline */
+function process(item) {
+  const img = item.img;
+  const size = +$("size").value;
+  const fill = +$("fill").value / 100;
+  const doTrim = $("trim").value === "1";
+  const keyMode = $("key").value;
+  const tol = +$("tol").value;
+
+  // 1. source into a working canvas
+  const sc = document.createElement("canvas");
+  sc.width = img.naturalWidth; sc.height = img.naturalHeight;
+  const sx = sc.getContext("2d", { willReadFrequently: true });
+  sx.drawImage(img, 0, 0);
+  let id = sx.getImageData(0, 0, sc.width, sc.height);
+  const d = id.data;
+
+  // 2. backdrop removal
+  const hadAlpha = anyAlpha(d);
+  let keyed = false;
+  if (keyMode === "always" || (keyMode === "auto" && !hadAlpha)) {
+    const sel = $("keycol").value;
+    const [kr, kg, kb] = sel === "auto" ? sampleBackdrop(d, sc.width, sc.height) : hexToRgb(sel);
+    const t2 = tol * tol * 3;
+    for (let i = 0; i < d.length; i += 4) {
+      const dr = d[i] - kr, dg = d[i + 1] - kg, db = d[i + 2] - kb;
+      const dist = dr * dr + dg * dg + db * db;
+      if (dist <= t2) d[i + 3] = 0;
+      else if (dist <= t2 * 2.6) {           // soft rim so edges do not alias hard
+        const f = (dist - t2) / (t2 * 1.6);
+        d[i + 3] = Math.min(d[i + 3], Math.round(255 * Math.max(0, Math.min(1, f))));
+      }
+    }
+    sx.putImageData(id, 0, 0);
+    id = sx.getImageData(0, 0, sc.width, sc.height);
+    keyed = true;
+  }
+
+  // 3. trim to artwork
+  let box = { x: 0, y: 0, w: sc.width, h: sc.height };
+  if (doTrim) {
+    const b = alphaBounds(id.data, sc.width, sc.height);
+    if (b) box = b;
+  }
+
+  // 4. scale into the padded inner square, centred
+  const oc = document.createElement("canvas");
+  oc.width = size; oc.height = size;
+  const ox = oc.getContext("2d");
+  ox.imageSmoothingEnabled = true;
+  ox.imageSmoothingQuality = "high";
+  const inner = size * fill;
+  const scale = Math.min(inner / box.w, inner / box.h);
+  const dw = Math.round(box.w * scale), dh = Math.round(box.h * scale);
+  ox.drawImage(sc, box.x, box.y, box.w, box.h,
+    Math.round((size - dw) / 2), Math.round((size - dh) / 2), dw, dh);
+
+  item.canvas = oc;
+  item.keyed = keyed;
+  item.hadAlpha = hadAlpha;
+  item.trimmed = doTrim && (box.w !== sc.width || box.h !== sc.height);
+  // did anything survive?
+  const od = ox.getImageData(0, 0, size, size).data;
+  item.empty = !alphaBounds(od, size, size);
+  return oc;
+}
+
+/* ------------------------------------------------------------------ ui */
+const items = [];
+const rowsEl = $("rows");
+
+function render() {
+  rowsEl.innerHTML = "";
+  items.forEach((it, idx) => {
+    const row = document.createElement("div");
+    row.className = "row" + (it.slot < 0 || it.empty ? " bad" : "");
+
+    const t1 = document.createElement("div"); t1.className = "thumb";
+    const im = document.createElement("img"); im.src = it.url; t1.appendChild(im);
+    const t2 = document.createElement("div"); t2.className = "thumb"; t2.appendChild(it.canvas);
+
+    const thumbs = document.createElement("div"); thumbs.className = "thumbs";
+    const ar = document.createElement("div"); ar.className = "arrow"; ar.textContent = "\u2192";
+    thumbs.append(t1, ar, t2);
+
+    const meta = document.createElement("div"); meta.className = "meta";
+    const src = document.createElement("div"); src.className = "src";
+    src.textContent = it.name + "  ·  " + it.img.naturalWidth + "\u00d7" + it.img.naturalHeight;
+    const sel = document.createElement("select");
+    sel.innerHTML = '<option value="-1">\u2014 not assigned \u2014</option>' +
+      SLOTS.map((s, i) => '<option value="' + i + '">' + s.label + "  \u2192  " + s.file + "</option>").join("");
+    sel.value = it.slot;
+    sel.onchange = () => { it.slot = +sel.value; render(); };
+    const out = document.createElement("div"); out.className = "out";
+    out.textContent = it.slot >= 0 ? SLOTS[it.slot].file : "assign a destination \u2193";
+    meta.append(src, out, sel);
+
+    if (it.empty) {
+      const w = document.createElement("div"); w.className = "badline";
+      w.textContent = "Nothing left after keying — lower the tolerance or set backdrop removal to Off.";
+      meta.appendChild(w);
+    } else if (it.keyed) {
+      const w = document.createElement("div"); w.className = "warnline";
+      w.textContent = "Backdrop keyed out" + (it.trimmed ? " and trimmed" : "") + " — check the edges on the right.";
+      meta.appendChild(w);
+    }
+
+    const acts = document.createElement("div"); acts.className = "acts";
+    const dl = document.createElement("button");
+    dl.textContent = "Download"; dl.disabled = it.slot < 0;
+    dl.onclick = () => downloadOne(it);
+    const rm = document.createElement("button");
+    rm.textContent = "Remove";
+    rm.onclick = () => { items.splice(idx, 1); render(); };
+    acts.append(dl, rm);
+
+    row.append(thumbs, meta, acts);
+    rowsEl.appendChild(row);
+  });
+
+  const ready = items.filter(i => i.slot >= 0 && !i.empty).length;
+  $("count").textContent = items.length
+    ? ready + " of " + items.length + " ready  ·  " + SLOTS.length + " slots total"
+    : "Nothing loaded";
+  $("zip").disabled = ready === 0;
+}
+
+function reprocessAll() { items.forEach(process); render(); }
+
+function addFiles(files) {
+  const list = [...files].filter(f => /^image\//.test(f.type));
+  let pending = list.length;
+  if (!pending) return;
+  list.forEach(f => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const it = { name: f.name, img, url, slot: guessSlot(f.name) };
+      process(it);
+      items.push(it);
+      if (--pending === 0) render();
+    };
+    img.onerror = () => { if (--pending === 0) render(); };
+    img.src = url;
+  });
+}
+
+/* ------------------------------------------------------------------ output */
+function canvasBlob(c) { return new Promise(r => c.toBlob(r, "image/png")); }
+
+async function downloadOne(it) {
+  const b = await canvasBlob(it.canvas);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = SLOTS[it.slot].file;
+  a.click();
+}
+
+/* --- minimal STORE-method ZIP; PNG is already deflated so no compression --- */
+const CRC_T = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(entries) {
+  const enc = new TextEncoder();
+  const chunks = [], central = [];
+  let offset = 0;
+  entries.forEach(e => {
+    const name = enc.encode(e.name), data = e.data, crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(lh.buffer), name, data);
+
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0, true); ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, name.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true);
+    ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + data.length;
+  });
+  const cdStart = offset;
+  let cdSize = 0; central.forEach(c => cdSize += c.length);
+  const eo = new DataView(new ArrayBuffer(22));
+  eo.setUint32(0, 0x06054b50, true); eo.setUint16(4, 0, true); eo.setUint16(6, 0, true);
+  eo.setUint16(8, entries.length, true); eo.setUint16(10, entries.length, true);
+  eo.setUint32(12, cdSize, true); eo.setUint32(16, cdStart, true); eo.setUint16(20, 0, true);
+  return new Blob([...chunks, ...central, new Uint8Array(eo.buffer)], { type: "application/zip" });
+}
+
+$("zip").onclick = async () => {
+  const ready = items.filter(i => i.slot >= 0 && !i.empty);
+  const seen = new Set(), entries = [];
+  for (const it of ready) {
+    let name = SLOTS[it.slot].file;
+    if (seen.has(name)) { const n = name.replace(".png", ""); let k = 2; while (seen.has(n + "(" + k + ").png")) k++; name = n + "(" + k + ").png"; }
+    seen.add(name);
+    const b = await canvasBlob(it.canvas);
+    entries.push({ name, data: new Uint8Array(await b.arrayBuffer()) });
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(makeZip(entries));
+  a.download = "AB_Risers_Textures.zip";
+  a.click();
+};
+
+/* ------------------------------------------------------------------ wiring */
+const drop = $("drop");
+drop.onclick = () => {
+  const i = document.createElement("input");
+  i.type = "file"; i.accept = "image/*"; i.multiple = true;
+  i.onchange = () => addFiles(i.files);
+  i.click();
+};
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("on"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("on"); }));
+drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => { e.preventDefault(); if (!drop.contains(e.target)) addFiles(e.dataTransfer.files); });
+
+$("clear").onclick = () => { items.length = 0; render(); };
+["size", "trim", "key", "keycol"].forEach(id => $(id).onchange = reprocessAll);
+$("fill").oninput = e => { $("fillv").textContent = e.target.value + "%"; reprocessAll(); };
+$("tol").oninput = e => { $("tolv").textContent = e.target.value; reprocessAll(); };
+$("keycol").addEventListener("change", e => {
+  $("keyv").textContent = e.target.value === "auto" ? "auto-sampled" : e.target.value;
+});
+
+render();
+</script>
+</body>
+</html>

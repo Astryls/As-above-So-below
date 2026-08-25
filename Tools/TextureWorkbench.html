@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As above, So below II — Riser Texture Workbench</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+  --tx:#e6edf3; --dim:#8b98a5; --accent:#f0883e; --ok:#3fb950; --bad:#f85149; --warn:#d29922;
+  --dub:#d8b04a; --ve:#7ec8e3;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0e1116 70%,rgba(14,17,22,.85));
+  border-bottom:1px solid var(--line);padding:14px 22px}
+h1{margin:0;font-size:17px;letter-spacing:.3px}
+h1 span{color:var(--accent)}
+.sub{color:var(--dim);font-size:12px;margin-top:3px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:11px}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;
+  padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+button:hover{border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.pill.on{border-color:var(--ok);color:var(--ok)}
+.pill.off{border-color:var(--bad);color:var(--bad)}
+#status{font-size:12px;color:var(--dim);margin-left:auto}
+main{padding:20px 22px 80px;max-width:1500px;margin:0 auto}
+.grp{margin:26px 0 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.grp h2{margin:0;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--accent)}
+.grp .meta{font-size:12px;color:var(--dim)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card.done{border-color:#26502f}
+.chead{padding:12px 14px;border-bottom:1px solid var(--line)}
+.chead b{font-size:14px}
+.defn{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:2px;word-break:break-all}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+.tag.rot{border-color:#3b5bdb;color:#8ba4ff}
+.tag.gate{border-color:#5a4a1e;color:#d8b04a}
+.tag.fam-dubwise{border-color:#6b5518;color:var(--dub)}
+.tag.fam-ve{border-color:#2a5f70;color:var(--ve)}
+.cbody{padding:12px 14px}
+.slots{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.slot{border:1px dashed var(--line);border-radius:8px;padding:7px;text-align:center;background:var(--panel2);
+  transition:.12s;cursor:pointer}
+.slot:hover{border-color:var(--accent)}
+.slot.over{border-color:var(--accent);background:#2a1d10}
+.slot.has{border-style:solid;border-color:#2f5d38}
+.slot.active{box-shadow:0 0 0 2px var(--accent) inset}
+.slot .ph{height:74px;display:flex;align-items:center;justify-content:center;color:#4d5866;font-size:26px}
+.slot img{width:100%;height:74px;object-fit:contain;image-rendering:pixelated;
+  background:repeating-conic-gradient(#20262e 0% 25%,#171c23 0% 50%) 50%/12px 12px}
+.slot .nm{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;word-break:break-all}
+.slot .px{font-size:9.5px;color:#5a6672}
+.refbox{margin-top:10px;background:#0b0e13;border:1px solid var(--line);border-left:2px solid var(--ok);
+  border-radius:6px;padding:8px 10px}
+.refbox .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ok);margin-bottom:4px}
+.refbox code{font-family:var(--mono);font-size:10px;color:#7f8c9a;word-break:break-all;display:block;margin-bottom:6px}
+.prompt{margin-top:11px;border-top:1px solid var(--line);padding-top:10px}
+.ptabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center}
+.ptab{font-size:10.5px;padding:3px 9px;border-radius:5px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;text-transform:uppercase;letter-spacing:.4px}
+.ptab:hover{border-color:var(--accent);color:#fff}
+.ptab.on{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:700}
+.ptabs .sp{flex:1}
+textarea{width:100%;background:#0b0e13;color:#b9c6d3;border:1px solid var(--line);border-radius:6px;
+  font-family:var(--mono);font-size:11px;line-height:1.55;padding:9px;resize:vertical;min-height:170px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:13px 16px;margin-bottom:18px;font-size:13px}
+.note b{color:var(--accent)}
+.note code{font-family:var(--mono);font-size:11.5px;background:#0b0e13;padding:1px 5px;border-radius:3px}
+.note ol,.note ul{margin:8px 0 0;padding-left:20px}.note li{margin:4px 0}
+.fam2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+@media(max-width:900px){.fam2{grid-template-columns:1fr}}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel2);
+  border:1px solid var(--accent);border-radius:8px;padding:10px 20px;font-size:13px;opacity:0;
+  transition:.22s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+#drop{position:fixed;inset:0;background:rgba(240,136,62,.13);border:3px dashed var(--accent);
+  z-index:100;display:none;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+#drop.on{display:flex}
+</style>
+</head>
+<body>
+<header>
+  <h1>As above, So below II — <span>Riser Texture Workbench</span></h1>
+  <div class="sub">Cross-level utility risers · 15 buildings · <span id="fcount">0</span> texture files · prompts derived from the host mods' own sprites</div>
+  <div class="bar">
+    <button class="primary" id="connect">Connect mod folder…</button>
+    <button id="rescan" disabled>Rescan</button>
+    <button id="copyall">Copy all prompts</button>
+    <label style="font-size:12px;color:var(--dim)">backdrop
+      <select id="bgsel" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:12px;margin-left:4px">
+        <option value="grey">neutral mid-grey</option>
+        <option value="slate">neutral slate</option>
+        <option value="magenta">chroma magenta</option>
+      </select>
+    </label>
+    <span class="pill" id="fsapi"></span>
+    <span id="status">Not connected — previews and saving are disabled.</span>
+  </div>
+</header>
+
+<main>
+
+<div class="note" style="border-left-color:var(--ok)">
+  <b>Always attach the reference image.</b> Every card below carries the path to a real sprite <i>from that riser's own
+  host mod</i>, already on your disk. Drag it into the Nano Banana chat with the prompt and say
+  <i>"match this art style exactly"</i>. This does more than any wording — the prompts describe the style, but the
+  reference is what actually lands it.
+  <div style="margin-top:8px;color:var(--dim);font-size:12px">
+    RimWorld's own Core textures are packed and cannot be opened, so Vanilla Expanded art is used as the vanilla
+    reference — VE is built to be indistinguishable from base game.
+  </div>
+</div>
+
+<div class="fam2">
+  <div class="note" style="border-left-color:var(--dub);margin:0">
+    <b style="color:var(--dub)">Family A — Dubwise</b> (Bad Hygiene, Rimefeller, Rimatomics)<br>
+    Every 1×1 network device in these three mods is the <i>same sprite recoloured</i>: a rounded square base plate
+    filling the cell, a chunky grey machine body centred on it, a small green square, a dark red bar,
+    a <b>thick near-black outline</b> on everything. The <b>plate colour is the network's identity</b> —
+    charcoal for plumbing, near-black for oil, blue for cold water, dark red for steam, teal for coolant.
+  </div>
+  <div class="note" style="border-left-color:var(--ve);margin:0">
+    <b style="color:var(--ve)">Family B — Vanilla / Vanilla Expanded</b> (power, Chemfuel, Temperature, Luciferium)<br>
+    Completely different: <b>almost no outline at all</b>. Flat colour blocks butt straight against each other, a
+    lighter top band over a darker lower band, groups of thin horizontal lines for fins, and tiny accents
+    (VTE's AC unit is two little triangles). Pipes are rounded-cap tubes with a soft vertical gradient and one
+    coloured identity band.
+  </div>
+</div>
+
+<div class="note">
+  <b>How to use.</b>
+  <ol>
+    <li><b>Connect mod folder…</b> and pick this mod's root — the folder containing <code>About/</code> and <code>Textures/</code> (named <code>50b4332c2547</code>).</li>
+    <li>Pick a slot, <b>Copy reference path</b>, <b>Copy prompt</b>, and give Nano Banana both together.</li>
+    <li><b>Cut the backdrop out</b> before saving — see below.</li>
+    <li>Drag the result onto the slot — written straight into <code>Textures/Things/Building/Risers/</code>. Drop anywhere on the page to match many files by filename.</li>
+  </ol>
+</div>
+
+<div class="note" style="border-left-color:var(--warn)">
+  <b style="color:var(--warn)">The backdrop has to come off before RimWorld sees it.</b>
+  Images generate on a flat solid colour because asking these models for an empty background makes them paint a fake
+  one <i>into</i> the picture instead. That flat colour is not what ships: a PNG that still has it will render as a
+  solid square in game, sitting over the floor.
+  <ul style="color:var(--dim);font-size:12px">
+    <li>Every prompt names one exact backdrop colour and forbids it appearing in the object, so a single select-by-colour
+      or magic-wand pass lifts it cleanly.</li>
+    <li>Use the <b>backdrop</b> selector above to switch all prompts at once. <b>Neutral mid-grey</b> looks best for
+      judging the art; <b>chroma magenta</b> keys out far more reliably, because these sprites are mostly grey and a
+      grey backdrop shares tones with the object.</li>
+    <li>Slots flag <span style="color:var(--warn)">NO ALPHA</span> when a dropped file is fully opaque — that is the
+      backdrop still being there.</li>
+  </ul>
+</div>
+
+<div class="note" style="border-left-color:#3b5bdb">
+  <b>Every riser is a wall attachment — three files each, 45 in total.</b> <code>Graphic_Multi.Init</code> falls back to
+  <code>_east</code> with <code>westFlipped</code> when <code>_west</code> is missing, which is exactly what DBH and VTE
+  ship, so author <code>_north _east _south</code> only.
+  <div style="margin-top:9px;padding:9px 11px;background:#2a1d10;border-radius:6px">
+    <b style="color:var(--accent)">⚠ Rotation is the direction of the WALL, not the way the unit faces.</b>
+    <code>Placeworker_AttachedToWall</code> demands a wall at <code>loc + CardinalDirections[rot]</code>, and
+    <code>CardinalDirections[0]</code> is <code>(0,0,1)</code> — north, up the screen. So:
+    <ul style="margin-top:6px">
+      <li><b style="color:#8ba4ff">north</b> — wall <b>above</b>, unit hugs the top edge, front face points down and is
+        fully visible. <b>This is the hero view.</b></li>
+      <li><b style="color:#8ba4ff">east</b> — wall <b>right</b>, narrow side profile, front points left.</li>
+      <li><b style="color:#8ba4ff">south</b> — wall <b>below</b>, you see the unit's <b>back</b>: plain top plate, no
+        front detail.</li>
+    </ul>
+    This is the reverse of the usual RimWorld habit where <code>_south</code> is the front view, and nothing in the art
+    can tell you it is wrong — swapped north/south files just look like a unit that turns its back when rotated.
+  </div>
+</div>
+
+<div id="app"></div>
+</main>
+
+<div id="drop">Drop PNGs — matched to slots by filename</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DIR = "Textures/Things/Building/Risers";
+const WS  = "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\";
+
+/* =====================================================================
+   Two style blocks, transcribed from the actual sprites:
+     A  DBH Valve, Rimefeller Valve, Rimatomics Coolant/Steam/Water valves,
+        Rimatomics transformer, DBH ElectricBoiler + centralAirVent
+     B  VTE ACUnit + VentValve, VCHE ChemfuelValve/Tap/Pipes,
+        Luciferium ScarletPipes
+   ===================================================================== */
+
+const STYLE_DUBWISE =
+"ART STYLE - copy the attached reference sprite exactly. This mod's 1x1 machines all share one look:\n" +
+"- A ROUNDED-CORNER SQUARE BASE PLATE that fills almost the entire image, in one flat colour with a fine speckled " +
+"noise texture over it.\n" +
+"- A THICK, SOLID, NEAR-BLACK OUTLINE around the base plate and around every element sitting on it. Heavy and even. " +
+"This is the most recognisable feature of the style.\n" +
+"- Flat colour with only a slight soft bevel on the raised grey parts. No gradients across the plate, no ambient " +
+"occlusion, no cast shadow, no glow, no reflections, no texture photography.\n" +
+"- Very few elements: three or four simple shapes at most, each a plain square, circle, bar or rounded rectangle.\n" +
+"- A tiny palette: the plate colour, two greys, and one or two small saturated accents.\n" +
+"- Chunky and readable when shrunk to 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+const STYLE_VE =
+"ART STYLE - copy the attached reference sprite exactly. Vanilla RimWorld / Vanilla Expanded look:\n" +
+"- NO heavy black outline. This style has essentially NO outline: flat blocks of colour butt directly against each " +
+"other, separated at most by a thin slightly-darker edge. Do not draw a cartoon border around the object.\n" +
+"- FLAT BLOCKS OF SOLID COLOUR arranged as simple geometry: a lighter band for the top surface, a darker band for the " +
+"front face, and groups of thin evenly spaced horizontal lines where there are fins, louvres or grilles.\n" +
+"- Cylinders and pipes are the one exception: they carry a soft smooth vertical gradient, lighter along the upper " +
+"edge and darker along the lower, with fully rounded caps.\n" +
+"- Muted, desaturated, slightly dusty palette built around ONE network identity colour. Accents are TINY - a small " +
+"triangle, a narrow band, a single square.\n" +
+"- No ambient occlusion, no specular highlights, no glow, no bloom, no cast shadow, no surface grime, no rivets, no " +
+"panel lines, no scratches.\n" +
+"- Three or four elements at most. Clean, geometric, architectural. Readable at 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+/* The backdrop is a flat solid colour, never "empty". Asking an image model for an
+   absent background makes it paint a decorative stand-in instead of leaving one out,
+   so we name a colour, forbid it inside the object, and cut it later. */
+const BG = {
+  grey:    { label:"neutral mid-grey", desc:"a flat solid neutral mid-grey, hex 8A8A8A" },
+  slate:   { label:"neutral slate",    desc:"a flat solid neutral blue-slate, hex 6E7A85" },
+  magenta: { label:"chroma magenta",   desc:"a flat solid bright magenta, hex FF00FF" }
+};
+let bgKey = "grey";
+
+function FRAME() {
+  return "COMPOSITION:\n" +
+  "- Exactly one object, centred, with a little clear space on every side. Do not let it bleed off the edges.\n" +
+  "- The backdrop behind it is " + BG[bgKey].desc + ", filling the whole canvas edge to edge as ONE uniform flat " +
+  "colour: no gradient, no vignette, no texture, no pattern, no shading, no floor, no ground, no wall, no room, no " +
+  "scene. The object casts no shadow onto it.\n" +
+  "- That backdrop colour must not appear anywhere in the object itself.\n" +
+  "- No text, numbers, labels, callouts, watermarks, borders or UI.\n" +
+  "- One single view only - not a turnaround, not a grid, not multiple angles.";
+}
+
+const OUT = "Output one square image.";
+
+const MATCH =
+"\n\nCONSISTENCY: this is one of three rotation variants of the same object. Keep colours, proportions and element " +
+"placement identical to its siblings - the three must read as one object turned in place.";
+
+/* ---------- views ----------
+   WARNING: ROTATION IS THE DIRECTION OF THE WALL, NOT THE WAY THE UNIT FACES.
+   Placeworker_AttachedToWall requires a wall at loc + GenAdj.CardinalDirections[rot];
+   CardinalDirections[0] is (0,0,1) = north = up the screen, and Graphic_Multi takes
+   mats[0] as _north. So _north is the view WITH THE WALL ABOVE, which makes it the hero
+   view - the opposite of the usual RimWorld habit where _south faces the player. */
+
+const VIEW_ROT = {
+  north: "NORTH variant - THE HERO VIEW. The wall runs along the TOP edge of the frame and the unit " +
+         "is bolted flat against it, hugging that top edge. Because the wall is behind it, the unit's " +
+         "FRONT FACE points DOWN toward the bottom of the frame and every detail listed above is fully " +
+         "visible. The connection stubs leave the TOP of the unit and disappear into the wall. Leave " +
+         "the bottom third of the frame empty.",
+  east:  "EAST variant - the same unit turned a quarter turn. The wall runs along the RIGHT edge of the " +
+         "frame and the unit hugs that right edge, so its front face points LEFT. You see it in narrow " +
+         "side profile, taller than it is wide. The connection stubs leave the RIGHT side into the wall. " +
+         "Front-face detail is edge-on and mostly hidden - keep it simple. Leave the left third empty.",
+  south: "SOUTH variant - the BACK of the unit. The wall runs along the BOTTOM edge of the frame and the " +
+         "unit hugs that bottom edge, facing away from you. You see its plain top plate and rear mounting " +
+         "brackets: NONE of the front-face detail is visible. The connection stubs leave the BOTTOM into " +
+         "the wall. Add at most one small dark fitting. Leave the top third of the frame empty."
+};
+
+/* =====================================================================
+   Two style blocks, transcribed from the actual sprites:
+     A  DBH Valve, Rimefeller Valve, Rimatomics Coolant/Steam/Water valves,
+        Rimatomics transformer, DBH ElectricBoiler + centralAirVent
+     B  VTE ACUnit + VentValve, VCHE ChemfuelValve/Tap/Pipes,
+        Luciferium ScarletPipes
+   ===================================================================== */
+
+const STYLE_DUBWISE =
+"ART STYLE - copy the attached reference sprite exactly. This mod's 1x1 machines all share one look:\n" +
+"- A ROUNDED-CORNER SQUARE BASE PLATE that fills almost the entire image, in one flat colour with a fine speckled " +
+"noise texture over it.\n" +
+"- A THICK, SOLID, NEAR-BLACK OUTLINE around the base plate and around every element sitting on it. Heavy and even. " +
+"This is the most recognisable feature of the style.\n" +
+"- Flat colour with only a slight soft bevel on the raised grey parts. No gradients across the plate, no ambient " +
+"occlusion, no cast shadow, no glow, no reflections, no texture photography.\n" +
+"- Very few elements: three or four simple shapes at most, each a plain square, circle, bar or rounded rectangle.\n" +
+"- A tiny palette: the plate colour, two greys, and one or two small saturated accents.\n" +
+"- Chunky and readable when shrunk to 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+const STYLE_VE =
+"ART STYLE - copy the attached reference sprite exactly. Vanilla RimWorld / Vanilla Expanded look:\n" +
+"- NO heavy black outline. This style has essentially NO outline: flat blocks of colour butt directly against each " +
+"other, separated at most by a thin slightly-darker edge. Do not draw a cartoon border around the object.\n" +
+"- FLAT BLOCKS OF SOLID COLOUR arranged as simple geometry: a lighter band for the top surface, a darker band for the " +
+"front face, and groups of thin evenly spaced horizontal lines where there are fins, louvres or grilles.\n" +
+"- Cylinders and pipes are the one exception: they carry a soft smooth vertical gradient, lighter along the upper " +
+"edge and darker along the lower, with fully rounded caps.\n" +
+"- Muted, desaturated, slightly dusty palette built around ONE network identity colour. Accents are TINY - a small " +
+"triangle, a narrow band, a single square.\n" +
+"- No ambient occlusion, no specular highlights, no glow, no bloom, no cast shadow, no surface grime, no rivets, no " +
+"panel lines, no scratches.\n" +
+"- Three or four elements at most. Clean, geometric, architectural. Readable at 32 pixels.\n" +
+"- NOT a 3D render, NOT photorealistic, NOT pixel art, NOT painterly concept art, NOT a technical diagram.";
+
+/* The backdrop is a flat solid colour, never "empty". Asking an image model for an
+   absent background makes it paint a decorative stand-in instead of leaving one out,
+   so we name a colour, forbid it inside the object, and cut it later. */
+const BG = {
+  grey:    { label:"neutral mid-grey", desc:"a flat solid neutral mid-grey, hex 8A8A8A" },
+  slate:   { label:"neutral slate",    desc:"a flat solid neutral blue-slate, hex 6E7A85" },
+  magenta: { label:"chroma magenta",   desc:"a flat solid bright magenta, hex FF00FF" }
+};
+let bgKey = "grey";
+
+function FRAME() {
+  return "COMPOSITION:\n" +
+  "- Exactly one object, centred, with a little clear space on every side. Do not let it bleed off the edges.\n" +
+  "- The backdrop behind it is " + BG[bgKey].desc + ", filling the whole canvas edge to edge as ONE uniform flat " +
+  "colour: no gradient, no vignette, no texture, no pattern, no shading, no floor, no ground, no wall, no room, no " +
+  "scene. The object casts no shadow onto it.\n" +
+  "- That backdrop colour must not appear anywhere in the object itself.\n" +
+  "- No text, numbers, labels, callouts, watermarks, borders or UI.\n" +
+  "- One single view only - not a turnaround, not a grid, not multiple angles.";
+}
+
+const OUT = "Output one square image.";
+
+const MATCH =
+"\n\nCONSISTENCY: this is one of three rotation variants of the same object. Keep colours, proportions and element " +
+"placement identical to its siblings - the three must read as one object turned in place.";
+
+/* ---------- views ---------- */
+
+const VIEW_PLATE =
+  "Seen from directly overhead, flat on. The base plate is square to the frame and the elements sit on top of it. " +
+  "Drawn once - there are no rotation variants.";
+
+const VIEW_TUBE =
+  "Seen from RimWorld's near-overhead angle: a short vertical pipe stub. A flat collar ring at the base, and standing " +
+  "on it the rounded end of the tube with its identity band, catching a soft lighter gradient along its upper edge. " +
+  "Drawn once - there are no rotation variants.";
+
+const VIEW_ROT = {
+  south: "SOUTH-facing variant: the unit stands against a wall behind it, seen from the front. A WIDE rectangle, " +
+         "lighter band across the top for the top surface, darker band below it for the front face carrying all the " +
+         "detail described above. Connections leave upward behind the top edge and are barely visible.",
+  north: "NORTH-facing variant: the same unit turned to face away, so you see its BACK. Same wide rectangle, but the " +
+         "front-face detail is HIDDEN - mostly the plain lighter top tone with a small darker band at the bottom. The " +
+         "connections now clearly project UP out of the top edge and stand proud of the silhouette. At most one tiny " +
+         "dark dot as a rear fitting.",
+  east:  "EAST-facing variant: the same unit seen from its side, so the silhouette is NARROWER and taller. The same " +
+         "colour blocks rearranged into vertical bands: a lighter block on one side, a darker block on the other, with " +
+         "a pale vertical strip between them. Connections hook out of the upper LEFT edge. Front-face detail is not " +
+         "visible - keep it nearly plain."
+};
+
+/* =====================================================================
+   ROSTER
+   ===================================================================== */
+
+const REF = {
+  dbhValve:  WS + "836308268\\1.6\\Textures\\DBH\\Things\\Building\\Valve.png",
+  dbhVent:   WS + "836308268\\1.6\\Textures\\DBH\\Things\\Building\\Heating\\centralAirVent_south.png",
+  rfValve:   WS + "1321849735\\Textures\\Rimefeller\\Things\\Building\\Valve.png",
+  raCoolant: WS + "1127530465\\Textures\\Rimatomics\\Things\\RimatomicsBuildings\\CoolantValve.png",
+  raSteam:   WS + "1127530465\\Textures\\Rimatomics\\Things\\RimatomicsBuildings\\SteamValve.png",
+  raWater:   WS + "1127530465\\Textures\\Rimatomics\\Things\\RimatomicsBuildings\\WaterValve.png",
+  raTrans:   WS + "1127530465\\Textures\\Rimatomics\\Things\\RimatomicsBuildings\\transformer.png",
+  vteAc:     WS + "3202046258\\Textures\\Things\\Building\\ACUnit\\ACUnit_south.png",
+  vteVent:   WS + "3202046258\\Textures\\Things\\Building\\Linked\\VentValve.png",
+  vcheChem:  WS + "2792917473\\Textures\\Things\\Building\\Linked\\ChemfuelPipes_MenuIcon.png",
+  vcheDeep:  WS + "2792917473\\Textures\\Things\\Building\\Linked\\DeepchemPipes_MenuIcon.png",
+  luciPipe:  WS + "3227008885\\Textures\\Things\\Building\\Linked\\ScarletPipes_MenuIcon.png"
+};
+
+/* The Dubwise faceplate, written once. Only the plate colour changes. */
+function plate(colour, centre) {
+  return "A 1x1 utility riser faceplate, built exactly like this mod's valve sprite. Base: a rounded-corner square " +
+    "plate in flat " + colour + " with fine speckled noise, filling almost the whole image, with a thick near-black " +
+    "outline. Centred on the plate, a chunky mid-grey rounded-rectangle housing with a thick dark outline; at its " +
+    "centre " + centre + " One small flat green square sits on the left edge of the housing. A short dark grey square " +
+    "sits above the housing. One thin dark curved arc sits below it. Nothing else.";
+}
+
+const FAMILIES = [
+ {id:"vanilla", name:"Vanilla power", style:"ve", meta:"RimWorld Core — PowerNetMaker flood fill", risers:[
+   {n:"Power distribution riser", d:"AB_RiserPower", f:"AB_RiserPower", gate:"Electricity", gateNote:"vanilla research",
+    net:"Power conduit", rot:true, ref:REF.vteAc, refName:"VTE ACUnit_south.png",
+    p:"A wall-mounted electrical distribution box, built exactly like the attached wall unit. Flat light grey top " +
+      "band. Flat mid-grey lower band carrying five thin evenly spaced darker grey horizontal lines. Two tiny accents " +
+      "on the lower band: one small yellow triangle and one small dark grey triangle. Two short thick dark grey cable " +
+      "stubs as the connections."}
+ ]},
+ {id:"dbh", name:"Dubs Bad Hygiene", style:"dubwise", meta:"HygienePipeMapComp.RebuildPipeGrid — 2 of 4 PipeTypes used", risers:[
+   {n:"Plumbing riser", d:"AB_RiserPlumbing", f:"AB_RiserPlumbing", gate:"Plumbing",
+    gateNote:'MayRequire="dbhlitemode" — copied from their pipe', net:"PipeType.Sewage", rot:true,
+    ref:REF.dbhValve, refName:"DBH Valve.png",
+    p:"A wall-mounted plumbing junction cabinet, built exactly like this mod's valve panel. A rounded-corner dark charcoal plate with fine speckled noise and a thick near-black outline; a chunky mid-grey housing across its middle with an off-white pipe collar at the centre; one small flat green indicator square. Two short pipe stubs leave on the wall side."
+    },
+   {n:"Air-con duct riser", d:"AB_RiserAirDuct", f:"AB_RiserAirDuct", gate:"MultiSplitAirCon",
+    gateNote:'MayRequire="dbhlitemode" — copied from their duct', net:"PipeType.Air", rot:true,
+    ref:REF.dbhVent, refName:"DBH centralAirVent_south.png",
+    p:"A wall-mounted air-duct junction cabinet, built like this mod's vent panel. A rounded-corner pale steel blue-grey plate with a thick near-black outline; a grey grille panel across the middle made of three evenly spaced dark bars; one small flat green indicator square; two thin copper-orange lines down one side. Two short duct stubs leave on the wall side."
+    }
+ ]},
+ {id:"rimefeller", name:"Rimefeller", style:"dubwise", meta:"UniversalPipeMapComp.RebuildPipeGrid — 1 PipeType", risers:[
+   {n:"Oil pipeline riser", d:"AB_RiserOil", f:"AB_RiserOil", gate:"OilDrilling", gateNote:"copied from their OilPipeline",
+    net:"PipeType.Oil", rot:true, ref:REF.rfValve, refName:"Rimefeller Valve.png",
+    p:"A wall-mounted crude-oil junction cabinet, built exactly like this mod's valve panel. A rounded-corner near-black plate with fine speckle and a thick near-black outline; a chunky grey housing with a dark olive-green pipe collar at its centre; one small flat green indicator square; one small dark red circular handwheel. Two short heavy pipe stubs leave on the wall side."
+    }
+ ]},
+ {id:"rimatomics", name:"Dubs Rimatomics", style:"dubwise", meta:"UniversalPipeMapComp.RebuildPipeGrid — 5 PipeTypes, gated by ResearchStepDef.Unlocks", risers:[
+   {n:"Cold water riser", d:"AB_RiserColdWater", f:"AB_RiserColdWater", gate:"BuildReactorTurbine",
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.ColdWater", rot:true, ref:REF.raWater, refName:"Rimatomics WaterValve.png",
+    p:"A wall-mounted cold-water junction cabinet, built exactly like this mod's water valve panel. A rounded-corner medium blue plate with fine speckle and a thick near-black outline; a chunky grey housing with a pale steel collar crossed by one flat mid-blue bar; one small flat green indicator square; one tiny round white gauge. Two short pipe stubs leave on the wall side."
+    },
+   {n:"Steam riser", d:"AB_RiserSteam", f:"AB_RiserSteam", gate:"BuildReactorTurbine",
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Steam", rot:true, ref:REF.raSteam, refName:"Rimatomics SteamValve.png",
+    p:"A wall-mounted steam junction cabinet, built exactly like this mod's steam valve panel. A rounded-corner dark red plate with fine speckle and a thick near-black outline; a chunky grey housing with an off-white lagged collar wrapped by two thin light bands; one small flat green indicator square; one small brass relief valve. Two short lagged stubs leave on the wall side."
+    },
+   {n:"Coolant riser", d:"AB_RiserCoolant", f:"AB_RiserCoolant", gate:"TestForCore",
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Cooling", rot:true, ref:REF.raCoolant, refName:"Rimatomics CoolantValve.png",
+    p:"A wall-mounted coolant junction cabinet, built exactly like this mod's coolant valve panel. A rounded-corner dark teal plate with fine speckle and a thick near-black outline; a chunky grey housing with a brushed collar crossed by one flat teal-cyan bar; one small flat green indicator square; one small pale blue-green sight glass. Two short pipe stubs leave on the wall side."
+    },
+   {n:"High voltage riser", d:"AB_RiserHighVoltage", f:"AB_RiserHighVoltage", gate:"BuildReactorCooling",
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.HighVoltage", rot:true, ref:REF.raTrans, refName:"Rimatomics transformer.png",
+    p:"A wall-mounted high-voltage busbar cabinet, built exactly like the attached transformer sprite. A dark grey steel enclosure with a thick near-black outline, a lighter grey band across the top and a darker band below it, a row of small dark squares along the far edge like a grating, and one small flat orange warning triangle. Three heavy brown ceramic insulators capped with small dark red circles leave on the wall side."
+    },
+   {n:"Console loom riser", d:"AB_RiserLoom", f:"AB_RiserLoom", gate:"BuildReactorCooling",
+    gateNote:"ResearchStepDef.Unlocks", net:"PipeType.Loom", rot:true, ref:REF.raTrans, refName:"Rimatomics transformer.png",
+    p:"A wall-mounted control-cable junction cabinet, built like the attached transformer sprite but slimmer and paler. A light grey steel enclosure with a thick near-black outline, a lighter band across the top and a mid-grey band below carrying a row of four tiny amber status squares. Three thin colour-coded cables - one green, one blue, one yellow - leave on the wall side as simple rounded lines."
+    }
+ ]},
+ {id:"vche", name:"Vanilla Chemfuel Expanded", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Chemfuel riser", d:"AB_RiserChemfuel", f:"AB_RiserChemfuel", gate:"BiofuelRefining",
+    gateNote:"copied from VCHE_ChemfuelPipe", net:"VCHE_ChemfuelNet", rot:true, ref:REF.vcheChem, refName:"VCHE ChemfuelPipes_MenuIcon.png",
+    p:"A wall-mounted chemfuel junction box. Flat colour blocks with almost no outline: a dusty amber-orange panel, a lighter band across the top, a darker band below carrying three thin evenly spaced horizontal fins, one small pale yellow sight-glass square, and one small black flammable diamond. Two short dark stubs leave on the wall side."
+    },
+   {n:"Deepchem riser", d:"AB_RiserDeepchem", f:"AB_RiserDeepchem", gate:"BiofuelRefining",
+    gateNote:"copied from VCHE_DeepchemPipe", net:"VCHE_DeepchemNet", rot:true, ref:REF.vcheDeep, refName:"VCHE DeepchemPipes_MenuIcon.png",
+    p:"A wall-mounted deepchem junction box. Flat colour blocks with almost no outline: a near-black charcoal panel, a slightly lighter band across the top, a darker band below with three thin horizontal fins, and one narrow deep violet identification stripe with a small violet sight port. Two short dark stubs leave on the wall side."
+    }
+ ]},
+ {id:"vte", name:"Vanilla Temperature Expanded", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Vent duct riser", d:"AB_RiserVentDuct", f:"AB_RiserVentDuct", gate:"VTE_HVAC", gateNote:"copied from VTE_AirDuct",
+    net:"VTE_EfficiencyNet", rot:true, ref:REF.vteVent, refName:"VTE VentValve.png",
+    p:"A wall-mounted HVAC vent box, built like the attached AC unit. Flat colour blocks with no outline at all: a clean white panel with a light grey band across the top and a mid-grey band below carrying five thin evenly spaced darker horizontal fins, plus two tiny accent triangles, one blue and one dark red. Two short pale stubs leave on the wall side."
+    }
+ ]},
+ {id:"luci", name:"Ushankas Luciferium Expansion", style:"ve", meta:"VEF PipeSystem — PipeNetManager.NeighbourThingsCardinal", risers:[
+   {n:"Scarlet sludge riser", d:"AB_RiserScarletSludge", f:"AB_RiserScarletSludge", gate:"BasicMechanitesUnderstanding",
+    gateNote:"copied from USH_UndergroundScarletPipe", net:"ScarletNet", rot:true, ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
+    p:"A wall-mounted sludge junction box. Flat colour blocks with almost no outline: a dark charcoal panel with a slightly lighter top band and a darker lower band carrying three thin pale teal-grey banding lines, plus one dull red clouded sight glass. Two short dark stubs leave on the wall side."
+    },
+   {n:"Compressed sludge riser", d:"AB_RiserCompressedSludge", f:"AB_RiserCompressedSludge", gate:"ScarlettRefining",
+    gateNote:"copied from USH_CompressedScarletSludgePipe", net:"USH_CompressedScarletSludgeNet", rot:true,
+    ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
+    p:"A wall-mounted pressurised sludge cabinet. Flat colour blocks with almost no outline: a mid-grey panel with a lighter top band and a darker lower band, three thin darker banding lines, one narrow deep crimson identification stripe and one small brass pressure gauge with a tiny red needle mark. Two short reinforced stubs leave on the wall side."
+    },
+   {n:"Mechanites riser", d:"AB_RiserMechanites", f:"AB_RiserMechanites", gate:"ScarlettRefining",
+    gateNote:"copied from USH_ScarletMechanitesPipe", net:"USH_ScarletMechanitesNet", rot:true,
+    ref:REF.luciPipe, refName:"Luciferium ScarletPipes_MenuIcon.png",
+    p:"A wall-mounted mechanite conduit cabinet. Flat colour blocks with almost no outline: a pale silver-white panel with a lighter top band and a light grey lower band carrying fine thin ribs, one narrow bright scarlet channel stripe and one tiny pale blue indicator square. Two short polished stubs leave on the wall side."
+    }
+ ]}
+];
+
+const ROTS = ["north", "east", "south"];
+
+function promptFor(riser, slot) {
+  const fam = riser.family.style;
+  const style = fam === "dubwise" ? STYLE_DUBWISE : STYLE_VE;
+  // Every riser is a wall attachment now, so there is no single-view branch left.
+  const view = VIEW_ROT[slot.rot];
+  return "Draw a single RimWorld game sprite. A reference image from the same mod is attached - match its art style, " +
+    "palette, outline weight and level of detail exactly.\n\nSUBJECT: " + riser.p +
+    "\n\nVIEW: " + view + (slot.rot ? MATCH : "") +
+    "\n\n" + style + "\n\n" + FRAME() + "\n\n" + OUT;
+}
+
+const ALL = [];
+FAMILIES.forEach(fam => fam.risers.forEach(r => {
+  r.family = fam;
+  r.slots = r.rot ? ROTS.map(o => ({ file: r.f + "_" + o + ".png", rot: o, label: o }))
+                  : [{ file: r.f + ".png", rot: null, label: "texture" }];
+  r.slots.forEach(s => { s.riser = r; s.prompt = promptFor(r, s); ALL.push(s); });
+}));
+document.getElementById("fcount").textContent = ALL.length;
+
+/* ---------- render ---------- */
+
+const app = document.getElementById("app");
+FAMILIES.forEach(fam => {
+  const n = fam.risers.reduce((a, r) => a + r.slots.length, 0);
+  const g = document.createElement("div");
+  g.innerHTML = '<div class="grp"><h2>' + fam.name + '</h2><span class="meta">' +
+    fam.risers.length + ' riser' + (fam.risers.length > 1 ? 's' : '') + ' \u00b7 ' + n +
+    ' file' + (n > 1 ? 's' : '') + ' \u00b7 ' + fam.meta + '</span></div>' +
+    '<div class="cards" id="c_' + fam.id + '"></div>';
+  app.appendChild(g);
+  const wrap = g.querySelector("#c_" + fam.id);
+
+  fam.risers.forEach(r => {
+    const c = document.createElement("div");
+    c.className = "card"; r.el = c;
+    c.innerHTML =
+      '<div class="chead"><b>' + r.n + '</b><div class="defn">' + r.d + '</div><div class="tags">' +
+        '<span class="tag fam-' + fam.style + '">' + (fam.style === 'dubwise' ? 'Dubwise look' : 'Vanilla / VE look') + '</span>' +
+        '<span class="tag ' + (r.rot ? 'rot' : '') + '">' + (r.rot ? 'rotatable \u00d73' : 'Graphic_Single') + '</span>' +
+        '<span class="tag gate">gate: ' + r.gate + '</span>' +
+        '<span class="tag">' + r.net + '</span>' +
+      '</div></div>' +
+      '<div class="cbody"><div class="slots"></div>' +
+        '<div class="refbox"><div class="lbl">Attach this reference \u2014 ' + r.refName + '</div>' +
+          '<code></code><button class="refbtn">Copy reference path</button></div>' +
+        '<div class="prompt"><div class="ptabs"></div><textarea readonly></textarea></div>' +
+      '</div>';
+
+    c.querySelector(".refbox code").textContent = r.ref;
+    c.querySelector(".refbtn").onclick = () => { navigator.clipboard.writeText(r.ref); toast("Reference path copied"); };
+
+    const sw = c.querySelector(".slots"), tw = c.querySelector(".ptabs"), ta = c.querySelector("textarea");
+    r.select = function (i) {
+      r.active = i; ta.value = r.slots[i].prompt;
+      r.slots.forEach((s, j) => { s.el.classList.toggle("active", j === i); s.tab.classList.toggle("on", j === i); });
+    };
+    r.slots.forEach((s, i) => {
+      const d = document.createElement("div"); d.className = "slot"; s.el = d;
+      paint(s); sw.appendChild(d);
+      const t = document.createElement("div"); t.className = "ptab"; t.textContent = s.label; s.tab = t;
+      t.onclick = () => r.select(i); tw.appendChild(t);
+    });
+    const sp = document.createElement("div"); sp.className = "sp"; tw.appendChild(sp);
+    const cp = document.createElement("button"); cp.textContent = "Copy prompt";
+    cp.onclick = () => { navigator.clipboard.writeText(ta.value); toast("Copied " + r.slots[r.active].file); };
+    tw.appendChild(cp);
+    r.select(0); wrap.appendChild(c);
+  });
+});
+
+/* ---------- slots ---------- */
+
+function paint(s, file) {
+  const d = s.el;
+  if (file) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      let msg = img.width + "\u00d7" + img.height, col = "var(--ok)";
+      if (img.width !== img.height) { msg += " \u2014 NOT SQUARE"; col = "var(--bad)"; }
+      else if (!hasAlpha(img)) { msg += " \u2014 NO ALPHA"; col = "var(--warn)"; }
+      d.classList.add("has");
+      d.innerHTML = '<img src="' + url + '"><div class="nm">' + s.file + '</div><div class="px" style="color:' +
+        col + '">' + msg + '</div>';
+      bind(s);
+    };
+    img.src = url; s.done = true;
+  } else {
+    s.done = false; d.classList.remove("has");
+    d.innerHTML = '<div class="ph">+</div><div class="nm">' + s.file + '</div><div class="px">256\u00d7256</div>';
+  }
+  bind(s);
+}
+/* A fully opaque file means the flat backdrop was never cut out. Sampled on a 64x64
+   downscale so this stays cheap even when rescanning every slot at once. */
+function hasAlpha(img) {
+  try {
+    const n = 64;
+    const cv = document.createElement("canvas"); cv.width = n; cv.height = n;
+    const cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, n, n);
+    const px = cx.getImageData(0, 0, n, n).data;
+    for (let i = 3; i < px.length; i += 4) if (px[i] < 16) return true;
+    return false;
+  } catch (e) { return true; }
+}
+
+function bind(s) {
+  const d = s.el, r = s.riser, i = r.slots.indexOf(s);
+  d.onclick = () => { r.select(i); pick(s); };
+  d.onmouseenter = () => r.select(i);
+  d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
+  d.ondragleave = () => d.classList.remove("over");
+  d.ondrop = e => { e.preventDefault(); d.classList.remove("over");
+    const f = e.dataTransfer.files[0]; if (f) save(s, f); };
+  if (r.active === i) d.classList.add("active");
+}
+
+/* ---------- file system ---------- */
+
+let root = null;
+const hasFS = "showDirectoryPicker" in window;
+const fsPill = document.getElementById("fsapi");
+fsPill.textContent = hasFS ? "File System API available" : "No File System API — download mode";
+fsPill.className = "pill " + (hasFS ? "on" : "off");
+
+document.getElementById("connect").onclick = async () => {
+  if (!hasFS) { toast("Use Chrome or Edge to save directly"); return; }
+  try {
+    root = await window.showDirectoryPicker({ mode: "readwrite" });
+    let ok = true;
+    try { await root.getDirectoryHandle("About"); } catch { ok = false; }
+    if (!ok && !confirm("No About/ folder here — this may not be the mod root. Continue anyway?")) { root = null; return; }
+    document.getElementById("status").textContent = "Connected to " + root.name;
+    document.getElementById("rescan").disabled = false;
+    scan();
+  } catch (e) { if (e.name !== "AbortError") toast("Could not open folder"); }
+};
+document.getElementById("rescan").onclick = scan;
+
+async function dirFor(create) {
+  let h = root;
+  for (const p of DIR.split("/")) h = await h.getDirectoryHandle(p, { create });
+  return h;
+}
+async function scan() {
+  if (!root) return;
+  let d;
+  try { d = await dirFor(false); }
+  catch { ALL.forEach(s => paint(s)); markAll(); toast("No Risers folder yet — created on first save"); return; }
+  for (const s of ALL) {
+    try { const fh = await d.getFileHandle(s.file); paint(s, await fh.getFile()); } catch { paint(s); }
+  }
+  markAll();
+}
+async function save(s, file) {
+  if (!/\.png$/i.test(file.name)) { toast("PNG files only"); return; }
+  if (!root) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = s.file; a.click();
+    toast("Downloaded as " + s.file + " — move it into " + DIR); paint(s, file); return;
+  }
+  try {
+    const d = await dirFor(true);
+    const fh = await d.getFileHandle(s.file, { create: true });
+    const w = await fh.createWritable();
+    await w.write(await file.arrayBuffer()); await w.close();
+    paint(s, file); markAll(); toast("Saved " + s.file);
+  } catch (e) { toast("Save failed: " + e.message); }
+}
+function pick(s) {
+  const i = document.createElement("input");
+  i.type = "file"; i.accept = "image/png";
+  i.onchange = () => i.files[0] && save(s, i.files[0]);
+  i.click();
+}
+function markAll() {
+  FAMILIES.forEach(f => f.risers.forEach(r => r.el.classList.toggle("done", r.slots.every(s => s.done))));
+  document.getElementById("fcount").textContent = ALL.filter(s => s.done).length + " / " + ALL.length;
+}
+
+/* ---------- bulk drop ---------- */
+
+const dz = document.getElementById("drop");
+let dc = 0;
+addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dc++; dz.classList.add("on"); } });
+addEventListener("dragleave", () => { if (--dc <= 0) { dc = 0; dz.classList.remove("on"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", async e => {
+  e.preventDefault(); dc = 0; dz.classList.remove("on");
+  const files = [...e.dataTransfer.files];
+  let hit = 0;
+  for (const f of files) {
+    const s = ALL.find(x => x.file.toLowerCase() === f.name.toLowerCase());
+    if (s) { await save(s, f); hit++; }
+  }
+  if (files.length) toast(hit ? "Matched " + hit + " of " + files.length + " by filename" : "No filenames matched a slot");
+});
+
+function rebuildPrompts() {
+  ALL.forEach(s => s.prompt = promptFor(s.riser, s));
+  FAMILIES.forEach(f => f.risers.forEach(r => r.select(r.active)));
+}
+document.getElementById("bgsel").onchange = e => {
+  bgKey = e.target.value; rebuildPrompts(); toast("Backdrop: " + BG[bgKey].label);
+};
+
+document.getElementById("copyall").onclick = () => {
+  const t = FAMILIES.map(f => "#################### " + f.name + " ####################\n\n" +
+    f.risers.map(r => r.slots.map(s =>
+      "----- " + r.n + " (" + r.d + ") \u2014 " + s.label + " \u2014 " + s.file + " -----\n" +
+      "REFERENCE IMAGE: " + r.ref + "\n\n" + s.prompt + "\n").join("\n")).join("\n")).join("\n");
+  navigator.clipboard.writeText(t);
+  toast("All " + ALL.length + " prompts copied");
+};
+
+const tEl = document.getElementById("toast");
+let tT;
+function toast(m) { tEl.textContent = m; tEl.classList.add("show");
+  clearTimeout(tT); tT = setTimeout(() => tEl.classList.remove("show"), 2100); }
+</script>
+</body>
+</html>

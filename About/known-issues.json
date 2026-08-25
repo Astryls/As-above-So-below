@@ -2,274 +2,88 @@
   "version": 1,
   "issues": [
     {
-      "id": "asb-subsystem-shutdown",
-      "title": "As above, So below: a subsystem shut itself down after an error",
-      "explanation": "As above, So below wraps each of its systems - cross-level hauling, rendering, threats, movement and so on - in its own kill switch. When one throws an error it is logged once, that single system is turned off, and the rest of the mod plus vanilla keep running. The log line names the system, what it was doing, and often the likely cause (a specific item, mod or pawn). This error is contained by design; it is not a crash.",
-      "fix": "The affected feature stays off until it is re-armed. Open Mod settings > As above, So below and re-arm the tripped system, or reload your save (loading re-arms every system). If it keeps tripping, the 'Likely cause' in the log points at the culprit - report that line together with the stack trace.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["shut itself down to protect your game"],
-        "regexes": [],
-        "namespaces": [],
-        "packageIds": []
-      }
+      "id": "asb2-subsystem-shutdown",
+      "title": "As above, So below II: a subsystem shut itself down after an error",
+      "explanation": "The mod wraps each of its systems - rendering, transit, level generation, combat and so on - in its own kill switch. When one throws an error it is logged once, that single system is turned off, and the rest of the mod plus vanilla keep running. The log line names the system and what it was doing. This is containment by design, not a crash.",
+      "fix": "Open the mod settings, Diagnostics tab, to see every subsystem's health, what tripped it, and a re-arm button. Re-arming gives it another chance; if the fault is still there it trips again with a fresh log line. Please report the logged error so the underlying cause can be fixed."
     },
     {
-      "id": "asb-subsystem-logistics",
-      "title": "As above, So below: cross-level logistics turned itself off",
-      "explanation": "The logistics system handles hauling and ferrying items between levels, storage capacity limits, demand pulls, and routing mechs to a charger on another level. It hit an error and shut down, so nothing will be carried, ferried or charged across levels until it is re-armed. The usual trigger is another storage or hauling mod (Pick Up And Haul, Hauler's Dream, LWM Deep Storage) or a modded mech or charger; the log's 'Likely cause' names the exact item or mod.",
-      "fix": "Re-arm 'logistics' in Mod settings > As above, So below, or reload the save. If it trips again, note the item or mod named as the likely cause and report it with the full log line and stack trace.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'logistics'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-mountain-start",
+      "title": "Colony started inside a small carved pocket surrounded by rock",
+      "explanation": "On fully mountainous tiles the surface level can generate as solid rock end to end (the mod slices its levels from a taller generated map, and a mountain can cover the whole slice). When that happens the mod carves a starting clearing so the colony is playable - an intentional mountain-base start, not a failed generation.",
+      "fix": "Mine outward as you would in any mountain base. Until a route to the map edge is open, walk-in raids and caravans behave like they do on any enclosed mountain map. Prefer flatter tiles if you want an open start."
     },
     {
-      "id": "asb-subsystem-movement",
-      "title": "As above, So below: cross-level movement turned itself off",
-      "explanation": "The movement system hands pawns between levels when they use stairs, elevators or ladders. It hit an error and shut down, so pawns will not path across levels until it is re-armed. This is usually triggered by a pathfinding or vehicle mod, or by a reservation conflict on the stair tile.",
-      "fix": "Re-arm 'movement' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which movement or vehicle mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'movement'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-coastline",
+      "title": "Coastline or river looks wrong / partly missing",
+      "explanation": "Map-edge features such as coastlines are generated against the full tall map and can land in a level that gets replaced during banding. Continuous terrain (elevation, soil, rock) slices correctly; edge-anchored water may not.",
+      "fix": "Choose inland tiles for now. A full fix (generating the surface at normal fidelity and transplanting it) is planned."
     },
     {
-      "id": "asb-subsystem-ui",
-      "title": "As above, So below: cross-level interface extras turned themselves off",
-      "explanation": "The ui system draws the mod's interface additions: the level-view buttons and hotkeys, below-thing overlays, cross-level drag-box selection, colonist-bar ordering, the column alerts and the widened targeter. It hit an error and shut down, so those extras stop, though the vanilla interface is unaffected. It is usually triggered by another UI or HUD mod, or by a thing that throws while its overlay is drawn.",
-      "fix": "Re-arm 'ui' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which UI, HUD or colonist-bar mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'ui'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-ce-bridge-experimental",
+      "title": "Combat Extended: cross-level shooting is new and lightly tested",
+      "explanation": "The CE bridge maps CE's own ballistics onto stacked levels: projectiles fly and collide on the correct level, high ground affects accuracy in both directions, and suppression carries across levels. It is shape-checked against the current CE build but has not accumulated real play hours yet. If CE updates its internals, the bridge degrades one seam at a time rather than breaking, and the in-game combat report names any seam that failed to bind.",
+      "fix": "Treat CE colonies as experimental for now. Reports with the weapon, the levels involved and what the projectile did are exactly what gets this verified faster."
     },
     {
-      "id": "asb-subsystem-rendering",
-      "title": "As above, So below: the see-below view turned itself off",
-      "explanation": "The rendering system draws the live view of the surface beneath the sky, and the plumb view of the level below. It hit an error and shut down, so the below view may go blank while the column itself keeps working normally. It is usually triggered by a rendering, shader or camera mod, or by an object that throws while being drawn shrunk in the below view.",
-      "fix": "Re-arm 'rendering' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which rendering or camera mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'rendering'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-cross-level-mining",
+      "title": "Pawns will not mine rock on a level they are not standing on",
+      "explanation": "A mining target is solid rock, and solid cells are not walkable ground, so the mod's level router has nothing to aim at and does not route the pawn through the stairs. The game still reports the rock as reachable, so the pawn accepts the job and then finds no walkable route to it, and stands still or moves on to other work. The same applies to deconstructing, repairing or smoothing something set into rock on another level.",
+      "fix": "Send the pawn to that level first, by right clicking the stairs or by drafting it down, then give the mining order while it is on the same level. Mining works normally from there. A proper fix is in progress."
     },
     {
-      "id": "asb-subsystem-combat",
-      "title": "As above, So below: cross-level combat turned itself off",
-      "explanation": "The combat system routes shooting and fighting between the sky and surface levels. It hit an error and shut down, so cross-level targeting and combat stop until it is re-armed. It is usually triggered by a combat overhaul such as Combat Extended, or by an unusual verb or projectile.",
-      "fix": "Re-arm 'combat' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus your combat mods (note if you run Combat Extended).",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'combat'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-stairs-placement-refused",
+      "title": "Stairs / ladder placement is refused with a message about open cells",
+      "explanation": "Links require at least one open cardinal (non-diagonal) neighbouring cell, because a link reachable only diagonally jams pawns - RimWorld blocks diagonal movement past obstacles. The placement preview outlines the cells pawns can enter from.",
+      "fix": "Leave one orthogonally adjacent cell clear, or mark adjacent rock for mining first - cells designated for mining count as future open ground."
     },
     {
-      "id": "asb-subsystem-roofsync",
-      "title": "As above, So below: roof syncing between levels turned itself off",
-      "explanation": "The roofSync system keeps the sky floor and the surface roof consistent - open air versus a mountain top overhead. It hit an error and shut down, so overhead and roof state between two levels may drift out of sync. It is usually triggered by a roofing or mining mod.",
-      "fix": "Re-arm 'roofSync' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which roofing or mining mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'roofSync'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-walltop-not-walkable",
+      "title": "Pawns cannot walk on top of walls seen from above",
+      "explanation": "The top of an unroofed wall is buildable (stack another wall to raise a structure) but deliberately not walkable - it is a ledge, not a floor. Roofed rooms are different: a constructed roof is a walkable rooftop across its whole footprint, walls included.",
+      "fix": "Working as designed. Roof the structure if you want to walk on it."
     },
     {
-      "id": "asb-subsystem-threats",
-      "title": "As above, So below: threat routing turned itself off",
-      "explanation": "The threats system sends raids, drop pods, infestations and visitors to the correct level of a column. It hit an error and shut down, so incidents may fall back to vanilla placement or land on the wrong level. It is usually triggered by a raid, incident or storyteller mod, or by a modded incident worker.",
-      "fix": "Re-arm 'threats' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which incident, raid or storyteller mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'threats'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-mapgen-time",
+      "title": "Map generation takes noticeably longer than vanilla",
+      "explanation": "A banded colony generates three levels of content plus the band structure. Generation has been heavily optimized and typically takes a few seconds longer than a vanilla map of similar size.",
+      "fix": "Expected. If generation takes more than ~30 seconds something else is wrong - please report with your map size and tile type."
     },
     {
-      "id": "asb-subsystem-levelgen",
-      "title": "As above, So below: level generation turned itself off",
-      "explanation": "The levelGen system builds the extra sky and basement maps when a column is created or extended. It hit an error and shut down, so a column may not gain its extra levels until it is re-armed. It is usually triggered by a world generation, biome or terrain mod that conflicts during map creation.",
-      "fix": "Re-arm 'levelGen' in Mod settings > As above, So below, then generate or extend the column again, or reload the save. If it keeps tripping, report the log line and stack trace, plus your worldgen, biome and terrain mods.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'levelGen'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-existing-saves",
+      "title": "Added the mod to an existing save and nothing changed",
+      "explanation": "Levels are created during map generation, so only maps generated with the mod active are banded. Existing maps stay vanilla and are fully playable.",
+      "fix": "Start a new colony to get levels. Removing the mod is cleanest on maps that were never banded."
     },
     {
-      "id": "asb-subsystem-hostilemove",
-      "title": "As above, So below: hostile descent AI turned itself off",
-      "explanation": "The hostileMove system lets raiders and other hostiles move between levels to reach your colony. It hit an error and shut down, so hostiles will not descend or ascend until it is re-armed. It is usually triggered by an AI or faction mod, or by an unusual modded pawn.",
-      "fix": "Re-arm 'hostileMove' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which AI, faction or pawn mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'hostileMove'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-landing-platform-trim",
+      "title": "How do I remove or shrink the platform a stair or ladder created up top?",
+      "explanation": "A sky landing is a real constructed roof laid on the level below the platform; the walkable rooftop above is derived from it. Remove the roof below and the platform above dissolves. The small core around the stairwell itself (the stairs plus one ring) is protected so arriving pawns always have somewhere to stand, and ground is never dissolved under a standing pawn or building. Colonies from older versions are converted automatically on load.",
+      "fix": "On the level BELOW the platform, use vanilla's Remove roof area over the parts you do not want, and construction pawns will take it from there. Deconstructing the stairs releases the protected core too; the leftover roof below is then an ordinary roof you can keep or remove."
     },
     {
-      "id": "asb-subsystem-areas",
-      "title": "As above, So below: cross-level areas turned themselves off",
-      "explanation": "The areas system lets home, allowed and zone areas span the levels of a column. It hit an error and shut down, so area and zone tools may stop spanning levels until it is re-armed. It is usually triggered by a zone or area mod.",
-      "fix": "Re-arm 'areas' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which zone or area mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'areas'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-columns-buildable-area",
+      "title": "Columns and floor space on the level above",
+      "explanation": "A column (or any roof-holding structure) below gives a buildable ledge directly above it, like a wall top. WALKABLE floor above comes from roofs, exactly as walls work: roof the area around the column on the level below and the rooftop appears above as floor you can walk and build on.",
+      "fix": "Build columns below, then draw vanilla's Build roof area around them (columns hold roof up to the normal 6-cell reach). The roofed area becomes rooftop floor on the level above. Remove roof area takes it away again."
     },
     {
-      "id": "asb-subsystem-transit",
-      "title": "As above, So below: skyfaller transit turned itself off",
-      "explanation": "The transit system carries drop pods, skyfallers and transport pods between levels. It hit an error and shut down, so pods and skyfallers will not transfer between levels until it is re-armed. It is usually triggered by a transport-pod or airship mod such as Trader Airships or SRTS.",
-      "fix": "Re-arm 'transit' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which transport-pod or airship mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'transit'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-basement-thick-roof",
+      "title": "Cannot remove the rock ceiling in the basement",
+      "explanation": "Basement levels sit under overhead mountain - the rock ceiling IS the level above's ground - and vanilla does not allow removing thick rock roof. That is by design: a dug-out basement behaves exactly like a mined-out mountain base, infestation risk included.",
+      "fix": "Working as designed. Insect-proofing and lighting strategies from mountain bases apply unchanged. An openable shaft or skylight is a possible future feature, not a current one."
     },
     {
-      "id": "asb-subsystem-social",
-      "title": "As above, So below: neutral and visitor flow turned itself off",
-      "explanation": "The social system moves stranded neutrals and roaming guests (for example Hospitality visitors) between the levels of a column. It hit an error and shut down, so visitors and neutrals will not roam across levels until it is re-armed. It is usually triggered by Hospitality or another guest or social mod.",
-      "fix": "Re-arm 'social' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which guest or social mods you run (note if you run Hospitality).",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'social'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-world-exit-edges",
+      "title": "Leaving the map / Walk The World prompts only on the surface level",
+      "explanation": "On a stacked colony the edge of the world is the SURFACE level's own perimeter, all four sides - including the sides that border the seam between levels. The outer edges of basements and sky levels are deliberately not world exits: walking to an underground map edge is not standing at the edge of the world. Mods that use the exit grid (such as Walk The World) follow this automatically; their green edge highlight may not paint the seam-side rows, but walking a pawn there still triggers the prompt.",
+      "fix": "Send pawns to any edge of the SURFACE level to leave the map or trigger travel prompts. To depart from another level, take the stairs to the surface first."
     },
     {
-      "id": "asb-subsystem-world",
-      "title": "As above, So below: world-map integration turned itself off",
-      "explanation": "The world system makes trade and caravan launches on the world map aware of the whole column. It hit an error and shut down, so column trade and launch fall back to vanilla behaviour until it is re-armed. It is usually triggered by a world-map, caravan or trade mod.",
-      "fix": "Re-arm 'world' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which world-map, caravan or trade mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'world'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
-    },
-    {
-      "id": "asb-subsystem-weather",
-      "title": "As above, So below: weather syncing turned itself off",
-      "explanation": "The weather system mirrors weather between the levels of a column so they stay consistent. It hit an error and shut down, so two levels may show different weather until it is re-armed. It is usually triggered by a weather mod.",
-      "fix": "Re-arm 'weather' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which weather mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'weather'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
-    },
-    {
-      "id": "asb-subsystem-power",
-      "title": "As above, So below: cross-level power turned itself off",
-      "explanation": "The power system links power networks between the levels of a column so electricity carries across them. It hit an error and shut down, so power will not cross between levels until it is re-armed. It is usually triggered by a power or electricity mod.",
-      "fix": "Re-arm 'power' in Mod settings > As above, So below, or reload the save. If it keeps tripping, report the log line and stack trace, plus which power or electricity mods you run.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'power'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
-    },
-    {
-      "id": "asb-subsystem-pipes",
-      "title": "As above, So below: cross-level pipes turned themselves off",
-      "explanation": "The pipes system links fluid and gas pipe networks across the levels of a column, for mods such as Dubs Bad Hygiene, Rimefeller and Vanilla Chemfuel Expanded. It hit an error and shut down, so those pipe networks will not carry across levels until it is re-armed. The trigger is usually the pipe mod itself; the log's 'Likely cause' names it.",
-      "fix": "Re-arm 'pipes' in Mod settings > As above, So below, or reload the save. If it keeps tripping, note the pipe mod named as the likely cause and report it with the log line and stack trace.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'pipes'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
-    },
-    {
-      "id": "asb-subsystem-async",
-      "title": "As above, So below: background rebuilds fell back to the main thread",
-      "explanation": "The async system builds the see-below mask on a background thread to keep the game smooth. Unlike the other systems, tripping it does not turn a feature off - it just falls back to building the mask synchronously on the main thread. The only symptom is a brief stutter when the below view updates. It is usually triggered by a threading or performance mod.",
-      "fix": "No action is needed; the below view still works, only less smoothly. To restore background rebuilds, re-arm 'async' in Mod settings > As above, So below or reload the save. RimThreaded is not supported. If it keeps tripping, report the log line and stack trace, plus your performance or threading mods.",
-      "severity": "error",
-      "reportedBy": "astryl",
-      "match": {
-        "exceptionTypes": [],
-        "keywords": ["Subsystem 'async'"],
-        "regexes": [],
-        "namespaces": ["AsAboveSoBelow"],
-        "packageIds": ["astryl.AsAboveSoBelow"]
-      }
+      "id": "asb2-caverns-need-mod",
+      "title": "Basement is always plain rock - no caverns",
+      "explanation": "Living cavern basements require the Biomes! Caverns mod (and its Biomes! Core framework). Without it the basement is always solid mineable rock, and the cavern settings are hidden.",
+      "fix": "Install Biomes! Caverns and start a new colony, then pick a cavern type (or Random) in the mod settings before generating."
     }
   ]
 }

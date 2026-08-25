@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- V2 SPIKE ONLY. Wormhole endpoint / prototype V2 stairwell.
+       Inherits DoorBase so the cell becomes a RegionType.Portal region (the only
+       way to get Portal from GetExpectedRegionType), which is what lets the
+       synthetic RegionLink conduct connectivity without merging rooms.
+       menuHidden: dev-spawned only, never in the architect menu.
+       Textures deliberately reuse vanilla door art - no new assets for a spike. -->
+  <ThingDef ParentName="DoorBase">
+    <defName>AB2_WormholeAnchor</defName>
+    <label>wormhole anchor</label>
+    <description>V2 spike test fixture. Joins its position to its partner anchor elsewhere on the map, forming a single connectivity graph across two bands.</description>
+    <thingClass>AsAboveSoBelow.Building_ABAnchor</thingClass>
+    <!-- Clears the designationCategory inherited from DoorBase so this spike
+         fixture never reaches the architect menu. The self-closing-tag idiom is
+         what Anomaly/Odyssey terrain defs use; there is no `menuHidden` field on
+         ThingDef in 1.6 (that was a run #4 XML error). -->
+    <designationCategory />
+    <costStuffCount>1</costStuffCount>
+    <statBases>
+      <WorkToBuild>1</WorkToBuild>
+      <MaxHitPoints>1000</MaxHitPoints>
+    </statBases>
+    <graphicData>
+      <texPath>Things/Building/Door/DoorSimple_Mover</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <uiIconPath>Things/Building/Door/DoorSimple_MenuIcon</uiIconPath>
+  </ThingDef>
+
+</Defs>

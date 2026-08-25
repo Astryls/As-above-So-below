@@ -1,5 +1,8 @@
+# Build artifacts (Assemblies/*.dll IS committed deliberately: it is the shipped artifact)
 Source/obj/
 Source/bin/
+*.pdb
 
-# Regenerable whole-codebase snapshot (docs/generate-helicopter-view.sh)
-docs/HELICOPTER_VIEW.md
+# Modmixer transient/local state (.modmixer/schematic.json, art-src/, mockups/ ARE backed up)
+.modmixer/publish-stash/
+.modmixer/prefs.json
