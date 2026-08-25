@@ -39,7 +39,7 @@ old tree. Work top to bottom; nothing here is optional.
 - [ ] `About/Preview.png` present and current.
 - [ ] `modDependencies` (Harmony) and `incompatibleWith` still accurate.
 
-## 4. Strip before publishing (FOUR MOVES)
+## 4. Strip before publishing (FIVE MOVES)
 
 Move these OUT of the mod folder, publish, then move them back. **Move, never delete:**
 `Source/` is the working tree.
@@ -50,6 +50,8 @@ Move these OUT of the mod folder, publish, then move them back. **Move, never de
 4. [ ] `.git/`  (PRESENT since window 8: repo Astryls/As-above-So-below, branch main.
       Move it out with the rest; committing and pushing BEFORE the strip is the
       cleanest order.)
+5. [ ] `mockups/`  (motion-study HTML pages, added for the transit-animation work.
+      Dev artifact, never ships.)
 
 Also confirm:
 - [ ] `.modmixer/` is never uploaded (the utility excludes it, but eyeball the file list).
@@ -60,7 +62,7 @@ Also confirm:
 - [ ] Run the Modmixer publish utility.
 - [ ] Steam **web** editor: paste `docs/UPDATE_NOTES.txt` into the Change Notes field.
 - [ ] Steam **web** editor: description only if it actually changed.
-- [ ] Move the four stripped folders back.
+- [ ] Move the five stripped folders back.
 - [ ] Subscribe-and-load smoke test from the Workshop copy, not the workspace copy.
 
 ## 6. After

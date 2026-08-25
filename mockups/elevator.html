@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - elevator transit</title>
+<style>
+:root{--bg:#131518;--panel:#1b1e24;--ink:#d8dce4;--mut:#8a93a2;--acc:#6fb0c9;--lat:#8f4e4e;--cell:64px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+header{max-width:1100px;margin:18px auto 8px;padding:0 16px}
+h1{font-size:19px;margin:0 0 4px}
+.chip{display:inline-block;background:#242a33;border:1px solid #39404a;border-radius:20px;padding:2px 10px;font-size:11.5px;color:var(--mut);vertical-align:middle;margin-left:8px}
+.tag{color:var(--mut);margin:2px 0 0;font-size:13px}
+nav{max-width:1100px;margin:0 auto;padding:0 16px;font-size:12.5px;color:var(--mut)}
+nav a{color:#7fb0d8;text-decoration:none}
+.controls{max-width:1100px;margin:12px auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:var(--panel);border:1px solid #2a2f38;border-radius:10px}
+button{background:#242a33;border:1px solid #39404a;color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{background:#2c333e}
+button.on{background:#3a4a3a;border-color:#5f8f52}
+button.dirOn{background:#30424a;border-color:var(--acc)}
+.ctl{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut)}
+.ctl input[type=range]{width:90px}
+.ctl b{color:var(--ink);font-weight:600;min-width:26px;text-align:right;font-variant-numeric:tabular-nums}
+.latbox{margin-left:auto;background:#2a2024;border:1px solid #5a3a3a;border-radius:8px;padding:4px 12px;font-size:12.5px;color:#d8a0a0}
+.latbox b{color:#f0c0c0}
+.stage{display:flex;justify-content:center;align-items:stretch;gap:0;max-width:1100px;margin:0 auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid #2a2f38;border-radius:10px;padding:10px;flex:0 0 auto}
+.panelTitle{font-size:13px;font-weight:600;margin-bottom:8px}
+.panelTitle small{color:var(--mut);font-weight:400}
+.map{position:relative;width:calc(5*var(--cell));height:calc(4*var(--cell));overflow:hidden;border-radius:6px;background:#23201c}
+.cell{position:absolute;width:var(--cell);height:var(--cell);border:1px solid rgba(255,255,255,.022)}
+.c1{background:#262220}.c2{background:#242019}
+.sprite{position:absolute;width:var(--cell);height:var(--cell)}
+.car{position:absolute;left:0;top:0;width:46px;height:46px;margin:-23px;opacity:0;transform-origin:center;will-change:transform,opacity}
+.actor{position:absolute;left:0;top:0;width:44px;height:52px;margin-left:-22px;margin-top:-34px;transform-origin:22px 34px;opacity:0;will-change:transform,opacity}
+.actor svg,.car svg{display:block}
+.shadow{position:absolute;left:0;top:0;width:34px;height:13px;margin-left:-17px;margin-top:-6px;border-radius:50%;background:rgba(0,0,0,.42);filter:blur(3px);opacity:0;transform-origin:center;will-change:transform,opacity}
+.gate{position:absolute;height:5px;background:linear-gradient(#e0b96a,#a9853f);border-radius:2px;width:0;box-shadow:0 0 4px rgba(224,185,106,.35)}
+.floorchip{position:absolute;right:6px;top:6px;background:#0d0f12;border:1px solid #39404a;border-radius:5px;padding:2px 8px;font:600 13px ui-monospace,Consolas,monospace;color:#9fe0ff;transition:transform .12s}
+.floorchip.blip{transform:scale(1.25)}
+.ding{position:absolute;left:0;top:0;width:56px;height:56px;margin:-28px;border:2px solid #ffd97a;border-radius:50%;opacity:0;transform-origin:center;will-change:transform,opacity}
+.caption{margin-top:8px;font-size:11.8px;color:var(--mut);max-width:calc(5*var(--cell))}
+.gutter{width:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#5a626e;font-size:11px}
+.gutter .arrow{font-size:22px;color:var(--acc)}
+.gutter .line{width:2px;flex:0 0 60px;background:repeating-linear-gradient(to bottom,#39404a 0 6px,transparent 6px 12px)}
+.timeline{max-width:1100px;margin:14px auto 0;padding:0 16px}
+.segbar{position:relative;display:flex;height:32px;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #2a2f38}
+.seg{position:relative;height:100%;min-width:3px}
+.seg.lat::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(0,0,0,.28) 0 6px,transparent 6px 12px)}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.7);pointer-events:none}
+.readout{margin-top:6px;font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.readout b{color:var(--ink)}
+.legend{margin-top:4px;font-size:11.5px;color:#6a7280}
+footer{max-width:1100px;margin:20px auto 30px;padding:0 16px;color:var(--mut);font-size:12.3px;line-height:1.55}
+footer h3{color:var(--ink);font-size:13px;margin:14px 0 4px}
+footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Elevator transit<span class="chip">AB2_Elevator - linksAllLevels, one shaft member on every level</span></h1>
+  <p class="tag">Motion language: the car does the moving, the rider just stands there. Board, gate, ride, gate, step off. Travel time scales with levels crossed; the floor indicator counts them. Same scale grammar as stairs and ladder.</p>
+</header>
+<nav>Motion studies: <a href="stairs.html">stairs</a> &middot; <a href="ladder.html">ladder</a> &middot; <b>elevator</b></nav>
+
+<section class="controls">
+  <button id="bPlay">Pause</button>
+  <button id="bRestart">Restart</button>
+  <button id="bLoop" class="on">Loop</button>
+  <span class="ctl">Direction
+    <button id="bDown" class="dirOn">&#9660; down</button>
+    <button id="bUp">&#9650; up</button>
+  </span>
+  <span class="ctl">Speed
+    <button data-sp="0.25">&frac14;x</button><button data-sp="0.5">&frac12;x</button><button data-sp="1" class="on">1x</button><button data-sp="2">2x</button>
+  </span>
+  <span class="ctl">levels <input id="sLevels" type="range" min="1" max="6" value="2"><b id="vLevels">2</b></span>
+  <span class="ctl">board <input id="sBoard" type="range" min="6" max="24" value="14"><b id="vBoard">14</b>t</span>
+  <span class="ctl">gate <input id="sGate" type="range" min="0" max="16" value="8"><b id="vGate">8</b>t</span>
+  <span class="ctl">per level <input id="sPer" type="range" min="8" max="40" value="20"><b id="vPer">20</b>t</span>
+  <span class="latbox">added cross-level latency: <b id="latT">70</b>t (<b id="latS">1.17</b>s)</span>
+</section>
+
+<section class="stage">
+  <div class="panel" id="panelA">
+    <div class="panelTitle"></div>
+    <div class="map" id="mapA"></div>
+    <div class="caption"></div>
+  </div>
+  <div class="gutter"><div class="line"></div><div class="arrow" id="gArrow">&#9660;</div><div>band<br>gutter</div><div class="line"></div></div>
+  <div class="panel" id="panelB">
+    <div class="panelTitle"></div>
+    <div class="map" id="mapB"></div>
+    <div class="caption"></div>
+  </div>
+</section>
+
+<section class="timeline">
+  <div class="segbar" id="segbar"></div>
+  <div class="readout" id="readout"></div>
+  <div class="legend">Hatched segments are the real, added latency. Travel = levels &times; per-level ticks; the indicator chip counts floors as the car passes them. Click the bar to scrub. 60 ticks = 1 second at 1x.</div>
+</section>
+
+<footer>
+  <h3>Why the elevator is the slow, comfy one</h3>
+  Stairs and ladders animate the pawn; the elevator animates the vehicle. Car and rider share one transform, so the ride is a single scale + fade with a slight running vibration, bookended by a gate close and an arrival ding. Its trade is explicit: the longest latency of the three, but one ride crosses any number of levels (<code>linksAllLevels</code> pairs the shaft member on every level), and the per-level cost is a slider. Boarding has a small weight dip when the pawn steps on - cheap, and it sells the platform as physical.
+  <h3>Implementation guardrail (run #297)</h3>
+  Same as the other two pages: none of this latency may gate the carry. Carry instantly, immobilize the arrived rider for the ride duration, ghost the origin-side clip, then play the arrival. The car plate is an overlay graphic we draw (like the gate bars and the indicator, which could be a tiny inspect-string or overlay text); the elevator building sprite itself never animates.
+  <h3>Honesty notes</h3>
+  Placeholder geometry only - motion study, not proposed art. The single physical car is a fiction the overlay maintains; the building exists on every level and never moves. Alpha fades need a tint path; scale-only still reads. If multi-level rides immobilize too long in practice, per-level ticks can shrink with a research upgrade rather than a settings toggle.
+</footer>
+
+<script>
+(function(){
+"use strict";
+var CELL=64;
+function $(id){return document.getElementById(id);}
+function clamp01(t){return t<0?0:t>1?1:t;}
+function smooth(t){t=clamp01(t);return t*t*(3-2*t);}
+function lerp(a,b,t){return a+(b-a)*t;}
+
+var PAWN_SVG='<svg width="44" height="52" viewBox="0 0 44 52">'
+ +'<ellipse cx="22" cy="34" rx="13.5" ry="15.5" fill="#3f6fae" stroke="rgba(0,0,0,.28)" stroke-width="1.5"/>'
+ +'<circle cx="22" cy="15.5" r="10" fill="#eac393" stroke="rgba(0,0,0,.2)" stroke-width="1"/>'
+ +'<path d="M12 15.5 a10 10 0 0 1 20 0 z" fill="#5b3d20"/></svg>';
+
+var CAR_SVG='<svg width="46" height="46" viewBox="0 0 46 46">'
+ +'<rect x="1" y="1" width="44" height="44" rx="4" fill="#6a717b" stroke="#3a3f47" stroke-width="2"/>'
+ +'<rect x="5" y="5" width="36" height="36" rx="2" fill="none" stroke="#7d848e" stroke-width="1.5"/>'
+ +'<line x1="23" y1="5" x2="23" y2="41" stroke="#59606a" stroke-width="1.5"/>'
+ +'<circle cx="6" cy="6" r="2.2" fill="#9aa1ab"/><circle cx="40" cy="6" r="2.2" fill="#9aa1ab"/>'
+ +'<circle cx="6" cy="40" r="2.2" fill="#9aa1ab"/><circle cx="40" cy="40" r="2.2" fill="#9aa1ab"/></svg>';
+
+function elevSVG(){
+  var s='<svg width="64" height="64" viewBox="0 0 64 64">'
+   +'<rect x="2" y="2" width="60" height="60" rx="4" fill="#23262b" stroke="#464c56" stroke-width="2"/>'
+   +'<rect x="8" y="8" width="48" height="48" fill="#0b0c0e"/>'
+   +'<rect x="3" y="3" width="10" height="10" rx="2" fill="#3d434c"/><rect x="51" y="3" width="10" height="10" rx="2" fill="#3d434c"/>'
+   +'<rect x="3" y="51" width="10" height="10" rx="2" fill="#3d434c"/><rect x="51" y="51" width="10" height="10" rx="2" fill="#3d434c"/>';
+  for(var i=0;i<6;i++){
+    s+='<rect x="'+(9+i*8)+'" y="57" width="5" height="3" fill="'+(i%2?'#1a1a1a':'#c9a25a')+'"/>';
+  }
+  return s+'</svg>';
+}
+
+function makePanel(rootId, mapId){
+  var map=$(mapId);
+  for(var r=0;r<4;r++)for(var c=0;c<5;c++){
+    var d=document.createElement('div');
+    d.className='cell '+(((r+c)%2)?'c1':'c2');
+    d.style.left=(c*CELL)+'px'; d.style.top=(r*CELL)+'px';
+    map.appendChild(d);
+  }
+  var sprite=document.createElement('div'); sprite.className='sprite';
+  sprite.style.left=(2*CELL)+'px'; sprite.style.top=(1*CELL)+'px';
+  sprite.innerHTML=elevSVG(); map.appendChild(sprite);
+  var car=document.createElement('div'); car.className='car'; car.innerHTML=CAR_SVG; map.appendChild(car);
+  var shadow=document.createElement('div'); shadow.className='shadow'; map.appendChild(shadow);
+  var actor=document.createElement('div'); actor.className='actor'; actor.innerHTML=PAWN_SVG; map.appendChild(actor);
+  var gl=document.createElement('div'); gl.className='gate'; gl.style.top=(2*CELL-7)+'px'; gl.style.left=(2*CELL+2)+'px'; map.appendChild(gl);
+  var gr=document.createElement('div'); gr.className='gate'; gr.style.top=(2*CELL-7)+'px'; map.appendChild(gr);
+  var ding=document.createElement('div'); ding.className='ding'; map.appendChild(ding);
+  var chip=document.createElement('div'); chip.className='floorchip'; chip.textContent='L?'; map.appendChild(chip);
+  var root=$(rootId);
+  return {sprite:sprite,car:car,shadow:shadow,actor:actor,gateL:gl,gateR:gr,ding:ding,chip:chip,
+          title:root.querySelector('.panelTitle'),caption:root.querySelector('.caption'),lastChip:''};
+}
+function setActor(p,x,y,scale,rot,alpha,noShadow){
+  if(alpha<=0){p.actor.style.opacity='0';p.shadow.style.opacity='0';return;}
+  p.actor.style.opacity=String(alpha);
+  p.actor.style.transform='translate('+(x*CELL)+'px,'+(y*CELL)+'px) rotate('+rot+'deg) scale('+scale+')';
+  if(noShadow){p.shadow.style.opacity='0';return;}
+  p.shadow.style.opacity=String(alpha*0.55*Math.min(1,scale));
+  p.shadow.style.transform='translate('+(x*CELL)+'px,'+((y+0.22)*CELL)+'px) scale('+scale+')';
+}
+function setCar(p,x,y,scale,alpha){
+  if(alpha<=0){p.car.style.opacity='0';return;}
+  p.car.style.opacity=String(alpha);
+  p.car.style.transform='translate('+(x*CELL)+'px,'+(y*CELL)+'px) scale('+scale+')';
+}
+function setGates(p,w){
+  var half=Math.max(0,Math.min(1,w))*29;
+  p.gateL.style.width=half+'px';
+  p.gateR.style.width=half+'px';
+  p.gateR.style.left=(3*CELL-2-half)+'px';
+}
+function setChip(p,txt){
+  if(p.lastChip!==txt){
+    p.lastChip=txt;
+    p.chip.textContent=txt;
+    p.chip.classList.add('blip');
+    setTimeout(function(){p.chip.classList.remove('blip');},130);
+  }
+}
+function walk(p,from,to,prog,steps){
+  steps=steps||4;
+  var x=lerp(from[0],to[0],prog), y=lerp(from[1],to[1],prog);
+  var bob=Math.abs(Math.sin(prog*steps*Math.PI));
+  var rot=Math.sin(prog*steps*Math.PI)*4;
+  setActor(p,x,y-bob*0.045,1,rot,1);
+}
+
+var PA=makePanel('panelA','mapA'), PB=makePanel('panelB','mapB');
+var state={t:0,playing:true,speed:1,dir:'down',loop:true};
+var sl={levels:$('sLevels'),board:$('sBoard'),gate:$('sGate'),per:$('sPer')};
+function levels(){return +sl.levels.value;}
+function travelT(){return levels()*(+sl.per.value);}
+
+function phases(){
+  var down=state.dir==='down';
+  return [
+   {id:'approach',label:'walk to the shaft',t:36,col:'#3b4656'},
+   {id:'board',label:'board the car (weight dip)',t:+sl.board.value,col:'#4a6a7a',lat:true},
+   {id:'gate',label:'gate closes',t:+sl.gate.value,col:'#7a6a3a',lat:true},
+   {id:'travel',label:down?'ride down '+levels()+' level(s)':'ride up '+levels()+' level(s)',t:travelT(),col:'#b0813f',lat:true},
+   {id:'gateO',label:'ding, gate opens',t:+sl.gate.value,col:'#7a6a3a',lat:true},
+   {id:'alight',label:'step off',t:14,col:'#5f8f52'},
+   {id:'depart',label:'walk on',t:36,col:'#3b4656'},
+   {id:'idle',label:'loop pause (car recalled)',t:26,col:'#242830'}
+  ];
+}
+function total(){var ps=phases(),s=0,i;for(i=0;i<ps.length;i++)s+=ps[i].t;return s;}
+function latency(){return (+sl.board.value)+2*(+sl.gate.value)+travelT();}
+
+function buildBar(){
+  var bar=$('segbar'); bar.innerHTML='';
+  var ps=phases(), tt=total(), i;
+  for(i=0;i<ps.length;i++){
+    var s=document.createElement('div');
+    s.className='seg'+(ps[i].lat?' lat':'');
+    s.style.width=(ps[i].t/tt*100)+'%';
+    s.style.background=ps[i].col;
+    s.title=ps[i].label+' - '+ps[i].t+'t';
+    bar.appendChild(s);
+  }
+  var ph=document.createElement('div'); ph.className='playhead'; ph.id='playhead'; bar.appendChild(ph);
+  $('vLevels').textContent=sl.levels.value; $('vBoard').textContent=sl.board.value;
+  $('vGate').textContent=sl.gate.value; $('vPer').textContent=sl.per.value;
+  $('latT').textContent=latency(); $('latS').textContent=(latency()/60).toFixed(2);
+}
+
+function topLevel(){return 1+levels();}
+function applyDir(){
+  var down=state.dir==='down';
+  var top=topLevel();
+  PA.title.innerHTML=down?'Origin - Level '+top+' <small>(upper band, viewed top-down)</small>':'Origin - Level 1 <small>(lower band, viewed top-down)</small>';
+  PB.title.innerHTML=down?'Destination - Level 1 <small>(lower band)</small>':'Destination - Level '+top+' <small>(upper band)</small>';
+  PA.caption.textContent=down?'AB2_Elevator: board, gate closes, the car sinks away - car and rider share one transform, with a running vibration.'
+                             :'AB2_Elevator: board, gate closes, the car rises toward the camera plane and fades out.';
+  PB.caption.textContent=down?'The shaft stands open until the car arrives from above (1.15 to 1.0), dings, and the rider steps off.'
+                             :'The shaft stands open until the car arrives from below (0.28 to 1.0), dings, and the rider steps off.';
+  $('gArrow').innerHTML=down?'&#9660;':'&#9650;';
+  $('bDown').classList.toggle('dirOn',down);
+  $('bUp').classList.toggle('dirOn',!down);
+  state.t=0; buildBar();
+}
+
+function draw(sec){
+  var ps=phases(), t=state.t, acc=0, cur=ps[0], p=0, i;
+  for(i=0;i<ps.length;i++){
+    if(t<acc+ps[i].t||i===ps.length-1){cur=ps[i];p=ps[i].t>0?clamp01((t-acc)/ps[i].t):1;break;}
+    acc+=ps[i].t;
+  }
+  setActor(PA,0,0,1,0,0); setActor(PB,0,0,1,0,0);
+  setCar(PA,2.5,1.5,1,0); setCar(PB,2.5,1.5,1,0);
+  PA.ding.style.opacity='0'; PB.ding.style.opacity='0';
+  var down=state.dir==='down';
+  var top=topLevel(), origin=down?top:1, dest=down?1:top;
+  var beforeTravel=(cur.id==='approach'||cur.id==='board'||cur.id==='gate');
+  var afterTravel=(cur.id==='gateO'||cur.id==='alight'||cur.id==='depart');
+
+  if(beforeTravel){ setCar(PA,2.5,1.5,1,1); setChip(PA,'L'+origin); setChip(PB,'L'+origin); }
+  if(afterTravel){ setCar(PB,2.5,1.5,1,1); setChip(PA,'L'+dest); setChip(PB,'L'+dest); }
+
+  setGates(PA, beforeTravel&&cur.id!=='gate' ? 0 : cur.id==='gate' ? p : cur.id==='idle' ? 1-p : 1);
+  setGates(PB, afterTravel&&cur.id!=='gateO' ? 0 : cur.id==='gateO' ? 1-p : cur.id==='idle' ? p : 1);
+
+  switch(cur.id){
+    case 'approach': walk(PA,[-0.5,3.0],[2.5,2.62],p); break;
+    case 'board':
+      if(p<0.75){ walk(PA,[2.5,2.62],[2.5,1.55],p/0.75,3); }
+      else{
+        var q2=(p-0.75)/0.25, dip=Math.sin(Math.PI*q2)*0.035;
+        setCar(PA,2.5,1.5+dip,1,1);
+        setActor(PA,2.5,1.5+dip,1,0,1,true);
+      }
+      break;
+    case 'gate':
+      setActor(PA,2.5,1.5,1,0,1,true);
+      break;
+    case 'travel':{
+      var q=p, jit=Math.sin(sec*45)*0.015;
+      var floorNow=Math.round(down? origin-levels()*q : origin+levels()*q);
+      setChip(PA,'L'+floorNow); setChip(PB,'L'+floorNow);
+      if(down){
+        if(q<0.5){
+          var e=smooth(q/0.5), a=q<0.32?1:1-(q-0.32)/0.18, s=lerp(1,0.25,e);
+          setCar(PA,2.5+jit,1.5,s,a); setActor(PA,2.5+jit,1.47,s,0,a,true);
+        }else{
+          var e2=smooth((q-0.5)/0.5), a2=clamp01((q-0.5)/0.15), s2=lerp(1.15,1,e2);
+          setCar(PB,2.5+jit,1.5,s2,a2); setActor(PB,2.5+jit,1.47,s2,0,a2,true);
+        }
+      }else{
+        if(q<0.5){
+          var e3=smooth(q/0.5), a3=q<0.32?1:1-(q-0.32)/0.18, s3=lerp(1,1.15,e3);
+          setCar(PA,2.5+jit,1.5,s3,a3); setActor(PA,2.5+jit,1.47,s3,0,a3,true);
+        }else{
+          var e4=smooth((q-0.5)/0.5), a4=clamp01((q-0.5)/0.15), s4=lerp(0.28,1,e4);
+          setCar(PB,2.5+jit,1.5,s4,a4); setActor(PB,2.5+jit,1.47,s4,0,a4,true);
+        }
+      }
+      break;
+    }
+    case 'gateO':
+      setActor(PB,2.5,1.5,1,0,1,true);
+      if(p<0.5){
+        PB.ding.style.opacity=String(0.8*(1-p*2));
+        PB.ding.style.transform='translate('+(2.5*CELL)+'px,'+(1.5*CELL)+'px) scale('+(0.5+p)+')';
+      }
+      break;
+    case 'alight':
+      walk(PB,[2.5,1.55],[2.5,2.62],p,3);
+      break;
+    case 'depart': walk(PB,[2.5,2.62],[5.6,3.0],p); break;
+    case 'idle':
+      setCar(PA,2.5,1.5,1,smooth(p));
+      setCar(PB,2.5,1.5,1,1-smooth(p));
+      setChip(PA,'L'+origin); setChip(PB,'L'+origin);
+      break;
+  }
+  var tt=total();
+  $('playhead').style.left=(clamp01(t/tt)*100)+'%';
+  $('readout').innerHTML='tick <b>'+Math.floor(t)+'</b> / '+tt+' &middot; phase: <b>'+cur.label+'</b> &middot; travel '+travelT()+'t ('+levels()+' &times; '+sl.per.value+') &middot; journey '+(tt/60).toFixed(2)+'s at 1x &middot; speed '+state.speed+'x';
+}
+
+var lastMs=performance.now();
+function frame(ms){
+  var dt=(ms-lastMs)/1000; lastMs=ms;
+  if(dt>0.25)dt=0.25;
+  if(state.playing){
+    state.t+=dt*60*state.speed;
+    var tt=total();
+    if(state.t>=tt){ if(state.loop){state.t=0;} else {state.t=tt-0.001;state.playing=false;$('bPlay').textContent='Play';} }
+  }
+  draw(ms/1000);
+  requestAnimationFrame(frame);
+}
+
+$('bPlay').onclick=function(){state.playing=!state.playing;this.textContent=state.playing?'Pause':'Play';};
+$('bRestart').onclick=function(){state.t=0;};
+$('bLoop').onclick=function(){state.loop=!state.loop;this.classList.toggle('on',state.loop);};
+$('bDown').onclick=function(){state.dir='down';applyDir();};
+$('bUp').onclick=function(){state.dir='up';applyDir();};
+var spBtns=document.querySelectorAll('[data-sp]');
+spBtns.forEach(function(b){b.onclick=function(){state.speed=+b.dataset.sp;spBtns.forEach(function(x){x.classList.toggle('on',x===b);});};});
+[sl.board,sl.gate,sl.per].forEach(function(x){x.oninput=function(){buildBar();if(state.t>total())state.t=0;};});
+sl.levels.oninput=function(){applyDir();};
+$('segbar').onclick=function(ev){var r=this.getBoundingClientRect();state.t=clamp01((ev.clientX-r.left)/r.width)*total();};
+document.addEventListener('keydown',function(ev){if(ev.code==='Space'){ev.preventDefault();$('bPlay').onclick.call($('bPlay'));}});
+
+applyDir();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - ladder transit</title>
+<style>
+:root{--bg:#131518;--panel:#1b1e24;--ink:#d8dce4;--mut:#8a93a2;--acc:#8fae5f;--lat:#8f4e4e;--cell:64px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+header{max-width:1040px;margin:18px auto 8px;padding:0 16px}
+h1{font-size:19px;margin:0 0 4px}
+.chip{display:inline-block;background:#242a33;border:1px solid #39404a;border-radius:20px;padding:2px 10px;font-size:11.5px;color:var(--mut);vertical-align:middle;margin-left:8px}
+.tag{color:var(--mut);margin:2px 0 0;font-size:13px}
+nav{max-width:1040px;margin:0 auto;padding:0 16px;font-size:12.5px;color:var(--mut)}
+nav a{color:#7fb0d8;text-decoration:none}
+.controls{max-width:1040px;margin:12px auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--panel);border:1px solid #2a2f38;border-radius:10px}
+button{background:#242a33;border:1px solid #39404a;color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{background:#2c333e}
+button.on{background:#3a4a3a;border-color:#5f8f52}
+button.dirOn{background:#3d4a30;border-color:var(--acc)}
+.ctl{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut)}
+.ctl input[type=range]{width:100px}
+.ctl b{color:var(--ink);font-weight:600;min-width:26px;text-align:right;font-variant-numeric:tabular-nums}
+.latbox{margin-left:auto;background:#2a2024;border:1px solid #5a3a3a;border-radius:8px;padding:4px 12px;font-size:12.5px;color:#d8a0a0}
+.latbox b{color:#f0c0c0}
+.stage{display:flex;justify-content:center;align-items:stretch;gap:0;max-width:1040px;margin:0 auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid #2a2f38;border-radius:10px;padding:10px;flex:0 0 auto}
+.panelTitle{font-size:13px;font-weight:600;margin-bottom:8px}
+.panelTitle small{color:var(--mut);font-weight:400}
+.map{position:relative;width:calc(5*var(--cell));height:calc(4*var(--cell));overflow:hidden;border-radius:6px;background:#23201c}
+.cell{position:absolute;width:var(--cell);height:var(--cell);border:1px solid rgba(255,255,255,.022)}
+.c1{background:#262220}.c2{background:#242019}
+.sprite{position:absolute;width:var(--cell);height:var(--cell)}
+.actor{position:absolute;left:0;top:0;width:44px;height:52px;margin-left:-22px;margin-top:-34px;transform-origin:22px 34px;opacity:0;will-change:transform,opacity}
+.actor svg{display:block}
+.shadow{position:absolute;left:0;top:0;width:34px;height:13px;margin-left:-17px;margin-top:-6px;border-radius:50%;background:rgba(0,0,0,.42);filter:blur(3px);opacity:0;transform-origin:center;will-change:transform,opacity}
+.dust{position:absolute;left:0;top:0;width:44px;height:44px;margin:-22px;border-radius:50%;background:radial-gradient(rgba(205,192,168,.55),rgba(205,192,168,0) 70%);opacity:0;will-change:transform,opacity}
+.caption{margin-top:8px;font-size:11.8px;color:var(--mut);max-width:calc(5*var(--cell))}
+.gutter{width:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#5a626e;font-size:11px}
+.gutter .arrow{font-size:22px;color:var(--acc)}
+.gutter .line{width:2px;flex:0 0 60px;background:repeating-linear-gradient(to bottom,#39404a 0 6px,transparent 6px 12px)}
+.timeline{max-width:1040px;margin:14px auto 0;padding:0 16px}
+.segbar{position:relative;display:flex;height:32px;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #2a2f38}
+.seg{position:relative;height:100%;min-width:3px}
+.seg.lat::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(0,0,0,.28) 0 6px,transparent 6px 12px)}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.7);pointer-events:none}
+.readout{margin-top:6px;font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.readout b{color:var(--ink)}
+.legend{margin-top:4px;font-size:11.5px;color:#6a7280}
+footer{max-width:1040px;margin:20px auto 30px;padding:0 16px;color:var(--mut);font-size:12.3px;line-height:1.55}
+footer h3{color:var(--ink);font-size:13px;margin:14px 0 4px}
+footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ladder transit<span class="chip">AB2_LadderDown / AB2_LadderUp</span></h1>
+  <p class="tag">Motion language: stationary, rhythmic. Four rung pulses with stepped easing - grab, pull, grab - instead of the stairs' smooth glide. Same scale grammar: below = small (0.32), above = slightly large (1.14) plus fade.</p>
+</header>
+<nav>Motion studies: <a href="stairs.html">stairs</a> &middot; <b>ladder</b> &middot; <a href="elevator.html">elevator</a></nav>
+
+<section class="controls">
+  <button id="bPlay">Pause</button>
+  <button id="bRestart">Restart</button>
+  <button id="bLoop" class="on">Loop</button>
+  <span class="ctl">Direction
+    <button id="bDown" class="dirOn">&#9660; down</button>
+    <button id="bUp">&#9650; up</button>
+  </span>
+  <span class="ctl">Speed
+    <button data-sp="0.25">&frac14;x</button><button data-sp="0.5">&frac12;x</button><button data-sp="1" class="on">1x</button><button data-sp="2">2x</button>
+  </span>
+  <span class="ctl">mount <input id="sMount" type="range" min="0" max="12" value="6"><b id="vMount">6</b>t</span>
+  <span class="ctl">climb <input id="sClimb" type="range" min="10" max="48" value="26"><b id="vClimb">26</b>t</span>
+  <span class="ctl">hold <input id="sHold" type="range" min="0" max="30" value="8"><b id="vHold">8</b>t</span>
+  <span class="ctl">emerge <input id="sEmerge" type="range" min="10" max="48" value="26"><b id="vEmerge">26</b>t</span>
+  <span class="latbox">added cross-level latency: <b id="latT">40</b>t (<b id="latS">0.67</b>s)</span>
+</section>
+
+<section class="stage">
+  <div class="panel" id="panelA">
+    <div class="panelTitle"></div>
+    <div class="map" id="mapA"></div>
+    <div class="caption"></div>
+  </div>
+  <div class="gutter"><div class="line"></div><div class="arrow" id="gArrow">&#9660;</div><div>band<br>gutter</div><div class="line"></div></div>
+  <div class="panel" id="panelB">
+    <div class="panelTitle"></div>
+    <div class="map" id="mapB"></div>
+    <div class="caption"></div>
+  </div>
+</section>
+
+<section class="timeline">
+  <div class="segbar" id="segbar"></div>
+  <div class="readout" id="readout"></div>
+  <div class="legend">Hatched segments are the real, added latency. The rung count is fixed at 4; the climb slider stretches the whole rhythm. Click the bar to scrub. 60 ticks = 1 second at 1x.</div>
+</section>
+
+<footer>
+  <h3>What makes a ladder read as a ladder</h3>
+  Three things, all cheap: the pawn snaps onto the ladder cell first (the mount), progress then advances in four discrete pulses (a staircase easing curve, not a ramp - each pulse is a quick pull between two dwells), and the body rocks left-right alternately with a slight lean each pull. Stairs glide; ladders tick. Defaults are a touch slower than stairs (climbing is effortful), which also gives the two link types different personalities for free.
+  <h3>Implementation guardrail (run #297)</h3>
+  Identical to the stairs page: the mount + climb + hold latency must not gate the carry (<code>ABStairAnim.ReadyToCarry</code> on <code>TryConsumeArrival</code> broke movement once). Carry instantly, immobilize briefly on the far side, play the climb as a visual-only ghost at the origin mouth, then the emerge clip. The stepped easing and rock live entirely in the pawn draw matrix, same as the stairs shimmy.
+  <h3>Honesty notes</h3>
+  Placeholder geometry only - motion study, not proposed art. All motion is the pawn matrix (scale, offset, rotation) plus overlay motes; the ladder sprite never animates. Alpha fades need a tint path; scale-only still reads.
+</footer>
+
+<script>
+(function(){
+"use strict";
+var CELL=64;
+function $(id){return document.getElementById(id);}
+function clamp01(t){return t<0?0:t>1?1:t;}
+function smooth(t){t=clamp01(t);return t*t*(3-2*t);}
+function lerp(a,b,t){return a+(b-a)*t;}
+function rungEase(p,n){
+  p=clamp01(p);
+  var s=p*n, i=Math.floor(s);
+  if(i>=n)i=n-1;
+  var f=s-i;
+  var m=smooth(clamp01((f-0.18)/0.55));
+  return (i+m)/n;
+}
+
+var PAWN_SVG='<svg width="44" height="52" viewBox="0 0 44 52">'
+ +'<ellipse cx="22" cy="34" rx="13.5" ry="15.5" fill="#3f6fae" stroke="rgba(0,0,0,.28)" stroke-width="1.5"/>'
+ +'<circle cx="22" cy="15.5" r="10" fill="#eac393" stroke="rgba(0,0,0,.2)" stroke-width="1"/>'
+ +'<path d="M12 15.5 a10 10 0 0 1 20 0 z" fill="#5b3d20"/></svg>';
+
+function ladderSVG(kind){
+  var down=kind==='down';
+  var s='<svg width="64" height="64" viewBox="0 0 64 64">'
+   +'<rect x="3" y="3" width="58" height="58" rx="5" fill="#221e19" stroke="#4a4034" stroke-width="2"/>'
+   +'<rect x="14" y="7" width="36" height="50" rx="3" fill="#0a0908"/>';
+  if(!down){ s+='<rect x="14" y="7" width="36" height="4" fill="rgba(233,213,150,.22)"/>'; }
+  s+='<rect x="20" y="6" width="5" height="52" fill="#8a6a44"/><rect x="39" y="6" width="5" height="52" fill="#8a6a44"/>';
+  for(var i=0;i<6;i++){
+    var yy=10+i*8.5;
+    s+='<rect x="20" y="'+yy+'" width="24" height="3" rx="1.5" fill="#a5824f"/>';
+  }
+  s+= down ? '<path d="M49 54 l8 0 -4 6 z" fill="#a7c26a"/>' : '<path d="M49 60 l8 0 -4 -6 z" fill="#a7c26a"/>';
+  return s+'</svg>';
+}
+
+function makePanel(rootId, mapId){
+  var map=$(mapId);
+  for(var r=0;r<4;r++)for(var c=0;c<5;c++){
+    var d=document.createElement('div');
+    d.className='cell '+(((r+c)%2)?'c1':'c2');
+    d.style.left=(c*CELL)+'px'; d.style.top=(r*CELL)+'px';
+    map.appendChild(d);
+  }
+  var sprite=document.createElement('div'); sprite.className='sprite';
+  sprite.style.left=(2*CELL)+'px'; sprite.style.top=(1*CELL)+'px'; map.appendChild(sprite);
+  var dust=document.createElement('div'); dust.className='dust'; map.appendChild(dust);
+  var shadow=document.createElement('div'); shadow.className='shadow'; map.appendChild(shadow);
+  var actor=document.createElement('div'); actor.className='actor'; actor.innerHTML=PAWN_SVG; map.appendChild(actor);
+  var root=$(rootId);
+  return {sprite:sprite,dust:dust,shadow:shadow,actor:actor,
+          title:root.querySelector('.panelTitle'),caption:root.querySelector('.caption')};
+}
+function setActor(p,x,y,scale,rot,alpha){
+  if(alpha<=0){p.actor.style.opacity='0';p.shadow.style.opacity='0';return;}
+  p.actor.style.opacity=String(alpha);
+  p.actor.style.transform='translate('+(x*CELL)+'px,'+(y*CELL)+'px) rotate('+rot+'deg) scale('+scale+')';
+  p.shadow.style.opacity=String(alpha*0.55*Math.min(1,scale));
+  p.shadow.style.transform='translate('+(x*CELL)+'px,'+((y+0.22)*CELL)+'px) scale('+scale+')';
+}
+function walk(p,from,to,prog,steps){
+  steps=steps||5;
+  var x=lerp(from[0],to[0],prog), y=lerp(from[1],to[1],prog);
+  var bob=Math.abs(Math.sin(prog*steps*Math.PI));
+  var rot=Math.sin(prog*steps*Math.PI)*4;
+  setActor(p,x,y-bob*0.045,1,rot,1);
+}
+
+var PA=makePanel('panelA','mapA'), PB=makePanel('panelB','mapB');
+var state={t:0,playing:true,speed:1,dir:'down',loop:true};
+var sl={mount:$('sMount'),climb:$('sClimb'),hold:$('sHold'),emerge:$('sEmerge')};
+
+function phases(){
+  var down=state.dir==='down';
+  return [
+   {id:'approach',label:'walk to the ladder',t:36,col:'#3b4656'},
+   {id:'mount',label:'mount (snap to the rails)',t:+sl.mount.value,col:'#7a8a4a',lat:true},
+   {id:'climb',label:down?'climb down, 4 rungs':'climb up, 4 rungs',t:+sl.climb.value,col:'#b0813f',lat:true},
+   {id:'hold',label:'carry + hold',t:+sl.hold.value,col:'#8f4e4e',lat:true},
+   {id:'emerge',label:down?'climb out below (from above)':'climb out above (from below)',t:+sl.emerge.value,col:'#5f8f52'},
+   {id:'depart',label:'walk on',t:36,col:'#3b4656'},
+   {id:'idle',label:'loop pause',t:24,col:'#242830'}
+  ];
+}
+function total(){var ps=phases(),s=0,i;for(i=0;i<ps.length;i++)s+=ps[i].t;return s;}
+function latency(){return (+sl.mount.value)+(+sl.climb.value)+(+sl.hold.value);}
+
+function buildBar(){
+  var bar=$('segbar'); bar.innerHTML='';
+  var ps=phases(), tt=total(), i;
+  for(i=0;i<ps.length;i++){
+    var s=document.createElement('div');
+    s.className='seg'+(ps[i].lat?' lat':'');
+    s.style.width=(ps[i].t/tt*100)+'%';
+    s.style.background=ps[i].col;
+    s.title=ps[i].label+' - '+ps[i].t+'t';
+    bar.appendChild(s);
+  }
+  var ph=document.createElement('div'); ph.className='playhead'; ph.id='playhead'; bar.appendChild(ph);
+  $('vMount').textContent=sl.mount.value; $('vClimb').textContent=sl.climb.value;
+  $('vHold').textContent=sl.hold.value; $('vEmerge').textContent=sl.emerge.value;
+  $('latT').textContent=latency(); $('latS').textContent=(latency()/60).toFixed(2);
+}
+
+function applyDir(){
+  var down=state.dir==='down';
+  PA.title.innerHTML=down?'Origin - Level 2 <small>(upper band, viewed top-down)</small>':'Origin - Level 1 <small>(lower band, viewed top-down)</small>';
+  PB.title.innerHTML=down?'Destination - Level 1 <small>(lower band)</small>':'Destination - Level 2 <small>(upper band)</small>';
+  PA.sprite.innerHTML=ladderSVG(down?'down':'up');
+  PB.sprite.innerHTML=ladderSVG(down?'up':'down');
+  PA.caption.textContent=down?'AB2_LadderDown: snap to the rails, then four discrete pulses down the shaft, shrinking to 0.32 with an alternating rock.'
+                             :'AB2_LadderUp: same four pulses upward, growing to 1.14 and fading past the camera plane.';
+  PB.caption.textContent=down?'AB2_LadderUp seen from below: the arrival pulses down from 1.14 to 1.0 - it came from above.'
+                             :'AB2_LadderDown seen from above: the arrival pulses up from 0.32 to 1.0, then steps off the rails.';
+  $('gArrow').innerHTML=down?'&#9660;':'&#9650;';
+  $('bDown').classList.toggle('dirOn',down);
+  $('bUp').classList.toggle('dirOn',!down);
+  state.t=0; buildBar();
+}
+
+function climbPose(p,down,arriving){
+  var pe=rungEase(p,4);
+  var rung=Math.floor(clamp01(p)*4); if(rung>3)rung=3;
+  var f=clamp01(p)*4-rung;
+  var sign=(rung%2===0)?1:-1;
+  var rock=sign*0.055*Math.sin(Math.PI*clamp01(f));
+  var rot=sign*7*Math.sin(Math.PI*clamp01(f));
+  var s,a,y;
+  if(!arriving){
+    if(down){ s=lerp(1,0.32,pe); a=p<0.80?1:1-(p-0.80)/0.20; y=lerp(1.95,1.55,pe); }
+    else    { s=lerp(1,1.14,pe); a=p<0.70?1:1-(p-0.70)/0.30; y=lerp(1.95,1.50,pe); }
+  }else{
+    if(down){ s=lerp(1.14,1,pe); a=p<0.20?p/0.20:1; y=lerp(1.50,2.10,pe); }
+    else    { s=lerp(0.32,1,pe); a=p<0.20?p/0.20:1; y=lerp(1.55,2.10,pe); }
+  }
+  return {x:2.5+rock,y:y,s:s,rot:rot,a:a};
+}
+
+function draw(sec){
+  var ps=phases(), t=state.t, acc=0, cur=ps[0], p=0, i;
+  for(i=0;i<ps.length;i++){
+    if(t<acc+ps[i].t||i===ps.length-1){cur=ps[i];p=ps[i].t>0?clamp01((t-acc)/ps[i].t):1;break;}
+    acc+=ps[i].t;
+  }
+  setActor(PA,0,0,1,0,0); setActor(PB,0,0,1,0,0);
+  PA.dust.style.opacity='0'; PB.dust.style.opacity='0';
+  var down=state.dir==='down';
+  var pose;
+  switch(cur.id){
+    case 'approach': walk(PA,[-0.5,3.0],[2.5,2.62],p); break;
+    case 'mount':{
+      var e=smooth(p);
+      setActor(PA,2.5,lerp(2.62,1.95,e),lerp(1,0.985,e),lerp(0,0,e),1);
+      break;
+    }
+    case 'climb':
+      pose=climbPose(p,down,false);
+      setActor(PA,pose.x,pose.y,pose.s,pose.rot,pose.a);
+      break;
+    case 'hold':
+      if((+sl.hold.value)>0){
+        PA.dust.style.opacity=String(0.40*(1-p));
+        PA.dust.style.transform='translate('+(2.5*CELL)+'px,'+(1.45*CELL)+'px) scale('+(0.5+1.2*p)+')';
+      }
+      break;
+    case 'emerge':
+      pose=climbPose(p,down,true);
+      setActor(PB,pose.x,pose.y,pose.s,pose.rot,pose.a);
+      break;
+    case 'depart': walk(PB,[2.5,2.10],[5.6,3.0],p); break;
+  }
+  var tt=total();
+  $('playhead').style.left=(clamp01(t/tt)*100)+'%';
+  $('readout').innerHTML='tick <b>'+Math.floor(t)+'</b> / '+tt+' &middot; phase: <b>'+cur.label+'</b> &middot; journey '+(tt/60).toFixed(2)+'s at 1x &middot; speed '+state.speed+'x';
+}
+
+var lastMs=performance.now();
+function frame(ms){
+  var dt=(ms-lastMs)/1000; lastMs=ms;
+  if(dt>0.25)dt=0.25;
+  if(state.playing){
+    state.t+=dt*60*state.speed;
+    var tt=total();
+    if(state.t>=tt){ if(state.loop){state.t=0;} else {state.t=tt-0.001;state.playing=false;$('bPlay').textContent='Play';} }
+  }
+  draw(ms/1000);
+  requestAnimationFrame(frame);
+}
+
+$('bPlay').onclick=function(){state.playing=!state.playing;this.textContent=state.playing?'Pause':'Play';};
+$('bRestart').onclick=function(){state.t=0;};
+$('bLoop').onclick=function(){state.loop=!state.loop;this.classList.toggle('on',state.loop);};
+$('bDown').onclick=function(){state.dir='down';applyDir();};
+$('bUp').onclick=function(){state.dir='up';applyDir();};
+var spBtns=document.querySelectorAll('[data-sp]');
+spBtns.forEach(function(b){b.onclick=function(){state.speed=+b.dataset.sp;spBtns.forEach(function(x){x.classList.toggle('on',x===b);});};});
+[sl.mount,sl.climb,sl.hold,sl.emerge].forEach(function(x){x.oninput=function(){buildBar();if(state.t>total())state.t=0;};});
+$('segbar').onclick=function(ev){var r=this.getBoundingClientRect();state.t=clamp01((ev.clientX-r.left)/r.width)*total();};
+document.addEventListener('keydown',function(ev){if(ev.code==='Space'){ev.preventDefault();$('bPlay').onclick.call($('bPlay'));}});
+
+applyDir();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
