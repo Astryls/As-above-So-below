@@ -47,7 +47,9 @@ Move these OUT of the mod folder, publish, then move them back. **Move, never de
 1. [ ] `Source/`
 2. [ ] `Tools/`
 3. [ ] `docs/`  ← this file and `UPDATE_NOTES.txt` live here
-4. [ ] `.git/`  (only if the tree has been re-initialised as a repo; absent right now)
+4. [ ] `.git/`  (PRESENT since window 8: repo Astryls/As-above-So-below, branch main.
+      Move it out with the rest; committing and pushing BEFORE the strip is the
+      cleanest order.)
 
 Also confirm:
 - [ ] `.modmixer/` is never uploaded (the utility excludes it, but eyeball the file list).
