@@ -7,13 +7,19 @@
 :root{--bg:#131518;--panel:#1b1e24;--ink:#d8dce4;--mut:#8a93a2;--acc:#c9a25a;--lat:#8f4e4e;--cell:64px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
-header{max-width:1040px;margin:18px auto 8px;padding:0 16px}
+header{max-width:1060px;margin:18px auto 8px;padding:0 16px}
 h1{font-size:19px;margin:0 0 4px}
 .chip{display:inline-block;background:#242a33;border:1px solid #39404a;border-radius:20px;padding:2px 10px;font-size:11.5px;color:var(--mut);vertical-align:middle;margin-left:8px}
 .tag{color:var(--mut);margin:2px 0 0;font-size:13px}
-nav{max-width:1040px;margin:0 auto;padding:0 16px;font-size:12.5px;color:var(--mut)}
+nav{max-width:1060px;margin:0 auto;padding:0 16px;font-size:12.5px;color:var(--mut)}
 nav a{color:#7fb0d8;text-decoration:none}
-.controls{max-width:1040px;margin:12px auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--panel);border:1px solid #2a2f38;border-radius:10px}
+.optrow{max-width:1060px;margin:12px auto 0;padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid #2a2f38;border-radius:10px}
+.optrow .lbl{font-size:12.5px;color:var(--mut);margin-right:2px}
+.optbtn{background:#242a33;border:1px solid #39404a;color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer;font-size:13px;text-align:left}
+.optbtn small{display:block;color:var(--mut);font-size:11px;margin-top:1px}
+.optbtn.optOn{background:#41372a;border-color:var(--acc)}
+.optbtn.optOn small{color:#cdb489}
+.controls{max-width:1060px;margin:10px auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--panel);border:1px solid #2a2f38;border-radius:10px}
 button{background:#242a33;border:1px solid #39404a;color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
 button:hover{background:#2c333e}
 button.on{background:#3a4a3a;border-color:#5f8f52}
@@ -23,7 +29,7 @@ button.dirOn{background:#4a4030;border-color:var(--acc)}
 .ctl b{color:var(--ink);font-weight:600;min-width:26px;text-align:right;font-variant-numeric:tabular-nums}
 .latbox{margin-left:auto;background:#2a2024;border:1px solid #5a3a3a;border-radius:8px;padding:4px 12px;font-size:12.5px;color:#d8a0a0}
 .latbox b{color:#f0c0c0}
-.stage{display:flex;justify-content:center;align-items:stretch;gap:0;max-width:1040px;margin:0 auto;padding:0 16px}
+.stage{display:flex;justify-content:center;align-items:stretch;gap:0;max-width:1060px;margin:0 auto;padding:0 16px}
 .panel{background:var(--panel);border:1px solid #2a2f38;border-radius:10px;padding:10px;flex:0 0 auto}
 .panelTitle{font-size:13px;font-weight:600;margin-bottom:8px}
 .panelTitle small{color:var(--mut);font-weight:400}
@@ -35,11 +41,11 @@ button.dirOn{background:#4a4030;border-color:var(--acc)}
 .actor svg{display:block}
 .shadow{position:absolute;left:0;top:0;width:34px;height:13px;margin-left:-17px;margin-top:-6px;border-radius:50%;background:rgba(0,0,0,.42);filter:blur(3px);opacity:0;transform-origin:center;will-change:transform,opacity}
 .dust{position:absolute;left:0;top:0;width:44px;height:44px;margin:-22px;border-radius:50%;background:radial-gradient(rgba(205,192,168,.55),rgba(205,192,168,0) 70%);opacity:0;will-change:transform,opacity}
-.caption{margin-top:8px;font-size:11.8px;color:var(--mut);max-width:calc(5*var(--cell))}
+.caption{margin-top:8px;font-size:11.8px;color:var(--mut);max-width:calc(5*var(--cell));min-height:48px}
 .gutter{width:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#5a626e;font-size:11px}
 .gutter .arrow{font-size:22px;color:var(--acc)}
 .gutter .line{width:2px;flex:0 0 60px;background:repeating-linear-gradient(to bottom,#39404a 0 6px,transparent 6px 12px)}
-.timeline{max-width:1040px;margin:14px auto 0;padding:0 16px}
+.timeline{max-width:1060px;margin:14px auto 0;padding:0 16px}
 .segbar{position:relative;display:flex;height:32px;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #2a2f38}
 .seg{position:relative;height:100%;min-width:3px}
 .seg.lat::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(0,0,0,.28) 0 6px,transparent 6px 12px)}
@@ -47,7 +53,7 @@ button.dirOn{background:#4a4030;border-color:var(--acc)}
 .readout{margin-top:6px;font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
 .readout b{color:var(--ink)}
 .legend{margin-top:4px;font-size:11.5px;color:#6a7280}
-footer{max-width:1040px;margin:20px auto 30px;padding:0 16px;color:var(--mut);font-size:12.3px;line-height:1.55}
+footer{max-width:1060px;margin:20px auto 30px;padding:0 16px;color:var(--mut);font-size:12.3px;line-height:1.55}
 footer h3{color:var(--ink);font-size:13px;margin:14px 0 4px}
 footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
 </style>
@@ -55,9 +61,16 @@ footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
 <body>
 <header>
   <h1>Stairs transit<span class="chip">AB2_StairsDown / AB2_StairsUp - grand stairs share the clip</span></h1>
-  <p class="tag">Motion language: a smooth glide along the run with a step shimmy. Scale grammar: below the viewed band = small (0.32), above it = slightly large (1.14) plus fade.</p>
+  <p class="tag">Three candidate animation styles. Switch live with the buttons (or keys 1 / 2 / 3) - the playhead keeps its position so you can compare the same moment across options.</p>
 </header>
 <nav>Motion studies: <b>stairs</b> &middot; <a href="ladder.html">ladder</a> &middot; <a href="elevator.html">elevator</a></nav>
+
+<section class="optrow">
+  <span class="lbl">Option</span>
+  <button class="optbtn" data-opt="A"><b>A - Depth glide</b><small>smooth slide along the run, pawn scales with depth (0.32 below, 1.14 above)</small></button>
+  <button class="optbtn" data-opt="B"><b>B - Tread steps</b><small>the pawn literally walks the treads: five discrete hops, no smooth ramp</small></button>
+  <button class="optbtn" data-opt="C"><b>C - Doorway slip</b><small>no scaling at all: the pawn walks in and is clipped by the well mouth, vanilla-feeling</small></button>
+</section>
 
 <section class="controls">
   <button id="bPlay">Pause</button>
@@ -72,7 +85,7 @@ footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
   </span>
   <span class="ctl">entry <input id="sEntry" type="range" min="6" max="40" value="18"><b id="vEntry">18</b>t</span>
   <span class="ctl">hold <input id="sHold" type="range" min="0" max="30" value="6"><b id="vHold">6</b>t</span>
-  <span class="ctl">emerge <input id="sEmerge" type="range" min="8" max="40" value="22"><b id="vEmerge">22</b>t</span>
+  <span class="ctl">emerge <input id="sEmerge" type="range" min="6" max="40" value="22"><b id="vEmerge">22</b>t</span>
   <span class="latbox">added cross-level latency: <b id="latT">24</b>t (<b id="latS">0.40</b>s)</span>
 </section>
 
@@ -93,16 +106,16 @@ footer code{background:#242a33;border-radius:4px;padding:0 5px;font-size:11.5px}
 <section class="timeline">
   <div class="segbar" id="segbar"></div>
   <div class="readout" id="readout"></div>
-  <div class="legend">Hatched segments are the real, added latency: the pawn has not finished crossing during them. Approach and depart are ordinary walking. Click the bar to scrub. 60 ticks = 1 second at 1x.</div>
+  <div class="legend">Hatched segments are the real, added latency: the pawn has not finished crossing during them. Sliders reset to each option's suggested defaults when you switch. Click the bar to scrub. 60 ticks = 1 second at 1x.</div>
 </section>
 
 <footer>
-  <h3>What this proposes</h3>
-  The entry clip (shrink into the well, or climb up and out of frame) plus a short shaft hold, in front of today's already-working pop-out. Entry default 18t mirrors the built-but-unwired <code>OutTicks</code>; emerge default 22t is the live <code>PopTicks</code>; the 0.32 floor is <code>MinScale</code>; the shimmy is the shipped one (amplitude 0.10 cells, rate 17). New grammar: an arrival <i>from above</i> settles down from 1.14 instead of growing from 0.32, so up and down journeys read differently on both ends.
+  <h3>How the three options differ</h3>
+  <b>A - Depth glide</b> is the cinematic one: one smooth eased slide into the well with the shipped shimmy (amplitude 0.10 cells, rate 17), the pawn's scale encoding altitude - shrink to 0.32 going below the viewed band (today's <code>MinScale</code>), grow to 1.14 and fade going above, and arrivals mirror it (from below grows, from above settles). <b>B - Tread steps</b> trades smoothness for literalism: progress advances in five discrete hops with a bob and an alternating lean, like the pawn is actually taking the treads; same scale grammar, chunkier read, slightly longer defaults. <b>C - Doorway slip</b> is the minimal, most vanilla-feeling one: the pawn never changes size - it keeps its ordinary walk cycle and is progressively clipped by the well mouth, as if walking behind a wall edge, with a dust puff and a brightness shift as the only depth cues. C is also the cheapest in game: no matrix scaling, just draw-order/clip against the stair sprite plus the existing hide machinery.
   <h3>Implementation guardrail (run #297)</h3>
-  The hold is real latency, but it must not sit on the carry decision: <code>ABStairAnim.ReadyToCarry</code> gating <code>TryConsumeArrival</code> is the exact thing that broke cross-level movement. Proposed mechanism instead: the carry stays instant; the arrived pawn is briefly immobilized on the far side (stagger-style, self-clearing) while a visual-only ghost plays the entry clip at the origin mouth, then the pop-out plays. Felt result is identical to this mockup; the pather never waits on a cosmetic (rule 30: a felt duration is a chain, not a number).
+  Whatever option wins, the entry + hold latency must not gate the carry: <code>ABStairAnim.ReadyToCarry</code> on <code>TryConsumeArrival</code> is the exact thing that broke cross-level movement once. Proposed mechanism instead: the carry stays instant; the arrived pawn is briefly immobilized on the far side (stagger-style, self-clearing) while a visual-only ghost plays the entry clip at the origin mouth, then the arrival clip plays. Felt result is identical to this mockup; the pather never waits on a cosmetic.
   <h3>Honesty notes</h3>
-  Placeholder geometry only - this is a motion study, not proposed art. In game, every motion here is the pawn draw matrix (scale, offset, rotation via the existing <code>GetDrawParms</code> postfix) plus overlay motes; the stair sprite itself never animates. The alpha fades need a tint/shader path we have not built; if that is expensive, the clips still read correctly scale-only.
+  Placeholder geometry only - this is a motion study, not proposed art. In game, options A and B are the pawn draw matrix (scale, offset, rotation via the existing <code>GetDrawParms</code> postfix) plus overlay motes; option C is clipping/draw-order against the stair sprite. Alpha fades need a tint/shader path we have not built; A and B still read scale-only, C reads with clipping alone.
 </footer>
 
 <script>
@@ -113,6 +126,14 @@ function $(id){return document.getElementById(id);}
 function clamp01(t){return t<0?0:t>1?1:t;}
 function smooth(t){t=clamp01(t);return t*t*(3-2*t);}
 function lerp(a,b,t){return a+(b-a)*t;}
+function stepEase(p,n){
+  p=clamp01(p);
+  var s=p*n, i=Math.floor(s);
+  if(i>=n)i=n-1;
+  var f=s-i;
+  var m=smooth(clamp01((f-0.18)/0.55));
+  return (i+m)/n;
+}
 
 var PAWN_SVG='<svg width="44" height="52" viewBox="0 0 44 52">'
  +'<ellipse cx="22" cy="34" rx="13.5" ry="15.5" fill="#3f6fae" stroke="rgba(0,0,0,.28)" stroke-width="1.5"/>'
@@ -158,6 +179,7 @@ function setActor(p,x,y,scale,rot,alpha){
   p.shadow.style.opacity=String(alpha*0.55*Math.min(1,scale));
   p.shadow.style.transform='translate('+(x*CELL)+'px,'+((y+0.22)*CELL)+'px) scale('+scale+')';
 }
+function clearFx(p){ p.actor.style.clipPath=''; p.actor.style.filter=''; }
 function walk(p,from,to,prog,steps){
   steps=steps||5;
   var x=lerp(from[0],to[0],prog), y=lerp(from[1],to[1],prog);
@@ -167,16 +189,39 @@ function walk(p,from,to,prog,steps){
 }
 
 var PA=makePanel('panelA','mapA'), PB=makePanel('panelB','mapB');
-var state={t:0,playing:true,speed:1,dir:'down',loop:true};
+var state={t:0,playing:true,speed:1,dir:'down',opt:'A',loop:true};
 var sl={entry:$('sEntry'),hold:$('sHold'),emerge:$('sEmerge')};
 
+var OPTS={
+  A:{name:'A - Depth glide',defaults:{entry:18,hold:6,emerge:22},
+     entryLbl:function(d){return d?'glide down into the well':'glide up the run';},
+     emergeLbl:function(d){return d?'settle in from above':'grow out from below';},
+     capO:function(d){return d?'Option A. The pawn glides up the run, shrinking to 0.32 with the shipped shimmy, and slips into the well.'
+                             :'Option A. The pawn glides up the run, growing to 1.14 and fading as it passes the camera plane.';},
+     capD:function(d){return d?'Option A. The arrival settles down from 1.14 to 1.0 with a fade-in - it came from above.'
+                             :'Option A. The arrival grows 0.32 to 1.0 with a small settle bump - today\u2019s shipped pop-out.';}},
+  B:{name:'B - Tread steps',defaults:{entry:26,hold:6,emerge:26},
+     entryLbl:function(d){return d?'walk down the treads':'walk up the treads';},
+     emergeLbl:function(d){return d?'step out from above':'step out from below';},
+     capO:function(d){return d?'Option B. Five discrete hops down the treads, bob and alternating lean on each, shrinking tread by tread.'
+                             :'Option B. Five discrete hops up the treads, growing tread by tread and fading at the top.';},
+     capD:function(d){return d?'Option B. The arrival takes the counterpart treads step by step, settling from 1.14 to 1.0.'
+                             :'Option B. The arrival hops out of the well tread by tread, 0.32 to 1.0.';}},
+  C:{name:'C - Doorway slip',defaults:{entry:14,hold:4,emerge:14},
+     entryLbl:function(d){return 'slip into the well mouth';},
+     emergeLbl:function(d){return 'slip out of the well mouth';},
+     capO:function(d){return d?'Option C. No scaling: the ordinary walk cycle continues while the well mouth clips the pawn away, darkening as it goes under.'
+                             :'Option C. No scaling: the walk cycle continues while the landing edge clips the pawn away, brightening toward the light above.';},
+     capD:function(d){return 'Option C. The pawn is revealed out of the mouth by the same clip, walking the whole time - closest to vanilla doors.';}}
+};
+
 function phases(){
-  var down=state.dir==='down';
+  var down=state.dir==='down', o=OPTS[state.opt];
   return [
    {id:'approach',label:'walk to the stairwell',t:36,col:'#3b4656'},
-   {id:'entry',label:down?'descend into the well':'climb the run',t:+sl.entry.value,col:'#b0813f',lat:true},
+   {id:'entry',label:o.entryLbl(down),t:+sl.entry.value,col:'#b0813f',lat:true},
    {id:'hold',label:'carry + hold',t:+sl.hold.value,col:'#8f4e4e',lat:true},
-   {id:'emerge',label:down?'arrive below (from above)':'pop out above (from below)',t:+sl.emerge.value,col:'#5f8f52'},
+   {id:'emerge',label:o.emergeLbl(down),t:+sl.emerge.value,col:'#5f8f52'},
    {id:'depart',label:'walk on',t:36,col:'#3b4656'},
    {id:'idle',label:'loop pause',t:24,col:'#242830'}
   ];
@@ -200,20 +245,103 @@ function buildBar(){
   $('latT').textContent=latency(); $('latS').textContent=(latency()/60).toFixed(2);
 }
 
-function applyDir(){
-  var down=state.dir==='down';
+function refreshText(){
+  var down=state.dir==='down', o=OPTS[state.opt];
   PA.title.innerHTML=down?'Origin - Level 2 <small>(upper band, viewed top-down)</small>':'Origin - Level 1 <small>(lower band, viewed top-down)</small>';
   PB.title.innerHTML=down?'Destination - Level 1 <small>(lower band)</small>':'Destination - Level 2 <small>(upper band)</small>';
   PA.sprite.innerHTML=stairSVG(down?'down':'up');
   PB.sprite.innerHTML=stairSVG(down?'up':'down');
-  PA.caption.textContent=down?'AB2_StairsDown: the pawn glides up the run, shrinking to 0.32 with the step shimmy, and slips into the well.'
-                             :'AB2_StairsUp: the pawn climbs the run, growing to 1.14 and fading as it passes the camera plane.';
-  PB.caption.textContent=down?'AB2_StairsUp seen from below: the arrival settles down from 1.14 to 1.0 - it came from above.'
-                             :'AB2_StairsDown seen from above: the arrival grows 0.32 to 1.0 - today\u2019s pop-out, kept as is.';
+  PA.caption.textContent=o.capO(down);
+  PB.caption.textContent=o.capD(down);
   $('gArrow').innerHTML=down?'&#9660;':'&#9650;';
   $('bDown').classList.toggle('dirOn',down);
   $('bUp').classList.toggle('dirOn',!down);
-  state.t=0; buildBar();
+  document.querySelectorAll('.optbtn').forEach(function(b){b.classList.toggle('optOn',b.dataset.opt===state.opt);});
+  buildBar();
+}
+function applyOpt(o){
+  if(!OPTS[o])return;
+  var frac=total()>0?state.t/total():0;
+  state.opt=o;
+  var d=OPTS[o].defaults;
+  sl.entry.value=d.entry; sl.hold.value=d.hold; sl.emerge.value=d.emerge;
+  refreshText();
+  state.t=frac*total();
+}
+function applyDir(d){ state.dir=d; state.t=0; refreshText(); }
+
+function drawEntry(p,sec,down){
+  var e,y,s,a,shimmy;
+  if(state.opt==='A'){
+    e=smooth(p); shimmy=Math.sin(sec*17)*0.10*e;
+    if(down){
+      y=lerp(2.62,1.35,e); s=lerp(1,0.32,e);
+      a=p<0.72?1:1-(p-0.72)/0.28;
+      setActor(PA,2.5+shimmy,y,s,0,a);
+    }else{
+      y=lerp(2.62,1.30,e); s=lerp(1,1.14,e);
+      var bob=Math.abs(Math.sin(p*4*Math.PI))*0.05;
+      a=p<0.62?1:1-(p-0.62)/0.38;
+      setActor(PA,2.5+shimmy*0.5,y-bob,s,0,a);
+    }
+  }else if(state.opt==='B'){
+    var pe=stepEase(p,5);
+    var tread=Math.floor(clamp01(p)*5); if(tread>4)tread=4;
+    var f=clamp01(p)*5-tread;
+    var hop=Math.abs(Math.sin(Math.PI*clamp01(f)))*0.06;
+    var lean=((tread%2===0)?1:-1)*5*Math.sin(Math.PI*clamp01(f));
+    y=lerp(2.62,down?1.35:1.30,pe)-hop;
+    s=down?lerp(1,0.32,pe):lerp(1,1.14,pe);
+    a=pe<0.75?1:1-(pe-0.75)/0.25;
+    setActor(PA,2.5,y,s,lean,a);
+  }else{
+    // C: ordinary walk, clipped by the mouth. No scaling.
+    var cf=smooth(clamp01((p-0.35)/0.60));
+    var wob=Math.abs(Math.sin(p*4*Math.PI));
+    y=lerp(2.62,1.42,p);
+    setActor(PA,2.5,y-wob*0.04,1,Math.sin(p*4*Math.PI)*4,1);
+    PA.actor.style.clipPath='inset('+(cf*100)+'% 0 0 0)';
+    PA.actor.style.filter=down?('brightness('+(1-0.45*cf)+')'):('brightness('+(1+0.18*cf)+')');
+    PA.shadow.style.opacity=String(0.55*(1-cf));
+    if(p>0.8){
+      PA.dust.style.opacity=String(0.35*(1-(p-0.8)/0.2));
+      PA.dust.style.transform='translate('+(2.5*CELL)+'px,'+(1.4*CELL)+'px) scale('+(0.5+p)+')';
+    }
+  }
+}
+function drawEmerge(p,sec,down){
+  var e,y,s,a,shimmy;
+  if(state.opt==='A'){
+    e=smooth(p); shimmy=Math.sin(-sec*17)*0.10*(1-e);
+    if(down){
+      y=lerp(1.30,2.62,e); s=lerp(1.14,1,e);
+      a=p<0.30?p/0.30:1;
+      setActor(PB,2.5+shimmy*0.5,y,s,0,a);
+    }else{
+      y=lerp(1.35,2.62,e);
+      s=lerp(0.32,1,e)*(1+0.05*Math.sin(Math.PI*clamp01((p-0.72)/0.28)));
+      a=p<0.30?p/0.30:1;
+      setActor(PB,2.5+shimmy,y,s,0,a);
+    }
+  }else if(state.opt==='B'){
+    var pe=stepEase(p,4);
+    var tread=Math.floor(clamp01(p)*4); if(tread>3)tread=3;
+    var f=clamp01(p)*4-tread;
+    var hop=Math.abs(Math.sin(Math.PI*clamp01(f)))*0.06;
+    var lean=((tread%2===0)?-1:1)*5*Math.sin(Math.PI*clamp01(f));
+    y=lerp(down?1.30:1.35,2.62,pe)-hop;
+    s=down?lerp(1.14,1,pe):lerp(0.32,1,pe);
+    a=pe<0.20?pe/0.20:1;
+    setActor(PB,2.5,y,s,lean,a);
+  }else{
+    var cf=1-smooth(clamp01(p/0.65));
+    var wob=Math.abs(Math.sin(p*4*Math.PI));
+    y=lerp(1.42,2.62,p);
+    setActor(PB,2.5,y-wob*0.04,1,Math.sin(p*4*Math.PI)*4,1);
+    PB.actor.style.clipPath='inset('+(cf*100)+'% 0 0 0)';
+    PB.actor.style.filter=down?('brightness('+(1+0.18*cf)+')'):('brightness('+(1-0.45*cf)+')');
+    PB.shadow.style.opacity=String(0.55*(1-cf));
+  }
 }
 
 function draw(sec){
@@ -223,48 +351,24 @@ function draw(sec){
     acc+=ps[i].t;
   }
   setActor(PA,0,0,1,0,0); setActor(PB,0,0,1,0,0);
+  clearFx(PA); clearFx(PB);
   PA.dust.style.opacity='0'; PB.dust.style.opacity='0';
   var down=state.dir==='down';
-  var e, y, s, a, shimmy;
   switch(cur.id){
     case 'approach': walk(PA,[-0.5,3.0],[2.5,2.62],p); break;
-    case 'entry':
-      e=smooth(p); shimmy=Math.sin(sec*17)*0.10*e;
-      if(down){
-        y=lerp(2.62,1.35,e); s=lerp(1,0.32,e);
-        a=p<0.72?1:1-(p-0.72)/0.28;
-        setActor(PA,2.5+shimmy,y,s,0,a);
-      }else{
-        y=lerp(2.62,1.30,e); s=lerp(1,1.14,e);
-        var bob=Math.abs(Math.sin(p*4*Math.PI))*0.05;
-        a=p<0.62?1:1-(p-0.62)/0.38;
-        setActor(PA,2.5+shimmy*0.5,y-bob,s,0,a);
-      }
-      break;
+    case 'entry': drawEntry(p,sec,down); break;
     case 'hold':
       if((+sl.hold.value)>0){
         PA.dust.style.opacity=String(0.45*(1-p));
         PA.dust.style.transform='translate('+(2.5*CELL)+'px,'+(1.35*CELL)+'px) scale('+(0.6+1.4*p)+')';
       }
       break;
-    case 'emerge':
-      e=smooth(p); shimmy=Math.sin(-sec*17)*0.10*(1-e);
-      if(down){
-        y=lerp(1.30,2.62,e); s=lerp(1.14,1,e);
-        a=p<0.30?p/0.30:1;
-        setActor(PB,2.5+shimmy*0.5,y,s,0,a);
-      }else{
-        y=lerp(1.35,2.62,e);
-        s=lerp(0.32,1,e)*(1+0.05*Math.sin(Math.PI*clamp01((p-0.72)/0.28)));
-        a=p<0.30?p/0.30:1;
-        setActor(PB,2.5+shimmy,y,s,0,a);
-      }
-      break;
+    case 'emerge': drawEmerge(p,sec,down); break;
     case 'depart': walk(PB,[2.5,2.62],[5.6,3.0],p); break;
   }
   var tt=total();
   $('playhead').style.left=(clamp01(t/tt)*100)+'%';
-  $('readout').innerHTML='tick <b>'+Math.floor(t)+'</b> / '+tt+' &middot; phase: <b>'+cur.label+'</b> &middot; journey '+(tt/60).toFixed(2)+'s at 1x &middot; speed '+state.speed+'x';
+  $('readout').innerHTML='option <b>'+OPTS[state.opt].name+'</b> &middot; tick <b>'+Math.floor(t)+'</b> / '+tt+' &middot; phase: <b>'+cur.label+'</b> &middot; journey '+(tt/60).toFixed(2)+'s at 1x &middot; speed '+state.speed+'x';
 }
 
 var lastMs=performance.now();
@@ -283,15 +387,21 @@ function frame(ms){
 $('bPlay').onclick=function(){state.playing=!state.playing;this.textContent=state.playing?'Pause':'Play';};
 $('bRestart').onclick=function(){state.t=0;};
 $('bLoop').onclick=function(){state.loop=!state.loop;this.classList.toggle('on',state.loop);};
-$('bDown').onclick=function(){state.dir='down';applyDir();};
-$('bUp').onclick=function(){state.dir='up';applyDir();};
+$('bDown').onclick=function(){applyDir('down');};
+$('bUp').onclick=function(){applyDir('up');};
+document.querySelectorAll('.optbtn').forEach(function(b){b.onclick=function(){applyOpt(b.dataset.opt);};});
 var spBtns=document.querySelectorAll('[data-sp]');
 spBtns.forEach(function(b){b.onclick=function(){state.speed=+b.dataset.sp;spBtns.forEach(function(x){x.classList.toggle('on',x===b);});};});
 [sl.entry,sl.hold,sl.emerge].forEach(function(x){x.oninput=function(){buildBar();if(state.t>total())state.t=0;};});
 $('segbar').onclick=function(ev){var r=this.getBoundingClientRect();state.t=clamp01((ev.clientX-r.left)/r.width)*total();};
-document.addEventListener('keydown',function(ev){if(ev.code==='Space'){ev.preventDefault();$('bPlay').onclick.call($('bPlay'));}});
+document.addEventListener('keydown',function(ev){
+  if(ev.code==='Space'){ev.preventDefault();$('bPlay').onclick.call($('bPlay'));}
+  if(ev.key==='1')applyOpt('A');
+  if(ev.key==='2')applyOpt('B');
+  if(ev.key==='3')applyOpt('C');
+});
 
-applyDir();
+applyOpt('A');
 requestAnimationFrame(frame);
 })();
 </script>
