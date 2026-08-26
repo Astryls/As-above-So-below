@@ -5,55 +5,41 @@ description and these notes are never uploaded by it.
 HOUSE RULE: no em-dashes anywhere in shipped text.
 ================================================================================
 
-[h1]◆ Window 8: Field Fixes ◆[/h1]
+[h1]◆ Window 9: Transit Animations ◆[/h1]
 
-[h1]✦ Fixed: pipe columns spammed errors with Vanilla Expanded pipe mods[/h1]
-With any Vanilla Expanded pipe network installed (nutrient paste, helixien gas,
-chemfuel and the rest), a pipe column carrying that network printed a red
-KeyNotFoundException every time that part of the map redrew, and the conduit that
-should appear on the floor above the column never drew at all.
+[h1]✦ New: colonists actually climb the stairs[/h1]
+Crossing between levels used to be an instant hop: a pawn touched the stairwell
+and simply appeared on the other side. Every link now plays a real crossing:
 
-The cause: the VE pipe framework looks its pipe art up in a table built from each
-mod's own authored pipe list, and the column's auto-generated connectors are in no
-authored list. The connector is now registered with the exact art its source pipe
-already uses, so the floor above a pipe column shows the real conduit, it links
-into pipe runs laid beside it, and the errors are gone.
-
-[h1]✦ Fixed: Biomes! Caverns basements full of dying plants and bare marsh[/h1]
-With Biomes! Caverns, a cavern basement generated most of its fungal trees and all
-three marsh mushroom species already dying, while the wet marshy ground stayed
-empty.
-
-Our plant seeding never asked the game's own "can this species live on this
-terrain" question, so marsh species landed on dry soil and soil species in the
-marsh. Seeding now runs the vanilla legality check on every cell: fungal trees
-stand on soil, marsh mushrooms stand in the marsh, and open marsh water carries
-its hydrophytes at natural density. Mud staying bare matches vanilla swamps and is
-correct. Applies to newly generated colonies.
-
-[h1]✦ New: level gizmos got icons, and they select the other end[/h1]
 [list]
-[*]Stairs, ladders and elevators now show a proper icon for each linked level,
-with the arrow telling you whether that end is above or below you.
-[*]Using the gizmo selects the matching stairs, ladder or elevator car on the
-level you arrive on, so you can walk a whole column by clicking the same spot.
-[*]The camera cuts straight to the other end instead of panning across the map.
+[*][b]Stairs and grand stairs[/b]: taken tread by tread, five distinct steps down
+into the well or up out of view, leaning into each step, shrinking away below you
+or growing past you above.
+[*][b]Ladders[/b]: the pawn pauses at the shaft, leans over to check, then
+commits with two big pulls. Coming the other way, the head pops out first before
+they haul themselves clear of the hole.
+[*][b]Elevator[/b]: a freight lift. The platform takes the weight with a clank
+and a puff of dust, drops fast enough to shake, and lands with a bounce. Longer
+rides take longer: every level of travel adds to the trip.
 [/list]
 
-[h1]✦ Verified: Smooth Terrain[/h1]
-Smooth Terrain (with NANAME Floors) has been checked against banded colonies:
-every level gets its terrain corners smoothed at generation, caverns and sky
-plateaus included, and the seams between levels stay clean. No patch needed on
-either side. One small pre-existing issue in Smooth Terrain itself (it can quietly
-remove swamp and water plants standing on the cells it smooths, on any map, with
-or without this mod) has been reported upstream with a suggested fix.
+Both ends play their half. Watch the departure level and they climb away from
+you; watch the arrival level and they climb out toward you.
+
+[h1]✦ The honest cost[/h1]
+Crossings now take a beat: about half a second on stairs, a little more on a
+ladder, and boarding plus travel time on the elevator. Under the hood the
+crossing still completes instantly, so pathing, hauling, jobs and orders are
+exactly as reliable as before; the pause is only the animation getting time to
+read. Prefer the old instant hop? It is one checkbox in settings: Transit
+animations.
 
 [h1]✦ Still open beta[/h1]
 [list]
 [*][b]Combat Extended[/b] remains experimental. The bridge is in and working, but
 it has not had real play time yet.
-[*]If a network in your modlist is not offered by the right utility column, say so
-on the Discord and it is a one line fix.
+[*]If a network in your modlist is not offered by the right utility column, say
+so on the Discord and it is a one line fix.
 [/list]
 Report anything you hit and it gets fixed: join the Discord (link in the
 description).
