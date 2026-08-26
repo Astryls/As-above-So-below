@@ -1,4 +1,29 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {
+      "path": "Textures/Things/Building/Risers/AB_WallRiserClimate.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-08-26T02:54:45.136Z"
+    },
+    {
+      "path": "Textures/Things/Building/Risers/AB_WallRiserData.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-08-26T02:54:45.141Z"
+    },
+    {
+      "path": "Textures/Things/Building/Risers/AB_WallRiserPipe.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-08-26T02:54:45.149Z"
+    },
+    {
+      "path": "Textures/Things/Building/Risers/AB_WallRiserPower.png",
+      "kind": "texture",
+      "sha256": "eeebf38f43c97e0cf4fca8e974065642edd06ecdea08a3a3c4d57650817459bf",
+      "generatedAt": "2026-08-26T02:54:45.152Z"
+    }
+  ]
 }

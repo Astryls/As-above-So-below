@@ -938,13 +938,16 @@ namespace AsAboveSoBelow
             List<Thing> here = t.Position.GetThingList(map);
             for (int i = 0; i < here.Count; i++)
             {
-                if (here[i] is Building_ABColumn
-                    && here[i].def.building?.isAttachment != true)
+                if (here[i] is Building_ABColumn)
                 {
-                    // The column speaks for it. WALL RISERS (§75) are exempted: their
-                    // sprite hugs the wall edge, so the carrier's conduit stub in the
-                    // cell centre is the visible run from the floor wiring to the wall
-                    // - suppressing it left a bare gap in the middle of a conduit line.
+                    // The column speaks for it - and since §75's first field test, so
+                    // does the wall riser. The exemption that kept the carrier stub
+                    // visible under risers read in game as a stray conduit floating one
+                    // tile out from the wall (the riser SPRITE hangs on the wall cell,
+                    // but the carrier sits at Position, the room-side cell in front of
+                    // it). Hidden here like under columns; the riser art carries the
+                    // connection story, and the power/pipe overlays still print the
+                    // carrier, which is where connectivity is actually read.
                     return false;
                 }
             }

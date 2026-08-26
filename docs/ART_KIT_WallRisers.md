@@ -27,24 +27,19 @@ Rotation faces the wall; the sprite is drawn pushed 0.9 tiles onto the wall cell
 Expect one in-game check pass for vertical placement per face (their offsets ride the
 wall art), same as the column art loop.
 
-## Workflow
+## Workflow (column-reference rail - USER'S CHOICE, session of §75 field test)
 
-Two rails, in order of preference:
-
-1. **Edit rail (preferred, matches the column 5/5 run):** if you can source the vanilla
-   `WallLamp_north/_south/_east` PNGs (AssetStudio extract), upscale sharply to
-   768-1024 (nearest or lanczos, crisp corners), pre-composite onto flat `#FF00FF`, and
-   use the prompts below with this header prepended:
-   > Treat this as repainting the existing drawing, never a new drawing of the same
-   > object. The output's outer outline matches the input's exactly, except where a
-   > change below says otherwise. Nothing in the changes list alters the fixture's
-   > proportions or orientation.
-2. **Generation rail (fallback):** no input sprite; attach as style anchors (a) your
-   winning column sprite of the SAME type and (b) two VTEXE loose PNGs
-   (workshop 2016436324: `Furniture/Dresser_south.png`, `Power/ChemfuelPoweredGenerator.png`),
-   with: "the output must sit indistinguishably among the attached sprites."
+Only THREE full generations carry re-render risk: the power riser's north, south and
+east faces, each with the POWER COLUMN winner attached as the style/palette reference
+(plus optionally two VTEXE loose PNGs, workshop 2016436324:
+`Furniture/Dresser_south.png`, `Power/ChemfuelPoweredGenerator.png`). Every other
+asset (pipe/climate/data x 3 faces = 9) is a SILHOUETTE-LOCKED EDIT of the matching
+power winner, with the same-type column attached for palette - the doctrine's proven
+cheap kind.
 
 Generate at 1K, expect 3-4 candidates per asset; drift is a reroll, not a prompt bug.
+The in-chat prompt set delivered alongside this doc is the authoritative copy-paste
+version of the prompts below.
 
 ## Stage 1: power riser, three full prompts
 

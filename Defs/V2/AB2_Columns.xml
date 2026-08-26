@@ -146,10 +146,12 @@
        rule then resolves the cell above as AB_RoofSurface exactly as it does over a
        roofed column.
 
-       ⚠ CARRIER ART IS NOT SUPPRESSED UNDER RISERS (unlike §62.M under columns): the
-       sprite hugs the wall edge, so the carrier's conduit stub in the cell centre is
-       the visible run connecting the floor wiring to the wall. The §62.M prefix tests
-       isAttachment for exactly this reason.
+       ⚠ CARRIER ART IS SUPPRESSED UNDER RISERS, same as under columns (§62.M). The
+       first field test shipped the opposite: with the riser sprite hanging on the wall
+       cell and the carrier at Position (the room-side cell in front of it), the
+       visible stub read as a stray conduit placed one tile out from the wall. The
+       riser ART carries the connection story (conduit strip up the plate); the
+       network overlays still print the carrier, which is where connectivity is read.
 
        ⚠ KNOWN MICRO-EDGE: two risers may share a corner cell on two different walls.
        EnsureRoof runs only in SpawnSetup, so removing the roof-laying one degrades the
