@@ -123,4 +123,144 @@
     </modExtensions>
   </ThingDef>
 
+  <!-- ======================= wall risers (§75) ======================= -->
+
+  <!-- The four columns in wall-lamp form factor. Same thingClass, same carriers, same
+       gizmos, same up-cell rule: Building_ABColumn is Position-driven throughout, so a
+       riser IS a column that happens to hang on a wall.
+
+       Attachment mechanics are vanilla WallLamp's: Position is the walkable room-side
+       cell, ROTATION FACES THE WALL (Placeworker_AttachedToWall checks
+       loc + CardinalDirections[rot]), the sprite is pushed 0.9 onto the wall cell by
+       the per-rotation drawOffsets, and the fixture is destroyed with its wall.
+       isEdifice false keeps the cell open for furniture; Standable keeps it walkable -
+       the whole point of the form factor. The host wall must have
+       supportsWallAttachments (vanilla walls do; some mod walls will not - that is the
+       same limitation wall lamps live with).
+
+       ⚠ NO holdsRoof, TWICE OVER: RoofCollapseUtility walks the EDIFICE grid, so
+       holdsRoof on a non-edifice would be a lie nothing reads; and a 35-steel fixture
+       must not become a cheap roof prop that undercuts the column. EnsureRoof still
+       works unchanged: the riser lays RoofConstructed on its own cell, and the HOST
+       WALL is the adjacent edifice support that makes that roof legal. The §45 up-cell
+       rule then resolves the cell above as AB_RoofSurface exactly as it does over a
+       roofed column.
+
+       ⚠ CARRIER ART IS NOT SUPPRESSED UNDER RISERS (unlike §62.M under columns): the
+       sprite hugs the wall edge, so the carrier's conduit stub in the cell centre is
+       the visible run connecting the floor wiring to the wall. The §62.M prefix tests
+       isAttachment for exactly this reason.
+
+       ⚠ KNOWN MICRO-EDGE: two risers may share a corner cell on two different walls.
+       EnsureRoof runs only in SpawnSetup, so removing the roof-laying one degrades the
+       up-cell until vanilla auto-roof or the player re-covers it. Accepted. -->
+
+  <ThingDef Name="AB_WallRiserBase" ParentName="BuildingBase" Abstract="True">
+    <thingClass>AsAboveSoBelow.Building_ABColumn</thingClass>
+    <category>Building</category>
+    <designationCategory>Structure</designationCategory>
+    <altitudeLayer>BuildingOnTop</altitudeLayer>
+    <passability>Standable</passability>
+    <pathCost>0</pathCost>
+    <fillPercent>0.2</fillPercent>
+    <rotatable>true</rotatable>
+    <terrainAffordanceNeeded IsNull="True" />
+    <constructEffect>ConstructMetal</constructEffect>
+    <statBases>
+      <MaxHitPoints>120</MaxHitPoints>
+      <WorkToBuild>1800</WorkToBuild>
+      <Mass>8</Mass>
+      <Flammability>0.5</Flammability>
+      <Beauty>0</Beauty>
+    </statBases>
+    <costList>
+      <Steel>35</Steel>
+      <ComponentIndustrial>1</ComponentIndustrial>
+    </costList>
+    <researchPrerequisites>
+      <li>Electricity</li>
+      <li>Machining</li>
+    </researchPrerequisites>
+    <building>
+      <isInert>true</isInert>
+      <isEdifice>false</isEdifice>
+      <isAttachment>true</isAttachment>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <placeWorkers>
+      <li>Placeworker_AttachedToWall</li>
+    </placeWorkers>
+    <graphicData>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+      <drawOffsetNorth>(0,0,0.9)</drawOffsetNorth>
+      <drawOffsetSouth>(0,0,-0.9)</drawOffsetSouth>
+      <drawOffsetWest>(-0.9,0,0)</drawOffsetWest>
+      <drawOffsetEast>(0.9,0,0)</drawOffsetEast>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_WallRiserBase">
+    <defName>AB_WallRiserPower</defName>
+    <label>power wall riser</label>
+    <description>A wall-mounted riser carrying electrical conduit up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Power grids on this level and the level above pool into one, and each connection can be switched off at the riser. Torn down with its wall, and too light to hold a roof.</description>
+    <uiOrder>2045</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_WallRiserPower</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Power</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_WallRiserBase">
+    <defName>AB_WallRiserPipe</defName>
+    <label>pipe wall riser</label>
+    <description>A wall-mounted riser carrying sealed piping up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Every liquid and gas network it recognizes can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
+    <uiOrder>2046</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_WallRiserPipe</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Pipe</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_WallRiserBase">
+    <defName>AB_WallRiserClimate</defName>
+    <label>climate wall riser</label>
+    <description>A wall-mounted riser carrying air ducting up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Ventilation and thermal networks can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
+    <uiOrder>2047</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_WallRiserClimate</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Climate</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
+  <ThingDef ParentName="AB_WallRiserBase">
+    <defName>AB_WallRiserData</defName>
+    <label>data wall riser</label>
+    <description>A wall-mounted riser carrying signal and logistics lines up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Data networks can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
+    <uiOrder>2048</uiOrder>
+    <graphicData>
+      <texPath>Things/Building/Risers/AB_WallRiserData</texPath>
+    </graphicData>
+    <modExtensions>
+      <li Class="AsAboveSoBelow.ABColumnTypeExt">
+        <columnType>Data</columnType>
+      </li>
+    </modExtensions>
+  </ThingDef>
+
 </Defs>

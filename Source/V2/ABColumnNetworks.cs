@@ -938,9 +938,14 @@ namespace AsAboveSoBelow
             List<Thing> here = t.Position.GetThingList(map);
             for (int i = 0; i < here.Count; i++)
             {
-                if (here[i] is Building_ABColumn)
+                if (here[i] is Building_ABColumn
+                    && here[i].def.building?.isAttachment != true)
                 {
-                    return false; // the column speaks for it
+                    // The column speaks for it. WALL RISERS (§75) are exempted: their
+                    // sprite hugs the wall edge, so the carrier's conduit stub in the
+                    // cell centre is the visible run from the floor wiring to the wall
+                    // - suppressing it left a bare gap in the middle of a conduit line.
+                    return false;
                 }
             }
             return true;
