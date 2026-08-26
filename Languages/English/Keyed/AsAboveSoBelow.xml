@@ -153,4 +153,8 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_ViewLevel>View level {0}</AB_ViewLevel>
   <AB_ViewLevelDesc>Jump the camera to this link's other end on level {0} and select it.</AB_ViewLevelDesc>
   <AB_StairsNoLevel>No level in that direction; this link connects nothing.</AB_StairsNoLevel>
+
+  <!-- Transit clips: stairs / ladder / elevator crossing animations. -->
+  <AB_TransitAnim>Transit animations</AB_TransitAnim>
+  <AB_TransitAnimTip>Pawns play a short clip when crossing levels: stairs are taken tread by tread, ladders get a peek-and-drop climb, and the freight elevator clanks, drops and bounces. Adds a brief hold after each crossing while the clip plays (about half a second; longer for multi-level elevator rides). Off: the old instant hop, with no clips and no hold.</AB_TransitAnimTip>
 </LanguageData>

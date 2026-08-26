@@ -151,6 +151,11 @@ namespace AsAboveSoBelow
         /// changing it forces a map-mesh regeneration - see ABMod.WriteSettings.</summary>
         public float depthFalloffPerLevel = ABDepthView.DefaultFalloff;
 
+        /// <summary>§73 transit clips: tread-step stairs, peek-and-drop ladders, the
+        /// freight elevator, plus the short post-hop hold that gives them time to read.
+        /// Off = the old instant hop: no clips, no hold, no stagger.</summary>
+        public bool transitAnim = true;
+
         /// <summary>Whether pawns below the viewed band may render from vanilla's pawn atlas
         /// (one blit) instead of walking their whole render tree every frame. Off / Auto /
         /// Aggressive - see ABBelowRenderCache. Auto is lossless by construction: it engages
@@ -319,6 +324,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref depthFalloff, "depthFalloff", true);
             Scribe_Values.Look(ref depthFalloffPerLevel, "depthFalloffPerLevel",
                 ABDepthView.DefaultFalloff);
+            Scribe_Values.Look(ref transitAnim, "transitAnim", true);
             Scribe_Values.Look(ref clampZoomToLevel, "clampZoomToLevel", true);
             Scribe_Values.Look(ref belowPawnCache, "belowPawnCache",
                 ABBelowRenderCache.ModeAuto);
@@ -578,6 +584,9 @@ namespace AsAboveSoBelow
             list.Label("AB_VisualsNote".Translate());
             GUI.color = dim;
             list.Gap(8f);
+
+            list.CheckboxLabeled("AB_TransitAnim".Translate(), ref transitAnim,
+                "AB_TransitAnimTip".Translate());
 
             bool falloffWas = depthFalloff;
             list.CheckboxLabeled("AB_DepthFalloff".Translate(), ref depthFalloff,

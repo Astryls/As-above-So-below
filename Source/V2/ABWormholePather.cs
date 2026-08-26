@@ -353,7 +353,8 @@ namespace AsAboveSoBelow
                     // ⚠ NOTHING MAY GATE THIS CARRY. An entry-animation hold was wired in here
                     // and in TryConsumeArrival and it broke cross-level movement outright
                     // ("can't command pawns across levels anymore", run #297). Both call sites
-                    // are reverted; ABStairAnim.ReadyToCarry still exists but is NOT WIRED.
+                    // are reverted; the delay now lives AFTER the hop (§73: stagger +
+                    // ghost, see the banner on ABStairAnim). Nothing gates the carry.
                     // See §33c before re-attempting: a cosmetic effect must never sit on the
                     // path that decides whether a transit happens at all.
                     tmpDone.Add(kv.Key);
@@ -467,15 +468,17 @@ namespace AsAboveSoBelow
             // this) would otherwise trip the ARRIVED-NO-PENDING diagnostic and read as a
             // failure when it is simply the journey finishing normally.
             everSegmented.Remove(pawn.thingIDNumber);
+            IntVec3 prePos = pawn.Position;
             pawn.Position = landing;
             pawn.Notify_Teleported(false, true);
             // Walking through a door reveals what is on the other side of it. The transit is
             // a teleport, so neither vanilla's door hook nor anything else fires here - see
             // ABFogReveal.RevealArrival for why both halves of the vanilla path miss.
             ABFogReveal.RevealArrival(pawn, landing);
-            // Cosmetic only, and deliberately AFTER the move: the animation is a pop-out on
-            // the far side, never a delay on the near one. See ABStairAnim.
-            ABStairAnim.NotifyTransited(pawn);
+            // Cosmetic only, and deliberately AFTER the move: the §73 clip is a ghost at
+            // the origin mouth plus a post-hop hold, never a gate on the carry itself.
+            // See the banner on ABStairAnim.
+            ABStairAnim.NotifyTransited(pawn, t.near, t.far, prePos, landing);
             // A camera locked to this pawn (Perspective Shift avatar, follow-selected)
             // treats its transit as the player's own level change. No-op for everyone else.
             ABBandView.FollowTransit(pawn);
@@ -606,13 +609,14 @@ namespace AsAboveSoBelow
             // teleport and kept dropping every pawn onto the anchor cell itself, so half the
             // transits still stacked even after the sweep was fixed.
             IntVec3 landing = LandingCell(pawn, t.far);
+            IntVec3 prePos = pawn.Position;
             pawn.Position = landing;
             // endCurrentJob:false - the job is mid-flight and must survive the hop.
             pawn.Notify_Teleported(false, true);
             // Paired with the tick sweep's copy above - both teleport sites must reveal, or
             // the fog lifts on some transits and not others depending on which path ran.
             ABFogReveal.RevealArrival(pawn, landing);
-            ABStairAnim.NotifyTransited(pawn);
+            ABStairAnim.NotifyTransited(pawn, t.near, t.far, prePos, landing);
             // Paired with the tick sweep's copy above, for the same reason both teleport
             // sites reveal fog: whichever trigger carries the followed pawn must also move
             // the view, or whether the camera follows depends on which path happened to run.

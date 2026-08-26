@@ -104,6 +104,15 @@ namespace AsAboveSoBelow
                 // cost one wrong fix (running the pawn through all three DynamicDrawPhases,
                 // which was a real staleness bug but not this one).
                 bool probing = ReportNextPass;
+                // §73: a pawn in its transit-ghost window is drawn by ABStairAnim's own
+                // pass at the origin mouth. Drawing it here too - shrunk, through the
+                // stair opening it just used - would be a second copy of the same pawn.
+                if (ABStairAnim.IsGhosting(p))
+                {
+                    if (probing) report.AppendLine("  SKIP " + p.LabelShortCap + " " + pos
+                        + " - transit ghost (drawn by the clip pass)");
+                    continue;
+                }
                 // ANY band below the view, not just the one directly beneath.
                 //
                 // The candidate rect used to be the view shifted down exactly one Slot, so a
@@ -356,7 +365,11 @@ namespace AsAboveSoBelow
         {
             try
             {
-                ABBelowDynamicDraw.DrawBelowPawns(MapRef(__instance));
+                Map map = MapRef(__instance);
+                ABBelowDynamicDraw.DrawBelowPawns(map);
+                // §73 transit ghosts: entry clips drawn at the origin mouth, after the
+                // below pass so they compose above it like any same-band pawn would.
+                ABStairAnim.DrawGhosts(map);
             }
             catch (Exception e)
             {
