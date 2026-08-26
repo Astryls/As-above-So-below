@@ -39,7 +39,7 @@ old tree. Work top to bottom; nothing here is optional.
 - [ ] `About/Preview.png` present and current.
 - [ ] `modDependencies` (Harmony) and `incompatibleWith` still accurate.
 
-## 4. Strip before publishing (FIVE MOVES)
+## 4. Strip before publishing (SIX MOVES)
 
 Move these OUT of the mod folder, publish, then move them back. **Move, never delete:**
 `Source/` is the working tree.
@@ -52,6 +52,8 @@ Move these OUT of the mod folder, publish, then move them back. **Move, never de
       cleanest order.)
 5. [ ] `mockups/`  (motion-study HTML pages, added for the transit-animation work.
       Dev artifact, never ships.)
+6. [ ] `.gitignore`  (caught in the window-9 eyeball: it survived the .git/ move and
+      sat in the ship list. It travels with `.git/`.)
 
 Also confirm:
 - [ ] `.modmixer/` is never uploaded (the utility excludes it, but eyeball the file list).
@@ -62,7 +64,7 @@ Also confirm:
 - [ ] Run the Modmixer publish utility.
 - [ ] Steam **web** editor: paste `docs/UPDATE_NOTES.txt` into the Change Notes field.
 - [ ] Steam **web** editor: description only if it actually changed.
-- [ ] Move the five stripped folders back.
+- [ ] Move the six stripped items back.
 - [ ] Subscribe-and-load smoke test from the Workshop copy, not the workspace copy.
 
 ## 6. After
