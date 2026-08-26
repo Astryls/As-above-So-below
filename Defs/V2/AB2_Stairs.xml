@@ -71,11 +71,14 @@
     <building>
       <!-- DoorBase sets blueprintClass=Blueprint_Door plus a Door_Blueprint texture, so
            every vertical link rendered as a generic door outline while being placed - the
-           2x2 staircase art only appeared once the thing was built. Blueprint_Build is the
-           ordinary building blueprint; each def below supplies its own graphic, and
-           useBlueprintGraphicAsGhost makes the placement ghost match too. Same shape vanilla
-           uses for the 2x1 Ornate Door. -->
-      <blueprintClass>Blueprint_Build</blueprintClass>
+           2x2 staircase art only appeared once the thing was built. Blueprint_ABBuild is
+           Blueprint_Build plus the finished stuff tint (a granite staircase plans granite).
+           The per-def blueprintGraphicData blocks below are the no-dll fallback only:
+           vanilla forces a blue 0.6-alpha wash in C#, and ABBlueprintLook rebuilds every
+           AB2 blueprint graphic from the real art at startup. useBlueprintGraphicAsGhost
+           does NOT cover door-class defs (GhostGraphicFor's IsDoor branch ignores it and
+           used the non-rotating uiIcon); ABGhostGraphicForLinks bypasses that branch. -->
+      <blueprintClass>AsAboveSoBelow.Blueprint_ABBuild</blueprintClass>
     </building>
     <useBlueprintGraphicAsGhost>true</useBlueprintGraphicAsGhost>
   </ThingDef>
