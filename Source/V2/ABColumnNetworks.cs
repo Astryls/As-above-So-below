@@ -926,6 +926,13 @@ namespace AsAboveSoBelow
     {
         private static bool Prefix(Thing t)
         {
+            return ShouldPrint(t);
+        }
+
+        /// <summary>Shared verdict for the vanilla general layer AND the Dubs-family
+        /// pipe layers (ABForeignPipeLayerHide, §75.d). §62.M + §75.a/b clauses.</summary>
+        internal static bool ShouldPrint(Thing t)
+        {
             if (t == null || !ABColumnNetworks.IsCarrier(t.def))
             {
                 return true;
@@ -976,6 +983,85 @@ namespace AsAboveSoBelow
                 }
             }
             return true;
+        }
+    }
+
+    /// <summary>
+    /// §75.d: the same hide verdict, installed onto the DUBS-FAMILY NORMAL-VIEW pipe
+    /// layers at boot. §62.M's original note classified "each pipe mod's own layer" as
+    /// overlay; field run #330 disproved that for the Dubs lineage: DBH and Rimefeller
+    /// (and Rimatomics, same shared code) print their pipe things' normal map-mesh art
+    /// through their OWN SectionLayer_Things subclasses, so carrier art at riser cells
+    /// sailed straight past the SectionLayer_ThingsGeneral patch (rule 16: count the
+    /// foreign mod's write paths). Their *Overlay layers stay untouched - overlays are
+    /// where connectivity is read (rule 34). VEF PipeSystem needs nothing here: its
+    /// SectionLayer_Resource is frame-gated overlay-only (checked against the 1.6
+    /// assembly) and its pipes' normal art prints through the general layer, which the
+    /// main patch already covers.
+    ///
+    /// Soft-resolved by name, ABDesignatorClamp style. A listed type that is absent is
+    /// silent (host not installed, or no such layer in this version). A HOST that is
+    /// present (map-comp anchor, the same anchors DubsPipeCompat.Hosts uses) with ZERO
+    /// patched layers warns by name (rule 33) - the "Dubs renamed their layer in an
+    /// update" tripwire.
+    /// </summary>
+    [StaticConstructorOnStartup]
+    public static class ABForeignPipeLayerHide
+    {
+        private static readonly (string hostComp, string layer)[] Layers =
+        {
+            ("DubsBadHygiene.HygienePipeMapComp", "DubsBadHygiene.SectionLayer_ThingsSewagePipe"),
+            ("Rimefeller.MapComponent_Rimefeller", "Rimefeller.SectionLayer_ThingsPipe"),
+            ("Rimefeller.MapComponent_Rimefeller", "Rimefeller.SectionLayer_SewagePipe"),
+            ("Rimatomics.MapComponent_Rimatomics", "Rimatomics.SectionLayer_ThingsPipe"),
+        };
+
+        static ABForeignPipeLayerHide()
+        {
+            HarmonyMethod prefix = new HarmonyMethod(
+                AccessTools.DeclaredMethod(typeof(ABForeignPipeLayerHide), nameof(ForeignPrefix)));
+            Dictionary<string, int> patchedPerHost = new Dictionary<string, int>();
+            foreach ((string hostComp, string layerName) in Layers)
+            {
+                if (!patchedPerHost.ContainsKey(hostComp))
+                {
+                    patchedPerHost[hostComp] = AccessTools.TypeByName(hostComp) != null ? 0 : -1;
+                }
+                Type layer = AccessTools.TypeByName(layerName);
+                if (layer == null)
+                {
+                    continue;
+                }
+                MethodInfo m = AccessTools.DeclaredMethod(layer, "TakePrintFrom");
+                if (m == null)
+                {
+                    continue; // not a things-print layer in this version; fine
+                }
+                try
+                {
+                    HarmonyBoot.Harmony.Patch(m, prefix: prefix);
+                    patchedPerHost[hostComp]++;
+                }
+                catch (Exception e)
+                {
+                    Log.Warning(ABLog.Tag + " could not patch " + layerName + ".TakePrintFrom: " + e.Message);
+                }
+            }
+            foreach (KeyValuePair<string, int> kv in patchedPerHost)
+            {
+                if (kv.Value == 0)
+                {
+                    Log.Warning(ABLog.Tag + " " + kv.Key + " is loaded but none of its pipe layers could be"
+                        + " patched; carrier art may stay visible at wall risers for this mod"
+                        + " (layer renamed in an update?).");
+                }
+            }
+        }
+
+        /// <summary>Index-bound (__0) so a foreign parameter name cannot break the bind.</summary>
+        private static bool ForeignPrefix(Thing __0)
+        {
+            return Patch_SectionLayer_ABHideCarrierUnderColumn.ShouldPrint(__0);
         }
     }
 
