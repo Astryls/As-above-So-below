@@ -916,10 +916,17 @@ namespace AsAboveSoBelow
     /// - completely untouched. Patching `Thing.Print` instead would have been wrong twice:
     /// broader than needed, and it would still have missed the power overlay entirely.
     ///
-    /// ⚠ THE CONDITION IS "A COLUMN STANDS HERE", NOT "THIS IS THE LOWER CARRIER". That is
-    /// self-maintaining for stacks: a column built on the cell above another column hides
-    /// the shared carrier there too, which is exactly right, and removing a column
-    /// re-reveals it because the despawn dirties the section.
+    /// ⚠ §75.e: THE POSITIONAL CLAUSES ARE GONE. §62.J made carriers visible so a column's
+    /// service top would read as "the conduit on the floor above"; the user revoked that
+    /// after the compat run - loose plumbing on an upper floor reads as a stray build, for
+    /// columns exactly as it did for risers (§75.a/b). Every carrier now hides in every
+    /// NORMAL-VIEW layer, unconditionally. That is also strictly cheaper: this prefix runs
+    /// per printed thing and no longer touches the thing grid or the band math at all.
+    ///
+    /// ⚠ OVERLAYS ARE UNAFFECTED AND THAT IS THE ENTIRE DESIGN (rule 34). Connectivity is
+    /// read in the power/pipe overlays, which are separate SectionLayer classes we never
+    /// patch; a player who wants to see where a column or riser joins a grid opens the
+    /// overlay, exactly as for a vanilla conduit buried under a wall.
     /// </summary>
     [HarmonyPatch(typeof(SectionLayer_ThingsGeneral), "TakePrintFrom")]
     public static class Patch_SectionLayer_ABHideCarrierUnderColumn
@@ -929,60 +936,14 @@ namespace AsAboveSoBelow
             return ShouldPrint(t);
         }
 
-        /// <summary>Shared verdict for the vanilla general layer AND the Dubs-family
-        /// pipe layers (ABForeignPipeLayerHide, §75.d). §62.M + §75.a/b clauses.</summary>
+        /// <summary>Shared verdict for the vanilla general layer AND the Dubs-family pipe
+        /// layers (ABForeignPipeLayerHide, §75.d). ONE clause since §75.e: a carrier is
+        /// never drawn in a normal-view layer, on any level, under any connector form.
+        /// Callers are TakePrintFrom prefixes, so false skips that layer's print only and
+        /// every overlay layer keeps printing the carrier normally.</summary>
         internal static bool ShouldPrint(Thing t)
         {
-            if (t == null || !ABColumnNetworks.IsCarrier(t.def))
-            {
-                return true;
-            }
-            Map map = t.Map;
-            if (map == null)
-            {
-                return true;
-            }
-            List<Thing> here = t.Position.GetThingList(map);
-            for (int i = 0; i < here.Count; i++)
-            {
-                if (here[i] is Building_ABColumn)
-                {
-                    // The column speaks for it - and since §75's first field test, so
-                    // does the wall riser. The exemption that kept the carrier stub
-                    // visible under risers read in game as a stray conduit floating one
-                    // tile out from the wall (the riser SPRITE hangs on the wall cell,
-                    // but the carrier sits at Position, the room-side cell in front of
-                    // it). Hidden here like under columns; the riser art carries the
-                    // connection story, and the power/pipe overlays still print the
-                    // carrier, which is where connectivity is actually read.
-                    return false;
-                }
-            }
-            // §75.b (field round 2): the same promise covers the riser's UP-CELL. A
-            // column's up-cell stub is §62.J design - the service top emerging through
-            // the floor above, with the column body below explaining it. A wall riser
-            // made the identical stub read as loose conduit lying on an empty roof
-            // cell. Hide the carrier when the thing one Slot below is an
-            // attachment-form column (mirrors OtherColumnClaims' below-cell walk);
-            // columns keep their visible tops, and every overlay keeps printing.
-            ABBandMap bands = ABBands.CompOf(map);
-            if (bands != null && bands.Banded)
-            {
-                IntVec3 below = new IntVec3(t.Position.x, 0, t.Position.z - bands.Slot);
-                if (below.InBounds(map) && !bands.InGutter(below))
-                {
-                    List<Thing> under = below.GetThingList(map);
-                    for (int i = 0; i < under.Count; i++)
-                    {
-                        if (under[i] is Building_ABColumn col
-                            && col.def.building?.isAttachment == true)
-                        {
-                            return false;
-                        }
-                    }
-                }
-            }
-            return true;
+            return t == null || !ABColumnNetworks.IsCarrier(t.def);
         }
     }
 

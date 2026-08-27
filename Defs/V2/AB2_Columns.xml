@@ -44,10 +44,12 @@
       <Steel>60</Steel>
       <ComponentIndustrial>2</ComponentIndustrial>
     </costList>
-    <researchPrerequisites>
-      <li>Electricity</li>
-      <li>Machining</li>
-    </researchPrerequisites>
+    <!-- NO researchPrerequisites (§75.f). A column is this mod's core infrastructure,
+         not a tech reward: gating it behind Electricity + Machining left a fresh
+         banded colony unable to join its levels' utilities until mid game. The
+         PER-NETWORK connect toggles still respect each host mod's own research
+         (Building_ABColumn.GetGizmos -> AB2_ColumnNeedsResearch), so a network you
+         have not unlocked still cannot be carried. -->
     <building>
       <isInert>true</isInert>
       <ai_chillDestination>false</ai_chillDestination>
@@ -67,7 +69,7 @@
     <defName>AB_ColumnPower</defName>
     <label>power column</label>
     <description>A reinforced service column carrying electrical conduit up through the ceiling. Power grids on this level and the level above pool into one, and each connection can be switched off at the column. Sturdy enough to hold a roof.</description>
-    <uiOrder>2041</uiOrder>
+    <uiOrder>2070</uiOrder>
     <graphicData>
       <texPath>Things/Building/Columns/AB_ColumnPower</texPath>
     </graphicData>
@@ -82,7 +84,7 @@
     <defName>AB_ColumnPipe</defName>
     <label>pipe column</label>
     <description>A reinforced service column carrying sealed piping up through the ceiling. Every liquid and gas network it recognizes can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
-    <uiOrder>2042</uiOrder>
+    <uiOrder>2071</uiOrder>
     <graphicData>
       <texPath>Things/Building/Columns/AB_ColumnPipe</texPath>
     </graphicData>
@@ -97,7 +99,7 @@
     <defName>AB_ColumnClimate</defName>
     <label>climate column</label>
     <description>A reinforced service column carrying air ducting up through the ceiling. Ventilation and thermal networks can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
-    <uiOrder>2043</uiOrder>
+    <uiOrder>2072</uiOrder>
     <graphicData>
       <texPath>Things/Building/Columns/AB_ColumnClimate</texPath>
     </graphicData>
@@ -112,7 +114,7 @@
     <defName>AB_ColumnData</defName>
     <label>data column</label>
     <description>A reinforced service column carrying signal and logistics lines up through the ceiling. Data networks can be connected to the level above or shut off individually at the column. Sturdy enough to hold a roof.</description>
-    <uiOrder>2044</uiOrder>
+    <uiOrder>2073</uiOrder>
     <graphicData>
       <texPath>Things/Building/Columns/AB_ColumnData</texPath>
     </graphicData>
@@ -152,10 +154,11 @@
        visible stub read as a stray conduit placed one tile out from the wall. The
        riser ART carries the connection story (conduit strip up the plate); the
        network overlays still print the carrier, which is where connectivity is read.
-       §75.b extends the same rule to the riser's UP-CELL carrier: a column's visible
-       top on the floor above is §62.J design, but with no column body to explain it
-       the riser's stub read as loose conduit on an empty roof cell. Columns keep
-       their visible tops; only attachment-form risers hide both cells.
+       §75.b extended the rule to the riser's UP-CELL carrier, and §75.e finished the
+       job: after the compat run the user revoked §62.J's visible column tops too, so
+       NO carrier is drawn in normal view on any level, under either connector form.
+       The fixture art carries the connection story; the network overlays still print
+       every carrier, which is where connectivity is read.
 
        ⚠ KNOWN MICRO-EDGE: two risers may share a corner cell on two different walls.
        EnsureRoof runs only in SpawnSetup, so removing the roof-laying one degrades the
@@ -183,10 +186,7 @@
       <Steel>35</Steel>
       <ComponentIndustrial>1</ComponentIndustrial>
     </costList>
-    <researchPrerequisites>
-      <li>Electricity</li>
-      <li>Machining</li>
-    </researchPrerequisites>
+    <!-- NO researchPrerequisites, same reasoning as the column (§75.f). -->
     <building>
       <isInert>true</isInert>
       <isEdifice>false</isEdifice>
@@ -213,7 +213,7 @@
     <defName>AB_WallRiserPower</defName>
     <label>power wall riser</label>
     <description>A wall-mounted riser carrying electrical conduit up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Power grids on this level and the level above pool into one, and each connection can be switched off at the riser. Torn down with its wall, and too light to hold a roof.</description>
-    <uiOrder>2045</uiOrder>
+    <uiOrder>2080</uiOrder>
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserPower</texPath>
     </graphicData>
@@ -229,7 +229,7 @@
     <defName>AB_WallRiserPipe</defName>
     <label>pipe wall riser</label>
     <description>A wall-mounted riser carrying sealed piping up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Every liquid and gas network it recognizes can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
-    <uiOrder>2046</uiOrder>
+    <uiOrder>2081</uiOrder>
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserPipe</texPath>
     </graphicData>
@@ -245,7 +245,7 @@
     <defName>AB_WallRiserClimate</defName>
     <label>climate wall riser</label>
     <description>A wall-mounted riser carrying air ducting up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Ventilation and thermal networks can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
-    <uiOrder>2047</uiOrder>
+    <uiOrder>2082</uiOrder>
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserClimate</texPath>
     </graphicData>
@@ -261,7 +261,7 @@
     <defName>AB_WallRiserData</defName>
     <label>data wall riser</label>
     <description>A wall-mounted riser carrying signal and logistics lines up through the ceiling. Bolted to a wall rather than standing on the floor, so the cell beneath it stays free to walk and build on. Data networks can be connected to the level above or shut off individually at the riser. Torn down with its wall, and too light to hold a roof.</description>
-    <uiOrder>2048</uiOrder>
+    <uiOrder>2083</uiOrder>
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserData</texPath>
     </graphicData>

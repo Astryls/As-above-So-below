@@ -96,6 +96,13 @@
   <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_StairsDown</defName>
     <label>stairs down</label>
+    <!-- ARCHITECT ORDER (§75.f). Every AB2 buildable now sits AFTER the whole vanilla
+         Structure block (Wall 2000, doors 2010, Fence 2020, FenceGate 2030, Column
+         2040, AnimalFlap 2050). Without an explicit value these links inherited
+         DoorBase's 2010 and interleaved all seven of them with the vanilla doors.
+         Links 2060-2066 (ladder, stairs, grand, elevator), utility columns 2070-2073,
+         wall risers 2080-2083. -->
+    <uiOrder>2062</uiOrder>
     <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
     <size>(2,2)</size>
     <graphicData>
@@ -125,6 +132,7 @@
   <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_StairsUp</defName>
     <label>stairs up</label>
+    <uiOrder>2063</uiOrder>
     <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
     <size>(2,2)</size>
     <graphicData>
@@ -162,6 +170,7 @@
   <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_Elevator</defName>
     <label>elevator</label>
+    <uiOrder>2066</uiOrder>
     <description>A counterweighted elevator shaft connecting every level of the colony through a single 2x2 footprint. Completing it opens all levels it reaches and creates a matching car on each. Colonists ride between any two levels directly, and haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
     <size>(2,2)</size>
     <!-- Inherit="False" is load-bearing: RimWorld MERGES <li> lists with the parent's
@@ -223,6 +232,7 @@
   <ThingDef ParentName="AB2_GrandBase">
     <defName>AB2_GrandStairsDown</defName>
     <label>grand staircase down</label>
+    <uiOrder>2064</uiOrder>
     <description>A broad staircase leading down. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the basement level below and creates a matching staircase there.</description>
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsDown</texPath>
@@ -251,6 +261,7 @@
   <ThingDef ParentName="AB2_GrandBase">
     <defName>AB2_GrandStairsUp</defName>
     <label>grand staircase up</label>
+    <uiOrder>2065</uiOrder>
     <description>A broad staircase leading up. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the sky level above and creates a matching staircase there.</description>
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsUp</texPath>
@@ -289,6 +300,7 @@
   <ThingDef ParentName="AB2_LadderBase">
     <defName>AB2_LadderDown</defName>
     <label>ladder down</label>
+    <uiOrder>2060</uiOrder>
     <description>A cheap ladder leading down. Completing it opens the basement level below and creates a matching ladder there. Cramped: only one cell wide, so traffic queues.</description>
     <!-- Genuinely 1x1, and its art already matches - the ladder was never affected by the
          size mismatch. Left explicit so the contrast with the staircases is deliberate. -->
@@ -320,6 +332,7 @@
   <ThingDef ParentName="AB2_LadderBase">
     <defName>AB2_LadderUp</defName>
     <label>ladder up</label>
+    <uiOrder>2061</uiOrder>
     <description>A cheap ladder leading up. Completing it opens the sky level above and creates a matching ladder there. Cramped: only one cell wide, so traffic queues.</description>
     <size>(1,1)</size>
     <graphicData>
