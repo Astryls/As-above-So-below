@@ -8,5 +8,6 @@
   <AB2_ColumnNoAbove>No level above: connections join this level's grid only.</AB2_ColumnNoAbove>
   <AB2_ColumnInspect_Connected>Carrying: {0}</AB2_ColumnInspect_Connected>
   <AB2_ColumnInspect_None>Carrying nothing. Use the connect toggles to link networks.</AB2_ColumnInspect_None>
+  <AB2_ColumnInspect_NoNetworks>No compatible {0} networks detected in the loaded mod list. This connector will activate when a mod that adds {0} networks is present.</AB2_ColumnInspect_NoNetworks>
 
 </LanguageData>

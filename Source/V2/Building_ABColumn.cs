@@ -405,6 +405,21 @@ namespace AsAboveSoBelow
             return false;
         }
 
+        /// <summary>Any detected network of this column's type with a live carrier
+        /// def? False = the connect-toggle list is necessarily empty (§75.c).</summary>
+        private bool TypeHasNetworks()
+        {
+            List<ABNetwork> nets = ABColumnNetworks.All;
+            for (int i = 0; i < nets.Count; i++)
+            {
+                if (nets[i].type == ColumnType && nets[i].carrier != null)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private bool TryUpCell(out IntVec3 up)
         {
             up = IntVec3.Invalid;
@@ -452,9 +467,23 @@ namespace AsAboveSoBelow
                 names.Append(n.LabelCap);
                 any = true;
             }
-            sb.Append(any
-                ? "AB2_ColumnInspect_Connected".Translate(names.ToString()).ToString()
-                : "AB2_ColumnInspect_None".Translate().ToString());
+            if (any)
+            {
+                sb.Append("AB2_ColumnInspect_Connected".Translate(names.ToString()).ToString());
+            }
+            else if (TypeHasNetworks())
+            {
+                sb.Append("AB2_ColumnInspect_None".Translate().ToString());
+            }
+            else
+            {
+                // Rules 31 and 33 (§75.c): the old line pointed at connect toggles
+                // that do not exist when ZERO networks of this type are detected -
+                // routine for Pipe/Climate/Data in vanilla-only sessions, where the
+                // only host network is vanilla power. Name the clause that declined
+                // instead of advertising controls the player cannot find.
+                sb.Append("AB2_ColumnInspect_NoNetworks".Translate(ColumnType.ToString()).ToString());
+            }
             if (!TryUpCell(out _))
             {
                 sb.AppendLine();
