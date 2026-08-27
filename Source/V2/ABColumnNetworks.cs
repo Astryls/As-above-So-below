@@ -951,6 +951,30 @@ namespace AsAboveSoBelow
                     return false;
                 }
             }
+            // §75.b (field round 2): the same promise covers the riser's UP-CELL. A
+            // column's up-cell stub is §62.J design - the service top emerging through
+            // the floor above, with the column body below explaining it. A wall riser
+            // made the identical stub read as loose conduit lying on an empty roof
+            // cell. Hide the carrier when the thing one Slot below is an
+            // attachment-form column (mirrors OtherColumnClaims' below-cell walk);
+            // columns keep their visible tops, and every overlay keeps printing.
+            ABBandMap bands = ABBands.CompOf(map);
+            if (bands != null && bands.Banded)
+            {
+                IntVec3 below = new IntVec3(t.Position.x, 0, t.Position.z - bands.Slot);
+                if (below.InBounds(map) && !bands.InGutter(below))
+                {
+                    List<Thing> under = below.GetThingList(map);
+                    for (int i = 0; i < under.Count; i++)
+                    {
+                        if (under[i] is Building_ABColumn col
+                            && col.def.building?.isAttachment == true)
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
             return true;
         }
     }

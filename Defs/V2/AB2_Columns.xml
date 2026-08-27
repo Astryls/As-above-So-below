@@ -152,6 +152,10 @@
        visible stub read as a stray conduit placed one tile out from the wall. The
        riser ART carries the connection story (conduit strip up the plate); the
        network overlays still print the carrier, which is where connectivity is read.
+       §75.b extends the same rule to the riser's UP-CELL carrier: a column's visible
+       top on the floor above is §62.J design, but with no column body to explain it
+       the riser's stub read as loose conduit on an empty roof cell. Columns keep
+       their visible tops; only attachment-form risers hide both cells.
 
        ⚠ KNOWN MICRO-EDGE: two risers may share a corner cell on two different walls.
        EnsureRoof runs only in SpawnSetup, so removing the roof-laying one degrades the
@@ -213,6 +217,7 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserPower</texPath>
     </graphicData>
+    <uiIconPath>Things/Building/Risers/AB_WallRiserPower_north</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABColumnTypeExt">
         <columnType>Power</columnType>
@@ -228,6 +233,7 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserPipe</texPath>
     </graphicData>
+    <uiIconPath>Things/Building/Risers/AB_WallRiserPipe_north</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABColumnTypeExt">
         <columnType>Pipe</columnType>
@@ -243,6 +249,7 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserClimate</texPath>
     </graphicData>
+    <uiIconPath>Things/Building/Risers/AB_WallRiserClimate_north</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABColumnTypeExt">
         <columnType>Climate</columnType>
@@ -258,6 +265,7 @@
     <graphicData>
       <texPath>Things/Building/Risers/AB_WallRiserData</texPath>
     </graphicData>
+    <uiIconPath>Things/Building/Risers/AB_WallRiserData_north</uiIconPath>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABColumnTypeExt">
         <columnType>Data</columnType>
