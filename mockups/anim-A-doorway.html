@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - A - Doorway</title>
+<link rel="stylesheet" href="kit/ab2kit.css">
+</head>
+<body>
+<script src="kit/ab2kit.js"></script>
+<script>
+/* =====================================================================
+   A - DOORWAY.  "A level change is a door you happen to walk through."
+
+   THE RULE: the walk cycle is never interrupted. There is no anticipation
+   beat, no dwell, no pose the pawn would not strike walking through a
+   vanilla door. The only non-vanilla event is the mouth swallowing the
+   sprite - and it is late and fast, so 65% of the clip is an ordinary walk
+   at an ordinary speed with the ORDINARY FACING.
+
+   Everything here is deliberately cheap and short. This is the option that
+   makes cross-level movement stop feeling like an event at all.
+   ===================================================================== */
+AB2.boot({
+id:'A', name:'Doorway',
+tagline:'Level change as a door you happen to walk through. Motion is continuous, facing is the walk direction, the mouth clips you late and fast. Shortest clips of the five, and the least felt latency of any option that still animates.',
+intro:'<b>Read this one first.</b> It is the control sample: every other language on the '+
+ 'nav bar is judged against how much better it looks <i>for the latency it spends</i>. '+
+ 'A never breaks stride, so it survives being seen a hundred times a day.',
+
+clips:{
+
+/* ------------------------------------------------------------- stairs -- */
+stairs:{
+ entry:16, hold:2, emerge:16,
+ capO:'<b>Entry.</b> One continuous stride into the well, five-beat bob, 3&deg; body sway. The depth change does not start until 35% - so the first third is literally just a colonist walking. Last 12%: the well mouth takes the sprite.',
+ capD:'<b>Emerge.</b> Mirror image. Depth resolves in the first 45% (you are already on this level), the rest is the walk continuing out of the stairwell toward wherever the pawn was actually going.',
+ portNote:'Shortest of the five. If you only take one idea from this page, take the\nlate depth ramp: Smooth(Clamp01((p-0.35)/0.65)) instead of Smooth(p).',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var w=Smooth(p);
+   var bob=Abs(Sin(p*5*PI));
+   var d=Smooth(Clamp01((p-0.35)/0.65));
+   var s=c.up?Lerp(1,ScaleAbove,d):Lerp(1,ScaleBelow,d);
+   o.sx=o.sz=s*Vanish(p)*(1+bob*0.03);
+   o.offX=c.dirX*0.85*w;
+   o.offZ=c.dirZ*0.85*w+bob*0.045;
+   o.rot=Sin(p*5*PI)*3;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var w=Smooth(q);
+   var bob=Abs(Sin(q*5*PI));
+   var d=Smooth(Clamp01(q/0.45));
+   var s=c.up?Lerp(ScaleBelow,1,d):Lerp(ScaleAbove,1,d);
+   o.sx=o.sz=s*Reveal(q)*(1+bob*0.03);
+   o.offX=c.ox*(1-w);
+   o.offZ=c.oz*(1-w)+bob*0.045;
+   o.rot=Sin(q*5*PI)*3;
+   return o;
+ }
+},
+
+/* -------------------------------------------------------- grand stairs -- */
+grand:{
+ entry:20, hold:2, emerge:20,
+ capO:'<b>Entry.</b> Same walk, longer run (1.35 cells) and seven beats, offset 0.45 cells to one side of the 3x3 - colonists keep right, which is what makes a wide staircase read as wide rather than as a big stairwell.',
+ capD:'<b>Emerge.</b> Arrives on the same side it left, so two pawns crossing in opposite directions visibly pass each other instead of overlapping in the middle cell.',
+ portNote:'The lateral offset is the perpendicular of glideDir: (-dirZ, +dirX).\nIt is the only thing distinguishing grand from plain stairs in this language,\nand it costs nothing.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var w=Smooth(p);
+   var bob=Abs(Sin(p*7*PI));
+   var d=Smooth(Clamp01((p-0.35)/0.65));
+   var s=c.up?Lerp(1,ScaleAbove,d):Lerp(1,ScaleBelow,d);
+   o.sx=o.sz=s*Vanish(p)*(1+bob*0.03);
+   o.offX=c.dirX*1.35*w-c.dirZ*0.45;
+   o.offZ=c.dirZ*1.35*w+c.dirX*0.45+bob*0.05;
+   o.rot=Sin(p*7*PI)*3;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var w=Smooth(q);
+   var bob=Abs(Sin(q*7*PI));
+   var d=Smooth(Clamp01(q/0.45));
+   var s=c.up?Lerp(ScaleBelow,1,d):Lerp(ScaleAbove,1,d);
+   o.sx=o.sz=s*Reveal(q)*(1+bob*0.03);
+   o.offX=c.ox*(1-w)-c.dirZ*0.45*(1-w);
+   o.offZ=c.oz*(1-w)+c.dirX*0.45*(1-w)+bob*0.05;
+   o.rot=Sin(q*7*PI)*3;
+   return o;
+ }
+},
+
+/* ------------------------------------------------------------- ladder -- */
+ladder:{
+ entry:22, hold:3, emerge:22,
+ capO:'<b>Entry.</b> 0-18%: step up to the rungs and <b>turn to face the ladder</b> - a colonist climbs facing the ladder whether going up or down, and that single facing choice is most of what sold this clip. 18-100%: three rung pulls, tiny 0.045-cell rock, no theatrics.',
+ capD:'<b>Emerge.</b> Three rungs out, still facing the ladder, then the facing flips to the walk direction on the last 20% as the pawn steps off and turns away.',
+ portNote:'THE FACING IS THE WHOLE POINT HERE. Both directions face the ladder\n(FaceOf(glideDir)), which is the opposite of what the movement vector\nwould give you on the way down.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   if(p<0.18){
+     var m=Smooth(p/0.18);
+     o.offX=c.dirX*0.25*m;
+     o.offZ=c.dirZ*0.25*m;
+     return o;
+   }
+   var pp=(p-0.18)/0.82;
+   var pe=StepEase(pp,3);
+   var rung=FloorToInt(Min(2,pp*3));
+   var f=Clamp01(pp*3-rung);
+   var rock=(rung%2===0?1:-1)*0.045*Sin(f*PI);
+   var s=c.up?Lerp(1,ScaleAbove,pe):Lerp(1,ScaleBelow,pe);
+   o.sx=o.sz=s*Vanish(pp);
+   o.offX=c.dirX*0.25+rock;
+   o.offZ=c.dirZ*0.25;
+   o.rot=rock*66;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=q<0.80?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   var pe=StepEase(q,3);
+   var rung=FloorToInt(Min(2,q*3));
+   var f=Clamp01(q*3-rung);
+   var rock=(rung%2===0?-1:1)*0.045*Sin(f*PI);
+   var s=c.up?Lerp(ScaleBelow,1,pe):Lerp(ScaleAbove,1,pe);
+   o.sx=o.sz=s*Reveal(q);
+   o.offX=c.ox*(1-pe)+rock;
+   o.offZ=c.oz*(1-pe);
+   o.rot=rock*66;
+   return o;
+ }
+},
+
+/* ----------------------------------------------------------- elevator -- */
+elevator:{
+ entry:18, hold:0, emerge:16,
+ capO:'<b>Entry.</b> 0-45%: step onto the car facing it, with a 4% vertical squash as the platform takes the weight. 45%+: <b>the pawn turns around inside the car</b> and rides facing the doors. That turn is the entire characterisation and it is one call to Opposite().',
+ capD:'<b>Emerge.</b> Arrives already facing out, settles to full size in the first half, walks out in the second. No bounce, no dust: this is the polite office elevator, not the freight lift.',
+ portNote:'hold = 0. The car never stops being a place the pawn is standing,\nso there is no frame where nobody is drawn anywhere.',
+ fx:[{phase:'entry',at:0.46,where:'origin',kind:'ring',size:0.9}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   var board=0.45;
+   if(p<board){
+     var m=Smooth(p/board);
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.offX=c.dirX*0.45*m;
+     o.offZ=c.dirZ*0.45*m;
+     o.sz=1-0.04*Sin(m*PI);
+     return o;
+   }
+   var q=(p-board)/(1-board);
+   o.facing=Opposite(FaceOf(c.dirX,c.dirZ));
+   o.offX=c.dirX*0.45;
+   o.offZ=c.dirZ*0.45;
+   var s=c.up?Lerp(1,ElevAbove,Smooth(q)):Lerp(1,ElevBelow,Smooth(q));
+   o.sx=o.sz=c.up?s*Vanish(q):s;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var a=Smooth(Min(1,q/0.5));
+   var s=c.up?Lerp(ElevBelow,1,a):Lerp(ElevAbove,1,a);
+   o.sx=o.sz=s*Reveal(q);
+   var w=Smooth(Clamp01((q-0.35)/0.65));
+   o.offX=c.ox*(1-w);
+   o.offZ=c.oz*(1-w);
+   return o;
+ }
+}
+
+},
+
+footer:
+'<h3>What this language is for</h3>'+
+'<p>Traffic. A mature colony sends pawns through a stairwell dozens of times a minute, and '+
+'any clip you will see that often has to survive being ignored. A spends its budget on two '+
+'things only: <b>the walk never stops</b>, and <b>the facing is always right</b>. Everything '+
+'else is trimmed until it disappears.</p>'+
+'<h3>Against the shipped clips</h3>'+
+'<ul>'+
+'<li>Latency drops from 32t / 48t / 8+10n t to <b>18t / 22t / 25t / 18t</b>. On stairs that is '+
+'half a second back.</li>'+
+'<li>The shipped stairs entry starts shrinking on tick 1, which is what makes it read as '+
+'"the pawn is being sucked in" rather than "the pawn is walking down". The depth ramp here '+
+'starts at 35%.</li>'+
+'<li>The shipped clips never set facing, so a pawn walking north into a stairwell keeps '+
+'whatever facing the pather left it with - most often south, i.e. <b>walking backwards down '+
+'the stairs</b>. That is the single most-visible defect and every language on this nav bar '+
+'fixes it the same way.</li>'+
+'</ul>'+
+'<h3>Under Perspective Shift</h3>'+
+'<p>Switch the view above. A is the safest PS option that keeps a clip at all: the frozen '+
+'window is short enough that the avatar reads as "stepping through" rather than "locked out '+
+'of the controls". It does not solve the band cut - the camera still jumps at the end of the '+
+'hold - it just makes the cut brief. <b>C - Traveler</b> is the language that actually '+
+'addresses the cut.</p>'+
+'<h3>Cost to port</h3>'+
+'<div class="costs">'+
+'<div class="cost"><b>ClipPose.facing</b> new int field, plus one line in the existing '+
+'GetDrawParms postfix</div>'+
+'<div class="cost"><b>Reveal()</b> ~2 lines</div>'+
+'<div class="cost"><b>Pose bodies</b> 4 x 2 functions, drop-in replacements for EntryPose / '+
+'EmergePose switch arms</div>'+
+'<div class="cost"><b>Durations</b> constant edits</div>'+
+'<div class="cost"><b>New draw paths</b> none</div>'+
+'<div class="cost"><b>Risk</b> lowest of the five</div>'+
+'</div>'+
+'<h3>Known caveats</h3>'+
+'<ul>'+
+'<li>Rotation sign: the mockup rotates in screen space. If leans read mirrored in game, '+
+'negate <code>o.rot</code> - <code>Quaternion.Euler(0, rot, 0)</code> is applied about the '+
+'up axis and the handedness has not been verified against a running frame.</li>'+
+'<li>The elevator ring fleck at the turn-around is a placeholder for a sound cue, not art.</li>'+
+'</ul>'
+});
+</script>
+</body>
+</html>

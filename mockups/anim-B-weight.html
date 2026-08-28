@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - B - Weight</title>
+<link rel="stylesheet" href="kit/ab2kit.css">
+</head>
+<body>
+<script src="kit/ab2kit.js"></script>
+<script>
+/* =====================================================================
+   B - WEIGHT.  "The pawn has a body and the body has mass."
+
+   THE RULE: every beat is ANTICIPATION -> ACTION -> RECOVERY, and the pawn
+   is never uniformly scaled during a beat - sx and sz diverge (squash on
+   the landing, stretch on the push-off). This is the Melee Animations /
+   Flourish register: readable silhouettes, exaggerated timing, a hold
+   before the big move.
+
+   The cost is honest and it is time: these are the longest clips of the
+   five, and the whole entry window is a stagger the player feels.
+   ===================================================================== */
+AB2.boot({
+id:'B', name:'Weight',
+tagline:'Anticipation, action, recovery on every beat. Squash and stretch, alternating body roll, a crouch before the commitment and an overshoot on the landing. The most expressive option and the most expensive in felt latency.',
+intro:'<b>Push-it-as-far-as-it-goes option.</b> Everything here is still one matrix per '+
+ 'frame - no new render path, no per-limb rig - but it uses the full range of that matrix: '+
+ 'non-uniform scale, big rotations, off-axis offsets, and dwell. Watch the <i>ladder</i> and '+
+ '<i>elevator</i> first; they gain the most from the extra ticks.',
+
+clips:{
+
+/* ------------------------------------------------------------- stairs -- */
+stairs:{
+ entry:30, hold:6, emerge:28,
+ capO:'<b>Entry.</b> 0-14%: the crouch. Weight shifts back, 9% vertical squash, 7&deg; lean away from the well - the pawn <i>decides</i> to go down. 14-100%: four heavy treads, each stretching on the push-off and squashing on the catch, body roll alternating &plusmn;9&deg;.',
+ capD:'<b>Emerge.</b> Lands squashed (12%) and rises out of it, three treads out, then a 6% overshoot that settles. The recovery beat is what makes the arrival read as landing rather than as spawning.',
+ portNote:'Non-uniform scale is the whole idea: o.sx and o.sz must be written\nseparately. The shipped code assigns o.sx = o.sz = s everywhere, which\nis exactly why it reads weightless.',
+ fx:[{phase:'entry',at:0.16,where:'origin',kind:'dust',size:0.7}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   if(p<0.14){
+     var a=Smooth(p/0.14);
+     o.sz=1-0.09*a;
+     o.sx=1+0.06*a;
+     o.offX=-c.dirX*0.10*a;
+     o.offZ=-c.dirZ*0.10*a;
+     o.rot=-7*a;
+     return o;
+   }
+   var pp=(p-0.14)/0.86;
+   var pe=StepEase(pp,4);
+   var tread=FloorToInt(Min(3,pp*4));
+   var f=Clamp01(pp*4-tread);
+   var push=Sin(f*PI);
+   var sign=(tread%2===0)?1:-1;
+   var s=(c.up?Lerp(1,ScaleAbove,pe):Lerp(1,ScaleBelow,pe))*Vanish(pp);
+   o.sx=s*(1-0.05*push);
+   o.sz=s*(1+0.07*push);
+   o.offX=c.dirX*0.95*pe-c.dirZ*sign*0.06*push;
+   o.offZ=c.dirZ*0.95*pe+c.dirX*sign*0.06*push+0.07*push;
+   o.rot=sign*9*push;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var pe=StepEase(q,3);
+   var tread=FloorToInt(Min(2,q*3));
+   var f=Clamp01(q*3-tread);
+   var push=Sin(f*PI);
+   var sign=(tread%2===0)?-1:1;
+   var land=Sin(PI*Clamp01(q/0.18));
+   var settle=Sin(PI*Clamp01((q-0.78)/0.22));
+   var s=(c.up?Lerp(ScaleBelow,1,pe):Lerp(ScaleAbove,1,pe))*Reveal(q);
+   o.sx=s*(1+0.10*land-0.04*push+0.05*settle);
+   o.sz=s*(1-0.12*land+0.06*push-0.06*settle);
+   o.offX=c.ox*(1-pe)-c.dirZ*sign*0.05*push;
+   o.offZ=c.oz*(1-pe)+0.07*push-0.04*land;
+   o.rot=sign*9*push;
+   return o;
+ }
+},
+
+/* -------------------------------------------------------- grand stairs -- */
+grand:{
+ entry:40, hold:6, emerge:34,
+ capO:'<b>Entry.</b> The ceremonial descent. 0-12% lean into the run, 12-58% two long strides with a constant 6&deg; roll toward the rail hand, <b>58-72% the look-back</b> - the pawn stops and the facing flips for eight ticks - then the last stride and the mouth. Nobody built a grand staircase to hurry down it.',
+ capD:'<b>Emerge.</b> A wide sweeping arrival: the pawn comes out on the rail side, rolls off the lean over the first third, then two strides to the landing cell with a settle.',
+ portNote:'The look-back is 8 ticks of dwell plus one Opposite() on facing. It is\nthe cheapest piece of characterisation in the whole set and it is the\nonly one that would look wrong on a plain staircase.',
+ fx:[{phase:'entry',at:0.60,where:'origin',kind:'ring',size:0.8}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   var rail=0.5;
+   if(p<0.12){
+     var a=Smooth(p/0.12);
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.sz=1-0.07*a;
+     o.rot=-5*a;
+     o.offX=-c.dirZ*rail*a;
+     o.offZ=c.dirX*rail*a;
+     return o;
+   }
+   if(p<0.58){
+     var pp=(p-0.12)/0.46;
+     var pe=StepEase(pp,2);
+     var stride=FloorToInt(Min(1,pp*2));
+     var f=Clamp01(pp*2-stride);
+     var push=Sin(f*PI);
+     var s=(c.up?Lerp(1,1.06,pe):Lerp(1,0.72,pe));
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.sx=s*(1-0.04*push);
+     o.sz=s*(1+0.06*push);
+     o.offX=c.dirX*1.10*pe-c.dirZ*rail;
+     o.offZ=c.dirZ*1.10*pe+c.dirX*rail+0.06*push;
+     o.rot=6+(stride%2===0?1:-1)*6*push;
+     return o;
+   }
+   if(p<0.72){
+     o.facing=Opposite(FaceOf(c.dirX,c.dirZ));
+     var h=Sin(PI*(p-0.58)/0.14);
+     o.sx=(c.up?1.06:0.72)*(1+0.03*h);
+     o.sz=(c.up?1.06:0.72)*(1-0.03*h);
+     o.offX=c.dirX*1.10-c.dirZ*rail;
+     o.offZ=c.dirZ*1.10+c.dirX*rail;
+     o.rot=6-10*h;
+     return o;
+   }
+   var q=(p-0.72)/0.28;
+   var e=Smooth(q);
+   var s2=(c.up?Lerp(1.06,ScaleAbove,e):Lerp(0.72,ScaleBelow,e))*Vanish(q);
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   o.sx=o.sz=s2;
+   o.offX=c.dirX*(1.10+0.55*e)-c.dirZ*rail;
+   o.offZ=c.dirZ*(1.10+0.55*e)+c.dirX*rail;
+   o.rot=6*(1-e);
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   var rail=0.5;
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var pe=StepEase(q,2);
+   var stride=FloorToInt(Min(1,q*2));
+   var f=Clamp01(q*2-stride);
+   var push=Sin(f*PI);
+   var settle=Sin(PI*Clamp01((q-0.74)/0.26));
+   var s=(c.up?Lerp(ScaleBelow,1,pe):Lerp(ScaleAbove,1,pe))*Reveal(q);
+   o.sx=s*(1-0.04*push+0.05*settle);
+   o.sz=s*(1+0.06*push-0.06*settle);
+   o.offX=c.ox*(1-pe)-c.dirZ*rail*(1-pe);
+   o.offZ=c.oz*(1-pe)+c.dirX*rail*(1-pe)+0.06*push;
+   o.rot=6*(1-pe)+(stride%2===0?1:-1)*6*push;
+   return o;
+ }
+},
+
+/* ------------------------------------------------------------- ladder -- */
+ladder:{
+ entry:46, hold:8, emerge:34,
+ capO:'<b>Entry.</b> Four beats and every one of them is a hold followed by a snap. 0-16% peek over the edge (14&deg; lean, facing the ladder). 16-26% the grab - 10% squash, no travel. 26-100% three big pulls, &plusmn;0.10 cell rock and &plusmn;9&deg;, each with a stretch on the pull and a squash on the catch.',
+ capD:'<b>Emerge.</b> Coming from above the pawn drops out of the ceiling in two heavy stages and hops off the last rung. Coming from below it is the head-pop first (0.18 scale with a 35% overshoot) and then two hauls to full size.',
+ portNote:'46 ticks of entry is 0.77s of stagger. That is the price and it should\nbe paid ONLY here: a ladder is the one link where slowness is the\ndesign intent (it is the cheap, cramped option).',
+ fx:[{phase:'entry',at:0.27,where:'origin',kind:'dust',size:0.6},
+     {phase:'emerge',at:0.92,where:'destination',kind:'dust',size:0.7}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   if(p<0.16){
+     var a=Smooth(p/0.16);
+     o.rot=(c.up?-11:14)*a;
+     o.offX=c.dirX*0.14*a;
+     o.offZ=c.dirZ*0.14*a;
+     o.sz=1-0.04*a;
+     return o;
+   }
+   if(p<0.26){
+     var g=Sin(PI*(p-0.16)/0.10);
+     o.rot=(c.up?-11:14);
+     o.offX=c.dirX*0.14;
+     o.offZ=c.dirZ*0.14;
+     o.sx=1+0.07*g;
+     o.sz=1-0.10*g;
+     return o;
+   }
+   var pp=(p-0.26)/0.74;
+   var pe=StepEase(pp,3);
+   var pull=FloorToInt(Min(2,pp*3));
+   var f=Clamp01(pp*3-pull);
+   var haul=Sin(f*PI);
+   var sign=(pull%2===0)?1:-1;
+   var s=(c.up?Lerp(1,ScaleAbove,pe):Lerp(1,ScaleBelow,pe))*Vanish(pp);
+   o.sx=s*(1-0.06*haul);
+   o.sz=s*(1+0.09*haul);
+   o.offX=c.dirX*(0.14+0.30*pe)+sign*0.10*haul;
+   o.offZ=c.dirZ*(0.14+0.30*pe);
+   o.rot=sign*9*haul+(c.up?-11:14)*(1-pe);
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=q<0.82?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   var s=1;
+   var rock=0;
+   if(!c.up){
+     var pe=StepEase(q,2);
+     var drop=FloorToInt(Min(1,q*2));
+     var f=Clamp01(q*2-drop);
+     var haul=Sin(f*PI);
+     var sign=(drop%2===0)?-1:1;
+     rock=sign*0.10*haul;
+     s=Lerp(ScaleAbove,1,pe)*Reveal(q);
+     o.rot=sign*9*haul;
+     o.sx=s*(1-0.05*haul);
+     o.sz=s*(1+0.08*haul);
+     if(q>0.86){ o.offZ=Sin(PI*(q-0.86)/0.14)*0.07; }
+     o.offX=c.ox*(1-q)+rock;
+     o.offZ=o.offZ+c.oz*(1-q);
+     return o;
+   }
+   if(q<0.25){
+     var qq=q/0.25;
+     s=Lerp(0.18,0.55,Smooth(qq))*(1+0.35*Sin(PI*Min(1,qq*1.15)));
+     o.sx=s;
+     o.sz=s;
+     o.offX=c.ox*(1-q);
+     o.offZ=c.oz*(1-q);
+     return o;
+   }
+   var pp=(q-0.25)/0.75;
+   var pe2=StepEase(pp,2);
+   var pull=FloorToInt(Min(1,pp*2));
+   var f2=Clamp01(pp*2-pull);
+   var haul2=Sin(f2*PI);
+   var sign2=(pull%2===0)?1:-1;
+   s=Lerp(0.55,1,pe2);
+   o.sx=s*(1-0.06*haul2);
+   o.sz=s*(1+0.09*haul2);
+   o.rot=sign2*9*haul2;
+   o.offX=c.ox*(1-q)+sign2*0.09*haul2;
+   o.offZ=c.oz*(1-q);
+   return o;
+ }
+},
+
+/* ----------------------------------------------------------- elevator -- */
+elevator:{
+ entry:12, hold:0, emerge:28,
+ capO:'<b>Entry.</b> Board in 12 ticks with a knee bend as the car takes the load, then the ride: a 3-4 px cable shudder that decays, and the scale ramp. Short entry on purpose - the drama of a lift is the arrival, not the departure.',
+ capD:'<b>Emerge.</b> The freight landing. Comes in hot, bottoms out at 86% with a 14% squash and a 10% widen, rebounds 8% past neutral, settles. Dust puff on the bottom-out frame, which is already how the shipped clip does it.',
+ portNote:'The shudder uses Time.realtimeSinceStartup in the shipped code and that\nis correct here too: it must NOT be tied to p, or it stops dead\nwhenever the game is paused mid-ride.',
+ fx:[{phase:'entry',at:0.02,where:'origin',kind:'dust',size:1.0},
+     {phase:'emerge',at:0.86,where:'destination',kind:'dust',size:1.3}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   var board=0.55;
+   if(p<board){
+     var m=Smooth(p/board);
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.offX=c.dirX*0.45*m;
+     o.offZ=c.dirZ*0.45*m;
+     o.sz=1-0.09*Sin(m*PI);
+     o.sx=1+0.05*Sin(m*PI);
+     return o;
+   }
+   var q=(p-board)/(1-board);
+   o.facing=Opposite(FaceOf(c.dirX,c.dirZ));
+   var s=c.up?Lerp(1,ElevAbove,Smooth(q)):Lerp(1,ElevBelow,Smooth(q));
+   o.sx=o.sz=c.up?s*Vanish(q):s;
+   o.offX=c.dirX*0.45+Sin(q*47)*0.035*(1-q);
+   o.offZ=c.dirZ*0.45;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var s=(c.up?Lerp(ElevBelow,1,Smooth(Min(1,q/0.80))):Lerp(ElevAbove,1,Smooth(Min(1,q/0.80))))*Reveal(q);
+   var jitter=Sin(q*47)*0.035*(q<0.80?1:0);
+   if(q>0.86){
+     var b=Sin(PI*(q-0.86)/0.14);
+     o.sx=s*(1+0.10*b);
+     o.sz=s*(1-0.14*b);
+     o.offZ=-0.04*b;
+   }else{
+     o.sx=o.sz=s;
+   }
+   var w=Smooth(Clamp01((q-0.62)/0.38));
+   o.offX=c.ox*(1-w)+jitter;
+   o.offZ=o.offZ+c.oz*(1-w);
+   return o;
+ }
+}
+
+},
+
+footer:
+'<h3>What this language is for</h3>'+
+'<p>Making a level change feel like a physical act. Every beat has a wind-up you can see '+
+'coming and a recovery you can see land, which is exactly the grammar Melee Animations uses '+
+'and exactly what the shipped clips lack: they are all <i>action</i>, no anticipation, no '+
+'recovery, and uniformly scaled throughout.</p>'+
+'<h3>The three ideas worth stealing even if you reject B</h3>'+
+'<ul>'+
+'<li><b>Non-uniform scale.</b> <code>o.sx</code> and <code>o.sz</code> already exist in '+
+'ClipPose and the shipped code never uses them separately except for the elevator bounce. '+
+'Squash-and-stretch is free.</li>'+
+'<li><b>The crouch.</b> 14% of the clip spent going the wrong way makes the other 86% read '+
+'as deliberate.</li>'+
+'<li><b>The look-back on the grand staircase.</b> Eight ticks of dwell and one facing flip.</li>'+
+'</ul>'+
+'<h3>Under Perspective Shift</h3>'+
+'<p>Switch the view above and watch the ladder. <b>This is the worst combination in the '+
+'set</b>: 54 ticks (0.9s) during which the avatar cannot be steered, the camera is pinned, '+
+'and for the last 8 of them nothing is drawn anywhere. If B is chosen, it should be chosen '+
+'with a PS-aware exception - either fall back to A durations while '+
+'<code>PerspectiveShiftCompat.Present</code> and the avatar is the transiting pawn, or adopt '+
+'C\'s dual-presence crossing so the frozen window at least has something to look at.</p>'+
+'<h3>Cost to port</h3>'+
+'<div class="costs">'+
+'<div class="cost"><b>ClipPose.facing</b> as in A</div>'+
+'<div class="cost"><b>Reveal()</b> ~2 lines</div>'+
+'<div class="cost"><b>Pose bodies</b> longer, but still pure math in the same two methods</div>'+
+'<div class="cost"><b>Stagger</b> up to 54t - the only real cost, and it is a gameplay cost, '+
+'not a frame cost</div>'+
+'<div class="cost"><b>New draw paths</b> none</div>'+
+'<div class="cost"><b>Risk</b> the clips outlast short journeys; a pawn ordered to stop '+
+'mid-ladder still owes 46 ticks of animation</div>'+
+'</div>'+
+'<h3>Known caveats</h3>'+
+'<ul>'+
+'<li>Long clips make the <i>known honest mismatch</i> in the shipped design worse: for 54 '+
+'ticks the pawn is logically at the destination and hittable there while its sprite is a '+
+'band away. Hostile pawns should probably be excluded (one faction check in '+
+'<code>NotifyTransited</code>, already priced in the ABStairAnim banner).</li>'+
+'<li>Stagger is aspirational per-pawn (StaggerDurationFactor, Anomaly awoken corpses). The '+
+'longer the clip, the more often you will see the early-move cut. That path already exists '+
+'and degrades to a shorter clip.</li>'+
+'</ul>'
+});
+</script>
+</body>
+</html>

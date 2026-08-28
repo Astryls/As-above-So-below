@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - D - Machinery</title>
+<link rel="stylesheet" href="kit/ab2kit.css">
+</head>
+<body>
+<script src="kit/ab2kit.js"></script>
+<script>
+/* =====================================================================
+   D - MACHINERY.  "Vanilla does not animate the pawn. It animates the door."
+
+   THE RULE: the pawn's own motion is restrained - roughly A - and the
+   spectacle is moved onto the STRUCTURE. The staircase darkens and a cast
+   shadow travels down its run. The ladder takes the weight and rocks. The
+   elevator car sinks in its frame, dims, and comes back up with a bounce.
+
+   This is the only language that needs a new draw: the link buildings
+   print into the map mesh today, so a moving overlay means owning a draw
+   for them (rule 38). Everything the rig track does is expressed against
+   the EXISTING textures - no new art, no new atlas entry.
+   ===================================================================== */
+AB2.boot({
+id:'D', name:'Machinery',
+tagline:'The pawn stays calm and the building does the acting: cast shadows travelling down the run, ladders taking the weight, the elevator car sinking and dimming in its shaft. The most "part of base game" of the five, and the only one that needs a new draw path.',
+intro:'<b>Why this reads as vanilla.</b> RimWorld almost never animates a pawn outside its '+
+ 'walk cycle - it animates the <i>world</i>: doors slide, turrets recoil, coolers spin. '+
+ 'A level change is the biggest world event this mod has, and today the world does not react '+
+ 'to it at all. Watch the <b>elevator</b> first: the car is the whole idea.',
+
+clips:{
+
+/* ------------------------------------------------------------- stairs -- */
+stairs:{
+ entry:20, hold:2, emerge:18,
+ capO:'<b>Entry.</b> The pawn walks (A\'s motion, one beat slower). The staircase dims to 40% over the descent and a cast shadow slides down the run ahead of the pawn and shrinks as the well deepens. The stairwell is what tells you someone went down it.',
+ capD:'<b>Emerge.</b> The counterpart staircase starts dim and brightens as the pawn rises out of it, with the shadow travelling the other way. Two buildings, one continuous read.',
+ portNote:'Shadow blobs are offsets from the LINK cell, so a port is\nGraphics.DrawMesh of one quad at link.DrawPos + (x, 0, z) using\nThings/Skyfaller/SkyfallerShadowCircle with ShaderDatabase.Transparent -\nan existing Core texture, already loaded, no new art.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var w=Smooth(p);
+   var bob=Abs(Sin(p*5*PI));
+   var d=Smooth(Clamp01((p-0.30)/0.70));
+   var s=c.up?Lerp(1,ScaleAbove,d):Lerp(1,ScaleBelow,d);
+   o.sx=o.sz=s*Vanish(p)*(1+bob*0.03);
+   o.offX=c.dirX*0.85*w;
+   o.offZ=c.dirZ*0.85*w+bob*0.045;
+   o.rot=Sin(p*5*PI)*3;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var w=Smooth(q);
+   var bob=Abs(Sin(q*5*PI));
+   var d=Smooth(Clamp01(q/0.40));
+   var s=c.up?Lerp(ScaleBelow,1,d):Lerp(ScaleAbove,1,d);
+   o.sx=o.sz=s*Reveal(q)*(1+bob*0.03);
+   o.offX=c.ox*(1-w);
+   o.offZ=c.oz*(1-w)+bob*0.045;
+   o.rot=Sin(q*5*PI)*3;
+   return o;
+ },
+ rig:function Rig(c,p,dest){
+   var r=NewRig();
+   var t=dest?(1-p):p;
+   r.dark=0.40*Smooth(t);
+   var travel=Lerp(-0.35,0.75,Smooth(t));
+   r.blobs=[{x:c.dirX*travel,z:c.dirZ*travel,s:Lerp(1.0,0.35,Smooth(t)),a:0.55*(1-0.3*t)}];
+   return r;
+ }
+},
+
+/* -------------------------------------------------------- grand stairs -- */
+grand:{
+ entry:24, hold:2, emerge:22,
+ capO:'<b>Entry.</b> Two shadows, half a cell apart, sweeping the 3x3 - a wide staircase catches light differently from a narrow one and that is most of what "grand" should mean visually. Dust kicks off the top step at 20%.',
+ capD:'<b>Emerge.</b> The two shadows retreat up the run as the pawn rises. The building brightens from 45% back to full.',
+ portNote:'Two quads instead of one. If the cost ever matters, the second blob\nis the first thing to cut - it is pure garnish.',
+ fx:[{phase:'entry',at:0.20,where:'origin',kind:'dust',size:0.8}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var w=Smooth(p);
+   var bob=Abs(Sin(p*7*PI));
+   var d=Smooth(Clamp01((p-0.30)/0.70));
+   var s=c.up?Lerp(1,ScaleAbove,d):Lerp(1,ScaleBelow,d);
+   o.sx=o.sz=s*Vanish(p)*(1+bob*0.03);
+   o.offX=c.dirX*1.30*w-c.dirZ*0.40;
+   o.offZ=c.dirZ*1.30*w+c.dirX*0.40+bob*0.05;
+   o.rot=Sin(p*7*PI)*3;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var w=Smooth(q);
+   var bob=Abs(Sin(q*7*PI));
+   var d=Smooth(Clamp01(q/0.40));
+   var s=c.up?Lerp(ScaleBelow,1,d):Lerp(ScaleAbove,1,d);
+   o.sx=o.sz=s*Reveal(q)*(1+bob*0.03);
+   o.offX=c.ox*(1-w)-c.dirZ*0.40*(1-w);
+   o.offZ=c.oz*(1-w)+c.dirX*0.40*(1-w)+bob*0.05;
+   o.rot=Sin(q*7*PI)*3;
+   return o;
+ },
+ rig:function Rig(c,p,dest){
+   var r=NewRig();
+   var t=dest?(1-p):p;
+   r.dark=0.45*Smooth(t);
+   var travel=Lerp(-0.60,1.05,Smooth(t));
+   var lead=Lerp(-0.20,1.35,Smooth(t));
+   r.blobs=[{x:c.dirX*travel-c.dirZ*0.40,z:c.dirZ*travel+c.dirX*0.40,
+             s:Lerp(1.2,0.40,Smooth(t)),a:0.55},
+            {x:c.dirX*lead+c.dirZ*0.30,z:c.dirZ*lead-c.dirX*0.30,
+             s:Lerp(0.9,0.30,Smooth(t)),a:0.32}];
+   return r;
+ }
+},
+
+/* ------------------------------------------------------------- ladder -- */
+ladder:{
+ entry:24, hold:3, emerge:22,
+ capO:'<b>Entry.</b> The ladder <b>takes the weight</b>: a 0.03-cell settle on each rung pull and a 1.5&deg; flex, timed to the same StepEase the pawn uses. The shadow steps rung by rung instead of sliding. Facing the ladder throughout, as in A.',
+ capD:'<b>Emerge.</b> The counterpart ladder flexes on the same beats, releasing as the pawn steps off. The flex is tiny on purpose - a ladder that swings reads as broken, a ladder that barely moves reads as loaded.',
+ portNote:'The rig and the pose MUST share one StepEase call count or the flex\ndesynchronises from the pull and the whole effect inverts - it starts\nreading as the ladder pushing the pawn.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   if(p<0.18){
+     var m=Smooth(p/0.18);
+     o.offX=c.dirX*0.25*m;
+     o.offZ=c.dirZ*0.25*m;
+     return o;
+   }
+   var pp=(p-0.18)/0.82;
+   var pe=StepEase(pp,3);
+   var rung=FloorToInt(Min(2,pp*3));
+   var f=Clamp01(pp*3-rung);
+   var rock=(rung%2===0?1:-1)*0.05*Sin(f*PI);
+   var s=c.up?Lerp(1,ScaleAbove,pe):Lerp(1,ScaleBelow,pe);
+   o.sx=o.sz=s*Vanish(pp);
+   o.offX=c.dirX*0.25+rock;
+   o.offZ=c.dirZ*0.25;
+   o.rot=rock*70;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=q<0.80?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   var pe=StepEase(q,3);
+   var rung=FloorToInt(Min(2,q*3));
+   var f=Clamp01(q*3-rung);
+   var rock=(rung%2===0?-1:1)*0.05*Sin(f*PI);
+   var s=c.up?Lerp(ScaleBelow,1,pe):Lerp(ScaleAbove,1,pe);
+   o.sx=o.sz=s*Reveal(q);
+   o.offX=c.ox*(1-pe)+rock;
+   o.offZ=c.oz*(1-pe);
+   o.rot=rock*70;
+   return o;
+ },
+ rig:function Rig(c,p,dest){
+   var r=NewRig();
+   var t=dest?(1-p):p;
+   var rung=FloorToInt(Min(2,t*3));
+   var f=Clamp01(t*3-rung);
+   var load=Sin(f*PI);
+   r.offZ=-0.03*load;
+   r.rot=1.5*load*(rung%2===0?1:-1);
+   r.dark=0.18*Smooth(t);
+   var step=StepEase(t,3);
+   r.blobs=[{x:c.dirX*Lerp(-0.10,0.35,step),z:c.dirZ*Lerp(-0.10,0.35,step),
+             s:Lerp(0.7,0.3,step),a:0.45}];
+   return r;
+ }
+},
+
+/* ----------------------------------------------------------- elevator -- */
+elevator:{
+ entry:20, hold:0, emerge:22,
+ capO:'<b>Entry.</b> Board, turn, and then <b>the car goes</b>: the elevator sprite dims to 55%, shrinks 8% (going down) or grows 6% (going up), and shudders. The pawn barely does anything - the machine is doing the work, which is the whole point of building an elevator.',
+ capD:'<b>Emerge.</b> The counterpart car arrives: it comes in dim and small, brightens, overshoots 5% and settles with a thump and a dust ring. The pawn steps out afterwards.',
+ portNote:'This is the one that justifies the new draw path on its own. A dimming,\nshuddering car is readable from any zoom and needs no new texture -\nit is AB_Elevator.png drawn a second time with a colour multiplier.',
+ fx:[{phase:'entry',at:0.30,where:'origin',kind:'ring',size:1.0},
+     {phase:'emerge',at:0.84,where:'destination',kind:'dust',size:1.3},
+     {phase:'emerge',at:0.84,where:'destination',kind:'ring',size:1.1}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   var board=0.40;
+   if(p<board){
+     var m=Smooth(p/board);
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.offX=c.dirX*0.45*m;
+     o.offZ=c.dirZ*0.45*m;
+     o.sz=1-0.05*Sin(m*PI);
+     return o;
+   }
+   var q=(p-board)/(1-board);
+   o.facing=Opposite(FaceOf(c.dirX,c.dirZ));
+   var s=c.up?Lerp(1,ElevAbove,Smooth(q)):Lerp(1,ElevBelow,Smooth(q));
+   o.sx=o.sz=c.up?s*Vanish(q):s;
+   o.offX=c.dirX*0.45+Sin(q*53)*0.025;
+   o.offZ=c.dirZ*0.45;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var a=Smooth(Min(1,q/0.62));
+   var s=(c.up?Lerp(ElevBelow,1,a):Lerp(ElevAbove,1,a))*Reveal(q);
+   if(q>0.84){
+     var b=Sin(PI*(q-0.84)/0.16);
+     o.sx=s*(1+0.06*b);
+     o.sz=s*(1-0.08*b);
+   }else{
+     o.sx=o.sz=s;
+   }
+   var w=Smooth(Clamp01((q-0.55)/0.45));
+   o.offX=c.ox*(1-w)+Sin(q*53)*0.025*(q<0.84?1:0);
+   o.offZ=c.oz*(1-w);
+   return o;
+ },
+ rig:function Rig(c,p,dest){
+   var r=NewRig();
+   var t=dest?(1-p):p;
+   var ride=Smooth(Clamp01((t-0.35)/0.65));
+   r.dark=0.55*ride;
+   var carScale=c.up?Lerp(1,1.06,ride):Lerp(1,0.92,ride);
+   r.sx=r.sz=carScale;
+   r.offZ=Sin(t*53)*0.02*ride;
+   if(dest&&p>0.84){
+     var b=Sin(PI*(p-0.84)/0.16);
+     r.sx=carScale*(1+0.04*b);
+     r.sz=carScale*(1-0.05*b);
+   }
+   r.blobs=[{x:0,z:0,s:Lerp(0.6,1.5,ride),a:0.30*ride}];
+   return r;
+ }
+}
+
+},
+
+footer:
+'<h3>What this language is for</h3>'+
+'<p>Making the <i>colony</i> feel multi-level rather than making the pawn feel acrobatic. A '+
+'staircase that dims when someone is on it, a ladder that flexes under load and an elevator '+
+'car that visibly leaves are world-state feedback: they read at any zoom, they read when the '+
+'pawn is one pixel tall, and they keep reading when four colonists queue for the same '+
+'stairwell.</p>'+
+'<h3>The one thing this costs that the others do not</h3>'+
+'<p>A draw. The link buildings are <code>MapMeshOnly</code> today - they are printed into the '+
+'section mesh once and never touched again, which is why they cost nothing. The rig track '+
+'needs the building drawn per-frame <i>while a clip is live on it</i>. Two honest options:</p>'+
+'<ul>'+
+'<li><b>Overlay copy.</b> Leave the printed sprite alone and draw a second, tinted copy over '+
+'it from the same clip sweep. Cheapest, no def change, and it composes with the shadow quads '+
+'that are already needed. The printed sprite underneath means "dimming" has to be done by '+
+'drawing a dark quad rather than by reducing brightness.</li>'+
+'<li><b>Real-time drawer.</b> <code>drawerType = MapMeshAndRealTime</code> on the four link '+
+'defs plus a <code>Draw()</code> override. Cleaner-looking, but it makes every link on the '+
+'map a per-frame draw forever, including the 20 nobody is using.</li>'+
+'</ul>'+
+'<p>Rule 38 applies either way: when a sprite must appear away from its thing\'s position, '+
+'own the draw.</p>'+
+'<h3>Under Perspective Shift</h3>'+
+'<p>Better than A or B and for a reason worth noting: under PS the camera is <i>at ground '+
+'level with the pawn</i>, so structure animation fills much more of the frame than pawn '+
+'animation does. The frozen window is still there (D does not change the lifecycle), but '+
+'there is something happening in it. Pairing D\'s rig track with C\'s dual-presence '+
+'lifecycle would be the strongest combination in this set - they are orthogonal.</p>'+
+'<h3>Cost to port</h3>'+
+'<div class="costs">'+
+'<div class="cost"><b>ClipPose.facing</b> as in A</div>'+
+'<div class="cost"><b>RigPose struct</b> new, small</div>'+
+'<div class="cost"><b>One owned draw</b> per live clip - the real cost</div>'+
+'<div class="cost"><b>Textures</b> none new: existing AB_*.png plus Core\'s '+
+'SkyfallerShadowCircle</div>'+
+'<div class="cost"><b>Risk</b> highest of the five: a new draw path on a map that already '+
+'has a see-below pass, a ghost pass and a band curtain, all of which have to agree about '+
+'which band this building is on</div>'+
+'</div>'+
+'<h3>Known caveats</h3>'+
+'<ul>'+
+'<li>The rig draw must pass the renderer\'s "is it drawn" gate (rule 26) - a link on a band '+
+'the camera is not viewing must not draw its shadow quads.</li>'+
+'<li>Fogged cells: <code>DrawGhosts</code> already checks <code>fogGrid</code> and the rig '+
+'has to do the same, or an unexplored staircase announces itself by flickering.</li>'+
+'<li>Two pawns using one staircase at once means two rig tracks on one building. Last writer '+
+'wins is acceptable; summing is not (the building would go black).</li>'+
+'</ul>'
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - E - Beat</title>
+<link rel="stylesheet" href="kit/ab2kit.css">
+</head>
+<body>
+<script src="kit/ab2kit.js"></script>
+<script>
+/* =====================================================================
+   E - BEAT.  "One strong pose, no stagger, ten ticks, done."
+
+   THE RULE: the pawn is NEVER immobilised. staggerTicks = 0, so the
+   moment the carry happens the pawn keeps walking - and the emerge clip
+   plays as a decoration ON TOP of that real movement. The entry ghost
+   still plays at the origin mouth, as a 10-tick afterimage.
+
+   Because the pawn is moving underneath, every emerge offset here is
+   deliberately small (a quarter of the anchor vector at most): the clip
+   accents the arrival, it does not drive it. Accents at the mouths carry
+   the drama instead of the body.
+   ===================================================================== */
+AB2.boot({
+id:'E', name:'Beat',
+tagline:'Ten to fourteen ticks, one strong silhouette per link type, zero stagger - the pawn is never taken off the player. The cheapest option, the only one with no felt latency at all, and the only one that survives a colonist queue of six.',
+intro:'<b>Zero latency is the feature.</b> Every other language on this nav bar buys its look '+
+ 'with ticks during which the pawn cannot be steered. E buys nothing: the crossing is as '+
+ 'instant as it is today, and the animation is an accent laid over movement that is already '+
+ 'happening. If the field verdict on the shipped clips is "they get in the way", this is the '+
+ 'answer to that verdict rather than a better version of the thing that got in the way.',
+
+clips:{
+
+/* ------------------------------------------------------------- stairs -- */
+stairs:{
+ entry:10, hold:0, emerge:10, noStagger:true,
+ capO:'<b>Entry.</b> One lunge. 14&deg; roll, 12% vertical stretch, half a cell of travel, then a hard snap-shrink over the last third. Ten ticks total - read it as a stride, not a descent.',
+ capD:'<b>Emerge.</b> A pop with an overshoot: 0.35 to 1.06 to 1.0, roll unwinding from -10&deg;. The pawn is already walking underneath this, so the clip only adds a quarter cell of slide.',
+ portNote:'staggerTicks = 0 in NotifyTransited. The early-move clause in Sweep\nthen becomes the NORMAL path rather than the degraded one - which it\nalready handles correctly, so nothing else changes.',
+ fx:[{phase:'entry',at:0.55,where:'origin',kind:'dust',size:0.8},
+     {phase:'emerge',at:0.10,where:'destination',kind:'dust',size:0.8}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var e=Smooth(p);
+   var lunge=Sin(Min(1,p*1.55)*PI);
+   var s=(c.up?Lerp(1,ScaleAbove,e):Lerp(1,ScaleBelow,e))*Vanish(p);
+   o.sx=s*(1-0.07*lunge);
+   o.sz=s*(1+0.12*lunge);
+   o.offX=c.dirX*0.50*e;
+   o.offZ=c.dirZ*0.50*e+0.08*lunge;
+   o.rot=14*lunge;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var e=Smooth(q);
+   var pop=Sin(PI*Min(1,q*1.30));
+   var s=Lerp(0.35,1,e)*(1+0.06*pop);
+   o.sx=s*(1+0.05*pop);
+   o.sz=s*(1-0.04*pop);
+   o.offX=c.ox*0.25*(1-e);
+   o.offZ=c.oz*0.25*(1-e)+0.06*pop;
+   o.rot=-10*(1-e);
+   return o;
+ }
+},
+
+/* -------------------------------------------------------- grand stairs -- */
+grand:{
+ entry:12, hold:0, emerge:12, noStagger:true,
+ capO:'<b>Entry.</b> The same lunge, wider (0.85 cells) and held to one side, with the roll dropped to 10&deg; - a grand staircase should look easier to walk than a cramped one, not harder.',
+ capD:'<b>Emerge.</b> Wider pop, no overshoot on the roll. Dust off the top step, which at this length is doing about as much work as the pose is.',
+ portNote:'The grand arm differs from stairs by three numbers. If you want to\ncollapse the switch to two arms (stairs-like / ladder-like), this is\nthe arm to fold.',
+ fx:[{phase:'entry',at:0.45,where:'origin',kind:'dust',size:1.0},
+     {phase:'emerge',at:0.10,where:'destination',kind:'dust',size:1.0}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var e=Smooth(p);
+   var lunge=Sin(Min(1,p*1.45)*PI);
+   var s=(c.up?Lerp(1,ScaleAbove,e):Lerp(1,ScaleBelow,e))*Vanish(p);
+   o.sx=s*(1-0.05*lunge);
+   o.sz=s*(1+0.10*lunge);
+   o.offX=c.dirX*0.85*e-c.dirZ*0.40;
+   o.offZ=c.dirZ*0.85*e+c.dirX*0.40+0.07*lunge;
+   o.rot=10*lunge;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var e=Smooth(q);
+   var pop=Sin(PI*Min(1,q*1.30));
+   var s=Lerp(0.40,1,e)*(1+0.05*pop);
+   o.sx=s*(1+0.04*pop);
+   o.sz=s*(1-0.04*pop);
+   o.offX=c.ox*0.25*(1-e)-c.dirZ*0.40*(1-e);
+   o.offZ=c.oz*0.25*(1-e)+c.dirX*0.40*(1-e)+0.05*pop;
+   o.rot=-7*(1-e);
+   return o;
+ }
+},
+
+/* ------------------------------------------------------------- ladder -- */
+ladder:{
+ entry:14, hold:0, emerge:12, noStagger:true,
+ capO:'<b>Entry.</b> One whip pull: the body cocks 12&deg; one way in the first three ticks and snaps through to the other side, stretching 14% as it goes. Facing the ladder, no travel to speak of - a ladder is vertical and the clip should be too.',
+ capD:'<b>Emerge.</b> Comes out on the counter-whip and settles. Twelve ticks is about one real rung, which is the honest read: you did not climb a storey, you stepped through a hole.',
+ portNote:'The whip is one Sin over the whole clip rather than StepEase over n\nbeats. At 14 ticks any beat structure is invisible, so do not pay for it.',
+ fx:[{phase:'entry',at:0.62,where:'origin',kind:'dust',size:0.6},
+     {phase:'emerge',at:0.14,where:'destination',kind:'dust',size:0.6}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var e=Smooth(p);
+   var whip=Sin(p*PI*1.0);
+   var cock=Sin(PI*Min(1,p*3.6))*(p<0.28?1:0);
+   var s=(c.up?Lerp(1,ScaleAbove,e):Lerp(1,ScaleBelow,e))*Vanish(p);
+   o.sx=s*(1-0.08*whip);
+   o.sz=s*(1+0.14*whip);
+   o.offX=c.dirX*0.22+0.10*whip-0.06*cock;
+   o.offZ=c.dirZ*0.22;
+   o.rot=12*whip-12*cock;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=q<0.70?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   var e=Smooth(q);
+   var whip=Sin(q*PI);
+   var s=Lerp(0.30,1,e);
+   o.sx=s*(1-0.07*whip);
+   o.sz=s*(1+0.12*whip);
+   o.offX=c.ox*0.25*(1-e)-0.09*whip;
+   o.offZ=c.oz*0.25*(1-e);
+   o.rot=-11*whip;
+   return o;
+ }
+},
+
+/* ----------------------------------------------------------- elevator -- */
+elevator:{
+ entry:14, hold:0, emerge:12, noStagger:true,
+ capO:'<b>Entry.</b> Board and drop in one motion: three hard shake frames at 6 Hz while the scale runs out. No turn-around beat - at 14 ticks there is no room for one and faking it just makes the sprite twitch.',
+ capD:'<b>Emerge.</b> Arrives hot and bottoms out at 70%: 12% squash, dust ring, one rebound. The thump is doing the work; the body barely moves.',
+ portNote:'Multi-level rides should NOT scale these durations. E\'s whole premise\nis a fixed, tiny cost per crossing - a sky-to-basement ride reading the\nsame as a one-floor hop is the intended trade.',
+ fx:[{phase:'entry',at:0.16,where:'origin',kind:'dust',size:1.0},
+     {phase:'emerge',at:0.70,where:'destination',kind:'dust',size:1.4},
+     {phase:'emerge',at:0.70,where:'destination',kind:'ring',size:1.2}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var e=Smooth(p);
+   var board=Sin(PI*Min(1,p*4.0))*(p<0.25?1:0);
+   var s=(c.up?Lerp(1,ElevAbove,e):Lerp(1,ElevBelow,e))*Vanish(p);
+   o.sx=s*(1+0.05*board);
+   o.sz=s*(1-0.09*board);
+   o.offX=c.dirX*0.40*Smooth(Min(1,p*2.2))+Sin(p*38)*0.04*e;
+   o.offZ=c.dirZ*0.40*Smooth(Min(1,p*2.2));
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var e=Smooth(Min(1,q/0.70));
+   var s=Lerp(0.30,1,e);
+   var thump=Sin(PI*Clamp01((q-0.60)/0.40));
+   o.sx=s*(1+0.10*thump);
+   o.sz=s*(1-0.12*thump);
+   o.offX=c.ox*0.25*(1-e)+Sin(q*38)*0.03*(1-e);
+   o.offZ=c.oz*0.25*(1-e)-0.04*thump;
+   return o;
+ }
+}
+
+},
+
+footer:
+'<h3>What this language is for</h3>'+
+'<p>Colonies that actually use their levels. Six pawns hauling steel down a staircase means '+
+'six clips a second; at B\'s durations that is six immobilised colonists, and at A\'s it is '+
+'still a visible hitch in the flow of work. E is authored on the assumption that the clip '+
+'will be seen thousands of times and must therefore cost nothing - not in ticks, not in '+
+'attention.</p>'+
+'<h3>The trade, stated plainly</h3>'+
+'<ul>'+
+'<li><b>You gain:</b> no stagger anywhere, so no "my colonist froze on the stairs" report is '+
+'possible; the shortest possible window in which the pawn is logically at the destination '+
+'while its sprite is at the origin (the honest mismatch in the shipped design shrinks from '+
+'32-54 ticks to 10-14); and the lowest render cost, since <code>IsAnimating</code> vetoes '+
+'the cached atlas blit and E keeps that veto short.</li>'+
+'<li><b>You lose:</b> the sense that a level change is a journey. Nothing here reads as '+
+'"climbing". It reads as a fast, well-punctuated step through a hole in the floor.</li>'+
+'</ul>'+
+'<h3>Under Perspective Shift</h3>'+
+'<p>The best of the five for a reason that has nothing to do with the poses: <b>the avatar is '+
+'never frozen</b>, so PS\'s own input handling is never fighting a stagger it did not '+
+'install. The band cut still happens, but it happens while the player is still steering, '+
+'which reads as a camera move rather than as a cutscene. Note the latency badge above stays '+
+'green on every link type - it is the only page in the set where it does.</p>'+
+'<h3>Cost to port</h3>'+
+'<div class="costs">'+
+'<div class="cost"><b>ClipPose.facing</b> as in A</div>'+
+'<div class="cost"><b>staggerTicks = 0</b> one line, and it deletes the riskiest coupling in '+
+'the whole feature</div>'+
+'<div class="cost"><b>Pose bodies</b> the shortest of the five</div>'+
+'<div class="cost"><b>New draw paths</b> none</div>'+
+'<div class="cost"><b>Risk</b> lowest, jointly with A</div>'+
+'</div>'+
+'<h3>Known caveats</h3>'+
+'<ul>'+
+'<li>Without the stagger, the emerge pose is drawn over a pawn that is already walking. '+
+'Offsets must stay small or the sprite visibly lags its own shadow and path line. Every '+
+'offset here is capped at a quarter of the anchor vector for that reason - do not raise it '+
+'without re-checking against the path line, which is drawn at true world coordinates '+
+'(ABTransitVisuals).</li>'+
+'<li>A pawn that arrives and immediately stands still (job ended at the landing cell) gets '+
+'the accent with nothing under it. That looks fine at these durations but it is the case to '+
+'check first in the field.</li>'+
+'</ul>'
+});
+</script>
+</body>
+</html>

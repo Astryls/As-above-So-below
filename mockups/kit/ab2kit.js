@@ -208,12 +208,14 @@ function setBuilding(P,type,goingDown,rot,rig){
   P.bld.style.filter=dark>0?('brightness('+(1-0.55*dark)+') saturate('+(1-0.25*dark)+')'):'none';
 }
 
+/* Blob coordinates are RimWorld-relative offsets from the LINK'S OWN CELL - i.e. exactly
+   what a C# port would pass to a shadow-quad draw at link.DrawPos + (x, 0, z). */
 function setBlobs(P,list){
   for(var i=0;i<P.blobs.length;i++){
     var b=P.blobs[i], d=list&&list[i];
     if(!d){ b.style.opacity='0'; continue; }
     b.style.opacity=String(d.a);
-    b.style.transform='translate('+(d.x*CELL)+'px,'+(d.z*CELL)+'px) scale('+d.s+')';
+    b.style.transform='translate('+((P.cx+d.x)*CELL)+'px,'+((P.cy-d.z)*CELL)+'px) scale('+d.s+')';
   }
 }
 
@@ -484,7 +486,8 @@ function boot(cfg){
     var rigO=null, rigD=null;
     if(cl.rig){
       if(cur.id==='entry'||cur.id==='cross') rigO=cl.rig(c,p,false);
-      if(cur.id==='emerge'||cur.id==='cross') rigD=cl.rig(c,cur.id==='cross'?p:p,true);
+      if(cur.id==='emerge'||cur.id==='cross') rigD=cl.rig(c,p,true);
+      if(cur.id==='hold'){ rigO=cl.rig(c,1,false); rigD=cl.rig(c,0,true); }
     }
     setBuilding(PA,state.type,goingDown,state.ap,rigO);
     setBuilding(PB,state.type,!goingDown,state.ap,rigD);

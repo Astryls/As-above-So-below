@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AB2 motion study - C - Traveler</title>
+<link rel="stylesheet" href="kit/ab2kit.css">
+</head>
+<body>
+<script src="kit/ab2kit.js"></script>
+<script>
+/* =====================================================================
+   C - TRAVELER.  "There is never a frame where the pawn is nowhere."
+
+   THE RULE: entry and emerge run in the SAME window. The origin ghost
+   sinks into the mouth over the whole crossing while the pawn's own draw
+   at the landing rises out of the counterpart mouth over the same ticks.
+   Both are near the opening and near the same scale at the midpoint, so
+   the camera can cut between bands at p = 0.5 and the cut is invisible.
+
+   THE ONE STRUCTURAL CHANGE: emergeStart is set to 0 at clip creation
+   instead of after entry+hold, and TryGetPose stops returning the hide
+   pose. Everything else is the shipped pipeline.
+
+   THIS IS THE PERSPECTIVE SHIFT ANSWER. Switch the view control and
+   compare against A or B: those cut to a band where the pawn has not
+   started moving yet, or to eight ticks of nothing at all.
+   ===================================================================== */
+AB2.boot({
+id:'C', name:'Traveler',
+tagline:'Entry and emerge play simultaneously, so both bands always have something to look at and the camera can cut between them at the midpoint without a seam. Built for Perspective Shift, useful without it.',
+intro:'<b>The dual presence is free.</b> Bands are camera-exclusive - the origin ghost only '+
+ 'draws when the viewed band is the origin, the landing draw only when it is the '+
+ 'destination - so the player never actually sees two copies. What they get is a guarantee: '+
+ '<i>whichever band the camera is on, mid-crossing, there is a pawn there and it is moving</i>. '+
+ 'The both-bands view below is a mockup convenience so you can check the two halves line up.',
+
+clips:{
+
+/* ------------------------------------------------------------- stairs -- */
+stairs:{
+ entry:24, hold:0, emerge:24, dual:true,
+ capO:'<b>Origin half.</b> Four treads down, reaching the mouth centre at exactly 50% at scale 0.55, then continuing under. Note the pawn is 0.45 cells <i>short</i> of the mouth at p=0 - the two halves are authored to meet, not to start and stop.',
+ capD:'<b>Destination half, same ticks.</b> Rises out of the counterpart mouth from 0.10, holds at the mouth until 50%, then walks to the landing cell. At the midpoint this copy and the origin copy are the same size in the same place.',
+ portNote:'dual: emergeStart = 0 in NotifyTransited, and TryGetPose no longer\nreturns pose.hide for the landing draw. The ghost window becomes\n"the whole clip" and DrawGhosts needs no change at all.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var pe=StepEase(p,4);
+   var tread=FloorToInt(Min(3,p*4));
+   var f=Clamp01(p*4-tread);
+   var hop=Sin(f*PI);
+   var s=Lerp(1,0.10,Smooth(p));
+   o.sx=o.sz=s*(1+hop*0.05);
+   o.offX=c.dirX*(0.90*pe-0.45);
+   o.offZ=c.dirZ*(0.90*pe-0.45)+hop*0.05;
+   o.rot=(tread%2===0?1:-1)*6*hop;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var w=Smooth(Clamp01((q-0.50)/0.50));
+   var pe=StepEase(w,3);
+   var tread=FloorToInt(Min(2,w*3));
+   var f=Clamp01(w*3-tread);
+   var hop=Sin(f*PI);
+   var s=Lerp(0.10,1,Smooth(q));
+   o.sx=o.sz=s*(1+hop*0.05);
+   o.offX=c.ox*(1-pe);
+   o.offZ=c.oz*(1-pe)+hop*0.05;
+   o.rot=(tread%2===0?-1:1)*6*hop;
+   return o;
+ }
+},
+
+/* -------------------------------------------------------- grand stairs -- */
+grand:{
+ entry:28, hold:0, emerge:28, dual:true,
+ capO:'<b>Origin half.</b> Six beats across a longer run, held 0.45 cells to one side. The wide footprint gives the crossing more screen distance to hide the scale change in, which is why the grand staircase is the best-looking link in this language.',
+ capD:'<b>Destination half.</b> Emerges on the matching side. Because both halves keep the same lateral offset, the pawn appears to walk a single continuous diagonal that happens to pass through a floor.',
+ portNote:'Identical to the stairs arm apart from beat count, run length and the\nperpendicular offset. Worth keeping as its own arm anyway - it is the\nonly place a 3x3 footprint can be used for anything.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var rail=0.45;
+   var pe=StepEase(p,6);
+   var beat=FloorToInt(Min(5,p*6));
+   var f=Clamp01(p*6-beat);
+   var hop=Sin(f*PI);
+   var s=Lerp(1,0.10,Smooth(p));
+   o.sx=o.sz=s*(1+hop*0.04);
+   o.offX=c.dirX*(1.30*pe-0.65)-c.dirZ*rail;
+   o.offZ=c.dirZ*(1.30*pe-0.65)+c.dirX*rail+hop*0.05;
+   o.rot=(beat%2===0?1:-1)*5*hop;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var rail=0.45;
+   var w=Smooth(Clamp01((q-0.50)/0.50));
+   var pe=StepEase(w,4);
+   var beat=FloorToInt(Min(3,w*4));
+   var f=Clamp01(w*4-beat);
+   var hop=Sin(f*PI);
+   var s=Lerp(0.10,1,Smooth(q));
+   o.sx=o.sz=s*(1+hop*0.04);
+   o.offX=c.ox*(1-pe)-c.dirZ*rail*(1-pe*0.5);
+   o.offZ=c.oz*(1-pe)+c.dirX*rail*(1-pe*0.5)+hop*0.05;
+   o.rot=(beat%2===0?-1:1)*5*hop;
+   return o;
+ }
+},
+
+/* ------------------------------------------------------------- ladder -- */
+ladder:{
+ entry:34, hold:0, emerge:34, dual:true,
+ capO:'<b>Origin half.</b> The perfect case for this language: a ladder crossing has <i>no lateral travel at all</i>, so the two halves meet at exactly the same screen pixel. Four rung pulls, facing the ladder, scale carrying the entire depth read.',
+ capD:'<b>Destination half.</b> Four rungs out of the counterpart ladder, same facing, same pixel. Cut the camera at 50% and the only thing that changes is the floor underneath.',
+ portNote:'If only one link type gets the dual treatment, make it this one:\nzero lateral travel means the midpoint match is exact rather than\napproximate.',
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   o.facing=FaceOf(c.dirX,c.dirZ);
+   var pe=StepEase(p,4);
+   var rung=FloorToInt(Min(3,p*4));
+   var f=Clamp01(p*4-rung);
+   var haul=Sin(f*PI);
+   var sign=(rung%2===0)?1:-1;
+   var s=Lerp(1,0.10,Smooth(p));
+   o.sx=s*(1-0.05*haul);
+   o.sz=s*(1+0.07*haul);
+   o.offX=c.dirX*0.20+sign*0.07*haul;
+   o.offZ=c.dirZ*0.20;
+   o.rot=sign*7*haul;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=q<0.85?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   var w=Smooth(Clamp01((q-0.50)/0.50));
+   var pe=StepEase(w,4);
+   var rung=FloorToInt(Min(3,w*4));
+   var f=Clamp01(w*4-rung);
+   var haul=Sin(f*PI);
+   var sign=(rung%2===0)?-1:1;
+   var s=Lerp(0.10,1,Smooth(q));
+   o.sx=s*(1-0.05*haul);
+   o.sz=s*(1+0.07*haul);
+   o.offX=c.ox*(1-pe)+sign*0.07*haul;
+   o.offZ=c.oz*(1-pe);
+   o.rot=sign*7*haul;
+   return o;
+ }
+},
+
+/* ----------------------------------------------------------- elevator -- */
+elevator:{
+ entry:30, hold:0, emerge:30, dual:true,
+ capO:'<b>Origin half.</b> Board (0-30%) facing the car, turn, then the shaft. The pawn is a small shuddering silhouette by the midpoint - the least demanding cut in the whole set, because there is barely a silhouette left to match.',
+ capD:'<b>Destination half.</b> The car rises into frame over the same ticks and the pawn grows out of it, facing the doors, then steps off. Landing dust at 88%.',
+ portNote:'For a multi-level ride, scale BOTH windows by levels (the shipped\ncode already does this for entry). Keep them equal or the midpoint\nstops being the midpoint.',
+ fx:[{phase:'cross',at:0.02,where:'origin',kind:'dust',size:0.9},
+     {phase:'cross',at:0.88,where:'destination',kind:'dust',size:1.2}],
+ entryPose:function Entry(c,p){
+   var o=NewPose();
+   var board=0.30;
+   if(p<board){
+     var m=Smooth(p/board);
+     o.facing=FaceOf(c.dirX,c.dirZ);
+     o.offX=c.dirX*0.45*m;
+     o.offZ=c.dirZ*0.45*m;
+     o.sz=1-0.05*Sin(m*PI);
+     return o;
+   }
+   var q=(p-board)/(1-board);
+   o.facing=Opposite(FaceOf(c.dirX,c.dirZ));
+   var s=Lerp(1,0.10,Smooth(q));
+   o.sx=o.sz=s;
+   o.offX=c.dirX*0.45+Sin(q*41)*0.03;
+   o.offZ=c.dirZ*0.45;
+   return o;
+ },
+ emergePose:function Emerge(c,q){
+   var o=NewPose();
+   o.facing=FaceOf(-c.ox,-c.oz);
+   var s=Lerp(0.10,1,Smooth(Min(1,q/0.86)));
+   var jitter=Sin(q*41)*0.03*(q<0.80?1:0);
+   if(q>0.88){
+     var b=Sin(PI*(q-0.88)/0.12);
+     o.sx=s*(1+0.08*b);
+     o.sz=s*(1-0.10*b);
+   }else{
+     o.sx=o.sz=s;
+   }
+   var w=Smooth(Clamp01((q-0.72)/0.28));
+   o.offX=c.ox*(1-w)+jitter;
+   o.offZ=c.oz*(1-w);
+   return o;
+ }
+}
+
+},
+
+footer:
+'<h3>What this language is for</h3>'+
+'<p>The field report that started this: <i>the animations feel wrong, especially under '+
+'Perspective Shift.</i> Under PS the camera is a pawn. The shipped design gives that camera '+
+'an entry clip on the origin band, then a hold in which nothing is drawn anywhere, then a '+
+'cut to a destination band where the emerge starts from scratch. Three discontinuities in a '+
+'row, each one landing while the player cannot steer. C removes all three by construction: '+
+'there is one window, both sides of it are populated, and the cut point is chosen to be the '+
+'frame where the two halves are indistinguishable.</p>'+
+'<h3>Why this is cheap</h3>'+
+'<ul>'+
+'<li>No new draw path. <code>DrawGhosts</code> already draws the origin copy; the landing '+
+'copy is the pawn\'s ordinary draw with the hide flag removed.</li>'+
+'<li>No extra cost per frame: the two halves are on different bands and the renderer only '+
+'ever runs one of them.</li>'+
+'<li><code>hold</code> disappears entirely, so the "nobody drawn anywhere" state stops '+
+'existing - which also deletes a whole class of "my colonist vanished" reports.</li>'+
+'</ul>'+
+'<h3>The change to ABStairAnim, precisely</h3>'+
+'<ul>'+
+'<li><code>NotifyTransited</code>: set <code>c.emergeStart = 0</code> and '+
+'<code>c.holdTicks = 0</code>.</li>'+
+'<li><code>IsGhosting</code> currently means <code>emergeStart &lt; 0</code>. It needs its '+
+'own flag (<code>age &lt; entryTicks</code>) because it also gates the pawn label and the '+
+'see-below pass.</li>'+
+'<li><code>TryGetPose</code>: while <code>ghostArmedId</code> matches, return the entry pose; '+
+'otherwise return the <b>emerge</b> pose instead of the hide pose.</li>'+
+'<li><code>Sweep</code>: expiry is now just <code>age &gt; entryTicks</code>; the early-move '+
+'clause still applies and still shortens the clip safely.</li>'+
+'</ul>'+
+'<h3>Cost to port</h3>'+
+'<div class="costs">'+
+'<div class="cost"><b>ClipPose.facing</b> as in A</div>'+
+'<div class="cost"><b>Clip lifecycle</b> four small edits, listed above - the only language '+
+'here that touches state rather than just math</div>'+
+'<div class="cost"><b>Label gating</b> must follow the new ghost window or names blink</div>'+
+'<div class="cost"><b>Risk</b> medium: the lifecycle edits are in the file whose banner '+
+'warns that nothing cosmetic may sit on the transit decision path. These edits are all on '+
+'the DRAW side of that line, but they need reading against it.</div>'+
+'</div>'+
+'<h3>Known caveats</h3>'+
+'<ul>'+
+'<li>The strict depth grammar is relaxed <i>during</i> the crossing: both halves go small at '+
+'the midpoint rather than one being 1.14 and the other 0.32. The defence is that a pawn '+
+'inside the opening is genuinely far from both cameras - but it is a deliberate departure '+
+'and it should be a conscious choice, not a surprise.</li>'+
+'<li>The camera cut itself is not implemented here. <code>ABBandView.FollowTransit</code> '+
+'would need to fire at <code>entryTicks / 2</code> rather than on arrival.</li>'+
+'</ul>'
+});
+</script>
+</body>
+</html>
