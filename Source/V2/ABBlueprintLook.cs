@@ -37,10 +37,13 @@ namespace AsAboveSoBelow
     public static class ABBlueprintLook
     {
         /// <summary>
-        /// Finished art at 70% alpha: recognizable at a glance, still clearly a plan.
-        /// One number to taste - raise toward 1.0 for a more solid look.
+        /// Finished art, heavily translucent: recognizable at a glance, never mistakable
+        /// for the built thing. 0.70 read as "already constructed" in the field, especially
+        /// for the dark-wood links over dark stone, so the plan now sits below vanilla's own
+        /// 0.6 blueprint wash. One number to taste - raise toward 1.0 for a more solid look,
+        /// lower for a fainter plan.
         /// </summary>
-        internal const float BlueprintAlpha = 0.70f;
+        internal const float BlueprintAlpha = 0.42f;
 
         static ABBlueprintLook()
         {
