@@ -60,6 +60,11 @@ button.sel{background:#41372a;border-color:var(--acc);color:#f0dcb4}
 .map.sky .c1{background:#333a45}.map.sky .c2{background:#2e3541}
 .bld{position:absolute;left:0;top:0;transform-origin:50% 50%;image-rendering:auto;
      will-change:transform,filter}
+/* footprint edges: which side of the link the art is OPEN on */
+.edge{position:absolute;background:#8f4e4e;opacity:.5;border-radius:2px;pointer-events:none}
+.edge.open{background:var(--acc);opacity:.95;box-shadow:0 0 6px rgba(201,162,90,.55)}
+.lane{position:absolute;background:rgba(201,162,90,.10);border:1px dashed rgba(201,162,90,.35);
+      pointer-events:none;border-radius:3px}
 .blob{position:absolute;left:0;top:0;width:var(--cell);height:var(--cell);
       margin-left:calc(var(--cell)/-2);margin-top:calc(var(--cell)/-2);border-radius:50%;
       background:radial-gradient(rgba(0,0,0,.55),rgba(0,0,0,0) 68%);pointer-events:none;

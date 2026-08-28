@@ -76,6 +76,53 @@ var TYPES={
 };
 var TYPE_ORDER=['stairs','grand','ladder','elevator'];
 var ROTNAME=['north','east','south','west'];
+var ROTLETTER=['N','E','S','W'];
+
+/* ---------------------------------------------------------------------------
+   WHERE THE ART IS ACTUALLY OPEN.
+
+   Measured, not assumed: every shipped *_south sprite has its notch - the gap in
+   the black frame - on its NORTH edge, with the treads shading light->dark toward
+   the south. So the sprite's rotation names the direction the stairs LEAD, and the
+   way in is the OPPOSITE edge:
+
+       entry edge   = Opposite(link.Rotation)
+       run direction= link.Rotation.FacingCell
+
+   The two flanking edges are railings. A pawn that enters across one of those is
+   walking through the handrail, which is the defect this table exists to prevent.
+   --------------------------------------------------------------------------- */
+
+/* Alpha-bbox centre of each sprite inside its own draw rect, in cells, measured off
+   the shipped PNGs. The art is NOT centred in its footprint - AB_StairsDown_south
+   sits 0.22 cells north of the cell it occupies - so a pawn walking to the CELL
+   centre visibly walks off the drawn treads. Ports as a constant added to the pose
+   offsets, which are already in draw space. */
+var ARTOFF={
+  stairs  :{down:{0:[0,-0.20],1:[-0.11,0.42],2:[0,0.22],3:[0.11,0.42]},
+            up  :{0:[0,-0.31],1:[-0.16,0.00],2:[0,-0.11],3:[0.15,0.00]}},
+  grand   :{down:{0:[0,-0.21],1:[0.00,-0.21],2:[0,0.23],3:[0.00,-0.21]},
+            up  :{0:[0.02,-0.37],1:[0.00,0.00],2:[0.02,-0.02],3:[0.00,0.00]}},
+  ladder  :{down:{0:[0,0.04],1:[0.00,-0.03],2:[0,0.00],3:[0.00,-0.03]},
+            up  :{0:[0,0.00],1:[-0.30,0.00],2:[0,0.00],3:[0.30,0.00]}},
+  elevator:{down:{0:[0,0],1:[0,0],2:[0,0],3:[0,0]},
+            up  :{0:[0,0],1:[0,0],2:[0,0],3:[0,0]}}
+};
+
+/* Sprites whose east/west variant is NOT a rotated version of the north/south pair -
+   flagged in the panel so the art problem is not mistaken for an animation problem. */
+var ART_SUSPECT={
+  'grand:down:1':'east art is the NORTH composition, unrotated - the run reads north-south',
+  'grand:down:3':'west art is the NORTH composition, unrotated - the run reads north-south',
+  'grand:up:1':'east art is unrotated (1.85 x 2.89 cells, a north-south run)',
+  'grand:up:3':'west art is unrotated (1.85 x 2.89 cells, a north-south run)',
+  'stairs:down:1':'east art is a different composition from north/south (1.24 x 1.17 vs 0.83 x 1.47) and sits 0.42 cells north',
+  'stairs:down:3':'west art is a different composition from north/south and sits 0.42 cells north',
+  'stairs:up:1':'east art spans the full 2 cells vertically - no notch resolves on any edge',
+  'stairs:up:3':'west art spans the full 2 cells vertically - no notch resolves on any edge',
+  'ladder:up:1':'east art is a 0.14-cell sliver drawn 0.30 cells WEST of its own cell',
+  'ladder:up:3':'west art is a 0.14-cell sliver drawn 0.30 cells EAST of its own cell'
+};
 
 /* Which PNG, and whether it must be mirrored (Graphic_Multi mirrors east into west). */
 function texFor(type,goingDown,rot){
@@ -164,7 +211,10 @@ function makePanel(host,skyClass){
     d.style.left=(c*CELL)+'px'; d.style.top=(r*CELL)+'px';
     map.appendChild(d);
   }
+  var lane=el('div','lane'); map.appendChild(lane);
   var bld=el('img','bld'); bld.alt=''; map.appendChild(bld);
+  var edges=[],j;
+  for(j=0;j<4;j++){ var eg=el('div','edge'); map.appendChild(eg); edges.push(eg); }
   var blobs=[],i;
   for(i=0;i<4;i++){ var b=el('div','blob'); map.appendChild(b); blobs.push(b); }
   var fx=[];
@@ -175,7 +225,26 @@ function makePanel(host,skyClass){
   wrap.appendChild(title); wrap.appendChild(map); wrap.appendChild(cap);
   host.appendChild(wrap);
   return {root:wrap,title:title.querySelector('.t'),titleBar:title,map:map,bld:bld,
+          lane:lane,edges:edges,
           blobs:blobs,fx:fx,shadow:shadow,actor:actor,cap:cap,face:-2,fxNext:0};
+}
+
+/* Footprint edges, coloured by whether the art is open on them, plus the walk lane
+   along the run axis. This is the check: the pawn must never cross a red edge. */
+function setEdges(P,size,entrySide,dx,dz){
+  var half=size/2, T=3;
+  var L=(P.cx-half)*CELL, TOP=(P.cy-half)*CELL, S=size*CELL;
+  var geo=[[L,TOP-T/2,S,T],[L+S-T/2,TOP,T,S],[L,TOP+S-T/2,S,T],[L-T/2,TOP,T,S]];
+  for(var i=0;i<4;i++){
+    var g=geo[i], e=P.edges[i];
+    e.style.left=g[0]+'px'; e.style.top=g[1]+'px';
+    e.style.width=g[2]+'px'; e.style.height=g[3]+'px';
+    e.className='edge'+(i===entrySide?' open':'');
+  }
+  var lw=(Math.abs(dx)>0.5)?(size+3)*CELL:0.9*CELL;
+  var lh=(Math.abs(dz)>0.5)?(size+3)*CELL:0.9*CELL;
+  P.lane.style.width=lw+'px'; P.lane.style.height=lh+'px';
+  P.lane.style.left=(P.cx*CELL-lw/2)+'px'; P.lane.style.top=(P.cy*CELL-lh/2)+'px';
 }
 
 function setActor(P,ux,uz,pose,alpha){
@@ -275,6 +344,9 @@ function boot(cfg){
     '<span class="lbl">Approach from</span><span class="grp">'+
       '<button data-ap="2">S</button><button data-ap="1">E</button>'+
       '<button data-ap="0">N</button><button data-ap="3">W</button></span>'+
+    '<span class="lbl">Art entry</span><span class="grp">'+
+      '<button id="bConv">opposite of facing</button>'+
+      '<button id="bArt">art-centre lane</button></span>'+
     '<span class="lbl">View</span><span class="grp">'+
       '<button id="bBoth">both bands</button><button id="bPS">Perspective Shift</button></span>'+
     '<span class="latbox" id="latbox">frozen for <b id="latT">0</b>t / <b id="latS">0.00</b>s</span>';
@@ -302,7 +374,12 @@ function boot(cfg){
     '&middot; p = <b id="rP">0.00</b> &middot; clip total <b id="rTot">0</b>t '+
     '(<b id="rSec">0.00</b>s)</div>'+
     '<div class="legend">Hatched segments are ticks during which the pawn is immobilised '+
-    '(vanilla StaggerFor). That is the whole felt cost of the effect.</div>';
+    '(vanilla StaggerFor). That is the whole felt cost of the effect.<br>'+
+    'Footprint edges: <b style="color:#c9a25a">gold = the edge the art is open on</b> '+
+    '(the only legal way in) &middot; <b style="color:#b06a6a">red = railing</b>. The pawn '+
+    'must never cross a red edge. Measured from the shipped PNGs: every <code>*_south</code> '+
+    'sprite has its notch on its NORTH edge, so entry = Opposite(Rotation) and the run '+
+    'direction = Rotation.FacingCell.</div>';
   document.body.appendChild(tl);
 
   var port=el('div','port');
@@ -319,7 +396,7 @@ function boot(cfg){
 
   /* ---- state ---- */
   var state={t:0,playing:true,speed:0.65,type:'stairs',down:true,ap:FaceSouth,
-             view:'both',loop:true,showPort:true};
+             view:'both',loop:true,showPort:true,entryOpposite:true,artAlign:true};
   var gType=$('gType');
   TYPE_ORDER.forEach(function(k){
     var b=el('button',null,TYPES[k].label);
@@ -335,27 +412,40 @@ function boot(cfg){
     if(state.ap===FaceWest)  return {x:1,z:0};
     return {x:-1,z:0};
   }
+  /* THE LINK'S OWN ROTATION. The art leads the way it faces and is entered from the
+     far side, so the rotation that matches an approach is the OPPOSITE of it. Getting
+     this backwards is what walked the pawn in over the handrail. */
+  function linkRot(){ return state.entryOpposite ? Opposite(state.ap) : state.ap; }
+  function artOff(type,goingDown,rot){
+    if(!state.artAlign) return [0,0];
+    var t=ARTOFF[type]; if(!t) return [0,0];
+    var s=goingDown?t.down:t.up; var v=s&&s[rot];
+    return v?v:[0,0];
+  }
   function layout(){
-    var t=TYPES[state.type];
+    var t=TYPES[state.type], lr=linkRot();
     /* building centre in corner units; 2x2 lands on a corner, 1x1 and 3x3 on a cell centre */
     var cx=(t.size%2===0)?4:3.5, cy=(t.size%2===0)?2:2.5;
     PA.cx=cx; PA.cy=cy; PB.cx=cx; PB.cy=cy;
     var d=dir(), out=t.size/2+0.5;
+    /* origin link is the one you entered; destination is its counterpart, and the two
+       have DIFFERENT art offsets (down_south sits +0.22, up_south sits -0.11). */
+    var aO=artOff(state.type,state.down,lr), aD=artOff(state.type,!state.down,lr);
     return {
-      cx:cx, cy:cy, d:d,
-      /* origin: pawn walks from start to the mouth */
-      startU:{x:cx-d.x*2.6, y:cy+d.z*2.6},
-      mouthU:{x:cx, y:cy},
-      /* destination: pawn appears at the far mouth and lands one cell beyond it */
+      cx:cx, cy:cy, d:d, rot:lr,
+      /* origin: pawn walks from start to the drawn centre of the run */
+      startU:{x:cx+aO[0]-d.x*2.6, y:cy-aO[1]+d.z*2.6},
+      mouthU:{x:cx+aO[0], y:cy-aO[1]},
+      /* destination: real landing CELL, unmoved - only the draw target shifts */
       landU:{x:cx+d.x*out, y:cy-d.z*out},
       exitU:{x:cx+d.x*(out+2.2), y:cy-d.z*(out+2.2)},
-      out:out
+      out:out, aO:aO, aD:aD
     };
   }
   function ctx(){
     var L=layout();
     return {up:!state.down, dirX:L.d.x, dirZ:L.d.z,
-            ox:-L.d.x*L.out, oz:-L.d.z*L.out, L:L};
+            ox:L.aD[0]-L.d.x*L.out, oz:L.aD[1]-L.d.z*L.out, L:L};
   }
 
   /* ---- timeline ---- */
@@ -424,7 +514,22 @@ function boot(cfg){
     '//   ...right after the pose.hide branch, before the matrix multiply:\n'+
     '//       if (pose.facing != FaceNone) { __result.facing = new Rot4(pose.facing); }\n'+
     '//   ShouldRecache already compares facing, and IsAnimating already vetoes the\n'+
-    '//   cached atlas blit for the whole clip, so nothing else has to change.\n';
+    '//   cached atlas blit for the whole clip, so nothing else has to change.\n'+
+    '//\n'+
+    '// ==== ONE-TIME FIX IN NotifyTransited - THE RAILING BUG =====================\n'+
+    '//   TODAY:  IntVec3 approach = near.Position - prePos;   // where the pawn CAME FROM\n'+
+    '//   The art leads the way the link faces and is entered from the opposite edge, so\n'+
+    '//   an arrival vector walks the pawn in across whichever edge it happened to reach -\n'+
+    '//   i.e. straight through the handrail on three sides out of four.\n'+
+    '//\n'+
+    '//   INSTEAD: the run direction is a property of the LINK, not of the approach.\n'+
+    '//       IntVec3 face = near.Rotation.FacingCell;          // stairs lead this way\n'+
+    '//       c.glideDir   = new Vector3(face.x, 0f, face.z);   // no normalize needed\n'+
+    '//       c.entryCell  = near.Position - face * (size/2 + 1);  // the ONLY way in\n'+
+    '//   and the art does not sit centred in its own footprint, so the pose offsets get\n'+
+    '//   a constant per def+rotation (see ARTOFF in the kit; AB_StairsDown_south is\n'+
+    '//   +0.22 cells north of the cell it occupies):\n'+
+    '//       o.offX += ArtOffX(def, rot);  o.offZ += ArtOffZ(def, rot);\n';
 
   function refreshPort(){
     var cl=clip();
@@ -444,13 +549,19 @@ function boot(cfg){
   /* ---- text ---- */
   function refreshText(){
     var cl=clip(), t=TYPES[state.type];
-    var dn=state.down;
+    var dn=state.down, lr=linkRot();
+    var rotTag=' <small>rot '+ROTNAME[lr]+', enter from '+ROTLETTER[state.ap]+'</small>';
     PA.title.innerHTML=(dn?'Origin - level 2 ':'Origin - level 1 ')+
-      '<small>('+t.label+(dn?' down':' up')+', viewed top-down)</small>';
+      '<small>('+t.label+(dn?' down':' up')+')</small>'+rotTag;
     PB.title.innerHTML=(dn?'Destination - level 1 ':'Destination - level 2 ')+
-      '<small>(the counterpart '+t.label+')</small>';
-    PA.cap.innerHTML=cl.capO||'';
-    PB.cap.innerHTML=cl.capD||'';
+      '<small>(counterpart '+t.label+')</small>'+rotTag;
+    var sus=ART_SUSPECT[state.type+':'+(dn?'down':'up')+':'+lr];
+    var susD=ART_SUSPECT[state.type+':'+(dn?'up':'down')+':'+lr];
+    PA.cap.innerHTML=(cl.capO||'')+(sus?'<br><span style="color:#d09a6a">&#9888; ART: '+sus+'</span>':'');
+    PB.cap.innerHTML=(cl.capD||'')+(susD?'<br><span style="color:#d09a6a">&#9888; ART: '+susD+'</span>':'');
+    $('bConv').textContent=state.entryOpposite?'opposite of facing':'same as facing';
+    $('bConv').classList.toggle('sel',state.entryOpposite);
+    $('bArt').classList.toggle('sel',state.artAlign);
     $('gArrow').innerHTML=dn?'&#9660;':'&#9650;';
     $('bDown').classList.toggle('sel',dn);
     $('bUp').classList.toggle('sel',!dn);
@@ -489,8 +600,10 @@ function boot(cfg){
       if(cur.id==='emerge'||cur.id==='cross') rigD=cl.rig(c,p,true);
       if(cur.id==='hold'){ rigO=cl.rig(c,1,false); rigD=cl.rig(c,0,true); }
     }
-    setBuilding(PA,state.type,goingDown,state.ap,rigO);
-    setBuilding(PB,state.type,!goingDown,state.ap,rigD);
+    setBuilding(PA,state.type,goingDown,L.rot,rigO);
+    setBuilding(PB,state.type,!goingDown,L.rot,rigD);
+    setEdges(PA,TYPES[state.type].size,state.ap,c.dirX,c.dirZ);
+    setEdges(PB,TYPES[state.type].size,state.ap,c.dirX,c.dirZ);
     setBlobs(PA,rigO&&rigO.blobs); setBlobs(PB,rigD&&rigD.blobs);
 
     /* pawn */
@@ -581,6 +694,8 @@ function boot(cfg){
   document.querySelectorAll('[data-ap]').forEach(function(b){
     b.addEventListener('click',function(){ state.ap=+b.dataset.ap; state.t=0; refreshText(); });
   });
+  $('bConv').onclick=function(){ state.entryOpposite=!state.entryOpposite; state.t=0; refreshText(); };
+  $('bArt').onclick=function(){ state.artAlign=!state.artAlign; refreshText(); };
   $('bDown').onclick=function(){ state.down=true; state.t=0; refreshText(); };
   $('bUp').onclick=function(){ state.down=false; state.t=0; refreshText(); };
   $('bBoth').onclick=function(){ state.view='both'; refreshText(); };
