@@ -128,7 +128,7 @@ ladder:{
  },
  emergePose:function Emerge(c,q){
    var o=NewPose();
-   o.facing=q<0.70?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   o.facing=q<0.70?FaceOf(-c.dirX,-c.dirZ):FaceOf(-c.ox,-c.oz);
    var e=Smooth(q);
    var whip=Sin(q*PI);
    var s=Lerp(0.30,1,e);

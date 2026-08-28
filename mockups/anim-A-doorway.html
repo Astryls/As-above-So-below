@@ -101,7 +101,7 @@ grand:{
 ladder:{
  entry:22, hold:3, emerge:22,
  capO:'<b>Entry.</b> 0-18%: step up to the rungs and <b>turn to face the ladder</b> - a colonist climbs facing the ladder whether going up or down, and that single facing choice is most of what sold this clip. 18-100%: three rung pulls, tiny 0.045-cell rock, no theatrics.',
- capD:'<b>Emerge.</b> Three rungs out, still facing the ladder, then the facing flips to the walk direction on the last 20% as the pawn steps off and turns away.',
+ capD:'<b>Emerge.</b> Three rungs out, still facing the ladder - which on this side is <i>behind</i> the exit direction, hence the negated glide vector - then the facing flips to the walk direction on the last 20% as the pawn steps off and turns away.',
  portNote:'THE FACING IS THE WHOLE POINT HERE. Both directions face the ladder\n(FaceOf(glideDir)), which is the opposite of what the movement vector\nwould give you on the way down.',
  entryPose:function Entry(c,p){
    var o=NewPose();
@@ -126,7 +126,7 @@ ladder:{
  },
  emergePose:function Emerge(c,q){
    var o=NewPose();
-   o.facing=q<0.80?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   o.facing=q<0.80?FaceOf(-c.dirX,-c.dirZ):FaceOf(-c.ox,-c.oz);
    var pe=StepEase(q,3);
    var rung=FloorToInt(Min(2,q*3));
    var f=Clamp01(q*3-rung);

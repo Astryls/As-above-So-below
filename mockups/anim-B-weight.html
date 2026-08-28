@@ -200,7 +200,7 @@ ladder:{
  },
  emergePose:function Emerge(c,q){
    var o=NewPose();
-   o.facing=q<0.82?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   o.facing=q<0.82?FaceOf(-c.dirX,-c.dirZ):FaceOf(-c.ox,-c.oz);
    var s=1;
    var rock=0;
    if(!c.up){

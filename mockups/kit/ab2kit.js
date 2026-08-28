@@ -379,7 +379,11 @@ function boot(cfg){
     '(the only legal way in) &middot; <b style="color:#b06a6a">red = railing</b>. The pawn '+
     'must never cross a red edge. Measured from the shipped PNGs: every <code>*_south</code> '+
     'sprite has its notch on its NORTH edge, so entry = Opposite(Rotation) and the run '+
-    'direction = Rotation.FacingCell.</div>';
+    'direction = Rotation.FacingCell.<br>'+
+    '<b>Both links share one rotation</b> (a footprint invariant), so the gold edge is on '+
+    'the same side of both panels: the pawn walks IN heading one way on the origin and '+
+    'walks OUT heading the opposite way on the destination, because it surfaces at the '+
+    'deep end of the far run and climbs out toward that link\'s own notch.</div>';
   document.body.appendChild(tl);
 
   var port=el('div','port');
@@ -436,16 +440,31 @@ function boot(cfg){
       /* origin: pawn walks from start to the drawn centre of the run */
       startU:{x:cx+aO[0]-d.x*2.6, y:cy-aO[1]+d.z*2.6},
       mouthU:{x:cx+aO[0], y:cy-aO[1]},
-      /* destination: real landing CELL, unmoved - only the draw target shifts */
-      landU:{x:cx+d.x*out, y:cy-d.z*out},
-      exitU:{x:cx+d.x*(out+2.2), y:cy-d.z*(out+2.2)},
+      /* ⚠ DESTINATION EXITS ON THE SAME EDGE THE ORIGIN WAS ENTERED ON.
+         The counterpart is spawned with the SAME Rotation - a hard invariant, because
+         GenAdj.AdjustForRotation shifts an even-sized footprint by a cell and
+         TryCellPairs pairs cell i to cell i. Same rotation means the counterpart's
+         notch is on the same side, so a pawn coming up arrives at the DEEP end of the
+         run (the hole it rose through) and walks out along -FacingCell, i.e. the
+         REVERSE of the direction it walked in on the level below. Landing on +dir was
+         landing outside the railing. */
+      landU:{x:cx-d.x*out, y:cy+d.z*out},
+      exitU:{x:cx-d.x*(out+2.2), y:cy+d.z*(out+2.2)},
       out:out, aO:aO, aD:aD
     };
   }
+  /* Origin context: "forward" is the direction the link leads. */
   function ctx(){
     var L=layout();
     return {up:!state.down, dirX:L.d.x, dirZ:L.d.z,
             ox:L.aD[0]-L.d.x*L.out, oz:L.aD[1]-L.d.z*L.out, L:L};
+  }
+  /* Destination context: "forward" is the EXIT direction at the far end, and the anchor
+     points back up the run to the mouth the pawn rose out of. Both are properties of the
+     far LINK - never of the journey that got the pawn there (rule 42). */
+  function ctxDest(L){
+    return {up:!state.down, dirX:-L.d.x, dirZ:-L.d.z,
+            ox:L.aD[0]+L.d.x*L.out, oz:L.aD[1]+L.d.z*L.out};
   }
 
   /* ---- timeline ---- */
@@ -529,7 +548,21 @@ function boot(cfg){
     '//   and the art does not sit centred in its own footprint, so the pose offsets get\n'+
     '//   a constant per def+rotation (see ARTOFF in the kit; AB_StairsDown_south is\n'+
     '//   +0.22 cells north of the cell it occupies):\n'+
-    '//       o.offX += ArtOffX(def, rot);  o.offZ += ArtOffZ(def, rot);\n';
+    '//       o.offX += ArtOffX(def, rot);  o.offZ += ArtOffZ(def, rot);\n'+
+    '//\n'+
+    '// ==== AND THE FAR END IS ITS OWN LINK ======================================\n'+
+    '//   The counterpart is spawned with the SAME Rotation (Building_ABStairs2: an\n'+
+    '//   invariant - GenAdj.AdjustForRotation shifts even-sized footprints, and\n'+
+    '//   TryCellPairs pairs cell i to cell i). Same rotation = the notch is on the same\n'+
+    '//   side, so a pawn that rose through the shaft arrives at the DEEP end of the far\n'+
+    '//   run and walks out along -far.Rotation.FacingCell: the REVERSE of the direction\n'+
+    '//   it walked in on the level below.\n'+
+    '//       entry pose  forward = near.Rotation.FacingCell\n'+
+    '//       emerge pose forward = -far.Rotation.FacingCell        // NOT the entry one\n'+
+    '//   LandingCell (ABWormholePather) must therefore prefer the far link\'s ENTRY-side\n'+
+    '//   cell, far.Position - far.Rotation.FacingCell * (size/2 + 1). Landing on the\n'+
+    '//   FacingCell side puts the pawn outside the railing, which is the same defect as\n'+
+    '//   the entry bug wearing the other costume.\n';
 
   function refreshPort(){
     var cl=clip();
@@ -590,15 +623,15 @@ function boot(cfg){
     }
     p=Clamp01(p);
 
-    var c=ctx(), L=c.L, cl=clip();
+    var c=ctx(), L=c.L, cD=ctxDest(L), cl=clip();
     var goingDown=state.down;
 
     /* building art: origin shows the link you entered, destination its counterpart */
     var rigO=null, rigD=null;
     if(cl.rig){
       if(cur.id==='entry'||cur.id==='cross') rigO=cl.rig(c,p,false);
-      if(cur.id==='emerge'||cur.id==='cross') rigD=cl.rig(c,p,true);
-      if(cur.id==='hold'){ rigO=cl.rig(c,1,false); rigD=cl.rig(c,0,true); }
+      if(cur.id==='emerge'||cur.id==='cross') rigD=cl.rig(cD,p,true);
+      if(cur.id==='hold'){ rigO=cl.rig(c,1,false); rigD=cl.rig(cD,0,true); }
     }
     setBuilding(PA,state.type,goingDown,L.rot,rigO);
     setBuilding(PB,state.type,!goingDown,L.rot,rigD);
@@ -615,16 +648,16 @@ function boot(cfg){
     } else if(cur.id==='entry'){
       poseO=cl.entryPose(c,p); uO={x:L.mouthU.x,y:L.mouthU.y};
     } else if(cur.id==='cross'){
-      poseO=cl.entryPose(c,p);  uO={x:L.mouthU.x,y:L.mouthU.y};
-      poseD=cl.emergePose(c,p); uD={x:L.landU.x, y:L.landU.y};
+      poseO=cl.entryPose(c,p);   uO={x:L.mouthU.x,y:L.mouthU.y};
+      poseD=cl.emergePose(cD,p); uD={x:L.landU.x, y:L.landU.y};
     } else if(cur.id==='hold'){
       /* nobody anywhere - that is the point of the segment */
     } else if(cur.id==='emerge'){
-      poseD=cl.emergePose(c,p); uD={x:L.landU.x,y:L.landU.y};
+      poseD=cl.emergePose(cD,p); uD={x:L.landU.x,y:L.landU.y};
     } else if(cur.id==='depart'){
       var w2=p, bob2=Abs(Sin(p*6*PI));
       uD={x:Lerp(L.landU.x,L.exitU.x,w2), y:Lerp(L.landU.y,L.exitU.y,w2)-bob2*0.05};
-      poseD=NewPose(); poseD.facing=FaceOf(c.dirX,c.dirZ); poseD.rot=Sin(p*6*PI)*3;
+      poseD=NewPose(); poseD.facing=FaceOf(cD.dirX,cD.dirZ); poseD.rot=Sin(p*6*PI)*3;
     }
     if(poseO&&uO){ setActor(PA,uO.x+poseO.offX,uO.y-poseO.offZ,poseO,1); }
     else setActor(PA,0,0,null,0);

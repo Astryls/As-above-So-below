@@ -149,7 +149,7 @@ ladder:{
  },
  emergePose:function Emerge(c,q){
    var o=NewPose();
-   o.facing=q<0.80?FaceOf(c.dirX,c.dirZ):FaceOf(-c.ox,-c.oz);
+   o.facing=q<0.80?FaceOf(-c.dirX,-c.dirZ):FaceOf(-c.ox,-c.oz);
    var pe=StepEase(q,3);
    var rung=FloorToInt(Min(2,q*3));
    var f=Clamp01(q*3-rung);
