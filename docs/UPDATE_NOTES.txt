@@ -5,34 +5,70 @@ description and these notes are never uploaded by it.
 HOUSE RULE: no em-dashes anywhere in shipped text.
 ================================================================================
 
-[h1]◆ Window 9: Transit Animations ◆[/h1]
+[h1]◆ Window 10: Wall Risers ◆[/h1]
 
-[h1]✦ New: colonists actually climb the stairs[/h1]
-Crossing between levels used to be an instant hop: a pawn touched the stairwell
-and simply appeared on the other side. Every link now plays a real crossing:
+[h1]✦ New: wall risers[/h1]
+Utility columns carry a service between levels, but they stand in the middle of
+the floor. Risers do the same job from inside the wall.
 
 [list]
-[*][b]Stairs and grand stairs[/b]: taken tread by tread, five distinct steps down
-into the well or up out of view, leaning into each step, shrinking away below you
-or growing past you above.
-[*][b]Ladders[/b]: the pawn pauses at the shaft, leans over to check, then
-commits with two big pulls. Coming the other way, the head pops out first before
-they haul themselves clear of the hole.
-[*][b]Elevator[/b]: a freight lift. The platform takes the weight with a clank
-and a puff of dust, drops fast enough to shake, and lands with a bounce. Longer
-rides take longer: every level of travel adds to the trip.
+[*][b]Four risers[/b], one per service: power, pipe, climate and data. Each joins
+the two levels it touches exactly as the matching column does.
+[*][b]They mount on a wall[/b], the way a wall lamp does, so the floor stays
+clear and a corridor keeps its full width.
+[*][b]They do not hold up a roof.[/b] A riser is a fitting, not a support. If you
+need the roof held, that is still the column's job.
+[*][b]Remove the wall and the riser goes with it[/b], rather than being left
+floating in the gap.
 [/list]
 
-Both ends play their half. Watch the departure level and they climb away from
-you; watch the arrival level and they climb out toward you.
+[h1]✦ Columns and risers no longer need research[/h1]
+Both used to sit behind Electricity and Machining. They are how a colony gets
+from one level to another, which is the whole point of the mod, so they are
+available from the moment you land. The individual network toggles still respect
+whatever the owning mod asks for, so an unresearched network still cannot be
+carried.
 
-[h1]✦ The honest cost[/h1]
-Crossings now take a beat: about half a second on stairs, a little more on a
-ladder, and boarding plus travel time on the elevator. Under the hood the
-crossing still completes instantly, so pathing, hauling, jobs and orders are
-exactly as reliable as before; the pause is only the animation getting time to
-read. Prefer the old instant hop? It is one checkbox in settings: Transit
-animations.
+[h1]✦ A tidier build menu[/h1]
+The vertical links had been sharing a slot with vanilla's doors and scattered
+themselves through the Structure tab. Everything this mod adds is now one
+deliberate block after vanilla's own: ladders, stairs, grand stairs and the
+elevator, then the four columns, then the four risers.
+
+[h1]✦ Blueprints show what you are actually building[/h1]
+Placing one of this mod's buildings drew a plain blue box. Blueprints and the
+placing ghost now show the finished building's own art, tinted the usual
+blueprint blue, so a planned stairwell reads as a stairwell before a single
+block is hauled.
+
+[h1]✦ Fixed: stray plumbing at columns and risers[/h1]
+With Dubs Bad Hygiene, Rimefeller or Rimatomics installed, loose lengths of pipe
+could appear at a column or riser, on its own level and the one above, looking
+like something you had built by mistake. Those fittings are now hidden in the
+normal view on every one of those mods' drawing paths. They remain fully visible
+in the pipe and power overlays, which is where you go to read what is connected
+to what.
+
+[h1]✦ Playing as one character: Perspective Shift[/h1]
+Perspective Shift is now supported, and the combination works properly across a
+column of levels.
+
+[list]
+[*][b]Shooting between levels works while you are the character[/b], through the
+same openings and the same rules the colony AI uses.
+[*][b]Looking at another level holds the view where you put it[/b] instead of
+dragging the camera back toward your character and stranding it between levels.
+[*][b]Your character holds still while you look elsewhere[/b], and cannot move or
+shoot until you come back. There is a setting in the camera tab to turn that off
+if you would rather keep walking around off screen.
+[*][b]Taking the stairs cuts straight to the new level[/b] rather than sliding
+the camera the whole way there.
+[/list]
+
+[h1]✦ A note on the riser art[/h1]
+The riser textures in this build are placeholders. They read correctly at a
+glance and they are not the final set; proper art is being made and will land in
+a later update. Nothing about how they work will change.
 
 [h1]✦ Still open beta[/h1]
 [list]

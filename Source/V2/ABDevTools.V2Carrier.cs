@@ -106,12 +106,17 @@ namespace AsAboveSoBelow
                 }
             }
 
-            sb.AppendLine("  PATCH CENSUS - every patched TakePrintFrom and whether the"
+            sb.Append("  FOREIGN PIPE PRINT BINDING (§75.h):\n")
+                .Append(ABForeignPipeLayerHide.Census);
+
+            sb.AppendLine("  PATCH CENSUS - every patched print method and whether the"
                 + " prefix is OURS:");
             int seen = 0;
             foreach (MethodBase m in Harmony.GetAllPatchedMethods())
             {
-                if (m == null || m.Name != "TakePrintFrom")
+                // §75.h: PrintForGrid is the Dubs family's print entry point; watching only
+                // TakePrintFrom is what let the missing binding read as "installed".
+                if (m == null || (m.Name != "TakePrintFrom" && m.Name != "PrintForGrid"))
                 {
                     continue;
                 }
@@ -133,7 +138,7 @@ namespace AsAboveSoBelow
             }
             if (seen == 0)
             {
-                sb.AppendLine("    NONE. No TakePrintFrom anywhere is patched - the hide is"
+                sb.AppendLine("    NONE. No print method anywhere is patched - the hide is"
                     + " not installed at all in this session.");
             }
 

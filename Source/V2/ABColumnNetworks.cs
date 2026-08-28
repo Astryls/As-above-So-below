@@ -976,60 +976,140 @@ namespace AsAboveSoBelow
     [StaticConstructorOnStartup]
     public static class ABForeignPipeLayerHide
     {
-        private static readonly (string hostComp, string layer)[] Layers =
+        /// <summary>
+        /// ⚠ §75.h: THE DUBS FAMILY HAS NO `TakePrintFrom`. §75.d assumed their pipe layers
+        /// were `SectionLayer_Things` subclasses and prefixed that method; the run-#347
+        /// carrier probe showed the patch census containing only vanilla's general layer,
+        /// and decompiling settled why. `Rimefeller.SectionLayer_ThingsPipe` and
+        /// `DubsBadHygiene.SectionLayer_ThingsSewagePipe` (identical shared Dubwise code)
+        /// derive from plain `SectionLayer`, declare no TakePrintFrom at all, and override
+        /// `Regenerate()` to walk the section's cells themselves, calling
+        /// `Building_Pipe.PrintForGrid(SectionLayer)` on each pipe. So the print entry point
+        /// is on the THING, not the layer, and `DeclaredMethod(layer, "TakePrintFrom")` was
+        /// always null - a silent `continue` for two windows. Rule 16, one level deeper than
+        /// it was first applied: count the foreign mod's print METHODS, not just its layers.
+        ///
+        /// ⚠ AND THAT IS WHY THE LAYER ARGUMENT IS INSPECTED RATHER THAN IGNORED. One method
+        /// serves both the normal-view layer AND the host's overlay layers, so a blanket
+        /// refusal would blank the carriers out of the pipe overlays too - the one place
+        /// §75.e requires them to remain (rule 34). The refusal is therefore conditional on
+        /// the layer being a KNOWN normal-view layer, which also fails safe: an unrecognised
+        /// layer prints, so a future rename leaks art rather than hiding connectivity.
+        /// </summary>
+        private static readonly (string hostComp, string pipeType, string[] normalLayers)[] Hosts =
         {
-            ("DubsBadHygiene.HygienePipeMapComp", "DubsBadHygiene.SectionLayer_ThingsSewagePipe"),
-            ("Rimefeller.MapComponent_Rimefeller", "Rimefeller.SectionLayer_ThingsPipe"),
-            ("Rimefeller.MapComponent_Rimefeller", "Rimefeller.SectionLayer_SewagePipe"),
-            ("Rimatomics.MapComponent_Rimatomics", "Rimatomics.SectionLayer_ThingsPipe"),
+            ("DubsBadHygiene.HygienePipeMapComp", "DubsBadHygiene.Building_Pipe",
+                new[] { "DubsBadHygiene.SectionLayer_ThingsSewagePipe" }),
+            ("Rimefeller.MapComponent_Rimefeller", "Rimefeller.Building_Pipe",
+                new[] { "Rimefeller.SectionLayer_ThingsPipe", "Rimefeller.SectionLayer_SewagePipe" }),
+            ("Rimatomics.MapComponent_Rimatomics", "Rimatomics.Building_Pipe",
+                new[] { "Rimatomics.SectionLayer_ThingsPipe" }),
         };
+
+        /// <summary>Layer types whose print is a NORMAL-VIEW draw. Everything absent from
+        /// this set - every overlay, every layer we have never heard of - prints.</summary>
+        private static readonly HashSet<Type> NormalViewLayers = new HashSet<Type>();
+
+        /// <summary>
+        /// ⚠ THE CENSUS EXISTS BECAUSE THE WARNING WAS NEVER SEEN. The rule-33 tripwire DID
+        /// fire for both hosts, correctly, every session since §75.d - but it fires from
+        /// [StaticConstructorOnStartup], which is before the diagnostic bridge attaches, so
+        /// it only ever reached Player.log. A tripwire nobody reads is not a tripwire.
+        /// Rule 15: assert always, narrate on request - this string is the narration, read
+        /// back by `AB2: network scan` and the carrier probe, in game, on demand.
+        /// </summary>
+        internal static string Census = "(not built)";
 
         static ABForeignPipeLayerHide()
         {
+            StringBuilder sb = new StringBuilder();
             HarmonyMethod prefix = new HarmonyMethod(
-                AccessTools.DeclaredMethod(typeof(ABForeignPipeLayerHide), nameof(ForeignPrefix)));
-            Dictionary<string, int> patchedPerHost = new Dictionary<string, int>();
-            foreach ((string hostComp, string layerName) in Layers)
+                AccessTools.DeclaredMethod(typeof(ABForeignPipeLayerHide),
+                    nameof(PrintForGridPrefix)));
+            HashSet<MethodInfo> alreadyPatched = new HashSet<MethodInfo>();
+            foreach ((string hostComp, string pipeTypeName, string[] normalLayers) in Hosts)
             {
-                if (!patchedPerHost.ContainsKey(hostComp))
+                if (AccessTools.TypeByName(hostComp) == null)
                 {
-                    patchedPerHost[hostComp] = AccessTools.TypeByName(hostComp) != null ? 0 : -1;
+                    continue; // host not installed: silent, per the ghost-warning rule
                 }
-                Type layer = AccessTools.TypeByName(layerName);
-                if (layer == null)
+                int layersFound = 0;
+                foreach (string layerName in normalLayers)
                 {
-                    continue;
+                    Type lt = AccessTools.TypeByName(layerName);
+                    if (lt != null)
+                    {
+                        NormalViewLayers.Add(lt);
+                        layersFound++;
+                    }
                 }
-                MethodInfo m = AccessTools.DeclaredMethod(layer, "TakePrintFrom");
-                if (m == null)
+                Type pipeType = AccessTools.TypeByName(pipeTypeName);
+                MethodInfo m = pipeType == null
+                    ? null
+                    : AccessTools.Method(pipeType, "PrintForGrid");
+                bool bound = false;
+                if (m != null)
                 {
-                    continue; // not a things-print layer in this version; fine
+                    if (!alreadyPatched.Add(m))
+                    {
+                        bound = true; // shared base method, already carrying our prefix
+                    }
+                    else
+                    {
+                        try
+                        {
+                            HarmonyBoot.Harmony.Patch(m, prefix: prefix);
+                            bound = true;
+                        }
+                        catch (Exception e)
+                        {
+                            sb.Append("    ").Append(pipeTypeName)
+                                .Append(".PrintForGrid PATCH THREW: ").AppendLine(e.Message);
+                        }
+                    }
                 }
-                try
+                sb.Append("    ").Append(hostComp).Append(": printMethod=")
+                    .Append(bound ? pipeTypeName + ".PrintForGrid" : "NOT BOUND")
+                    .Append("  normalViewLayers=").Append(layersFound)
+                    .Append('/').Append(normalLayers.Length).AppendLine();
+                if (!bound || layersFound == 0)
                 {
-                    HarmonyBoot.Harmony.Patch(m, prefix: prefix);
-                    patchedPerHost[hostComp]++;
-                }
-                catch (Exception e)
-                {
-                    Log.Warning(ABLog.Tag + " could not patch " + layerName + ".TakePrintFrom: " + e.Message);
+                    // Rule 33 unchanged in spirit, but it now describes the REAL failure:
+                    // either the print method or the layer identities went missing.
+                    Log.Warning(ABLog.Tag + " " + hostComp + " is loaded but its carrier hide"
+                        + " is incomplete (printMethod bound: " + bound + ", normal-view"
+                        + " layers resolved: " + layersFound + "/" + normalLayers.Length
+                        + "). Carrier art may stay visible in normal view for this mod."
+                        + " Run 'AB2: network scan' in game for the full census.");
                 }
             }
-            foreach (KeyValuePair<string, int> kv in patchedPerHost)
-            {
-                if (kv.Value == 0)
-                {
-                    Log.Warning(ABLog.Tag + " " + kv.Key + " is loaded but none of its pipe layers could be"
-                        + " patched; carrier art may stay visible at wall risers for this mod"
-                        + " (layer renamed in an update?).");
-                }
-            }
+            Census = sb.Length == 0
+                ? "    (no Dubs-family host installed)\n"
+                : sb.ToString();
         }
 
-        /// <summary>Index-bound (__0) so a foreign parameter name cannot break the bind.</summary>
-        private static bool ForeignPrefix(Thing __0)
+        /// <summary>
+        /// Index-bound (__0) so a foreign parameter name cannot break the bind. `__instance`
+        /// is declared as `Thing`, a base of every host's Building_Pipe, so no foreign type
+        /// appears in the signature; `SectionLayer` is vanilla and therefore safe to name.
+        /// </summary>
+        private static bool PrintForGridPrefix(Thing __instance, SectionLayer __0)
         {
-            return Patch_SectionLayer_ABHideCarrierUnderColumn.ShouldPrint(__0);
+            try
+            {
+                if (__instance == null
+                    || Patch_SectionLayer_ABHideCarrierUnderColumn.ShouldPrint(__instance))
+                {
+                    return true; // not a carrier: never our business
+                }
+                // A carrier. Refuse ONLY on the host's normal-view layers; every overlay
+                // keeps drawing it, which is where connectivity is read (rule 34).
+                return __0 == null || !NormalViewLayers.Contains(__0.GetType());
+            }
+            catch
+            {
+                return true; // a cosmetic hide must never break a foreign mod's rendering
+            }
         }
     }
 
@@ -1056,6 +1136,9 @@ namespace AsAboveSoBelow
                 + EccentricGridCompat.CounterReport()
                 + "\n  HOST ART BINDING (§62.N - a carrier draws with the host's own graphic):\n"
                 + ABPipeGraphics.CounterReport()
+                + "\n  FOREIGN PIPE PRINT BINDING (§75.h - the startup tripwire, read back in"
+                + " game because it fires before the bridge attaches):\n"
+                + ABForeignPipeLayerHide.Census
                 + "\n  COLUMNS ON THIS MAP (rule 31 - name the clause that declined):\n"
                 + Building_ABColumn.ColumnReport(Find.CurrentMap));
         }
