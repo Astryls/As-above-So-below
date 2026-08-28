@@ -317,9 +317,83 @@ namespace AsAboveSoBelow
                 far = far,
                 expiresAtTick = Find.TickManager.TicksGame + TransitTimeoutTicks
             };
-            dest = near;
+            // §78b: WALK TO THE WAY IN, NOT TO THE MIDDLE. The links are directional - the
+            // art leads the way it faces and is entered from the opposite edge - so pathing
+            // at the building itself let the pawn arrive on whichever side the route
+            // happened to favour, i.e. usually across a handrail. EntryCellFor returns
+            // IntVec3.Invalid whenever that cell is not usable, and then this falls back to
+            // the old behaviour verbatim.
+            IntVec3 entry = EntryCellFor(near, pawn);
+            dest = entry.IsValid ? new LocalTargetInfo(entry) : (LocalTargetInfo)near;
             peMode = PathEndMode.OnCell;
             return true;
+        }
+
+        /// <summary>
+        /// The cell a pawn should stand in to use this link: one step beyond the footprint,
+        /// on the edge OPPOSITE the link's facing, centred on the run.
+        ///
+        /// ⚠⚠ EVERY FAILURE RETURNS Invalid AND THE CALLER FALLS BACK. A link whose entry
+        /// cell is walled in, out of bounds or unreachable must stay USABLE - degrading to
+        /// a slightly wrong-looking animation is fine, refusing to path is the
+        /// ladder-to-nowhere class of bug and is not.
+        ///
+        /// ⚠ CanReach IS THE EXPENSIVE CLAUSE AND IT IS ORDERED LAST. The cheap tests
+        /// (bounds, standable) reject the walled-in case without touching the reachability
+        /// cache. This runs inside a StartPath prefix, but only on the cross-band path that
+        /// was already about to do a wormhole lookup, and CanReach is a read-only cache
+        /// query - it cannot re-enter StartPath.
+        ///
+        /// ⚠ THE EDGE IS TAKEN FROM OccupiedRect, NOT FROM Position. For an even-sized
+        /// footprint (the 2x2 stairs and elevator) Position is not the geometric centre -
+        /// GenAdj.AdjustForRotation shifts it - so deriving the edge arithmetically from
+        /// Position lands a cell off on half the rotations.
+        /// </summary>
+        private static IntVec3 EntryCellFor(Building_Door link, Pawn pawn)
+        {
+            if (link == null || pawn == null)
+            {
+                return IntVec3.Invalid;
+            }
+            Map map = link.Map;
+            if (map == null)
+            {
+                return IntVec3.Invalid;
+            }
+            CellRect r = link.OccupiedRect();
+            IntVec3 face = link.Rotation.FacingCell;
+            IntVec3 c;
+            if (face.z > 0)
+            {
+                c = new IntVec3(r.CenterCell.x, 0, r.minZ - 1);
+            }
+            else if (face.z < 0)
+            {
+                c = new IntVec3(r.CenterCell.x, 0, r.maxZ + 1);
+            }
+            else if (face.x > 0)
+            {
+                c = new IntVec3(r.minX - 1, 0, r.CenterCell.z);
+            }
+            else
+            {
+                c = new IntVec3(r.maxX + 1, 0, r.CenterCell.z);
+            }
+            if (!c.InBounds(map) || !c.Standable(map))
+            {
+                return IntVec3.Invalid;
+            }
+            // Must be on the pawn's own side of the wormhole, or we would be asking it to
+            // path to a cell it can only get to by crossing the link it has not crossed yet.
+            if (!ABBands.SameBand(map, pawn.Position, c))
+            {
+                return IntVec3.Invalid;
+            }
+            if (!pawn.CanReach(c, PathEndMode.OnCell, Danger.Deadly))
+            {
+                return IntVec3.Invalid;
+            }
+            return c;
         }
 
         /// <summary>

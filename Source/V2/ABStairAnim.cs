@@ -100,14 +100,26 @@ namespace AsAboveSoBelow
             public int entryTicks;
             public int emergeTicks;
 
-            /// <summary>Pawn draw position -> the NEAR link's drawn centre, in cells.
-            /// Resolved once on the main thread: the pawn is frozen for the entry, and if it
-            /// is not (stagger-immune) the crossing finishes early anyway.</summary>
-            public float baseX, baseZ;
+            /// <summary>ENTRY ONLY. The whole walk, in cells: from where the pawn actually
+            /// stands to just past the drawn mouth. Every entry pose scales this by its own
+            /// easing, so the clip always STARTS at offset zero.
+            ///
+            /// ⚠⚠ THIS REPLACED AN ABSOLUTE "snap the sprite onto the link" OFFSET AND THAT
+            /// WAS A FIELD-REPORTED BUG (§78b): "animation makes pawn teleport into the
+            /// centre of the stairs". The pawn is only required to be within ArriveRadius
+            /// (3 cells) of the anchor, so an offset applied whole on frame one moved the
+            /// sprite up to three cells instantly. Travel, not teleport.</summary>
+            public float travelX, travelZ;
 
-            /// <summary>Entry: the run direction (near.Rotation.FacingCell). Emerge: the
-            /// EXIT direction at the far end (-far.Rotation.FacingCell). Two different
-            /// vectors from two different buildings - rule 42.</summary>
+            /// <summary>Unit direction of the CURRENT phase's motion: the entry walk, or
+            /// the exit walk at the far end. Drives facing and the lateral rail offset.
+            ///
+            /// ⚠ DERIVED FROM THE ACTUAL GEOMETRY, NOT FROM Rotation.FacingCell. The link's
+            /// axis is the right answer only when the pawn is standing on the link's entry
+            /// side, and nothing yet guarantees that (see EntryCellFor - it has a fallback,
+            /// and the fallback must not produce a pawn walking one way while facing the
+            /// other). Taking the direction from the vector we are actually going to move
+            /// along makes every case self-consistent.</summary>
             public float dirX, dirZ;
 
             /// <summary>Emerge only: the far link's drawn centre relative to the landing
@@ -310,20 +322,32 @@ namespace AsAboveSoBelow
             c.entryTicks = half;
             c.emergeTicks = half;
 
-            // ⚠ FORWARD COMES FROM THE LINK. Rotation.FacingCell is the direction the run
-            // leads; the pawn entered from the opposite edge and travels along it.
-            IntVec3 face = near.Rotation.FacingCell;
-            c.dirX = face.x;
-            c.dirZ = face.z;
-
-            // Where the sprite has to be drawn: the link's own drawn centre, offset by the
-            // art's bounding-box centre, expressed relative to wherever the pawn actually
-            // came to rest (which is within ArriveRadius, not necessarily on the anchor).
+            // The target: the link's drawn centre, shifted by the art's bounding-box centre
+            // so the walk lands on the treads that are actually painted rather than on the
+            // cell they nominally occupy.
             Vector2 a = ArtOff(near);
             Vector3 mouth = near.TrueCenter();
             Vector3 pawnAt = p.Position.ToVector3Shifted();
-            c.baseX = mouth.x + a.x - pawnAt.x;
-            c.baseZ = mouth.z + a.y - pawnAt.z;
+            float tx = mouth.x + a.x - pawnAt.x;
+            float tz = mouth.z + a.y - pawnAt.z;
+            float len = Mathf.Sqrt(tx * tx + tz * tz);
+            if (len < 0.05f)
+            {
+                // Already standing on the mouth: no vector to take a direction from, so
+                // fall back to the link's own axis.
+                IntVec3 face = near.Rotation.FacingCell;
+                c.dirX = face.x;
+                c.dirZ = face.z;
+            }
+            else
+            {
+                c.dirX = tx / len;
+                c.dirZ = tz / len;
+            }
+            // Overshoot the mouth slightly along the same line, so the pawn is swallowed
+            // rather than stopping dead on top of the opening.
+            c.travelX = tx + c.dirX * 0.45f;
+            c.travelZ = tz + c.dirZ * 0.45f;
 
             clips[p.thingIDNumber] = c;
             PopsStarted++;
@@ -354,22 +378,36 @@ namespace AsAboveSoBelow
             CarriesSeen++;
             c.phase = Phase.Emerge;
             c.phaseStart = Find.TickManager.TicksGame;
-            c.baseX = 0f;
-            c.baseZ = 0f;
+            c.travelX = 0f;
+            c.travelZ = 0f;
             if (far != null)
             {
-                // ⚠ MINUS THE FAR LINK'S FACING. The counterpart carries the SAME Rotation
-                // as the near end (a footprint invariant, see Building_ABStairs2), so its
-                // notch is on the same side: a pawn surfacing here comes up at the DEEP end
-                // of that run and walks out the way it came in one level below.
-                IntVec3 face = far.Rotation.FacingCell;
-                c.dirX = -face.x;
-                c.dirZ = -face.z;
+                // The far link's drawn mouth, relative to the cell the pawn was set down
+                // on. The emerge walks from there to zero, so the pawn climbs out of the
+                // opening instead of appearing beside it.
                 Vector2 a = ArtOff(far);
                 Vector3 mouth = far.TrueCenter();
                 Vector3 landAt = landing.ToVector3Shifted();
                 c.ox = mouth.x + a.x - landAt.x;
                 c.oz = mouth.z + a.y - landAt.z;
+                // Exit direction = mouth -> landing, i.e. the walk we are about to draw.
+                // Equal to -far.Rotation.FacingCell whenever the landing is on the far
+                // link's entry side (rule 42); taken from the real vector so that it stays
+                // honest when LandingCell had to settle for somewhere else.
+                float ex = -c.ox;
+                float ez = -c.oz;
+                float el = Mathf.Sqrt(ex * ex + ez * ez);
+                if (el < 0.05f)
+                {
+                    IntVec3 face = far.Rotation.FacingCell;
+                    c.dirX = -face.x;
+                    c.dirZ = -face.z;
+                }
+                else
+                {
+                    c.dirX = ex / el;
+                    c.dirZ = ez / el;
+                }
             }
             clips[p.thingIDNumber] = c;
         }
@@ -524,10 +562,6 @@ namespace AsAboveSoBelow
             {
                 float p = c.entryTicks > 0 ? Mathf.Clamp01(age / (float)c.entryTicks) : 1f;
                 pose = EntryPose(c, p);
-                // The pawn came to rest wherever it could reach; the clip is authored about
-                // the LINK. This is the only term that moves the sprite off the pawn's cell.
-                pose.offX += c.baseX;
-                pose.offZ += c.baseZ;
                 return true;
             }
             float q = c.emergeTicks > 0 ? Mathf.Clamp01(age / (float)c.emergeTicks) : 1f;
@@ -548,15 +582,18 @@ namespace AsAboveSoBelow
             {
                 case ClipKind.Grand:
                 {
-                    const float rail = 0.45f;
                     float pe = StepEase(p, 6);
                     int beat = Mathf.Min(5, (int)(p * 6f));
                     float f = Mathf.Clamp01(p * 6f - beat);
                     float hop = Mathf.Sin(f * Mathf.PI);
                     float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
+                    // Colonists keep to one side of a wide staircase. Eased in over the
+                    // first quarter rather than applied flat, or the clip opens with a
+                    // half-cell sideways jolt.
+                    float rail = 0.45f * Smooth(Mathf.Min(1f, p / 0.25f));
                     o.sx = o.sz = s * (1f + hop * 0.04f);
-                    o.offX = c.dirX * (1.30f * pe - 0.65f) - c.dirZ * rail;
-                    o.offZ = c.dirZ * (1.30f * pe - 0.65f) + c.dirX * rail + hop * 0.05f;
+                    o.offX = c.travelX * pe - c.dirZ * rail;
+                    o.offZ = c.travelZ * pe + c.dirX * rail + hop * 0.05f;
                     o.rot = ((beat & 1) == 0 ? 1f : -1f) * 5f * hop;
                     break;
                 }
@@ -570,11 +607,12 @@ namespace AsAboveSoBelow
                     float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
                     o.sx = s * (1f - 0.05f * haul);
                     o.sz = s * (1f + 0.07f * haul);
-                    // A ladder crossing has NO lateral travel, which is what makes it the
-                    // cleanest midpoint match of the four: the two halves meet on the same
-                    // pixel rather than merely near it.
-                    o.offX = c.dirX * 0.20f * pe + sign * 0.07f * haul;
-                    o.offZ = c.dirZ * 0.20f * pe;
+                    // A ladder crossing has NO lateral travel of its own, which is what
+                    // makes it the cleanest midpoint match of the four: the two halves meet
+                    // on the same pixel rather than merely near it. The only travel is the
+                    // step onto the rungs from wherever the pawn stopped.
+                    o.offX = c.travelX * pe + sign * 0.07f * haul;
+                    o.offZ = c.travelZ * pe;
                     o.rot = sign * 7f * haul;
                     break;
                 }
@@ -584,8 +622,8 @@ namespace AsAboveSoBelow
                     if (p < board)
                     {
                         float m = Smooth(p / board);
-                        o.offX = c.dirX * 0.45f * m;
-                        o.offZ = c.dirZ * 0.45f * m;
+                        o.offX = c.travelX * m;
+                        o.offZ = c.travelZ * m;
                         o.sz = 1f - 0.05f * Mathf.Sin(m * Mathf.PI);
                         break;
                     }
@@ -596,8 +634,8 @@ namespace AsAboveSoBelow
                     o.sx = o.sz = s2;
                     // Realtime, not q: the shudder is a property of the machine, and tying
                     // it to clip progress makes it step visibly at low game speeds.
-                    o.offX = c.dirX * 0.45f + Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f;
-                    o.offZ = c.dirZ * 0.45f;
+                    o.offX = c.travelX + Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f;
+                    o.offZ = c.travelZ;
                     break;
                 }
                 default:
@@ -608,10 +646,10 @@ namespace AsAboveSoBelow
                     float hop = Mathf.Sin(f * Mathf.PI);
                     float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
                     o.sx = o.sz = s * (1f + hop * 0.05f);
-                    // Starts 0.45 cells SHORT of the mouth and ends 0.45 past it: the two
-                    // halves are authored to meet, not to start and stop.
-                    o.offX = c.dirX * (0.90f * pe - 0.45f);
-                    o.offZ = c.dirZ * (0.90f * pe - 0.45f) + hop * 0.05f;
+                    // Zero at p=0 - the pawn walks in from where it is standing - and ends
+                    // 0.45 cells past the mouth, so the two halves meet under the opening.
+                    o.offX = c.travelX * pe;
+                    o.offZ = c.travelZ * pe + hop * 0.05f;
                     o.rot = ((tread & 1) == 0 ? 1f : -1f) * 6f * hop;
                     break;
                 }
@@ -639,8 +677,11 @@ namespace AsAboveSoBelow
                     float f = Mathf.Clamp01(w * 4f - beat);
                     float hop = Mathf.Sin(f * Mathf.PI);
                     o.sx = o.sz = grow * (1f + hop * 0.04f);
-                    o.offX = c.ox * (1f - pe) - c.dirZ * rail * (1f - pe * 0.5f);
-                    o.offZ = c.oz * (1f - pe) + c.dirX * rail * (1f - pe * 0.5f) + hop * 0.05f;
+                    // (1 - pe), NOT (1 - pe*0.5): the lateral term has to resolve to zero by
+                    // the end or the clip hands back a pawn standing a quarter-cell off its
+                    // own tile, which snaps the moment the pose stops being applied.
+                    o.offX = c.ox * (1f - pe) - c.dirZ * rail * (1f - pe);
+                    o.offZ = c.oz * (1f - pe) + c.dirX * rail * (1f - pe) + hop * 0.05f;
                     o.rot = ((beat & 1) == 0 ? -1f : 1f) * 5f * hop;
                     break;
                 }
@@ -702,6 +743,67 @@ namespace AsAboveSoBelow
                 }
             }
             return o;
+        }
+    }
+
+    /// <summary>
+    /// THE NAME LABEL HAS TO GO WHERE THE SPRITE WENT.
+    ///
+    /// Field report (§78b): "their nameplate is in the wrong location". Every overlay in
+    /// the game positions itself from `thing.DrawPos` - the pawn's TRUE position - while a
+    /// transit clip draws the sprite somewhere else entirely, by design. So the label sat
+    /// on the cell the pawn legally occupies while the pawn appeared to be inside the
+    /// stairwell, and the further the clip travelled the more obviously they diverged.
+    ///
+    /// §73 solved this by HIDING the label for the duration. Moving it is strictly better:
+    /// the player keeps the name, and it keeps agreeing with the body.
+    ///
+    /// ⚠ THE DELTA IS COMPUTED IN SCREEN SPACE, NOT ADDED IN WORLD SPACE, because the
+    /// vanilla result has already been projected AND vertically flipped
+    /// (`result.y = screenHeight - result.y`). Projecting both endpoints and taking the
+    /// difference keeps the patch correct at any zoom without duplicating that flip - but
+    /// it does mean the y term subtracts.
+    ///
+    /// ⚠ EVERY overlay routed through this helper moves, which is what we want: label,
+    /// and anything else vanilla or a mod positions with it.
+    /// </summary>
+    [HarmonyPatch(typeof(GenMapUI), nameof(GenMapUI.LabelDrawPosFor),
+        new[] { typeof(Thing), typeof(float) })]
+    public static class Patch_GenMapUI_ABClipLabel
+    {
+        private static void Postfix(Thing thing, ref Vector2 __result)
+        {
+            try
+            {
+                if (!(thing is Pawn p))
+                {
+                    return;
+                }
+                if (!ABStairAnim.TryGetPose(p, out ABStairAnim.ClipPose pose))
+                {
+                    return;
+                }
+                if (pose.offX == 0f && pose.offZ == 0f)
+                {
+                    return;
+                }
+                Camera cam = Find.Camera;
+                if (cam == null)
+                {
+                    return;
+                }
+                Vector3 at = p.DrawPos;
+                Vector3 to = at + new Vector3(pose.offX, 0f, pose.offZ);
+                Vector3 sa = cam.WorldToScreenPoint(at);
+                Vector3 sb = cam.WorldToScreenPoint(to);
+                float scale = Prefs.UIScale;
+                __result.x += (sb.x - sa.x) / scale;
+                __result.y -= (sb.y - sa.y) / scale;
+            }
+            catch
+            {
+                // Never lose labels over a cosmetic effect.
+            }
         }
     }
 }
