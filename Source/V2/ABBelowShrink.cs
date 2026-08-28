@@ -60,14 +60,16 @@ namespace AsAboveSoBelow
                 // shrink alone must not count, or the counter reads healthy on any map
                 // with a see-below pass. Interlocked inside: worker threads (§61/§14).
                 ABStairAnim.NoteAnimApplied();
-                if (pose.hide)
+                // ⚠ THE SECOND CHANNEL, AND IT SAT UNUSED FOR TWO WINDOWS (§77a, rule 41).
+                // PawnDrawParms.facing is a plain writable Rot4 on the struct we already
+                // have by ref. Overriding it here rather than touching pawn.Rotation means
+                // nothing that reads Rotation for GAMEPLAY - shooting, interaction spots,
+                // Pawn_RotationTracker - sees the override, and it reverts by itself the
+                // instant the clip stops applying. PawnDrawParms.ShouldRecache already
+                // compares facing, so the render cache invalidates correctly on its own.
+                if (pose.facing != ABStairAnim.FaceNone)
                 {
-                    // The ghost pass owns this pawn's sprite; its normal draw at the
-                    // landing collapses to a dot. No alpha path exists, so scale IS the
-                    // hide mechanism - the cache veto guarantees the matrix is honored.
-                    __result.matrix *= Matrix4x4.TRS(Vector3.zero, Quaternion.identity,
-                        new Vector3(0.002f, 1f, 0.002f));
-                    return;
+                    __result.facing = new Rot4(pose.facing);
                 }
                 // Right-multiplied: the transform happens in the pawn's LOCAL space, so it
                 // moves and scales about its own draw position and stays on its cell. A

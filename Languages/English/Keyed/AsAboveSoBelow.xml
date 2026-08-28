@@ -158,5 +158,5 @@ You can turn this back off at any time; existing colonies keep the size they wer
 
   <!-- Transit clips: stairs / ladder / elevator crossing animations. -->
   <AB_TransitAnim>Transit animations</AB_TransitAnim>
-  <AB_TransitAnimTip>Pawns play a short clip when crossing levels: stairs are taken tread by tread, ladders get a peek-and-drop climb, and the freight elevator clanks, drops and bounces. Adds a brief hold after each crossing while the clip plays (about half a second; longer for multi-level elevator rides). Off: the old instant hop, with no clips and no hold.</AB_TransitAnimTip>
+  <AB_TransitAnimTip>Pawns take a moment to cross between levels instead of blinking across. They walk into the stairwell and sink out of sight, then climb out of the matching stairwell on the far level, facing the way they are travelling. Stairs take about 1.3 seconds, a grand staircase 1.5, a ladder 1.9, and an elevator longer the further it rides. Off: the instant hop, with no clip and no delay.</AB_TransitAnimTip>
 </LanguageData>

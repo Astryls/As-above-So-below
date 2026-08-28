@@ -8,93 +8,113 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// §73 TRANSIT CLIPS. Per-link-type crossing animations, user-picked from the mockups:
-    /// STAIRS = "Tread steps" (five discrete hops along the run), LADDER = "Peek and drop"
-    /// (a lean-over beat, then two big pulls), ELEVATOR = "Freight lift" (clank, fast drop
-    /// with shake, landing bounce). Grand stairs share the stairs clip.
+    /// §78 TRANSIT CLIPS, "TRAVELER" - the user-picked language from the second round of
+    /// motion studies (mockups/anim-C-traveler.html), with the delay UN-inverted.
     ///
-    /// ⚠⚠ THE RULE THIS FILE EXISTS AROUND (run #297): NOTHING COSMETIC MAY SIT ON THE CODE
-    /// PATH THAT DECIDES WHETHER A TRANSIT HAPPENS. A previous version held the pawn at the
-    /// stairwell by gating TryConsumeArrival (ReadyToCarry): that suppressed vanilla's
-    /// PatherArrived, the leg never completed, the job re-issued StartPath, TrySegment
-    /// re-segmented, and cross-level movement read as "the order does nothing". That method
-    /// is deleted; its lesson is this design:
+    /// ⚠⚠ READ THIS BEFORE TOUCHING THE TIMING. §73 shipped an INVERTED delay: the carry was
+    /// instant and the latency landed afterwards, as a ghost redrawn at the origin mouth
+    /// while the real pawn was already at the destination. That existed because an earlier
+    /// attempt to hold the pawn BEFORE the hop broke cross-level movement outright (run
+    /// #297): it held by gating TryConsumeArrival/ReadyToCarry, which suppressed vanilla's
+    /// PatherArrived, so the leg never completed, the job re-issued StartPath, TrySegment
+    /// re-segmented, and the order read as doing nothing.
     ///
-    ///   THE DELAY IS INVERTED. The carry stays byte-for-byte instant. The user-accepted
-    ///   latency lands AFTER the hop: the arrived pawn is briefly immobilized on the far
-    ///   side (vanilla StaggerFor - job state untouched, self-clearing) while a GHOST plays
-    ///   the entry clip back at the origin mouth. Then the emerge clip plays over the freed
-    ///   pawn, exactly like the old pop-out did.
+    /// The delay is now BEFORE the hop again, by user request, and the #297 trap is avoided
+    /// by a different mechanism, which lives in ABWormholePather.BeginCrossing:
     ///
-    /// ⚠ STAGGER IS NOT A GUARANTEE. StaggerFor scales by StaggerDurationFactor and Anomaly
-    /// awoken corpses refuse it outright, so the hold is aspirational per-pawn. Every phase
-    /// therefore keys off ACTUAL state: the moment the pawn leaves its landing cell the
-    /// ghost is cut and the emerge clip starts. A stagger-immune pawn simply gets a shorter
-    /// show; nothing desyncs.
+    ///   THE TRANSIT DECISION IS STILL MADE AND CONSUMED IN THE SAME TICK IT ALWAYS WAS.
+    ///   The record leaves `pending` exactly as before; nothing gates the carry. What is
+    ///   deferred is only the POSITION WRITE, by a self-contained timer that cannot decline
+    ///   to fire. The pawn is held by StopDead + StaggerFor, not by refusing an arrival.
     ///
-    /// ⚠ WHY THE GHOST IS A SEPARATE DRAW PASS AND NOT A MATRIX TRANSLATION. Bands are
-    /// regions of one map and the camera is clamped to the viewed band, so during the ghost
-    /// window the pawn (already at the destination) is CULLED whenever the player watches
-    /// the origin band - there is no draw call to translate. DrawGhosts therefore invokes
-    /// the pawn's three DynamicDrawPhases at the origin mouth, the exact discipline
-    /// ABBelowDynamicDraw established (including the "all three phases or you draw stale"
-    /// lesson and the arm/disarm-in-a-finally rule). While a clip is in its ghost window the
-    /// pawn's NORMAL draw at the landing cell is suppressed to a dot by the pose's hide
-    /// flag, and ABBelowDynamicDraw skips ghosting pawns so the see-below pass cannot draw
-    /// a second copy through the stair opening.
+    /// The payoff is that this file gets much smaller and much more honest:
+    ///  - NO GHOST. During the entry clip the pawn is genuinely at the origin, so its own
+    ///    ordinary draw plays the clip. DrawGhosts and the hide pose are retired.
+    ///  - NO MISMATCH. §73 shipped a known, user-accepted lie: for the whole clip the pawn
+    ///    was logically at the destination (hittable there, turret-targetable) while drawn a
+    ///    band away. That is gone - body and sprite agree on every tick again.
+    ///  - THE MIDPOINT IS REAL. Traveler was authored so the two halves match in scale and
+    ///    position at the crossover; the teleport now happens exactly at that frame, so the
+    ///    camera cut (ABBandView.FollowTransit) lands on a matched pose.
     ///
-    /// ⚠ KNOWN HONEST MISMATCH (user-accepted): during the ghost window the pawn is
-    /// LOGICALLY at the destination - hittable there, turret-targetable - while its sprite
-    /// is at the origin mouth one band away. This is the mirror-image cost of never
-    /// delaying the real crossing. Priced fallback if the field hates it: skip ghost+hold
-    /// for hostile pawns (one faction check in NotifyTransited).
+    /// ⚠ NO ALPHA, STILL. Re-verified against 1.6: PawnDrawParms.tint is writable, but pawn
+    /// materials are cutout, so alpha only lands if PawnRenderFlags.Invisible is also set -
+    /// which routes every node through InvisibilityMatPool.GetInvisibleMat, a distortion
+    /// shader with a hard-coded cyan multiply. That is a cloak, not a fade. Scale remains
+    /// the only vanish channel.
     ///
-    /// ⚠ IT COMPOSES WITH THE DEPTH CUE, SAME AS BEFORE. Pose and depth shrink multiply in
-    /// the ONE GetDrawParms postfix (ABBelowShrink); a second patch on that method would
-    /// silently depend on patch order forever.
+    /// ⚠ FACING IS A REAL CHANNEL AND WE NEVER USED IT (rule 41). PawnDrawParms.facing is a
+    /// plain writable Rot4 on the struct our GetDrawParms postfix already takes by ref.
+    /// Nobody set it, so a pawn walking north into a stairwell kept whatever the pather left
+    /// it with - usually south, i.e. walking backwards down the stairs.
     ///
-    /// ⚠ NO ALPHA. There is no tint path, so clips must read scale-only: entries end with a
-    /// fast final shrink ("swallowed by the opening") instead of a fade, and from-above
-    /// arrivals pop in through a fast scale ramp instead of a fade-in.
+    /// ⚠ FORWARD IS A PROPERTY OF THE LINK, NEVER OF THE ARRIVAL (rule 42). The art leads
+    /// the way it faces and is entered from the opposite edge (measured: every *_south
+    /// sprite has its notch on its NORTH edge). The old code derived the glide from
+    /// `near.Position - prePos`, the direction the pawn happened to come from, which walked
+    /// it through the handrail on three approaches out of four. And the FAR end is a
+    /// DIFFERENT link with its own axis: the counterpart shares this one's Rotation (a
+    /// footprint invariant - see Building_ABStairs2), so a pawn surfacing there arrives at
+    /// the deep end of that run and walks out along MINUS its facing.
     /// </summary>
     public static class ABStairAnim
     {
-        public enum ClipKind { Stairs, Ladder, Elevator }
+        public enum ClipKind { Stairs, Grand, Ladder, Elevator }
 
-        // ---- durations (ticks). Mockup defaults, user-approved. -------------
-        private const int StairsEntryTicks = 26;
-        private const int StairsHoldTicks = 6;
-        private const int StairsEmergeTicks = 26;
+        /// <summary>ClipPose.facing values. Match Rot4's AsInt; -1 means "leave the pawn's
+        /// own facing alone".</summary>
+        public const int FaceNone = -1;
+        public const int FaceNorth = 0;
+        public const int FaceEast = 1;
+        public const int FaceSouth = 2;
+        public const int FaceWest = 3;
 
-        private const int LadderEntryTicks = 40;   // 6 mount/peek + 34 climb
-        private const float LadderMountFrac = 0.15f;
-        private const int LadderHoldTicks = 8;
-        private const int LadderEmergeTicks = 30;
+        // ---- durations (ticks) ------------------------------------------------
+        // ⚠ THESE ARE THE ONE KNOB, AND THEY WERE CHOSEN, NOT GUESSED. The user watched
+        // the Traveler study at 0.30 playback and approved that pacing. In the study both
+        // halves played SIMULTANEOUSLY inside one window; sequentially they cannot, so the
+        // approved window is split evenly between them. That preserves the felt length of
+        // the whole crossing (stairs 1.33s) at the cost of each half's curve running twice
+        // as fast as it did on screen. If the motion now reads hurried rather than the
+        // crossing reading long, DOUBLE these - that is the other defensible reading of the
+        // same approval, and it costs 2.67s per staircase.
+        private const int StairsHalf = 40;
+        private const int GrandHalf = 46;
+        private const int LadderHalf = 56;
 
-        private const int ElevBoardTicks = 8;
-        private const int ElevPerLevelTicks = 10;
+        /// <summary>Elevator rides scale with distance, but sub-linearly and capped: a
+        /// sky-to-basement ride is three times the levels, not three times the patience.</summary>
+        private const int ElevHalfBase = 50;
+        private const int ElevHalfPerLevel = 14;
+        private const int ElevHalfMax = 78;
 
-        // ---- scale grammar ----------------------------------------------------
-        private const float ScaleBelow = 0.32f;    // the shipped MinScale, kept
-        private const float ScaleAbove = 1.14f;
-        private const float ElevScaleBelow = 0.25f;
-        private const float ElevScaleAbove = 1.15f;
+        private enum Phase { Entry, Emerge }
 
         private struct Clip
         {
             public Pawn pawn;
             public ClipKind kind;
-            public bool up;              // journey direction: true = to a higher band
-            public int startTick;
-            public int entryTicks;       // ghost window at the origin mouth
-            public int holdTicks;        // hidden gap (nobody drawn anywhere)
+            public bool up;
+            public Phase phase;
+            public int phaseStart;
+            public int entryTicks;
             public int emergeTicks;
-            public IntVec3 origin;       // near anchor cell: where the ghost is drawn
-            public IntVec3 landing;      // where the pawn really is
-            public IntVec3 farAnchor;    // far mouth: emerge slides from here to landing
-            public Vector3 glideDir;     // unit-ish "into the mouth" direction at the origin
-            public int emergeStart;      // age (ticks) when the emerge began; -1 while ghosting
-            public bool dustDone;        // elevator landing puff fired
+
+            /// <summary>Pawn draw position -> the NEAR link's drawn centre, in cells.
+            /// Resolved once on the main thread: the pawn is frozen for the entry, and if it
+            /// is not (stagger-immune) the crossing finishes early anyway.</summary>
+            public float baseX, baseZ;
+
+            /// <summary>Entry: the run direction (near.Rotation.FacingCell). Emerge: the
+            /// EXIT direction at the far end (-far.Rotation.FacingCell). Two different
+            /// vectors from two different buildings - rule 42.</summary>
+            public float dirX, dirZ;
+
+            /// <summary>Emerge only: the far link's drawn centre relative to the landing
+            /// cell, i.e. the mouth the pawn rose out of.</summary>
+            public float ox, oz;
+
+            public bool dustDone;
         }
 
         public struct ClipPose
@@ -102,40 +122,25 @@ namespace AsAboveSoBelow
             public float offX, offZ;     // cells, applied in the pawn's local draw space
             public float rot;            // degrees about the up axis
             public float sx, sz;         // scale multipliers
-            public bool hide;            // suppress this draw to a dot (ghost is elsewhere)
+            public int facing;           // -1 = leave vanilla facing alone
         }
 
         /// <summary>pawn id -> live clip. Empty almost always. Written ONLY from the main
-        /// thread (notify / sweep / clear); read from Unity job worker threads via
+        /// thread (begin / carry / sweep / clear); read from Unity job worker threads via
         /// TryGetPose, which is safe because ticks and draws do not overlap and the count
         /// guard below keeps the common case off the bucket chain entirely.</summary>
         private static readonly Dictionary<int, Clip> clips = new Dictionary<int, Clip>();
 
         private static readonly List<int> tmpExpired = new List<int>();
 
-        /// <summary>Armed to the ghosting pawn's id ONLY around the three draw phases
-        /// DrawGhosts invokes, main thread, cleared in a finally - the BelowDrawOffsetZ
-        /// discipline. TryGetPose returns the ENTRY pose while armed for that pawn and the
-        /// hide pose for every other read of it.</summary>
-        private static int ghostArmedId = -1;
+        private static readonly List<KeyValuePair<int, Clip>> pendingWrites =
+            new List<KeyValuePair<int, Clip>>();
 
         // ---- diagnostics ------------------------------------------------------
         // ⚠ A SILENT EARLY-RETURN IS INDISTINGUISHABLE FROM AN UNIMPLEMENTED FEATURE (§14).
-        // The three counters read as a pipeline: clips started with zero anim frames means
-        // the transit side fires and the draw side eats it; zero clips means the transit
-        // side never fires. Narrated on request via CountersLine (rule 15).
-
-        /// <summary>Clips started, i.e. NotifyTransited calls that produced one.</summary>
         internal static int PopsStarted;
-
-        /// <summary>Ghost passes actually drawn (main thread).</summary>
-        internal static int GhostsDrawn;
-
-        /// <summary>Draw frames on which a clip pose reached a pawn matrix. Worker
-        /// threads - hence Interlocked.</summary>
+        internal static int CarriesSeen;
         internal static int AnimFramesApplied;
-
-        /// <summary>Times IsAnimating forced a pawn off the cached atlas blit.</summary>
         internal static int CacheVetoes;
 
         internal static void NoteAnimApplied()
@@ -151,7 +156,7 @@ namespace AsAboveSoBelow
         internal static string CountersLine()
         {
             return "transit clips: started " + PopsStarted
-                + ", ghost draws " + GhostsDrawn
+                + ", carried " + CarriesSeen
                 + ", anim frames " + AnimFramesApplied
                 + ", cache vetoes " + CacheVetoes
                 + ", live " + clips.Count;
@@ -164,110 +169,209 @@ namespace AsAboveSoBelow
         {
             clips.Clear();
             tmpExpired.Clear();
-            ghostArmedId = -1;
+            pendingWrites.Clear();
             // Counters deliberately NOT reset: per-session diagnostics.
         }
 
+        // =================================================================== art
+
         /// <summary>
-        /// Called the instant a pawn is carried across, AFTER Position/Notify_Teleported -
-        /// a pure observer of the hop, exactly like the old pop-out. Starts the clip and
-        /// applies the post-hop hold.
+        /// ⚠ THE ART DOES NOT SIT CENTRED IN ITS OWN FOOTPRINT. Measured off the shipped
+        /// PNGs (alpha bounding-box centre, in cells, indexed by Rot4.AsInt): AB_StairsDown
+        /// facing south is drawn 0.22 cells NORTH of the cell it occupies, and the grand
+        /// staircase facing north is 0.37 off. A pawn animated to the CELL centre visibly
+        /// walks off the drawn treads, which is the second half of the "walks over the
+        /// railing" report.
+        ///
+        /// ⚠ THE EAST/WEST ROWS ARE HONEST TRANSCRIPTIONS OF BROKEN ART, NOT FIXES. The
+        /// grand staircase's east and west sprites are the north composition unrotated, and
+        /// AB_LadderUp_east is a 0.14-cell sliver drawn 0.30 cells west of its own cell.
+        /// These numbers make the animation agree with what is actually on screen; the art
+        /// itself is the user's to redraw (§77c).
         /// </summary>
-        public static void NotifyTransited(Pawn p, Building_Door near, Building_Door far,
-            IntVec3 prePos, IntVec3 landing)
+        private static readonly Dictionary<string, Vector2[]> ArtOffsets =
+            new Dictionary<string, Vector2[]>
         {
+            { "AB2_StairsDown", new[] { new Vector2(0f, -0.20f), new Vector2(-0.11f, 0.42f),
+                                        new Vector2(0f, 0.22f), new Vector2(0.11f, 0.42f) } },
+            { "AB2_StairsUp", new[] { new Vector2(0f, -0.31f), new Vector2(-0.16f, 0f),
+                                      new Vector2(0f, -0.11f), new Vector2(0.15f, 0f) } },
+            { "AB2_GrandStairsDown", new[] { new Vector2(0f, -0.21f), new Vector2(0f, -0.21f),
+                                             new Vector2(0f, 0.23f), new Vector2(0f, -0.21f) } },
+            { "AB2_GrandStairsUp", new[] { new Vector2(0.02f, -0.37f), new Vector2(0f, 0f),
+                                           new Vector2(0.02f, -0.02f), new Vector2(0f, 0f) } },
+            { "AB2_LadderDown", new[] { new Vector2(0f, 0.04f), new Vector2(0f, -0.03f),
+                                        new Vector2(0f, 0f), new Vector2(0f, -0.03f) } },
+            { "AB2_LadderUp", new[] { new Vector2(0f, 0f), new Vector2(-0.30f, 0f),
+                                      new Vector2(0f, 0f), new Vector2(0.30f, 0f) } }
+        };
+
+        private static Vector2 ArtOff(Thing link)
+        {
+            if (link?.def == null)
+            {
+                return Vector2.zero;
+            }
+            return ArtOffsets.TryGetValue(link.def.defName, out Vector2[] rows)
+                ? rows[link.Rotation.AsInt & 3]
+                : Vector2.zero;
+        }
+
+        // ================================================================ facing
+
+        private static int FaceOf(float dx, float dz)
+        {
+            if (Mathf.Abs(dx) > Mathf.Abs(dz))
+            {
+                return dx > 0f ? FaceEast : FaceWest;
+            }
+            return dz > 0f ? FaceNorth : FaceSouth;
+        }
+
+        private static int Opposite(int f)
+        {
+            switch (f)
+            {
+                case FaceNorth: return FaceSouth;
+                case FaceSouth: return FaceNorth;
+                case FaceEast: return FaceWest;
+                case FaceWest: return FaceEast;
+                default: return FaceNone;
+            }
+        }
+
+        // ================================================================= entry
+
+        private static ClipKind KindOf(Building_ABStairs2 link)
+        {
+            if (link.LinksAllLevels)
+            {
+                return ClipKind.Elevator;
+            }
+            string n = link.def.defName;
+            if (n.IndexOf("Ladder", System.StringComparison.Ordinal) >= 0)
+            {
+                return ClipKind.Ladder;
+            }
+            if (n.IndexOf("Grand", System.StringComparison.Ordinal) >= 0)
+            {
+                return ClipKind.Grand;
+            }
+            return ClipKind.Stairs;
+        }
+
+        /// <summary>
+        /// Start the ENTRY half, played over the pawn where it really is: at the origin,
+        /// before any teleport. Returns false when there is nothing to play, in which case
+        /// the caller must hop instantly (the pre-§78 behaviour).
+        ///
+        /// ⚠ THIS IS A PURE OBSERVER AND IT MUST STAY ONE. It reports how long to hold; it
+        /// never decides WHETHER to cross. ABWormholePather has already consumed the transit
+        /// record by the time this runs.
+        /// </summary>
+        public static bool Begin(Pawn p, Building_Door near, Building_Door far,
+            int fromBand, int toBand, out int entryTicks)
+        {
+            entryTicks = 0;
             if (p == null || Find.TickManager == null || !p.Spawned)
             {
-                return;
+                return false;
             }
             if (ABMod.Settings == null || !ABMod.Settings.transitAnim)
             {
-                return; // toggle off: the old instant hop, no clip, no hold
+                return false; // toggle off: instant hop, no clip, no hold
             }
-            Building_ABStairs2 link = near as Building_ABStairs2;
-            ABBandMap bands = ABBands.CompOf(p.Map);
-            if (link == null || far == null || bands == null || !bands.Banded)
+            if (!(near is Building_ABStairs2 link) || far == null || fromBand == toBand)
             {
-                return;
-            }
-            int fromBand = bands.BandOf(near.Position);
-            int toBand = bands.BandOf(landing);
-            if (fromBand == toBand)
-            {
-                return; // not a cross-band hop; nothing to dramatize
+                return false;
             }
 
             Clip c = default;
             c.pawn = p;
+            c.kind = KindOf(link);
             c.up = toBand > fromBand;
-            c.startTick = Find.TickManager.TicksGame;
-            c.origin = near.Position;
-            c.landing = landing;
-            c.farAnchor = far.Position;
-            c.emergeStart = -1;
+            c.phase = Phase.Entry;
+            c.phaseStart = Find.TickManager.TicksGame;
 
-            if (link.LinksAllLevels)
-            {
-                c.kind = ClipKind.Elevator;
-            }
-            else if (link.def.defName.IndexOf("Ladder", System.StringComparison.Ordinal) >= 0)
-            {
-                c.kind = ClipKind.Ladder;
-            }
-            else
-            {
-                c.kind = ClipKind.Stairs;
-            }
-
-            IntVec3 approach = near.Position - prePos;
-            Vector3 glide = new Vector3(approach.x, 0f, approach.z);
-            if (glide.sqrMagnitude < 0.01f)
-            {
-                IntVec3 face = near.Rotation.FacingCell;
-                glide = new Vector3(face.x, 0f, face.z);
-            }
-            c.glideDir = glide.normalized;
-
-            int staggerTicks;
+            int half;
             switch (c.kind)
             {
-                case ClipKind.Ladder:
-                    c.entryTicks = LadderEntryTicks;
-                    c.holdTicks = LadderHoldTicks;
-                    c.emergeTicks = LadderEmergeTicks;
-                    staggerTicks = c.entryTicks + c.holdTicks;
-                    break;
+                case ClipKind.Grand: half = GrandHalf; break;
+                case ClipKind.Ladder: half = LadderHalf; break;
                 case ClipKind.Elevator:
                 {
                     int levels = Mathf.Max(1, Mathf.Abs(toBand - fromBand));
-                    int travel = levels * ElevPerLevelTicks;
-                    c.entryTicks = ElevBoardTicks + travel / 2;
-                    c.holdTicks = 0;
-                    c.emergeTicks = travel - travel / 2;
-                    staggerTicks = ElevBoardTicks + travel;
-                    // The clank: the platform takes the load. Main thread, at the origin
-                    // cell, so it is only ever seen by someone watching that band.
-                    if (p.Map != null)
-                    {
-                        FleckMaker.ThrowDustPuff(c.origin.ToVector3Shifted(), p.Map, 1.0f);
-                    }
+                    half = Mathf.Min(ElevHalfMax,
+                        ElevHalfBase + ElevHalfPerLevel * (levels - 1));
                     break;
                 }
-                default:
-                    c.entryTicks = StairsEntryTicks;
-                    c.holdTicks = StairsHoldTicks;
-                    c.emergeTicks = StairsEmergeTicks;
-                    staggerTicks = c.entryTicks + c.holdTicks;
-                    break;
+                default: half = StairsHalf; break;
             }
+            c.entryTicks = half;
+            c.emergeTicks = half;
+
+            // ⚠ FORWARD COMES FROM THE LINK. Rotation.FacingCell is the direction the run
+            // leads; the pawn entered from the opposite edge and travels along it.
+            IntVec3 face = near.Rotation.FacingCell;
+            c.dirX = face.x;
+            c.dirZ = face.z;
+
+            // Where the sprite has to be drawn: the link's own drawn centre, offset by the
+            // art's bounding-box centre, expressed relative to wherever the pawn actually
+            // came to rest (which is within ArriveRadius, not necessarily on the anchor).
+            Vector2 a = ArtOff(near);
+            Vector3 mouth = near.TrueCenter();
+            Vector3 pawnAt = p.Position.ToVector3Shifted();
+            c.baseX = mouth.x + a.x - pawnAt.x;
+            c.baseZ = mouth.z + a.y - pawnAt.z;
 
             clips[p.thingIDNumber] = c;
             PopsStarted++;
+            entryTicks = half;
 
-            // The user-accepted latency. Full stop (factor 0), never a slow-walk. If the
-            // pawn resists (StaggerDurationFactor, awoken corpses), the sweep notices the
-            // early move and cuts straight to the emerge clip - see the banner.
-            p.stances?.stagger?.StaggerFor(staggerTicks, 0f);
+            if (c.kind == ClipKind.Elevator && p.Map != null)
+            {
+                // The clank: the platform takes the load.
+                FleckMaker.ThrowDustPuff(mouth, p.Map, 1.0f);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// The teleport just happened. Flip the clip to its EMERGE half, anchored on the FAR
+        /// link - which has its own axis and its own art offset.
+        /// </summary>
+        public static void NotifyCarried(Pawn p, Building_Door far, IntVec3 landing)
+        {
+            if (p == null || Find.TickManager == null)
+            {
+                return;
+            }
+            if (!clips.TryGetValue(p.thingIDNumber, out Clip c))
+            {
+                return; // no clip (toggle off, or an instant hop): nothing to flip
+            }
+            CarriesSeen++;
+            c.phase = Phase.Emerge;
+            c.phaseStart = Find.TickManager.TicksGame;
+            c.baseX = 0f;
+            c.baseZ = 0f;
+            if (far != null)
+            {
+                // ⚠ MINUS THE FAR LINK'S FACING. The counterpart carries the SAME Rotation
+                // as the near end (a footprint invariant, see Building_ABStairs2), so its
+                // notch is on the same side: a pawn surfacing here comes up at the DEEP end
+                // of that run and walks out the way it came in one level below.
+                IntVec3 face = far.Rotation.FacingCell;
+                c.dirX = -face.x;
+                c.dirZ = -face.z;
+                Vector2 a = ArtOff(far);
+                Vector3 mouth = far.TrueCenter();
+                Vector3 landAt = landing.ToVector3Shifted();
+                c.ox = mouth.x + a.x - landAt.x;
+                c.oz = mouth.z + a.y - landAt.z;
+            }
+            clips[p.thingIDNumber] = c;
         }
 
         public static void Clear(Pawn p)
@@ -289,21 +393,37 @@ namespace AsAboveSoBelow
             return clips.ContainsKey(pawn.thingIDNumber);
         }
 
-        /// <summary>True while the pawn is in its ghost/hold window: sprite at the origin
-        /// mouth (or nowhere), logical body at the landing. Gates the see-below pass, the
-        /// pawn label, and the hidden normal draw.</summary>
+        /// <summary>
+        /// RETIRED BY §78 AND DELIBERATELY LEFT AS A CONSTANT FALSE.
+        ///
+        /// It used to mean "this pawn's sprite is at the origin mouth while its body is
+        /// already at the destination", which gated the see-below pass and the name label.
+        /// With the delay un-inverted that state cannot occur: during the entry half the
+        /// pawn IS at the origin, and after the carry it IS at the destination. Kept so the
+        /// two call sites in ABBelowDynamicDraw and the label patch need no edit, and named
+        /// here rather than deleted silently so the next reader knows it is answered, not
+        /// forgotten (§14).
+        /// </summary>
         public static bool IsGhosting(Pawn pawn)
         {
-            if (clips.Count == 0 || pawn == null)
-            {
-                return false;
-            }
-            return clips.TryGetValue(pawn.thingIDNumber, out Clip c) && c.emergeStart < 0;
+            return false;
         }
 
         /// <summary>
-        /// Advance clip state. Runs every tick from the transit sweep, main thread.
-        /// The dictionary is empty almost always.
+        /// RETIRED BY §78. See IsGhosting. The ghost pass existed only because the pawn had
+        /// already been teleported; there is no longer anything to redraw anywhere.
+        /// </summary>
+        public static void DrawGhosts(Map map)
+        {
+        }
+
+        /// <summary>
+        /// Advance clip state. Runs every tick from the transit sweep, main thread. The
+        /// dictionary is empty almost always.
+        ///
+        /// ⚠ THIS DOES NOT DRIVE THE TELEPORT. The hold timer lives in ABWormholePather,
+        /// which owns transits; this only ages the cosmetic half so that a clip whose pawn
+        /// died, despawned or never got carried cannot linger.
         /// </summary>
         public static void Sweep()
         {
@@ -313,49 +433,31 @@ namespace AsAboveSoBelow
             }
             int now = Find.TickManager.TicksGame;
             tmpExpired.Clear();
-            // Mutated copies are stashed and written AFTER the loop: rewriting a value
-            // inside the foreach would invalidate the enumerator.
             foreach (KeyValuePair<int, Clip> kv in clips)
             {
                 Clip c = kv.Value;
                 Pawn p = c.pawn;
-                int age = now - c.startTick;
-                if (p == null || !p.Spawned || p.Dead
-                    || age > c.entryTicks + c.holdTicks + c.emergeTicks + 600)
-                {
-                    tmpExpired.Add(kv.Key); // despawned mid-clip, or the watchdog margin
-                    continue;
-                }
-                bool mutated = false;
-                if (c.emergeStart < 0)
-                {
-                    // The hold ends when its time is up OR the moment the pawn genuinely
-                    // moves - whichever is first. That second clause is what makes a
-                    // stagger-immune pawn degrade to a shorter clip instead of a desync.
-                    if (age >= c.entryTicks + c.holdTicks || p.Position != c.landing)
-                    {
-                        c.emergeStart = age < 0 ? 0 : age;
-                        mutated = true;
-                    }
-                }
-                else if (age - c.emergeStart > c.emergeTicks)
+                int age = now - c.phaseStart;
+                int span = c.phase == Phase.Entry ? c.entryTicks : c.emergeTicks;
+                if (p == null || !p.Spawned || p.Dead || age > span + 600)
                 {
                     tmpExpired.Add(kv.Key);
+                    continue;
                 }
-                else if (c.kind == ClipKind.Elevator && !c.dustDone && c.emergeTicks > 0
-                    && (age - c.emergeStart) / (float)c.emergeTicks >= 0.86f)
+                if (c.phase == Phase.Emerge && age > span)
                 {
-                    // The landing thump, at the moment the bounce bottoms out.
+                    tmpExpired.Add(kv.Key);
+                    continue;
+                }
+                if (c.phase == Phase.Emerge && c.kind == ClipKind.Elevator && !c.dustDone
+                    && span > 0 && age / (float)span >= 0.86f)
+                {
                     c.dustDone = true;
-                    mutated = true;
+                    pendingWrites.Add(new KeyValuePair<int, Clip>(kv.Key, c));
                     if (p.Map != null)
                     {
-                        FleckMaker.ThrowDustPuff(c.landing.ToVector3Shifted(), p.Map, 1.2f);
+                        FleckMaker.ThrowDustPuff(p.Position.ToVector3Shifted(), p.Map, 1.2f);
                     }
-                }
-                if (mutated)
-                {
-                    pendingWrites.Add(new KeyValuePair<int, Clip>(kv.Key, c));
                 }
             }
             for (int i = 0; i < pendingWrites.Count; i++)
@@ -368,90 +470,6 @@ namespace AsAboveSoBelow
                 clips.Remove(tmpExpired[i]);
             }
             tmpExpired.Clear();
-        }
-
-        private static readonly List<KeyValuePair<int, Clip>> pendingWrites =
-            new List<KeyValuePair<int, Clip>>();
-
-        /// <summary>
-        /// The ghost pass. Runs after ABBelowDynamicDraw.DrawBelowPawns from the same
-        /// DrawDynamicThings postfix: for every clip in its ghost window whose ORIGIN band
-        /// is the one on camera, run the pawn's three draw phases at the origin mouth.
-        /// All three phases, per the staleness lesson in ABBelowDynamicDraw - do not
-        /// "optimise" this to DrawNowAt.
-        /// </summary>
-        public static void DrawGhosts(Map map)
-        {
-            if (clips.Count == 0 || map == null || !ABGuard.On(ABGuard.Rendering))
-            {
-                return;
-            }
-            ABBandMap bands = ABBands.CompOf(map);
-            if (bands == null || !bands.Banded)
-            {
-                return;
-            }
-            CameraDriver cam = Find.CameraDriver;
-            if (cam == null || Find.TickManager == null)
-            {
-                return;
-            }
-            int viewBand = ABBandView.CurrentBand(map);
-            CellRect camView = cam.CurrentViewRect;
-            int now = Find.TickManager.TicksGame;
-            foreach (KeyValuePair<int, Clip> kv in clips)
-            {
-                Clip c = kv.Value;
-                if (c.emergeStart >= 0)
-                {
-                    continue; // emerging: the normal draw at the landing carries the clip
-                }
-                int age = now - c.startTick;
-                if (age < 0 || age >= c.entryTicks)
-                {
-                    continue; // the hold gap: nobody is drawn anywhere, like the mockup
-                }
-                Pawn p = c.pawn;
-                if (p == null || !p.Spawned || p.Map != map)
-                {
-                    continue;
-                }
-                if (bands.BandOf(c.origin) != viewBand || !camView.Contains(c.origin))
-                {
-                    continue;
-                }
-                if (map.fogGrid.IsFogged(c.origin))
-                {
-                    continue;
-                }
-                try
-                {
-                    Vector3 loc = c.origin.ToVector3Shifted();
-                    loc.y = p.DrawPos.y;
-                    ghostArmedId = kv.Key;
-                    // The cache decision is consumed inside ParallelPreDraw; IsAnimating is
-                    // true for this pawn, so BeginPawn vetoes the blit and the pose matrix
-                    // is honored.
-                    ABBelowRenderCache.BeginPawn(p, 1f);
-                    try
-                    {
-                        p.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
-                        p.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
-                        p.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
-                    }
-                    finally
-                    {
-                        ghostArmedId = -1;
-                        ABBelowRenderCache.EndPawn();
-                    }
-                    GhostsDrawn++;
-                }
-                catch (System.Exception e)
-                {
-                    Log.WarningOnce(ABLog.Tag + " V2 transit ghost draw failed for "
-                        + p.LabelShortCap + ": " + e.Message, p.thingIDNumber ^ 762195877);
-                }
-            }
         }
 
         // ------------------------------------------------------------------ poses
@@ -475,22 +493,20 @@ namespace AsAboveSoBelow
             return (i + m) / n;
         }
 
-        /// <summary>The scale-only stand-in for an alpha fade: a fast final shrink,
-        /// "swallowed by the opening". 1 until 88%, then down to ~0.1x.</summary>
-        private static float Vanish(float p)
-        {
-            return p > 0.88f ? 1f - 0.9f * Smooth((p - 0.88f) / 0.12f) : 1f;
-        }
+        /// <summary>The scale both halves meet at. Traveler's whole premise: the entry ends
+        /// here and the emerge starts here, so the teleport frame is a matched pose.</summary>
+        private const float MeetScale = 0.10f;
 
         /// <summary>
-        /// The one draw-side query. Returns the pose for this pawn's current phase, or
-        /// false when it has no clip. Worker-thread safe: count guard first, dictionary
-        /// never written outside the game tick, everything else pure math.
+        /// The one draw-side query. Returns the pose for this pawn's current phase, or false
+        /// when it has no clip. Worker-thread safe: count guard first, dictionary never
+        /// written outside the game tick, everything else pure math.
         /// </summary>
         public static bool TryGetPose(Pawn pawn, out ClipPose pose)
         {
             pose = default;
             pose.sx = pose.sz = 1f;
+            pose.facing = FaceNone;
             if (clips.Count == 0 || pawn == null)
             {
                 return false;
@@ -499,25 +515,22 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            int age = Find.TickManager.TicksGame - c.startTick;
+            int age = Find.TickManager.TicksGame - c.phaseStart;
             if (age < 0)
             {
                 return false;
             }
-            if (c.emergeStart < 0)
+            if (c.phase == Phase.Entry)
             {
-                if (ghostArmedId == pawn.thingIDNumber)
-                {
-                    pose = EntryPose(c, c.entryTicks > 0
-                        ? Mathf.Clamp01(age / (float)c.entryTicks) : 1f);
-                    return true;
-                }
-                // Normal draw at the landing while the ghost owns the sprite: a dot.
-                pose.hide = true;
+                float p = c.entryTicks > 0 ? Mathf.Clamp01(age / (float)c.entryTicks) : 1f;
+                pose = EntryPose(c, p);
+                // The pawn came to rest wherever it could reach; the clip is authored about
+                // the LINK. This is the only term that moves the sprite off the pawn's cell.
+                pose.offX += c.baseX;
+                pose.offZ += c.baseZ;
                 return true;
             }
-            float q = c.emergeTicks > 0
-                ? Mathf.Clamp01((age - c.emergeStart) / (float)c.emergeTicks) : 1f;
+            float q = c.emergeTicks > 0 ? Mathf.Clamp01(age / (float)c.emergeTicks) : 1f;
             if (q >= 1f)
             {
                 return false; // finished; the sweep removes it next tick
@@ -530,80 +543,76 @@ namespace AsAboveSoBelow
         {
             ClipPose o = default;
             o.sx = o.sz = 1f;
+            o.facing = FaceOf(c.dirX, c.dirZ);
             switch (c.kind)
             {
-                case ClipKind.Stairs:
+                case ClipKind.Grand:
                 {
-                    float pe = StepEase(p, 5);
-                    int tread = (int)(Mathf.Clamp01(p) * 5f);
-                    if (tread > 4) tread = 4;
-                    float f = Mathf.Clamp01(p * 5f - tread);
-                    float hop = Mathf.Abs(Mathf.Sin(f * Mathf.PI));
-                    float s = c.up ? Mathf.Lerp(1f, ScaleAbove, pe)
-                                   : Mathf.Lerp(1f, ScaleBelow, pe);
-                    s *= Vanish(p) * (1f + hop * 0.04f);
-                    o.sx = o.sz = s;
-                    o.offX = c.glideDir.x * 0.5f * pe;
-                    o.offZ = c.glideDir.z * 0.5f * pe + hop * 0.05f;
-                    o.rot = ((tread & 1) == 0 ? 1f : -1f) * 5f * Mathf.Sin(f * Mathf.PI);
+                    const float rail = 0.45f;
+                    float pe = StepEase(p, 6);
+                    int beat = Mathf.Min(5, (int)(p * 6f));
+                    float f = Mathf.Clamp01(p * 6f - beat);
+                    float hop = Mathf.Sin(f * Mathf.PI);
+                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
+                    o.sx = o.sz = s * (1f + hop * 0.04f);
+                    o.offX = c.dirX * (1.30f * pe - 0.65f) - c.dirZ * rail;
+                    o.offZ = c.dirZ * (1.30f * pe - 0.65f) + c.dirX * rail + hop * 0.05f;
+                    o.rot = ((beat & 1) == 0 ? 1f : -1f) * 5f * hop;
                     break;
                 }
                 case ClipKind.Ladder:
                 {
-                    if (p < LadderMountFrac)
-                    {
-                        // The peek: lean over the shaft and check. Anticipation beat.
-                        float mp = Smooth(p / LadderMountFrac);
-                        o.rot = (c.up ? -10f : 14f) * mp;
-                        o.sx = o.sz = c.up ? 1f - 0.05f * mp : 1f;
-                        o.offX = c.glideDir.x * 0.12f * mp;
-                        o.offZ = c.glideDir.z * 0.12f * mp;
-                    }
-                    else
-                    {
-                        // Two big committed pulls.
-                        float pp = (p - LadderMountFrac) / (1f - LadderMountFrac);
-                        float pe = StepEase(pp, 2);
-                        int pull = pp < 0.5f ? 0 : 1;
-                        float f = Mathf.Clamp01(pp * 2f - pull);
-                        float sign = pull == 0 ? 1f : -1f;
-                        float rock = sign * 0.09f * Mathf.Sin(f * Mathf.PI);
-                        float s = c.up ? Mathf.Lerp(1f, ScaleAbove, pe)
-                                       : Mathf.Lerp(1f, ScaleBelow, pe);
-                        o.sx = o.sz = s * Vanish(pp);
-                        o.offX = c.glideDir.x * (0.12f + 0.25f * pe) + rock;
-                        o.offZ = c.glideDir.z * (0.12f + 0.25f * pe);
-                        o.rot = sign * 7f * Mathf.Sin(f * Mathf.PI)
-                              + (c.up ? -10f : 14f) * (1f - pp);
-                    }
+                    float pe = StepEase(p, 4);
+                    int rung = Mathf.Min(3, (int)(p * 4f));
+                    float f = Mathf.Clamp01(p * 4f - rung);
+                    float haul = Mathf.Sin(f * Mathf.PI);
+                    float sign = (rung & 1) == 0 ? 1f : -1f;
+                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
+                    o.sx = s * (1f - 0.05f * haul);
+                    o.sz = s * (1f + 0.07f * haul);
+                    // A ladder crossing has NO lateral travel, which is what makes it the
+                    // cleanest midpoint match of the four: the two halves meet on the same
+                    // pixel rather than merely near it.
+                    o.offX = c.dirX * 0.20f * pe + sign * 0.07f * haul;
+                    o.offZ = c.dirZ * 0.20f * pe;
+                    o.rot = sign * 7f * haul;
                     break;
                 }
-                default: // Elevator
+                case ClipKind.Elevator:
                 {
-                    float boardFrac = c.entryTicks > 0
-                        ? Mathf.Clamp01(ElevBoardTicks / (float)c.entryTicks) : 0.3f;
-                    if (p < boardFrac)
+                    const float board = 0.30f;
+                    if (p < board)
                     {
-                        // Step on; the platform takes the weight late in the board.
-                        float bp = p / boardFrac;
-                        if (bp > 0.55f)
-                        {
-                            o.offZ = -Mathf.Sin((bp - 0.55f) / 0.45f * Mathf.PI) * 0.05f;
-                        }
+                        float m = Smooth(p / board);
+                        o.offX = c.dirX * 0.45f * m;
+                        o.offZ = c.dirZ * 0.45f * m;
+                        o.sz = 1f - 0.05f * Mathf.Sin(m * Mathf.PI);
+                        break;
                     }
-                    else
-                    {
-                        // The drop (or hoist): fast, shaking.
-                        float q = (p - boardFrac) / (1f - boardFrac);
-                        float s = c.up ? Mathf.Lerp(1f, ElevScaleAbove, Smooth(q))
-                                       : Mathf.Lerp(1f, ElevScaleBelow, Smooth(q));
-                        if (c.up)
-                        {
-                            s *= Vanish(q);
-                        }
-                        o.sx = o.sz = s;
-                        o.offX = Mathf.Sin(Time.realtimeSinceStartup * 70f) * 0.03f;
-                    }
+                    float q = (p - board) / (1f - board);
+                    // Turn around inside the car and ride facing the doors.
+                    o.facing = Opposite(o.facing);
+                    float s2 = Mathf.Lerp(1f, MeetScale, Smooth(q));
+                    o.sx = o.sz = s2;
+                    // Realtime, not q: the shudder is a property of the machine, and tying
+                    // it to clip progress makes it step visibly at low game speeds.
+                    o.offX = c.dirX * 0.45f + Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f;
+                    o.offZ = c.dirZ * 0.45f;
+                    break;
+                }
+                default:
+                {
+                    float pe = StepEase(p, 4);
+                    int tread = Mathf.Min(3, (int)(p * 4f));
+                    float f = Mathf.Clamp01(p * 4f - tread);
+                    float hop = Mathf.Sin(f * Mathf.PI);
+                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
+                    o.sx = o.sz = s * (1f + hop * 0.05f);
+                    // Starts 0.45 cells SHORT of the mouth and ends 0.45 past it: the two
+                    // halves are authored to meet, not to start and stop.
+                    o.offX = c.dirX * (0.90f * pe - 0.45f);
+                    o.offZ = c.dirZ * (0.90f * pe - 0.45f) + hop * 0.05f;
+                    o.rot = ((tread & 1) == 0 ? 1f : -1f) * 6f * hop;
                     break;
                 }
             }
@@ -614,124 +623,85 @@ namespace AsAboveSoBelow
         {
             ClipPose o = default;
             o.sx = o.sz = 1f;
-            bool fromAbove = !c.up; // a downward journey arrives from above
-            // Scale-only stand-in for a fade-in: from-above arrivals pop in through a fast
-            // ramp instead of materializing at 1.14 from nothing.
-            float reveal = fromAbove ? Mathf.Lerp(0.05f, 1f, Smooth(q / 0.10f)) : 1f;
-            float ox = c.farAnchor.x - c.landing.x;
-            float oz = c.farAnchor.z - c.landing.z;
+            // c.dirX/dirZ is now the EXIT direction at the far end.
+            o.facing = FaceOf(c.dirX, c.dirZ);
+            // Scale resolves slightly ahead of the walk, so the pawn is at full size for the
+            // last fifth and the clip hands over to ordinary movement without a step.
+            float grow = Mathf.Lerp(MeetScale, 1f, Smooth(Mathf.Min(1f, q / 0.80f)));
             switch (c.kind)
             {
-                case ClipKind.Stairs:
+                case ClipKind.Grand:
                 {
-                    float pe = StepEase(q, 4);
-                    int tread = (int)(Mathf.Clamp01(q) * 4f);
-                    if (tread > 3) tread = 3;
-                    float f = Mathf.Clamp01(q * 4f - tread);
-                    float hop = Mathf.Abs(Mathf.Sin(f * Mathf.PI));
-                    float s = fromAbove
-                        ? Mathf.Lerp(ScaleAbove, 1f, pe)
-                        : Mathf.Lerp(ScaleBelow, 1f, pe)
-                          * (1f + 0.05f * Mathf.Sin(Mathf.PI * Mathf.Clamp01((q - 0.72f) / 0.28f)));
-                    s *= reveal * (1f + hop * 0.04f);
-                    o.sx = o.sz = s;
-                    o.offX = ox * (1f - pe);
-                    o.offZ = oz * (1f - pe) + hop * 0.05f;
-                    o.rot = ((tread & 1) == 0 ? -1f : 1f) * 5f * Mathf.Sin(f * Mathf.PI);
+                    const float rail = 0.45f;
+                    float w = Smooth(q);
+                    float pe = StepEase(w, 4);
+                    int beat = Mathf.Min(3, (int)(w * 4f));
+                    float f = Mathf.Clamp01(w * 4f - beat);
+                    float hop = Mathf.Sin(f * Mathf.PI);
+                    o.sx = o.sz = grow * (1f + hop * 0.04f);
+                    o.offX = c.ox * (1f - pe) - c.dirZ * rail * (1f - pe * 0.5f);
+                    o.offZ = c.oz * (1f - pe) + c.dirX * rail * (1f - pe * 0.5f) + hop * 0.05f;
+                    o.rot = ((beat & 1) == 0 ? -1f : 1f) * 5f * hop;
                     break;
                 }
                 case ClipKind.Ladder:
                 {
-                    float s;
-                    float rock = 0f;
-                    if (fromAbove)
+                    float w = Smooth(q);
+                    float pe = StepEase(w, 4);
+                    int rung = Mathf.Min(3, (int)(w * 4f));
+                    float f = Mathf.Clamp01(w * 4f - rung);
+                    float haul = Mathf.Sin(f * Mathf.PI);
+                    float sign = (rung & 1) == 0 ? -1f : 1f;
+                    o.sx = grow * (1f - 0.05f * haul);
+                    o.sz = grow * (1f + 0.07f * haul);
+                    o.offX = c.ox * (1f - pe) + sign * 0.07f * haul;
+                    o.offZ = c.oz * (1f - pe);
+                    o.rot = sign * 7f * haul;
+                    // ⚠ FACING THE RUNGS MEANS FACING AWAY FROM THE EXIT. On this side the
+                    // ladder is behind the pawn's line of travel, so the climb beat is the
+                    // NEGATED exit vector; only the last fifth turns to walk off.
+                    if (q < 0.82f)
                     {
-                        // Two big drops out of the ceiling, then a hop off the last rung.
-                        float pe = StepEase(q, 2);
-                        int pull = q < 0.5f ? 0 : 1;
-                        float f = Mathf.Clamp01(q * 2f - pull);
-                        float sign = pull == 0 ? -1f : 1f;
-                        rock = sign * 0.09f * Mathf.Sin(f * Mathf.PI);
-                        s = Mathf.Lerp(ScaleAbove, 1f, pe) * reveal;
-                        o.rot = sign * 7f * Mathf.Sin(f * Mathf.PI);
-                        if (q > 0.86f)
-                        {
-                            o.offZ += Mathf.Sin(Mathf.PI * (q - 0.86f) / 0.14f) * 0.06f;
-                        }
+                        o.facing = FaceOf(-c.dirX, -c.dirZ);
                     }
-                    else if (q < 0.25f)
-                    {
-                        // The head-pop: small, with an overshoot bounce.
-                        float qq = q / 0.25f;
-                        s = Mathf.Lerp(0.18f, 0.55f, Smooth(qq))
-                          * (1f + 0.35f * Mathf.Sin(Mathf.PI * Mathf.Min(1f, qq * 1.15f)));
-                    }
-                    else
-                    {
-                        // Haul out in two pulls.
-                        float pp = (q - 0.25f) / 0.75f;
-                        float pe = StepEase(pp, 2);
-                        int pull = pp < 0.5f ? 0 : 1;
-                        float f = Mathf.Clamp01(pp * 2f - pull);
-                        float sign = pull == 0 ? 1f : -1f;
-                        rock = sign * 0.08f * Mathf.Sin(f * Mathf.PI);
-                        s = Mathf.Lerp(0.55f, 1f, pe);
-                        o.rot = sign * 7f * Mathf.Sin(f * Mathf.PI);
-                    }
-                    o.sx = o.sz = s;
-                    o.offX = ox * (1f - q) + rock;
-                    o.offZ = oz * (1f - q);
                     break;
                 }
-                default: // Elevator
+                case ClipKind.Elevator:
                 {
-                    float jt = Mathf.Sin(Time.realtimeSinceStartup * 70f) * 0.03f
-                             * (q < 0.85f ? 1f : 0.3f);
-                    float s = fromAbove
-                        ? Mathf.Lerp(ElevScaleAbove, 1f, Smooth(q)) * reveal
-                        : Mathf.Lerp(0.28f, 1f, Smooth(q));
-                    if (q > 0.86f)
+                    float jt = Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f
+                             * (q < 0.80f ? 1f : 0f);
+                    if (q > 0.88f)
                     {
-                        // The landing bounce: overshoot with a squash. The dust puff is
-                        // thrown from the sweep at the same moment.
-                        float b = Mathf.Sin(Mathf.PI * (q - 0.86f) / 0.14f);
-                        o.sx = s * (1f + 0.10f * b);
-                        o.sz = s * (1f - 0.12f * b);
-                        o.offZ = -0.03f * b;
+                        // The landing bounce; the dust puff is thrown from the sweep on the
+                        // same frame.
+                        float b = Mathf.Sin(Mathf.PI * (q - 0.88f) / 0.12f);
+                        o.sx = grow * (1f + 0.08f * b);
+                        o.sz = grow * (1f - 0.10f * b);
                     }
                     else
                     {
-                        o.sx = o.sz = s;
+                        o.sx = o.sz = grow;
                     }
-                    o.offX = jt;
+                    float w2 = Smooth(Mathf.Clamp01((q - 0.45f) / 0.55f));
+                    o.offX = c.ox * (1f - w2) + jt;
+                    o.offZ = c.oz * (1f - w2);
+                    break;
+                }
+                default:
+                {
+                    float w = Smooth(q);
+                    float pe = StepEase(w, 3);
+                    int tread = Mathf.Min(2, (int)(w * 3f));
+                    float f = Mathf.Clamp01(w * 3f - tread);
+                    float hop = Mathf.Sin(f * Mathf.PI);
+                    o.sx = o.sz = grow * (1f + hop * 0.05f);
+                    o.offX = c.ox * (1f - pe);
+                    o.offZ = c.oz * (1f - pe) + hop * 0.05f;
+                    o.rot = ((tread & 1) == 0 ? -1f : 1f) * 6f * hop;
                     break;
                 }
             }
             return o;
-        }
-    }
-
-    /// <summary>
-    /// The pawn's name label reads DrawPos, which during the ghost window is the landing
-    /// cell - a label floating over an empty cell while the sprite is a band away. Hidden
-    /// for those few ticks; everything else about the overlay is untouched.
-    /// </summary>
-    [HarmonyPatch(typeof(PawnUIOverlay), nameof(PawnUIOverlay.DrawPawnGUIOverlay))]
-    public static class Patch_PawnUIOverlay_ABGhostLabel
-    {
-        private static readonly AccessTools.FieldRef<PawnUIOverlay, Pawn> PawnRef =
-            AccessTools.FieldRefAccess<PawnUIOverlay, Pawn>("pawn");
-
-        private static bool Prefix(PawnUIOverlay __instance)
-        {
-            try
-            {
-                return !ABStairAnim.IsGhosting(PawnRef(__instance));
-            }
-            catch
-            {
-                return true; // never lose labels over a cosmetic effect
-            }
         }
     }
 }

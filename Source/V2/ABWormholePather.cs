@@ -182,7 +182,43 @@ namespace AsAboveSoBelow
             everSegmented.Clear();
             tmpDone.Clear();
             tmpCarry.Clear();
+            holding.Clear();
+            tmpHoldDone.Clear();
+            tmpHoldFire.Clear();
         }
+
+        // ================================================== §78 the held crossing
+
+        /// <summary>
+        /// A transit that has been DECIDED and is now waiting out its entry clip before the
+        /// position write. See the banner on BeginCrossing for why this is not the thing
+        /// that broke in run #297.
+        /// </summary>
+        private struct Crossing
+        {
+            public Pawn pawn;
+            public Building_Door near;
+            public Building_Door far;
+            public LocalTargetInfo realDest;
+            public PathEndMode realPeMode;
+            public int fireAtTick;
+            public IntVec3 holdCell;
+
+            /// <summary>The job that owned the pather when the hold started. If it changes,
+            /// something else has taken command and this teleport must not happen.</summary>
+            public Job job;
+        }
+
+        private static readonly Dictionary<int, Crossing> holding =
+            new Dictionary<int, Crossing>();
+
+        private static readonly List<int> tmpHoldDone = new List<int>();
+
+        private static readonly List<Crossing> tmpHoldFire = new List<Crossing>();
+
+        /// <summary>Hard ceiling on a hold. Longer than any clip; if this ever fires,
+        /// something stopped ticking and finishing late beats never finishing.</summary>
+        private const int MaxHoldTicks = 300;
 
         /// <summary>Returns true when the destination was rewritten to a near anchor.</summary>
         public static bool TrySegment(Pawn pawn, ref LocalTargetInfo dest, ref PathEndMode peMode)
@@ -302,6 +338,11 @@ namespace AsAboveSoBelow
         public static void TickTransits()
         {
             ABStairAnim.Sweep();
+            // ⚠ BEFORE THE `pending` EARLY-RETURN. A held crossing has already left
+            // `pending`, so gating this on it would strand every hold the moment the last
+            // record was consumed - which is the common case, since the hold begins in the
+            // same tick the record is removed.
+            TickCrossings();
             // Route previews are built HERE, on the tick, never from a draw callback.
             // See the banner on ABTransitVisuals.DrawRemainingRoute.
             ABTransitVisuals.TickRoutes();
@@ -457,28 +498,193 @@ namespace AsAboveSoBelow
             return anchor;
         }
 
-        /// <summary>Move the pawn to the far side and resume toward the real destination.</summary>
+        /// <summary>
+        /// Either start the §78 hold - the pawn stays where it is and plays the entry clip -
+        /// or carry instantly, which is precisely what this method did before §78 and is
+        /// still what happens whenever there is no clip to play.
+        /// </summary>
         private static void Carry(Pawn pawn, Transit t)
+        {
+            // Stop tracking: the pawn's NEXT arrival (at the real destination, just after
+            // this) would otherwise trip the ARRIVED-NO-PENDING diagnostic and read as a
+            // failure when it is simply the journey finishing normally. Done here rather
+            // than in CarryNow so it happens once, whichever route the crossing takes.
+            everSegmented.Remove(pawn.thingIDNumber);
+            if (BeginCrossing(pawn, t))
+            {
+                return;
+            }
+            CarryNow(pawn, t);
+        }
+
+        /// <summary>
+        /// Hold the pawn at the stairwell for the length of its entry clip, then teleport.
+        /// Returns false when no hold was started, in which case the caller must carry now.
+        ///
+        /// ⚠⚠ WHY THIS IS NOT THE RUN #297 BUG WEARING A NEW HAT. That attempt held the pawn
+        /// by REFUSING AN ARRIVAL - it gated TryConsumeArrival/ReadyToCarry, so vanilla's
+        /// PatherArrived never ran, the leg never completed, the job re-issued StartPath,
+        /// TrySegment re-segmented (the real destination is still on another band) and the
+        /// pawn re-arrived at the same anchor forever. The transit DECISION was the thing
+        /// being deferred, and it was deferred by a cosmetic condition.
+        ///
+        /// Here the decision is already final: by the time this runs the record has left
+        /// `pending` (tick sweep phase 2, or Clear() on the arrival path) and everSegmented
+        /// has been dropped. Nothing can re-segment this leg, because there is no leg left -
+        /// StopDead ends it. What remains is a plain timer that owns one thing, the position
+        /// write, and that timer cannot decline to fire: every exit from TickCrossings either
+        /// teleports or abandons, and MaxHoldTicks backstops both.
+        ///
+        /// ⚠ STOPDEAD, NOT A SUPPRESSED ARRIVAL. StopDead releases the path and clears
+        /// `moving` WITHOUT notifying the JobDriver, so the toil that completes on
+        /// ToilCompleteMode.PatherArrival simply waits - no arrival is fired at the
+        /// stairwell, so no toil completes in the wrong place, and because `moving` is false
+        /// PatherTick never re-tests AtDestinationPosition and there is no per-tick loop.
+        /// That IS the difference: #297 deferred the DECISION, this defers the MOVE.
+        ///
+        /// ⚠ THE STAGGER IS BELT TO STOPDEAD'S BRACES, and it is aspirational per pawn
+        /// (StaggerDurationFactor, Anomaly awoken corpses). If a pawn shrugs it off and
+        /// steps away, TickCrossings sees the cell change and fires the teleport early - a
+        /// shorter show, never a desync.
+        /// </summary>
+        private static bool BeginCrossing(Pawn pawn, Transit t)
+        {
+            if (pawn == null || !pawn.Spawned || t.near == null || t.far == null)
+            {
+                return false;
+            }
+            ABBandMap bands = ABBands.CompOf(pawn.Map);
+            if (bands == null || !bands.Banded)
+            {
+                return false;
+            }
+            if (!ABStairAnim.Begin(pawn, t.near, t.far, bands.BandOf(t.near.Position),
+                    bands.BandOf(t.far.Position), out int entryTicks)
+                || entryTicks <= 0)
+            {
+                return false; // animation off, or nothing to play: carry instantly
+            }
+            pawn.pather?.StopDead();
+            pawn.stances?.stagger?.StaggerFor(entryTicks, 0f);
+            holding[pawn.thingIDNumber] = new Crossing
+            {
+                pawn = pawn,
+                near = t.near,
+                far = t.far,
+                realDest = t.realDest,
+                realPeMode = t.realPeMode,
+                fireAtTick = Find.TickManager.TicksGame + entryTicks,
+                holdCell = pawn.Position,
+                job = pawn.CurJob
+            };
+            ABV2Debug.Transit("HOLDING " + pawn.LabelShort + " at " + pawn.Position
+                + " for " + entryTicks + "t (entry clip) before " + t.far.Position);
+            return true;
+        }
+
+        /// <summary>
+        /// Age every held crossing. Collect-then-act, for the same reason TickTransits is:
+        /// CarryNow calls StartPath, which re-enters TrySegment, which writes `pending`.
+        /// </summary>
+        private static void TickCrossings()
+        {
+            if (holding.Count == 0 || Find.TickManager == null)
+            {
+                return;
+            }
+            int now = Find.TickManager.TicksGame;
+            tmpHoldDone.Clear();
+            tmpHoldFire.Clear();
+            foreach (KeyValuePair<int, Crossing> kv in holding)
+            {
+                Crossing x = kv.Value;
+                Pawn p = x.pawn;
+                if (p == null || !p.Spawned || p.Dead
+                    || x.near == null || x.far == null || !x.near.Spawned || !x.far.Spawned)
+                {
+                    // ⚠ END THE JOB. The pawn is sitting on a StopDead pather under a toil
+                    // that only a pather arrival can complete; abandoning the crossing
+                    // without this is precisely the "frozen under a live job" wedge that
+                    // ABStuckWatchdog episode B exists to report.
+                    tmpHoldDone.Add(kv.Key);
+                    ABStairAnim.Clear(p);
+                    if (p != null && p.Spawned && !p.Dead && p.CurJob == x.job)
+                    {
+                        ABV2Debug.Transit("HOLD ABANDONED for " + p.LabelShort
+                            + " (anchor lost mid-clip); ending job");
+                        p.jobs?.EndCurrentJob(JobCondition.Incompletable);
+                    }
+                    continue;
+                }
+                if (p.CurJob != x.job)
+                {
+                    // Re-ordered, drafted, or the job ended under us. Whatever took command
+                    // owns the pather now and issued its own path; teleporting the pawn a
+                    // level away at this point would be the mod overriding the player.
+                    tmpHoldDone.Add(kv.Key);
+                    ABStairAnim.Clear(p);
+                    ABV2Debug.Transit("HOLD CANCELLED for " + p.LabelShort
+                        + " (job changed mid-clip); no teleport");
+                    continue;
+                }
+                int ticksLeft = x.fireAtTick - now;
+                // Second clause is the clock running backwards on a loaded save, third is
+                // the stagger-immune pawn walking off. Both mean "fire now".
+                if (ticksLeft <= 0 || ticksLeft > MaxHoldTicks || p.Position != x.holdCell)
+                {
+                    tmpHoldDone.Add(kv.Key);
+                    tmpHoldFire.Add(x);
+                }
+            }
+            for (int i = 0; i < tmpHoldDone.Count; i++)
+            {
+                holding.Remove(tmpHoldDone[i]);
+            }
+            for (int i = 0; i < tmpHoldFire.Count; i++)
+            {
+                Crossing x = tmpHoldFire[i];
+                try
+                {
+                    CarryNow(x.pawn, new Transit
+                    {
+                        near = x.near,
+                        far = x.far,
+                        realDest = x.realDest,
+                        realPeMode = x.realPeMode
+                    });
+                }
+                catch (Exception e)
+                {
+                    // The pawn is on a stopped pather. Failing silently here strands it, so
+                    // end the job rather than leave a wedge behind an exception.
+                    Log.ErrorOnce(ABLog.Tag + " V2: held carry threw for "
+                        + x.pawn.LabelShortCap + ": " + e,
+                        x.pawn.thingIDNumber ^ 762195936);
+                    x.pawn.jobs?.EndCurrentJob(JobCondition.Errored);
+                }
+            }
+            tmpHoldDone.Clear();
+            tmpHoldFire.Clear();
+        }
+
+        /// <summary>The position write and everything downstream of it. Reached either
+        /// straight from Carry (no clip) or from TickCrossings when the hold expires.</summary>
+        private static void CarryNow(Pawn pawn, Transit t)
         {
             IntVec3 landing = LandingCell(pawn, t.far);
             ABV2Debug.Transit("TRANSITED " + pawn.LabelShort + " " + t.near.Position
                 + " -> " + landing + " (anchor " + t.far.Position + ")"
                 + "; resuming to " + t.realDest.Cell);
-            // Stop tracking: the pawn's NEXT arrival (at the real destination, just after
-            // this) would otherwise trip the ARRIVED-NO-PENDING diagnostic and read as a
-            // failure when it is simply the journey finishing normally.
-            everSegmented.Remove(pawn.thingIDNumber);
-            IntVec3 prePos = pawn.Position;
             pawn.Position = landing;
             pawn.Notify_Teleported(false, true);
             // Walking through a door reveals what is on the other side of it. The transit is
             // a teleport, so neither vanilla's door hook nor anything else fires here - see
             // ABFogReveal.RevealArrival for why both halves of the vanilla path miss.
             ABFogReveal.RevealArrival(pawn, landing);
-            // Cosmetic only, and deliberately AFTER the move: the §73 clip is a ghost at
-            // the origin mouth plus a post-hop hold, never a gate on the carry itself.
-            // See the banner on ABStairAnim.
-            ABStairAnim.NotifyTransited(pawn, t.near, t.far, prePos, landing);
+            // Cosmetic only, and deliberately AFTER the move: flips the §78 clip to its
+            // emerge half, anchored on the FAR link's own axis and art offset. Never a gate
+            // on the carry itself. See the banner on ABStairAnim.
+            ABStairAnim.NotifyCarried(pawn, t.far, landing);
             // A camera locked to this pawn (Perspective Shift avatar, follow-selected)
             // treats its transit as the player's own level change. No-op for everyone else.
             ABBandView.FollowTransit(pawn);
@@ -605,18 +811,32 @@ namespace AsAboveSoBelow
             // ordinary same-band path.
             Clear(pawn);
 
+            // §78: hold here too, or whether the entry clip plays would depend on which of
+            // the two triggers happened to fire first - the exact class of inconsistency
+            // the ArriveRadius comment above exists to prevent.
+            //
+            // ⚠ RETURNING TRUE IS LOAD-BEARING HERE, AND IT IS SAFE ONLY BECAUSE OF
+            // STOPDEAD. True skips vanilla's PatherArrived. If it ran, the toil would
+            // complete AT THE STAIRWELL and the job would advance as though it had reached
+            // its real destination. And because BeginCrossing has already cleared `moving`,
+            // PatherTick never re-tests AtDestinationPosition, so suppressing the arrival
+            // cannot turn into the per-tick re-arrival loop described above.
+            if (BeginCrossing(pawn, t))
+            {
+                return true;
+            }
+
             // Same landing rule as the tick sweep - this path had its own copy of the
             // teleport and kept dropping every pawn onto the anchor cell itself, so half the
             // transits still stacked even after the sweep was fixed.
             IntVec3 landing = LandingCell(pawn, t.far);
-            IntVec3 prePos = pawn.Position;
             pawn.Position = landing;
             // endCurrentJob:false - the job is mid-flight and must survive the hop.
             pawn.Notify_Teleported(false, true);
             // Paired with the tick sweep's copy above - both teleport sites must reveal, or
             // the fog lifts on some transits and not others depending on which path ran.
             ABFogReveal.RevealArrival(pawn, landing);
-            ABStairAnim.NotifyTransited(pawn, t.near, t.far, prePos, landing);
+            ABStairAnim.NotifyCarried(pawn, t.far, landing);
             // Paired with the tick sweep's copy above, for the same reason both teleport
             // sites reveal fog: whichever trigger carries the followed pawn must also move
             // the view, or whether the camera follows depends on which path happened to run.
