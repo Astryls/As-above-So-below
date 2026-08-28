@@ -75,6 +75,11 @@ namespace AsAboveSoBelow
             int old = CurrentBand(map);
             bands.viewBand = band;
             Patch_CameraDriver_ABClipViewToBand.Invalidate();
+            // Arm/release the Perspective Shift peek in the SAME frame as the band change.
+            // The per-frame reconcile in the clamp postfix would otherwise land one frame
+            // late, which is one frame of PS dragging the camera off the band the player
+            // just asked for.
+            PerspectiveShiftCompat.SyncPeek(map);
             if (preserveXZ && Find.CameraDriver != null)
             {
                 IntVec3 look = CameraCell(map);
@@ -151,6 +156,12 @@ namespace AsAboveSoBelow
                 // in-band position would only add a visible double move.
                 ABLog.Dev("V2: view following " + pawn.LabelShort + " to band " + band + ".");
                 SetBand(map, band, preserveXZ: false);
+                // preserveXZ:false leaves the camera for the follower to re-centre, which is
+                // right for vanilla follow-selected (it snaps) and wrong for Perspective
+                // Shift (it lerps 10% a frame, so a band stride becomes a long glide through
+                // the gutter). Close the distance for PS so its lerp is a no-op and the
+                // transit reads as a cut.
+                PerspectiveShiftCompat.SnapToAvatar(pawn);
             }
             catch (Exception e)
             {
@@ -495,6 +506,9 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // Per-frame reconcile: this is the one hook that cannot be skipped, so a
+                // peek can never outlive the avatar, the playstyle, or the map.
+                PerspectiveShiftCompat.SyncPeek(map);
                 if (ABCameraBounds.CalibrationUnlocked)
                 {
                     // The calibration window is open: stand down so the camera can be

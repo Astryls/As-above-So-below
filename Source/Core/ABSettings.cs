@@ -178,6 +178,12 @@ namespace AsAboveSoBelow
         /// </summary>
         public bool clampZoomToLevel = true;
 
+        /// <summary>Perspective Shift only: freeze the avatar while the player is looking at
+        /// a level the avatar is not standing on. Implemented with PS's own
+        /// State.CameraLockPosition, which is the same lever PS uses when its camera is sent
+        /// somewhere other than the avatar.</summary>
+        public bool psFreezeAvatarWhilePeeking = true;
+
         // ---- sky band generation -------------------------------------------
 
         /// <summary>Meadow-Perlin peaks (varied ledges and plateaus) rather than a plain
@@ -326,6 +332,8 @@ namespace AsAboveSoBelow
                 ABDepthView.DefaultFalloff);
             Scribe_Values.Look(ref transitAnim, "transitAnim", true);
             Scribe_Values.Look(ref clampZoomToLevel, "clampZoomToLevel", true);
+            Scribe_Values.Look(ref psFreezeAvatarWhilePeeking, "psFreezeAvatarWhilePeeking",
+                true);
             Scribe_Values.Look(ref belowPawnCache, "belowPawnCache",
                 ABBelowRenderCache.ModeAuto);
             Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
@@ -635,6 +643,13 @@ namespace AsAboveSoBelow
             list.Gap(10f);
             list.CheckboxLabeled("AB_ClampZoom".Translate(), ref clampZoomToLevel,
                 "AB_ClampZoomTip".Translate());
+            // Only shown to players who actually run Perspective Shift: a checkbox about a
+            // mod you do not have is noise.
+            if (PerspectiveShiftCompat.Present)
+            {
+                list.CheckboxLabeled("AB_PSFreezePeek".Translate(),
+                    ref psFreezeAvatarWhilePeeking, "AB_PSFreezePeekTip".Translate());
+            }
         }
 
         // ---- climate tab -----------------------------------------------------
