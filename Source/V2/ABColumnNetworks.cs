@@ -180,6 +180,13 @@ namespace AsAboveSoBelow
             return d != null && carrierDefs.Contains(d);
         }
 
+        /// <summary>Probe support (§75.g): a zero here means no carrier was ever generated,
+        /// which would make every IsCarrier verdict false for an innocent reason.</summary>
+        internal static int CarrierDefCount
+        {
+            get { return carrierDefs.Count; }
+        }
+
         public static ABNetwork ById(string id)
         {
             List<ABNetwork> list = All;
