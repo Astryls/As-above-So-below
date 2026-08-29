@@ -62,6 +62,24 @@ namespace AsAboveSoBelow
 
         private static readonly List<int> tmpDrop = new List<int>();
 
+        // ⚠⚠ VANILLA'S OWN TWO GATES, READ RATHER THAN RE-DERIVED (rule 36). PatherTick
+        // opens with `if (WillCollideWithPawnAt(Position, forceOnlyStanding: true,
+        // useId: true)) { if (FailedToFindCloseUnoccupiedCellRecently()) return; }` -
+        // an early return AHEAD of every movement statement, which is the whole of
+        // §89. Reimplementing the collision test was rejected: the `useId` tie-break
+        // decides WHICH of two co-located pawns is allowed to yield, and guessing it
+        // wrong inverts the answer on exactly the case being diagnosed.
+        //
+        // Reflected as MethodInfo/FieldInfo rather than delegates so a vanilla rename
+        // leaves them null and the report degrades to its old wording, instead of
+        // throwing at type-init and taking the whole watchdog down with it.
+        private static readonly MethodInfo WillCollideMethod =
+            AccessTools.Method(typeof(Pawn_PathFollower), "WillCollideWithPawnAt",
+                new[] { typeof(IntVec3), typeof(bool), typeof(bool) });
+
+        private static readonly FieldInfo FailedTicksField = AccessTools.Field(
+            typeof(Pawn_PathFollower), "failedToFindCloseUnoccupiedCellTicks");
+
         /// <summary>Pawn-id keyed, so it must not cross a game load - see the banner on
         /// ABWormholePather.ResetForNewGame. Stale entries here only cost a false episode
         /// (the watchdog would compare a loaded pawn against a previous session's position),
@@ -217,28 +235,54 @@ namespace AsAboveSoBelow
             }
 
             // WHAT is in the way. Without this the BLOCKED verdict names a category but not a
-            // culprit, and the three culprits below need entirely different fixes.
+            // culprit, and the culprits below need entirely different fixes.
+            //
+            // ⚠⚠ THIS USED TO ASK FOR *THE* OCCUPANT AND THAT IS WHY §89 SURVIVED FIVE
+            // SIGHTINGS (rule 71). It did `next.GetFirstPawn(map)` and then discarded the
+            // answer when it was the watched pawn itself - so for the one arrangement
+            // that actually matters, TWO PAWNS ON ONE CELL, it printed `occupant=none`
+            // and the report read as "nothing is in the way" while the pawn was, in
+            // effect, in its own way. A probe that peeks at the first entry cannot see a
+            // stack. It now COUNTS, and names every pawn including self.
+            bool selfStack = false;
             string nextCellInfo = "n/a";
             if (p.pather != null)
             {
                 IntVec3 next = p.pather.nextCell;
+                selfStack = next.IsValid && next == p.Position;
                 if (next.IsValid && next.InBounds(map))
                 {
-                    Pawn occupant = next.GetFirstPawn(map);
                     Building edifice = next.GetEdifice(map);
                     Building_Door door = edifice as Building_Door;
                     nextCellInfo = next
+                        + (selfStack ? " (== PAWN'S OWN CELL)" : string.Empty)
                         + " walkable=" + next.Walkable(map)
-                        + " occupant=" + (occupant != null && occupant != p
-                            ? occupant.LabelShortCap + "(" + (occupant.pather != null && occupant.pather.Moving
-                                ? "moving" : "idle") + ")"
-                            : "none")
+                        + " pawnsHere=" + PawnCensus(map, next, p)
                         + " edifice=" + (edifice != null ? edifice.def.defName : "-")
                         + (door != null
                             ? " door[open=" + door.Open + " freePassage=" + door.FreePassage
                               + " blockedOpenMomentary=" + door.BlockedOpenMomentary + "]"
                             : string.Empty);
                 }
+            }
+
+            // Vanilla's verdict on the same question, straight from its own state.
+            bool collides = CollidesHere(p);
+            int gaveUpAge = UnstickGaveUpTicksAgo(p);
+            // ⚠ SAY SO WHEN THE INSTRUMENT IS DEGRADED (rule 33). Both members are
+            // private vanilla state; a rename leaves them null and this file quietly
+            // reverts to the exact wording that hid §89 for five sightings. A
+            // diagnostic that loses a sense must announce it, or the next person
+            // spends four runs trusting a verdict it can no longer support.
+            if (WillCollideMethod == null || FailedTicksField == null)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: stuck watchdog could not bind vanilla's"
+                    + " PatherTick gates (WillCollideWithPawnAt="
+                    + (WillCollideMethod != null)
+                    + ", failedToFindCloseUnoccupiedCellTicks="
+                    + (FailedTicksField != null)
+                    + "); SELF-STACK episodes will be misreported as BLOCKED.",
+                    0x2B10C1);
             }
 
             string verdict = !moving
@@ -249,7 +293,21 @@ namespace AsAboveSoBelow
                     ? "CONNECTIVITY - region says reachable, no walkable route"
                     : (destChanges >= 3
                         ? "RE-TARGETING - destination changed " + destChanges + " times while standing still"
-                        : "BLOCKED - path exists and destination is stable, so movement is obstructed"));
+                        : (gaveUpAge >= 0 || (collides && selfStack)
+                            ? "SELF-STACK - another STANDING pawn shares this cell. Vanilla's "
+                              + "PatherTick returns before ANY movement code while "
+                              + "TryFindBestPawnStandCell keeps failing"
+                              + (gaveUpAge >= 0
+                                  ? " (it gave up " + gaveUpAge + " ticks ago; it re-tries "
+                                    + "every 100)"
+                                  : " (collision confirmed, timestamp unreadable)")
+                              + ". NOT obstructed - co-located. Read pawnsHere: a "
+                              + "co-occupant marked `transit` makes this OURS (\u00a778's hold "
+                              + "parks a crossing pawn with StopDead for 90t, \u00a785.19 "
+                              + "queues onto the approach tile); anything else is vanilla "
+                              + "traffic and not our bug"
+                            : "BLOCKED - path exists and destination is stable, so movement "
+                              + "is obstructed")));
 
             // ONE self-contained message: separate Log calls from here would share a stack
             // signature and be folded into a single class by the log monitor.
@@ -268,7 +326,91 @@ namespace AsAboveSoBelow
                 + " | destChanges=" + destChanges
                 + " | pendingTransit=" + ABWormholePather.HasPending(p)
                 + " | nextCell=" + nextCellInfo
+                + " | collidesHere=" + collides
+                + " | unstickGaveUp=" + (gaveUpAge >= 0 ? gaveUpAge + "t ago" : "no")
                 + " | verdict=" + verdict);
+        }
+
+        /// <summary>
+        /// Every pawn standing on a cell, SELF INCLUDED and labelled as such.
+        ///
+        /// Self is counted rather than filtered because the count is the finding: one
+        /// is normal, two is <see href="#">\u00a789</see>. Each is tagged moving/idle
+        /// (vanilla's gate is <c>forceOnlyStanding</c>, so only idle ones wedge a
+        /// pather) and, decisively, whether it is mid-transit - which is what tells
+        /// a stairs-side stack of ours apart from ordinary vanilla traffic.
+        /// </summary>
+        private static string PawnCensus(Map map, IntVec3 c, Pawn self)
+        {
+            List<Thing> things = map.thingGrid.ThingsListAtFast(c);
+            int count = 0;
+            string names = string.Empty;
+            for (int i = 0; i < things.Count; i++)
+            {
+                if (!(things[i] is Pawn q))
+                {
+                    continue;
+                }
+                count++;
+                names += (names.Length > 0 ? "," : string.Empty)
+                    + (q == self ? "SELF" : q.LabelShortCap)
+                    + "(" + (q.pather != null && q.pather.Moving ? "moving" : "idle")
+                    + (ABWormholePather.HasPending(q) ? ",TRANSIT" : string.Empty) + ")";
+            }
+            return count + (count > 0 ? " [" + names + "]" : string.Empty);
+        }
+
+        /// <summary>Vanilla's own "another standing pawn is on my cell" test, invoked
+        /// rather than reimplemented - see the banner on WillCollideMethod.</summary>
+        private static bool CollidesHere(Pawn p)
+        {
+            if (WillCollideMethod == null || p?.pather == null)
+            {
+                return false;
+            }
+            try
+            {
+                return WillCollideMethod.Invoke(p.pather,
+                    new object[] { p.Position, true, true }) is bool b && b;
+            }
+            catch
+            {
+                return false; // a diagnostic must never be the thing that throws
+            }
+        }
+
+        /// <summary>
+        /// How long ago vanilla's unstick search last failed, or -1 if it has not
+        /// failed recently.
+        ///
+        /// ⚠ THE 100-TICK WINDOW IS VANILLA'S, COPIED VERBATIM from
+        /// <c>FailedToFindCloseUnoccupiedCellRecently</c>
+        /// (<c>failedToFindCloseUnoccupiedCellTicks + 100 &gt; TicksGame</c>). Inside it,
+        /// PatherTick returns early every tick. The default is -999999, so an
+        /// untouched field falls out of the window and reads as "no".
+        ///
+        /// Reflection cost is irrelevant here: this runs once per REPORTED episode,
+        /// not per tick.
+        /// </summary>
+        private static int UnstickGaveUpTicksAgo(Pawn p)
+        {
+            if (FailedTicksField == null || p?.pather == null)
+            {
+                return -1;
+            }
+            try
+            {
+                if (!(FailedTicksField.GetValue(p.pather) is int t))
+                {
+                    return -1;
+                }
+                int age = Find.TickManager.TicksGame - t;
+                return age >= 0 && age < 100 ? age : -1;
+            }
+            catch
+            {
+                return -1;
+            }
         }
     }
 }
