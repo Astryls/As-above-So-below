@@ -5,75 +5,87 @@ description and these notes are never uploaded by it.
 HOUSE RULE: no em-dashes anywhere in shipped text.
 ================================================================================
 
-[h1]◆ Window 10: Wall Risers ◆[/h1]
+[h1]◆ Window 11: Taking The Stairs ◆[/h1]
 
-[h1]✦ New: wall risers[/h1]
-Utility columns carry a service between levels, but they stand in the middle of
-the floor. Risers do the same job from inside the wall.
-
-[list]
-[*][b]Four risers[/b], one per service: power, pipe, climate and data. Each joins
-the two levels it touches exactly as the matching column does.
-[*][b]They mount on a wall[/b], the way a wall lamp does, so the floor stays
-clear and a corridor keeps its full width.
-[*][b]They do not hold up a roof.[/b] A riser is a fitting, not a support. If you
-need the roof held, that is still the column's job.
-[*][b]Remove the wall and the riser goes with it[/b], rather than being left
-floating in the gap.
-[/list]
-
-[h1]✦ Columns and risers no longer need research[/h1]
-Both used to sit behind Electricity and Machining. They are how a colony gets
-from one level to another, which is the whole point of the mod, so they are
-available from the moment you land. The individual network toggles still respect
-whatever the owning mod asks for, so an unresearched network still cannot be
-carried.
-
-[h1]✦ A tidier build menu[/h1]
-The vertical links had been sharing a slot with vanilla's doors and scattered
-themselves through the Structure tab. Everything this mod adds is now one
-deliberate block after vanilla's own: ladders, stairs, grand stairs and the
-elevator, then the four columns, then the four risers.
-
-[h1]✦ Blueprints show what you are actually building[/h1]
-Placing one of this mod's buildings drew a plain blue box. Blueprints and the
-placing ghost now show the finished building's own art, tinted the usual
-blueprint blue, so a planned stairwell reads as a stairwell before a single
-block is hauled.
-
-[h1]✦ Fixed: stray plumbing at columns and risers[/h1]
-With Dubs Bad Hygiene, Rimefeller or Rimatomics installed, loose lengths of pipe
-could appear at a column or riser, on its own level and the one above, looking
-like something you had built by mistake. Those fittings are now hidden in the
-normal view on every one of those mods' drawing paths. They remain fully visible
-in the pipe and power overlays, which is where you go to read what is connected
-to what.
-
-[h1]✦ Playing as one character: Perspective Shift[/h1]
-Perspective Shift is now supported, and the combination works properly across a
-column of levels.
+[h1]✦ Colonists actually climb now[/h1]
+Crossing between levels used to be instant, with the colonist appearing at the
+far end and a faint copy left behind at the stairs for a moment. That was
+backwards, and it is gone.
 
 [list]
-[*][b]Shooting between levels works while you are the character[/b], through the
-same openings and the same rules the colony AI uses.
-[*][b]Looking at another level holds the view where you put it[/b] instead of
-dragging the camera back toward your character and stranding it between levels.
-[*][b]Your character holds still while you look elsewhere[/b], and cannot move or
-shoot until you come back. There is a setting in the camera tab to turn that off
-if you would rather keep walking around off screen.
-[*][b]Taking the stairs cuts straight to the new level[/b] rather than sliding
-the camera the whole way there.
+[*][b]They walk to the stairwell first[/b], at their own speed, along a real
+path, and they step onto the stairs before anything happens.
+[*][b]Then they climb.[/b] Going down they sink and shrink into the opening;
+going up they rise out of it. Stairs get a slight lean, ladders are climbed
+square on, and there is a footfall bob timed to the climb rather than to the
+distance.
+[*][b]They emerge at the far end[/b] instead of blinking into existence in the
+middle of the floor, arriving from above when they came down and from below when
+they came up.
+[*][b]Their name tag travels with them[/b] and they face the way they are
+actually going.
+[*]A crossing takes about a second and a half. Ladders are slower, and an
+elevator ride is a little longer for every level it passes.
 [/list]
 
-[h1]✦ A note on the riser art[/h1]
-The riser textures in this build are placeholders. They read correctly at a
-glance and they are not the final set; proper art is being made and will land in
-a later update. Nothing about how they work will change.
+[h1]✦ Ways between levels are researched now[/h1]
+Four new projects, each one standing on its own with nothing required before it.
+
+[list]
+[*][b]Stairs[/b] and [b]Ladders[/b] are neolithic and cheap. A standard colony
+already knows both when it lands, so nothing about a normal start changes.
+[*][b]A tribal colony starts without them[/b] and has to research one before it
+can leave the level it arrived on. This is deliberate. It makes digging down an
+early goal rather than a freebie, and both projects are the cheapest in the mod.
+[*][b]Transfer columns[/b] covers the four utility columns and their four wall
+risers. [b]Elevator[/b] covers the elevator.
+[*][b]The grand staircase comes with stairs[/b] rather than needing its own
+project. It is a wider version of something you already know how to cut.
+[/list]
+
+This reverses part of the last update, which removed research from the columns
+entirely. The reason that was done still holds: a new colony must not be locked
+out of joining its own levels until mid game. So the new project needs nothing
+before it and can be started the moment you land. As before, the individual
+network toggles still respect whatever the owning mod asks for, so an
+unresearched network still cannot be carried.
+
+[h1]✦ Turn the levels off[/h1]
+There is now an [b]Enable multiple levels[/b] checkbox on the map size screen,
+next to the level plan.
+
+[list]
+[*][b]Unticked, the colony generates as an ordinary single level map[/b] and
+RimWorld's own map sizes are available again, including the ones this mod
+normally locks.
+[*][b]Your level plan is remembered, not thrown away.[/b] Tick it back on and
+the levels you had chosen are still there.
+[*][b]It is per colony[/b], like the rest of the plan, so one settlement can be a
+deep column and the next one flat.
+[*]Colonies you have already started are not affected either way.
+[/list]
+
+[h1]✦ Toggleable Overlays supported[/h1]
+If you use Toggleable Overlays, the two now agree about the level below.
+
+[list]
+[*][b]Hovering something on a lower level shows its overlay[/b], the same way
+hovering it on your own level does. Stack counts, storage labels, bed and throne
+names and fuel warnings on lower levels used to be hidden permanently.
+[*][b]Forbidden markers match[/b] between the level you are on and the one below.
+[*][b]Its zoom setting applies to both levels[/b], so zooming out no longer
+leaves the level below cluttered with labels yours has already dropped.
+[*][b]Its blueprint transparency slider now drives ours too.[/b] If your plans
+look solid rather than translucent, that slider is set to fully opaque; open the
+Toggleable Overlays settings and turn it down.
+[/list]
 
 [h1]✦ Still open beta[/h1]
 [list]
 [*][b]Combat Extended[/b] remains experimental. The bridge is in and working, but
 it has not had real play time yet.
+[*][b]The riser textures are still placeholders.[/b] They read correctly at a
+glance, proper art is being made, and nothing about how they work will change.
 [*]If a network in your modlist is not offered by the right utility column, say
 so on the Discord and it is a one line fix.
 [/list]
