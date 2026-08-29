@@ -545,29 +545,50 @@ namespace AsAboveSoBelow
                 // Already standing on the art. Sending it out to the front tile so it can
                 // walk back in would be a visible round trip for no gain - and it is the
                 // exact shape of an oscillation, so it is refused rather than tolerated.
+                // (This is the routine [single leg] of every ping-pong return trip - the
+                // pawn is ordered back up the stairs it just came out of.)
+                Decline(link, "pawn already on the mouth");
                 return IntVec3.Invalid;
             }
             Map map = link.Map;
             if (map == null || !ABLinkApproach.TryGet(link, out ABApproach a))
             {
+                Decline(link, "no approach resolved for this def/rotation");
                 return IntVec3.Invalid;
             }
             IntVec3 c = a.outside;
             if (!c.InBounds(map) || !c.Standable(map))
             {
+                Decline(link, "front tile " + c + " not standable");
                 return IntVec3.Invalid;
             }
             // A seam runs between bands; the cell in front of a link built flush against one
             // belongs to another level entirely.
             if (!ABBands.SameBand(map, pawn.Position, c))
             {
+                Decline(link, "front tile " + c + " is across a band seam");
                 return IntVec3.Invalid;
             }
             if (!pawn.CanReach(c, PathEndMode.OnCell, Danger.Deadly))
             {
+                Decline(link, "front tile " + c + " unreachable for this pawn");
                 return IntVec3.Invalid;
             }
             return c;
+        }
+
+        /// <summary>
+        /// Rule 31: make the guard say which clause declined. §85.19's first field outing
+        /// produced `[single leg]` for two rotations and NO WAY TO TELL WHY - four clauses,
+        /// one silent Invalid. Behind LogTransit, so a Release build never builds the string.
+        /// </summary>
+        private static void Decline(Building_Door link, string why)
+        {
+            if (ABV2Debug.LogTransit)
+            {
+                ABV2Debug.Transit("  no front tile for " + link.def.defName + " "
+                    + link.Rotation + " at " + link.Position + ": " + why);
+            }
         }
 
         /// <summary>
