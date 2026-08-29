@@ -137,6 +137,64 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
+        /// WHERE A PAWN ORDERED TO USE THIS LINK SHOULD COME TO REST ON THE FAR SIDE: the
+        /// tile just outside the opening, OFF the footprint. IntVec3.Invalid when there is
+        /// no usable one, and then the caller must fall back to the link's own cell.
+        ///
+        /// ⚠⚠ THE ARRIVAL WAS ALREADY RIGHT; THE ORDER WAS NOT. §85's LandingCell has set
+        /// transiting pawns down on this exact tile for two windows - but the float-menu
+        /// travel order aimed its Goto at `far.Position`, a cell INSIDE the far link's own
+        /// footprint. So the pawn crossed, landed correctly in front of the opening, and
+        /// then its still-live job walked it BACK ONTO THE STAIRCASE and parked it there.
+        /// Field report: "they should path off the building, not go to the building cell",
+        /// most visible under Perspective Shift, where a pawn standing on the art is drawn
+        /// inside the staircase rather than beside it.
+        ///
+        /// ⚠ RULE 57: THE ORDER AND THE LANDING MUST NOT EACH ANSWER "WHICH SIDE". This
+        /// lives next to TryGet so both read the SAME per-def table. Deriving the tile a
+        /// second time at the order site is how the two ends of one journey come to
+        /// disagree about which edge is open.
+        ///
+        /// ⚠ ELEVATORS RETURN Invalid AND THAT IS THE FEATURE (user's call, §85). TryGet is
+        /// false for a non-Directional link, so an elevator order keeps aiming at the car
+        /// and the pawn arrives inside it, exactly as it always has.
+        ///
+        /// ⚠ OCCUPANCY IS DELIBERATELY NOT TESTED, twice over. Standable ignores pawns by
+        /// design, and a pawn standing here at ORDER time says nothing about who is standing
+        /// here when the traveller actually arrives - possibly hundreds of ticks later. A
+        /// blocked tile makes a queue; that is the correct behaviour for a staircase
+        /// (§85.19) and rejecting it would send the order back to the footprint for the one
+        /// case that most wants to be off it.
+        ///
+        /// ⚠ SAME-BAND IS NOT REDUNDANT. A link built flush against a band edge has a
+        /// neighbour cell that is a different LEVEL sharing an x/z edge; aiming a journey at
+        /// it would route the pawn to the wrong band entirely.
+        /// </summary>
+        public static IntVec3 DisembarkCell(Thing link)
+        {
+            if (link == null || !link.Spawned)
+            {
+                return IntVec3.Invalid;
+            }
+            Map map = link.Map;
+            if (map == null || !TryGet(link, out ABApproach a))
+            {
+                return IntVec3.Invalid; // elevator, or nothing rotatable to point at
+            }
+            IntVec3 c = a.outside;
+            // Standable, NOT Walkable - the same distinction ApproachLanding draws for its
+            // outside candidates. This cell is OFF the footprint, so walkable-but-not-
+            // standable out here is somebody ELSE's doorway, and ending a journey parked in
+            // one is the jam §85.4 exists to avoid.
+            if (!c.InBounds(map) || !c.Standable(map)
+                || !ABBands.SameBand(map, c, link.Position))
+            {
+                return IntVec3.Invalid;
+            }
+            return c;
+        }
+
+        /// <summary>
         /// The world point the transit clips are anchored on: the MIDDLE OF THE OPEN EDGE,
         /// not the middle of the building.
         ///

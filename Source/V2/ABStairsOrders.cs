@@ -103,7 +103,29 @@ namespace AsAboveSoBelow
                         options.Add(new FloatMenuOption(label + " (" + "NoPath".Translate() + ")", null));
                         continue;
                     }
-                    IntVec3 dest = far.Position;
+                    // ⚠⚠ AIM AT THE TILE IN FRONT OF THE FAR OPENING, NOT AT THE LINK.
+                    // This was `far.Position` - a cell INSIDE the far link's own footprint -
+                    // and it quietly undid §85's landing rule: the pawn crossed, was set down
+                    // on the front tile by LandingCell, and then this job walked it back ONTO
+                    // the staircase and left it standing there. The arrival was never the
+                    // bug; the destination was.
+                    //
+                    // ⚠ THE FALLBACK IS THE OLD BEHAVIOUR VERBATIM, and it is the ELEVATOR's
+                    // normal path, not an error case: DisembarkCell returns Invalid for a
+                    // non-directional link, so an elevator order still aims at the car and
+                    // the pawn arrives inside it (user's call, §85). A stairs/ladder whose
+                    // front tile is walled in, out of bounds or across a seam degrades to the
+                    // same place it has always gone rather than refusing to travel.
+                    //
+                    // ⚠ THIS DOES NOT DIVERT THE ROUTE. TryGetTransit scores candidate pairs
+                    // partly on the far anchor's distance to the destination, and the front
+                    // tile is ONE CELL from the link the player clicked - so the intended
+                    // pair still wins by the same margin `far.Position` won by.
+                    IntVec3 dest = ABLinkApproach.DisembarkCell(far);
+                    if (!dest.IsValid)
+                    {
+                        dest = far.Position;
+                    }
                     options.Add(FloatMenuUtility.DecoratePrioritizedTask(
                         new FloatMenuOption(label, delegate
                         {
