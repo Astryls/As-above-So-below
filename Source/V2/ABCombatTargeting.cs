@@ -42,21 +42,17 @@ namespace AsAboveSoBelow
     /// </summary>
     public static class ABCombatTargeting
     {
-        // Observe-only counters for `AB2: combat report`.
-        public static int thingsAppended;
-
-        public static int cellsTranslated;
-
         public static void ResetCounters()
         {
-            thingsAppended = 0;
-            cellsTranslated = 0;
+            ABMouseDescend.descends = 0;
         }
 
+        /// <summary>Reports the GLOBAL descend now, since that is what does this job.
+        /// The old seeThroughThings/seeThroughCells pair counted the two deleted patches
+        /// and would have read a permanent zero.</summary>
         public static string CounterReport()
         {
-            return "targeting: seeThroughThings=" + thingsAppended
-                + " seeThroughCells=" + cellsTranslated;
+            return ABMouseDescend.CounterReport();
         }
 
         /// <summary>
@@ -102,124 +98,26 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// THE one interception. Everything the player can point at is filtered through this
-    /// list; see the banner in ABCombatTargeting for why it is the only place worth patching.
-    ///
-    /// A POSTFIX that APPENDS, never one that replaces: things on the level you are actually
-    /// looking at must keep winning, because <c>Targeter</c> and the float menu both treat
-    /// list order as preference. Ordering the below-level things last is what stops a
-    /// force-fire click landing on a raider one storey down when there is one right in front
-    /// of the cursor.
-    /// </summary>
-    [HarmonyPatch(typeof(GenUI), nameof(GenUI.ThingsUnderMouse))]
-    public static class Patch_GenUI_ABThingsUnderMouseSeeThrough
-    {
-        private static void Postfix(Vector3 clickPos, TargetingParameters clickParams,
-            ITargetingSource source, List<Thing> __result)
-        {
-            try
-            {
-                if (__result == null || !ABBelowClickThrough.Enabled)
-                {
-                    return;
-                }
-                Map map = Find.CurrentMap;
-                if (!ABCombatTargeting.TryResolveClicked(map, clickPos, out IntVec3 below))
-                {
-                    return;
-                }
-                List<Thing> things = map.thingGrid.ThingsListAtFast(below);
-                for (int i = 0; i < things.Count; i++)
-                {
-                    Thing t = things[i];
-                    if (t == null || __result.Contains(t))
-                    {
-                        continue;
-                    }
-                    // clickParams is the caller's own filter - faction relations, pawns only,
-                    // buildings only, whatever this particular targeter wants. Honouring it
-                    // here is what makes one patch serve psycasts, mortars and jump packs
-                    // without knowing anything about them.
-                    if (clickParams != null && !clickParams.CanTarget(t, source))
-                    {
-                        continue;
-                    }
-                    __result.Add(t);
-                    ABCombatTargeting.thingsAppended++;
-                }
-            }
-            catch (Exception e)
-            {
-                ABGuard.Disable(ABGuard.Combat, e, "V2 see-through target list");
-            }
-        }
-    }
-
-    /// <summary>
-    /// The bare-CELL half of the same problem, which the thing list cannot cover.
-    ///
-    /// <c>GenUI.TargetsAt</c> ends by yielding <c>UI.MouseCell()</c> for any targeter that
-    /// accepts locations - mortars, most offensive psycasts, jump packs. Over an open-air cell
-    /// that raw cell is a hole in the sky: legal to target and completely pointless, because
-    /// the shell or the psycast would resolve in mid-air one level above the thing the player
-    /// is looking at.
-    ///
-    /// ⚠ SO THIS ONE SUBSTITUTES RATHER THAN APPENDS, and that asymmetry with the thing patch
-    /// above is deliberate. There is no reading of "I clicked the open air" that means the air
-    /// itself. For a thing, both readings exist and the nearer one should win; for a cell, the
-    /// see-through reading is the only one.
-    /// </summary>
-    [HarmonyPatch(typeof(GenUI), nameof(GenUI.TargetsAt))]
-    public static class Patch_GenUI_ABTargetsAtSeeThrough
-    {
-        private static void Postfix(Vector3 clickPos, TargetingParameters clickParams,
-            bool thingsOnly, ITargetingSource source,
-            ref IEnumerable<LocalTargetInfo> __result)
-        {
-            if (thingsOnly || __result == null)
-            {
-                return; // no cell is yielded in that mode, so there is nothing to substitute
-            }
-            __result = Wrap(__result, clickPos, clickParams, source);
-        }
-
-        private static IEnumerable<LocalTargetInfo> Wrap(IEnumerable<LocalTargetInfo> inner,
-            Vector3 clickPos, TargetingParameters clickParams, ITargetingSource source)
-        {
-            Map map = Find.CurrentMap;
-            bool resolved = false;
-            IntVec3 below = IntVec3.Invalid;
-            try
-            {
-                resolved = ABBelowClickThrough.Enabled
-                    && ABCombatTargeting.TryResolveClicked(map, clickPos, out below);
-            }
-            catch (Exception e)
-            {
-                ABGuard.Disable(ABGuard.Combat, e, "V2 see-through cell target");
-                resolved = false;
-            }
-            foreach (LocalTargetInfo t in inner)
-            {
-                if (!resolved || t.HasThing || !t.IsValid)
-                {
-                    yield return t;
-                    continue;
-                }
-                // ⚠ NO try/catch AROUND A yield - C# forbids it, and this is why the resolve
-                // happens above the loop rather than inline where it reads more naturally.
-                if (clickParams != null
-                    && !clickParams.CanTarget(new TargetInfo(below, map), source))
-                {
-                    yield return t;
-                    continue;
-                }
-                ABCombatTargeting.cellsTranslated++;
-                yield return new LocalTargetInfo(below);
-            }
-        }
-    }
+    // ⚠⚠ TOMBSTONE - `Patch_GenUI_ABThingsUnderMouseSeeThrough` (window 9) AND
+    // `Patch_GenUI_ABTargetsAtSeeThrough` (window 9) LIVED HERE AND WERE DELETED IN
+    // WINDOW 13, SUPERSEDED BY `ABMouseDescend`.
+    //
+    // They were the opt-in half of the see-through model: one appended the things the column
+    // shows to GenUI.ThingsUnderMouse, the other substituted the cell the column shows into
+    // GenUI.TargetsAt. Both worked (field-verified §82, run #375) and both are now redundant,
+    // because the clickPos they were handed - and the UI.MouseCell() that TargetsAt yields -
+    // have ALREADY descended at the source.
+    //
+    // ⚠ DO NOT REINSTATE EITHER. Leaving them in alongside the global descend is the §82a
+    // defect a third time: TryResolveClicked asks "is this cell open air?" about a cell that
+    // has already been resolved to solid floor, answers no, and the patch goes silently inert
+    // - which is harmless but reads, to the next person debugging, like the see-through rule
+    // is firing when it is not. The append patch would additionally be capable of adding the
+    // SAME thing twice if the resolve ever became non-idempotent.
+    //
+    // What survives here is the part that was never about pointing: TryResolveClicked (kept
+    // as the shared, documented resolver) and the turret forced-target range fix below, which
+    // is band arithmetic, not a cursor question.
 
     /// <summary>
     /// TURRET FORCE-TARGETS, and the last raw distance test in the combat path.

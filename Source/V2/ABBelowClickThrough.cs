@@ -750,7 +750,16 @@ namespace AsAboveSoBelow
                 int loZ = banded ? Mathf.RoundToInt(bMin) : 0;
                 int hiZ = banded ? Mathf.RoundToInt(bMax) - 1 : int.MaxValue;
 
-                Vector3 mouse = UI.MouseMapPosition();
+                // ⚠ EXPLICITLY RAW (window 13). The global descend (ABMouseDescend) makes
+                // UI.MouseMapPosition answer with the cell the column SHOWS, and both uses
+                // below need the cursor's own cell instead: the curtain clamp compares it
+                // against the VIEWED band's rows - a descended cell is outside them by
+                // construction, so every open-air click would select nothing at all - and
+                // TryTranslate below re-asks the see-through question itself. Selector's
+                // click path is suppressed too, so this is belt and braces; it is explicit
+                // because that suppression depends on a call graph (SelectUnderMouse has a
+                // caller outside HandleMapClicks) that nobody will re-check.
+                Vector3 mouse = ABMouseDescend.RawMouseMapPosition();
                 IntVec3 mouseCell = IntVec3.FromVector3(mouse);
 
                 if (banded)
