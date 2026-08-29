@@ -99,13 +99,29 @@ namespace AsAboveSoBelow
         // the field report was "the animation isn't going up the stairs but in and down".
         // V1 separates the two ideas - a slide toward the stairwell, PLUS a screen-space
         // rise or sink - so going up looks like going up no matter which way the run points.
-        private const float ClimbSink = -0.35f;   // z offset, descending
-        private const float ClimbRise = 0.30f;    // z offset, ascending
-        private const float ClimbShrink = 0.28f;  // scale lost, descending
-        private const float ClimbGrow = 0.10f;    // scale gained, ascending
+        // ⚠⚠ §85.15 ONE GRAMMAR, INVERTED ONLY IN THE VERTICAL. User's spec, verbatim:
+        // "I want ascent to recede like they're disappearing from view due to being on the
+        // level above. Going up and down should have the same animation but inversed in
+        // start and size growth."
+        //
+        // So the two halves of a crossing are each other's inverse, and the two DIRECTIONS
+        // differ only in which way the vertical term points:
+        //   ENTRY  (leaving a level)  - always RECEDES: scale 1 -> 1-ClimbRecede.
+        //                               up rises off the top of the stair, down sinks in.
+        //   EMERGE (arriving)         - always APPEARS: scale 1-EmergeAppear -> 1.
+        //                               arriving from above starts high, from below starts low.
+        //
+        // ⚠ THIS REPLACED V1's ASYMMETRIC PORT (§78d), WHICH GREW ON ASCENT. ClimbGrow was
+        // +0.10 and EmergeBigger +0.12, i.e. a climb read as the pawn coming TOWARD the
+        // camera - defensible as perspective (the level above is nearer the camera) and
+        // rejected in the field: a pawn leaving for the level above should read as leaving,
+        // exactly like one going down. Four constants collapsed to two, and the collapse is
+        // the point - a single number per half is what makes the two directions match.
+        private const float ClimbSink = -0.35f;    // z offset, descending
+        private const float ClimbRise = 0.30f;     // z offset, ascending
+        private const float ClimbRecede = 0.28f;   // scale LOST by the entry half, either way
         private const float EmergeVert = 0.30f;
-        private const float EmergeBigger = 0.12f; // arriving from above
-        private const float EmergeSmaller = 0.18f; // arriving from below
+        private const float EmergeAppear = 0.18f;  // scale the arrival starts SHORT by, either way
 
         /// <summary>Longest slide toward the stairwell centre, in cells. V1's value.</summary>
         private const float SlideMax = 1.35f;
@@ -652,8 +668,10 @@ namespace AsAboveSoBelow
             float bob = elevator ? 0f
                 : Mathf.Abs(Mathf.Sin(ageTicks * Mathf.PI / period)) * amp;
 
+            // §85.15: RECEDE EITHER WAY. The direction changes only where the pawn goes,
+            // not whether it is leaving.
             float vert = (c.up ? ClimbRise : ClimbSink) * ease;
-            float k = c.up ? 1f + ClimbGrow * ease : 1f - ClimbShrink * ease;
+            float k = 1f - ClimbRecede * ease;
 
             o.offX = c.travelX * ease;
             o.offZ = c.travelZ * ease + bob + vert;
@@ -681,9 +699,13 @@ namespace AsAboveSoBelow
         ///
         /// ⚠ THE VERTICAL TERM IS INVERTED RELATIVE TO THE CLIMB, WHICH IS WHAT MAKES THE
         /// TWO HALVES READ AS ONE MOVEMENT. A pawn that went DOWN arrives from above, so it
-        /// starts raised and slightly enlarged and settles; a pawn that went UP arrives from
-        /// below, so it starts sunken and small and grows. Getting this backwards makes a
-        /// descent end by rising out of the floor.
+        /// starts raised and settles; a pawn that went UP arrives from below, so it starts
+        /// sunken and rises. Getting this backwards makes a descent end by rising out of the
+        /// floor.
+        ///
+        /// ⚠ THE SCALE IS NO LONGER INVERTED WITH IT (§85.15). It used to start ENLARGED
+        /// after a descent and SHRUNKEN after a climb; now both start short of full size and
+        /// grow in, because "arriving" is the same event whichever way the pawn travelled.
         /// </summary>
         private static ClipPose EmergePose(Clip c, float q)
         {
@@ -694,8 +716,13 @@ namespace AsAboveSoBelow
             float e = 1f - Mathf.Clamp01(q);
             e *= e;
 
+            // §85.15: APPEAR EITHER WAY - start short of full size and grow into it. The
+            // vertical term stays inverted by direction and is now the ONLY thing that is:
+            // arriving from below starts sunken and rises, from above starts raised and
+            // settles. Getting THAT backwards is what makes a descent end by rising out of
+            // the floor.
             float vert = c.up ? -EmergeVert : EmergeVert;
-            float k = c.up ? 1f - EmergeSmaller * e : 1f + EmergeBigger * e;
+            float k = 1f - EmergeAppear * e;
 
             o.offX = c.ox * e;
             o.offZ = (c.oz + vert) * e;
