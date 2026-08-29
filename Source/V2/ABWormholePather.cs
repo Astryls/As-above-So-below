@@ -379,6 +379,10 @@ namespace AsAboveSoBelow
             // the old behaviour verbatim.
             dest = entry.IsValid ? new LocalTargetInfo(entry) : (LocalTargetInfo)near;
             peMode = PathEndMode.OnCell;
+            // ⚠ §85.18: the LAST thing this prefix does, so the log records what StartPath
+            // was actually handed. If a later line shows the pawn aimed elsewhere, something
+            // re-dispatched the pather AFTER us and that is the bug, not this rewrite.
+            ABV2Debug.Transit("  StartPath rewritten -> " + dest + " (OnCell)");
             return true;
         }
 
@@ -1072,7 +1076,18 @@ namespace AsAboveSoBelow
                     + " (band " + ABBands.BandOf(m, t.near.Position) + ")"
                     + ", far " + t.far.Position
                     + " (band " + ABBands.BandOf(m, t.far.Position) + ")"
-                    + " | job=" + (pawn.CurJob?.def?.defName ?? "none"));
+                    + " | job=" + (pawn.CurJob?.def?.defName ?? "none")
+                    // ⚠⚠ THE FIELD THAT NAMES THE CULPRIT (§85.18). "The pawn stopped short"
+                    // has two utterly different causes that look identical here: either the
+                    // pather was AIMED somewhere else (something re-dispatched it after our
+                    // StartPath rewrite), or it was aimed at the entry cell and gave up.
+                    // Destination answers that in one field.
+                    + " | entryCell=" + (t.entryCell.IsValid ? t.entryCell.ToString() : "INVALID")
+                    + " | patherDest=" + (pawn.pather != null
+                        ? pawn.pather.Destination.ToString() : "none")
+                    + " | moving=" + (pawn.pather != null && pawn.pather.Moving)
+                    + " | aimedAtEntry=" + (pawn.pather != null && t.entryCell.IsValid
+                        && pawn.pather.Destination.Cell == t.entryCell));
 
                 // A record whose NEAR anchor is not in the pawn's own band can never complete:
                 // the pawn is past it. Drop it rather than let it linger for the full 4000-tick
