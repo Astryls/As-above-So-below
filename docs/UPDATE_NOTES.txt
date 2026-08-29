@@ -1,93 +1,51 @@
-================================================================================
-STEAM CHANGE NOTES - paste into the Steam WEB editor (Workshop item 3776015553)
-Change Notes field. The publish utility pushes FILES + PREVIEW ONLY; the
-description and these notes are never uploaded by it.
-HOUSE RULE: no em-dashes anywhere in shipped text.
-================================================================================
+[h1]Clicking through open air now works everywhere[/h1]
 
-[h1]◆ Window 11: Taking The Stairs ◆[/h1]
+Open air is not a place, so the cursor no longer stops there. Point at a hole in the floor and you are pointing at whatever the column actually shows you, in every part of the game at once: psycast and ability targeting, jump packs, mortar and turret force targets, ordinary right click orders, left click selection, and the dev tools.
 
-[h1]✦ Colonists actually climb now[/h1]
-Crossing between levels used to be instant, with the colonist appearing at the
-far end and a faint copy left behind at the stairs for a moment. That was
-backwards, and it is gone.
+This used to be handled one feature at a time, which meant anything new started out broken until somebody noticed. It is now the default everywhere, with a short list of deliberate exceptions, so other mods' targeting gets it too without a patch having been written for them.
 
-[list]
-[*][b]They walk to the stairwell first[/b], at their own speed, along a real
-path, and they step onto the stairs before anything happens.
-[*][b]Then they climb.[/b] Going down they sink and shrink into the opening;
-going up they rise out of it. Stairs get a slight lean, ladders are climbed
-square on, and there is a footfall bob timed to the climb rather than to the
-distance.
-[*][b]They emerge at the far end[/b] instead of blinking into existence in the
-middle of the floor, arriving from above when they came down and from below when
-they came up.
-[*][b]Their name tag travels with them[/b] and they face the way they are
-actually going.
-[*]A crossing takes about a second and a half. Ladders are slower, and an
-elevator ride is a little longer for every level it passes.
-[/list]
+[b]Build and mine deliberately do NOT click through.[/b] Placement and designation stay on the level you are looking at, so a wall ghost never drops through a hole and a mining drag never runs off the bottom of your level.
 
-[h1]✦ Ways between levels are researched now[/h1]
-Four new projects, each one standing on its own with nothing required before it.
+[h1]Staircases are now one cell wide[/h1]
+
+[b]Normal staircases (up and down) are now 1x2 instead of 2x2.[/b] The art was always a single narrow flight; the old footprint bought two extra cells of solid building that colonists could not walk on and that arrivals were sometimes set down inside. Grand staircases are unchanged at 3x3.
+
+Existing saves are fine. Old staircases reload at the smaller size in the same spot, both ends shrink together, and a shrink cannot overlap anything.
+
+[h1]Colonists use the opening[/h1]
+
+Pawns taking a staircase now walk to the tile in front of the opening and step in through it, instead of arriving on the handrail or stopping beside the building. Arriving on the far level works the same way: they are set down in front of the opening and step off it.
 
 [list]
-[*][b]Stairs[/b] and [b]Ladders[/b] are neolithic and cheap. A standard colony
-already knows both when it lands, so nothing about a normal start changes.
-[*][b]A tribal colony starts without them[/b] and has to research one before it
-can leave the level it arrived on. This is deliberate. It makes digging down an
-early goal rather than a freebie, and both projects are the cheapest in the mod.
-[*][b]Transfer columns[/b] covers the four utility columns and their four wall
-risers. [b]Elevator[/b] covers the elevator.
-[*][b]The grand staircase comes with stairs[/b] rather than needing its own
-project. It is a wider version of something you already know how to cut.
+[*]Up stairs are entered from the side they face; down stairs from the notch, so one staircase is entered at one end and left at the other and you keep your direction of travel across the level change.
+[*]Several colonists sent at once queue in front of the opening instead of stacking on one tile.
+[*]Climb animations now match in both directions: leaving always recedes, arriving always appears, so a colonist heading up reads as leaving rather than growing.
+[*]Right clicking an elevator or a ladder now says elevator or ladder instead of "take the stairs".
 [/list]
 
-This reverses part of the last update, which removed research from the columns
-entirely. The reason that was done still holds: a new colony must not be locked
-out of joining its own levels until mid game. So the new project needs nothing
-before it and can be started the moment you land. As before, the individual
-network toggles still respect whatever the owning mod asks for, so an
-unresearched network still cannot be carried.
+[h1]Range rings and target highlights follow the level you are viewing[/h1]
 
-[h1]✦ Turn the levels off[/h1]
-There is now an [b]Enable multiple levels[/b] checkbox on the map size screen,
-next to the level plan.
+Turret and weapon range rings, jump range, and target highlights are drawn on the band you are actually looking at, so a range ring around something one level down lands where you can see it instead of hundreds of cells away.
+
+[h1]Raiders jump between levels[/h1]
+
+Hostiles that carry a jump ability now use it to cross levels when they cannot walk to you, in both directions, and the jump is drawn correctly on the way through instead of vanishing mid flight.
+
+[b]Honest scope:[/b] this affects sanguophages, Biotech mechs, and raiders from mods that hand out jump abilities. No vanilla raider kind carries a jump pack, so on a vanilla load list you will mostly see this from sanguophages.
+
+[h1]Fixes[/h1]
 
 [list]
-[*][b]Unticked, the colony generates as an ordinary single level map[/b] and
-RimWorld's own map sizes are available again, including the ones this mod
-normally locks.
-[*][b]Your level plan is remembered, not thrown away.[/b] Tick it back on and
-the levels you had chosen are still there.
-[*][b]It is per colony[/b], like the rest of the plan, so one settlement can be a
-deep column and the next one flat.
-[*]Colonies you have already started are not affected either way.
+[*][b]Perspective Shift:[/b] the "Return to character" button works again when your avatar is on a different level from the one you are viewing. It now brings the view back to your avatar's level as well as the camera.
+[*]Cross level ability and psycast targeting: cell targeted abilities (jump destinations, location psycasts, mortar target cells) resolved onto the empty sky cell instead of the ground you were pointing at. Two internal fixes that had been quietly cancelling each other out.
+[*]Turret force targets across levels no longer measure range through the gap between levels, so a mortar no longer accepts a target it will then refuse to fire at.
+[*]East and west facing staircases draw on their own footprint instead of hanging off it.
+[*]Blueprints and placement ghosts now match the built thing for every link.
 [/list]
 
-[h1]✦ Toggleable Overlays supported[/h1]
-If you use Toggleable Overlays, the two now agree about the level below.
+[h1]Known[/h1]
 
 [list]
-[*][b]Hovering something on a lower level shows its overlay[/b], the same way
-hovering it on your own level does. Stack counts, storage labels, bed and throne
-names and fuel warnings on lower levels used to be hidden permanently.
-[*][b]Forbidden markers match[/b] between the level you are on and the one below.
-[*][b]Its zoom setting applies to both levels[/b], so zooming out no longer
-leaves the level below cluttered with labels yours has already dropped.
-[*][b]Its blueprint transparency slider now drives ours too.[/b] If your plans
-look solid rather than translucent, that slider is set to fully opaque; open the
-Toggleable Overlays settings and turn it down.
+[*]The Combat Extended bridge is still marked experimental. Manned CE weapons are the next piece of work there.
+[*]East and west grand staircase art is still being redrawn.
 [/list]
-
-[h1]✦ Still open beta[/h1]
-[list]
-[*][b]Combat Extended[/b] remains experimental. The bridge is in and working, but
-it has not had real play time yet.
-[*][b]The riser textures are still placeholders.[/b] They read correctly at a
-glance, proper art is being made, and nothing about how they work will change.
-[*]If a network in your modlist is not offered by the right utility column, say
-so on the Discord and it is a one line fix.
-[/list]
-Report anything you hit and it gets fixed: join the Discord (link in the
-description).
