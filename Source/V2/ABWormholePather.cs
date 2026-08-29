@@ -355,6 +355,11 @@ namespace AsAboveSoBelow
                 return false;
             }
             IntVec3 entry = EntryCellFor(near, pawn);
+            // The other half of the CARRY line: if the walk-to-the-mouth never happened, this
+            // says whether it was never ASKED FOR (entry invalid) or asked for and abandoned.
+            ABV2Debug.Transit("  entry cell for " + near.def.defName + " " + near.Rotation
+                + " at " + near.Position + " = "
+                + (entry.IsValid ? entry.ToString() : "INVALID - walking to the building"));
             everSegmented.Add(pawn.thingIDNumber);
             pending[pawn.thingIDNumber] = new Transit
             {
@@ -535,6 +540,22 @@ namespace AsAboveSoBelow
                                          && now - t.nearSinceTick > ApproachPatienceTicks;
                     if (onEntry || stoppedShort || outOfPatience)
                     {
+                        // ⚠ NAME THE CLAUSE THAT FIRED (rule 31, inverted). "The pawn was
+                        // carried from the wrong cell" has three possible causes that look
+                        // identical on screen, and guessing between them has now cost two
+                        // runs. This line is the discriminator: WHERE the pawn was, where it
+                        // was SUPPOSED to be, and WHICH clause let it go.
+                        ABV2Debug.Transit("CARRY " + pawn.LabelShort + " at " + pawn.Position
+                            + " | entryCell=" + (t.entryCell.IsValid
+                                ? t.entryCell.ToString() : "INVALID (never rewritten)")
+                            + " | onEntry=" + onEntry
+                            + " stoppedShort=" + stoppedShort
+                            + " outOfPatience=" + outOfPatience
+                            + " | nearSince=" + (t.nearSinceTick == 0
+                                ? "this tick" : (now - t.nearSinceTick) + "t")
+                            + " | moving=" + (pawn.pather != null && pawn.pather.Moving)
+                            + " | dest=" + (pawn.pather != null
+                                ? pawn.pather.Destination.ToString() : "none"));
                         tmpDone.Add(kv.Key);
                         tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
                     }

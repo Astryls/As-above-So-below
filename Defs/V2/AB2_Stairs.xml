@@ -252,7 +252,9 @@
         <approachCells>
           <li>(0,-1)</li>   <!-- north -->
           <li>(-1,0)</li>   <!-- east -->
-          <li>(0,2)</li>   <!-- south -->
+          <li>(0,-1)</li>   <!-- south · §85.17 NOT the derived default. AB_StairsUp_south
+                                 is entered at the BOTTOM of the texture (user, run #389),
+                                 i.e. the rotation side, not Opposite(Rotation). -->
           <li>(2,0)</li>   <!-- west -->
         </approachCells>
       </li>

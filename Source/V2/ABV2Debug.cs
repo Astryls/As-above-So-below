@@ -35,10 +35,22 @@ namespace AsAboveSoBelow
         // the reason that cost one launch instead of a release - build the discriminator
         // INTO a change whose mechanism you cannot read.
 
-        /// <summary>Traces every step of a cross-band transit. Off by default (it is noisy
-        /// and per-move); the stairs order is the one flow where seeing each step beats
-        /// reasoning about it.</summary>
-        public static bool LogTransit;
+        /// <summary>
+        /// Traces every step of a cross-band transit. Noisy and per-move; the stairs order is
+        /// the one flow where seeing each step beats reasoning about it.
+        ///
+        /// ⚠ ON BY DEFAULT IN DEBUG BUILDS ONLY (§85.16). `build_mod` builds Debug and the
+        /// publish builds Release, so a test launch traces itself with no dev action to
+        /// remember, and a shipped build cannot possibly spam a player's log. Three
+        /// consecutive stairs runs produced no evidence at all because this defaulted to
+        /// false and nobody toggled it; the toggle still exists for a Release-built session.
+        /// </summary>
+        public static bool LogTransit =
+#if DEBUG
+            true;
+#else
+            false;
+#endif
 
         public static void Transit(string msg)
         {
