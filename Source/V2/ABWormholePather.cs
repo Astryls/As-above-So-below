@@ -35,7 +35,28 @@ namespace AsAboveSoBelow
             public Building_Door near;
             public Building_Door far;
             public int expiresAtTick;
+
+            /// <summary>§78c: the cell ON the link that the pawn is walking to, or Invalid
+            /// when no usable one exists. Standing here means standing on the stair art,
+            /// which is where the clip is allowed to start.</summary>
+            public IntVec3 entryCell;
+
+            /// <summary>When the record was made, for the approach-patience backstop.</summary>
+            public int startedTick;
         }
+
+        /// <summary>
+        /// How long a pawn that is already within ArriveRadius may keep walking toward its
+        /// entry cell before we carry it anyway.
+        ///
+        /// ⚠⚠ THIS IS THE ONLY THING STANDING BETWEEN §78c AND A RE-RUN OF THE OLD STALLS.
+        /// Waiting for the pawn to reach a specific cell is a NARROWER carry condition, and
+        /// narrowing this condition has caused a stairwell jam every single time it has been
+        /// tried (see the ArriveRadius banner). The patience makes the narrowing
+        /// time-bounded rather than conditional: within two seconds of getting close, the
+        /// pawn crosses whether or not it ever reached the cell.
+        /// </summary>
+        private const int ApproachPatienceTicks = 120;
 
         /// <summary>A transit record lives this long before being abandoned. Long enough to
         /// cross a band on foot, short enough that a stranded record cannot linger.</summary>
@@ -308,6 +329,7 @@ namespace AsAboveSoBelow
                 Clear(pawn);
                 return false;
             }
+            IntVec3 entry = EntryCellFor(near, pawn);
             everSegmented.Add(pawn.thingIDNumber);
             pending[pawn.thingIDNumber] = new Transit
             {
@@ -315,6 +337,8 @@ namespace AsAboveSoBelow
                 realPeMode = peMode,
                 near = near,
                 far = far,
+                entryCell = entry,
+                startedTick = Find.TickManager.TicksGame,
                 expiresAtTick = Find.TickManager.TicksGame + TransitTimeoutTicks
             };
             // §78b: WALK TO THE WAY IN, NOT TO THE MIDDLE. The links are directional - the
@@ -323,15 +347,22 @@ namespace AsAboveSoBelow
             // happened to favour, i.e. usually across a handrail. EntryCellFor returns
             // IntVec3.Invalid whenever that cell is not usable, and then this falls back to
             // the old behaviour verbatim.
-            IntVec3 entry = EntryCellFor(near, pawn);
             dest = entry.IsValid ? new LocalTargetInfo(entry) : (LocalTargetInfo)near;
             peMode = PathEndMode.OnCell;
             return true;
         }
 
         /// <summary>
-        /// The cell a pawn should stand in to use this link: one step beyond the footprint,
-        /// on the edge OPPOSITE the link's facing, centred on the run.
+        /// The cell a pawn should stand in to use this link: the footprint cell on the edge
+        /// OPPOSITE the link's facing, centred on the run - i.e. just inside the notch.
+        ///
+        /// ⚠ ON THE FOOTPRINT, NOT ONE STEP OUTSIDE IT (§78c). It was outside, and the field
+        /// report was "the animation still starts before they hit the stair texture": the
+        /// clip legitimately began while the pawn was standing next to the staircase, so it
+        /// shrank into a descent it had not walked onto yet. Pathing the pawn ONTO the art
+        /// means the descent clip starts on the frame the pawn is standing on the treads,
+        /// and the approach is done by the pawn's own pather at its own walk speed instead
+        /// of being faked inside the clip.
         ///
         /// ⚠⚠ EVERY FAILURE RETURNS Invalid AND THE CALLER FALLS BACK. A link whose entry
         /// cell is walled in, out of bounds or unreachable must stay USABLE - degrading to
@@ -365,21 +396,26 @@ namespace AsAboveSoBelow
             IntVec3 c;
             if (face.z > 0)
             {
-                c = new IntVec3(r.CenterCell.x, 0, r.minZ - 1);
+                c = new IntVec3(r.CenterCell.x, 0, r.minZ);
             }
             else if (face.z < 0)
             {
-                c = new IntVec3(r.CenterCell.x, 0, r.maxZ + 1);
+                c = new IntVec3(r.CenterCell.x, 0, r.maxZ);
             }
             else if (face.x > 0)
             {
-                c = new IntVec3(r.minX - 1, 0, r.CenterCell.z);
+                c = new IntVec3(r.minX, 0, r.CenterCell.z);
             }
             else
             {
-                c = new IntVec3(r.maxX + 1, 0, r.CenterCell.z);
+                c = new IntVec3(r.maxX, 0, r.CenterCell.z);
             }
-            if (!c.InBounds(map) || !c.Standable(map))
+            // ⚠ WALKABLE, NOT STANDABLE. This cell is INSIDE the footprint, and the link is
+            // a Building_Door - `passability` is PassThroughOnly, so GenGrid.Standable is
+            // false for it and a Standable test would reject every link there is. Walkable
+            // reads the path grid, where a door is passable, which is the question actually
+            // being asked: can the pawn stand here on its way through.
+            if (!c.InBounds(map) || !c.Walkable(map))
             {
                 return IntVec3.Invalid;
             }
@@ -463,17 +499,29 @@ namespace AsAboveSoBelow
                     tmpDone.Add(kv.Key);
                     continue;
                 }
-                if (pawn.Position.InHorDistOf(t.near.Position, ArriveRadius))
+                // ⚠⚠ THIS CONDITION MAY BE DELAYED BUT NEVER DENIED. An entry-animation hold
+                // was once wired in here and in TryConsumeArrival as a CONDITIONAL gate and
+                // it broke cross-level movement outright ("can't command pawns across
+                // levels anymore", run #297). What follows is not a gate: every clause is a
+                // trigger, and ApproachPatienceTicks guarantees one of them fires within two
+                // seconds of the pawn getting close. A cosmetic effect must never be able to
+                // decide whether a transit happens - only, briefly, when.
+                bool nearEnough = pawn.Position.InHorDistOf(t.near.Position, ArriveRadius);
+                if (nearEnough)
                 {
-                    // ⚠ NOTHING MAY GATE THIS CARRY. An entry-animation hold was wired in here
-                    // and in TryConsumeArrival and it broke cross-level movement outright
-                    // ("can't command pawns across levels anymore", run #297). Both call sites
-                    // are reverted; the delay now lives AFTER the hop (§73: stagger +
-                    // ghost, see the banner on ABStairAnim). Nothing gates the carry.
-                    // See §33c before re-attempting: a cosmetic effect must never sit on the
-                    // path that decides whether a transit happens at all.
-                    tmpDone.Add(kv.Key);
-                    tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
+                    // Standing on the link itself: the clip can start on the art, which is
+                    // the whole point of §78c.
+                    bool onEntry = t.entryCell.IsValid && pawn.Position == t.entryCell;
+                    // Stopped short - blocked by a pawn that just landed, or the entry cell
+                    // was never reachable. Carrying now is the old behaviour and is right.
+                    bool stoppedShort = pawn.pather == null || !pawn.pather.Moving;
+                    // And the backstop, so "still walking" can never mean "never crosses".
+                    bool outOfPatience = now - t.startedTick > ApproachPatienceTicks;
+                    if (onEntry || stoppedShort || outOfPatience)
+                    {
+                        tmpDone.Add(kv.Key);
+                        tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
+                    }
                 }
             }
 
