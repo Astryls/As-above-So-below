@@ -25,6 +25,10 @@
 
   <AB_GoDown>Go down the stairs</AB_GoDown>
   <AB_GoUp>Go up the stairs</AB_GoUp>
+  <AB_GoDownLadder>Climb down the ladder</AB_GoDownLadder>
+  <AB_GoUpLadder>Climb up the ladder</AB_GoUpLadder>
+  <AB_GoDownElevator>Ride the elevator down</AB_GoDownElevator>
+  <AB_GoUpElevator>Ride the elevator up</AB_GoUpElevator>
   <AB_LevelNotDug>Nothing has dug into that level yet. Build stairs down to reach it.</AB_LevelNotDug>
   <AB_MapSizeBanded>{0}x{0} ({1} cells per level, {2} stacked)</AB_MapSizeBanded>
   <AB_MapSizeBandedTip>As above, So below stacks {0} playable levels into a single map, so this colony costs the stacked cell count shown. That is the figure RimWorld's pathfinder works over, not the per-level size. These sizes are chosen to sit just under a 64-row boundary, where the dead space between levels shrinks to its 2-row minimum. Sizes in between waste up to a fifth of the map on empty seam.</AB_MapSizeBandedTip>

@@ -73,7 +73,24 @@ namespace AsAboveSoBelow
                         continue;
                     }
                     int delta = bands.BandOf(far.Position) - myBand;
-                    string label = delta > 0 ? "AB_GoUp".Translate() : "AB_GoDown".Translate();
+                    // §85.23: the verb belongs to the LINK KIND. This said "the stairs" for
+                    // every def, so an elevator's right-click read "Take the stairs to level X"
+                    // (field report). Same kind test ABStairAnim uses: linksAllLevels is the
+                    // elevator, "Ladder" in the defName is a ladder, everything else stairs.
+                    string key;
+                    if (stairs.LinksAllLevels)
+                    {
+                        key = delta > 0 ? "AB_GoUpElevator" : "AB_GoDownElevator";
+                    }
+                    else if (stairs.def.defName.IndexOf("Ladder", StringComparison.Ordinal) >= 0)
+                    {
+                        key = delta > 0 ? "AB_GoUpLadder" : "AB_GoDownLadder";
+                    }
+                    else
+                    {
+                        key = delta > 0 ? "AB_GoUp" : "AB_GoDown";
+                    }
+                    string label = key.Translate();
                     if (multi)
                     {
                         // Two ends can share a direction (a sky elevator goes down to the
