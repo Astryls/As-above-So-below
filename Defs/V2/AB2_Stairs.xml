@@ -250,12 +250,19 @@
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_StairsDown</counterpartDef>
         <approachCells>
-          <li>(0,-1)</li>   <!-- north -->
-          <li>(-1,0)</li>   <!-- east -->
-          <li>(0,-1)</li>   <!-- south · §85.17 NOT the derived default. AB_StairsUp_south
-                                 is entered at the BOTTOM of the texture (user, run #389),
-                                 i.e. the rotation side, not Opposite(Rotation). -->
-          <li>(2,0)</li>   <!-- west -->
+          <!-- ⚠⚠ §85.22 AN UP-STAIRS IS ENTERED FROM THE SIDE IT FACES - all four rows are
+               the ROTATION side, the OPPOSITE of the down-stairs (whose notch faces away).
+               One staircase seen from two levels: enter the south-facing pair at the
+               up-link's south edge, climb north, emerge through the down-link's north
+               notch still heading north. Continuous, both directions, user-confirmed on
+               south (run #391) and diagnosed on west (Kit, run #392) where the old
+               Opposite(Rotation) tag put the pawn in at the TOP of the flight, facing
+               down it. -->
+          <li>(0,2)</li>    <!-- north · rotation side (§85.22) -->
+          <li>(2,0)</li>    <!-- east · rotation side (§85.22) -->
+          <li>(0,-1)</li>   <!-- south · rotation side (§85.17, the first sighting of the
+                                 §85.22 rule) -->
+          <li>(-1,0)</li>   <!-- west · rotation side (§85.22) -->
         </approachCells>
       </li>
       <li Class="AsAboveSoBelow.ABLinkArtExt">
@@ -436,10 +443,12 @@
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_GrandStairsDown</counterpartDef>
         <approachCells>
-          <li>(1,-1)</li>   <!-- north -->
-          <li>(-1,1)</li>   <!-- east -->
-          <li>(1,3)</li>   <!-- south -->
-          <li>(3,1)</li>   <!-- west -->
+          <!-- §85.22: an UP-link is entered from the side it FACES (rotation side) -
+               user-confirmed "they follow the same rule" after the plain stairs. -->
+          <li>(1,3)</li>    <!-- north · rotation side -->
+          <li>(3,1)</li>    <!-- east · rotation side -->
+          <li>(1,-1)</li>   <!-- south · rotation side -->
+          <li>(-1,1)</li>   <!-- west · rotation side -->
         </approachCells>
       </li>
       <li Class="AsAboveSoBelow.ABLinkArtExt">
@@ -565,10 +574,13 @@
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_LadderDown</counterpartDef>
         <approachCells>
-          <li>(0,-1)</li>   <!-- north -->
-          <li>(-1,0)</li>   <!-- east -->
-          <li>(0,1)</li>   <!-- south -->
-          <li>(1,0)</li>   <!-- west -->
+          <!-- §85.22: rotation side, like every up-link. Consistent with this def's own
+               drawOffsets, which push the sprite toward the wall it leans on - the exposed,
+               climbable face IS the rotation side. -->
+          <li>(0,1)</li>    <!-- north · rotation side -->
+          <li>(1,0)</li>    <!-- east · rotation side -->
+          <li>(0,-1)</li>   <!-- south · rotation side -->
+          <li>(-1,0)</li>   <!-- west · rotation side -->
         </approachCells>
       </li>
       <li Class="AsAboveSoBelow.ABLinkArtExt">
