@@ -43,6 +43,19 @@ namespace AsAboveSoBelow
 
             /// <summary>When the record was made, for the approach-patience backstop.</summary>
             public int startedTick;
+
+            /// <summary>
+            /// First tick the pawn was within ArriveRadius of the near anchor; 0 until then.
+            ///
+            /// ⚠⚠ §85.14 THIS EXISTS BECAUSE THE PATIENCE WAS MEASURED FROM THE WRONG
+            /// EVENT. It used startedTick - the tick the transit was RECORDED, i.e. when the
+            /// pawn was ordered, often a long walk away - while its own banner said "within
+            /// two seconds of GETTING CLOSE". Any pawn more than ~7 cells from the stairwell
+            /// therefore arrived with the patience ALREADY expired, and was carried on the
+            /// first tick it came within ArriveRadius (3) of the anchor - from whichever side
+            /// it happened to be walking past, without ever reaching its entry cell.
+            /// </summary>
+            public int nearSinceTick;
         }
 
         /// <summary>
@@ -53,10 +66,21 @@ namespace AsAboveSoBelow
         /// Waiting for the pawn to reach a specific cell is a NARROWER carry condition, and
         /// narrowing this condition has caused a stairwell jam every single time it has been
         /// tried (see the ArriveRadius banner). The patience makes the narrowing
-        /// time-bounded rather than conditional: within two seconds of getting close, the
+        /// time-bounded rather than conditional: within five seconds of getting close, the
         /// pawn crosses whether or not it ever reached the cell.
+        ///
+        /// ⚠ MEASURED FROM Transit.nearSinceTick, NOT startedTick - see the banner there for
+        /// what measuring it from the wrong event did.
+        ///
+        /// ⚠ RAISED FROM 120 BECAUSE THE FOOTPRINT IS THE UNIT, NOT THE CELL. ArriveRadius
+        /// is measured from the anchor, so on a 3x3 grand staircase a pawn is already "close"
+        /// while it still has to walk most of the way AROUND the building to reach the mouth
+        /// - roughly 8 cells, about 1.7s at walk speed, and more if it has to yield. 120
+        /// ticks made the backstop fire mid-detour and land the pawn on the side it was
+        /// passing. This is a ceiling on a case that stoppedShort already catches instantly
+        /// whenever the pawn is genuinely blocked, so spending it is cheap.
         /// </summary>
-        private const int ApproachPatienceTicks = 120;
+        private const int ApproachPatienceTicks = 300;
 
         /// <summary>A transit record lives this long before being abandoned. Long enough to
         /// cross a band on foot, short enough that a stranded record cannot linger.</summary>
@@ -202,6 +226,7 @@ namespace AsAboveSoBelow
             pending.Clear();
             everSegmented.Clear();
             tmpDone.Clear();
+            tmpStamp.Clear();
             tmpCarry.Clear();
             holding.Clear();
             tmpHoldDone.Clear();
@@ -504,14 +529,36 @@ namespace AsAboveSoBelow
                     // was never reachable. Carrying now is the old behaviour and is right.
                     bool stoppedShort = pawn.pather == null || !pawn.pather.Moving;
                     // And the backstop, so "still walking" can never mean "never crosses".
-                    bool outOfPatience = now - t.startedTick > ApproachPatienceTicks;
+                    // ⚠ 0 MEANS "BECAME CLOSE THIS TICK", so the clock starts at zero rather
+                    // than reading as infinitely old - which is the whole defect being fixed.
+                    bool outOfPatience = t.nearSinceTick != 0
+                                         && now - t.nearSinceTick > ApproachPatienceTicks;
                     if (onEntry || stoppedShort || outOfPatience)
                     {
                         tmpDone.Add(kv.Key);
                         tmpCarry.Add(new KeyValuePair<Pawn, Transit>(pawn, t));
                     }
+                    else if (t.nearSinceTick == 0)
+                    {
+                        // Start the clock. Deferred: `pending` is being enumerated, and
+                        // Transit is a struct, so it cannot be updated in place here.
+                        tmpStamp.Add(kv.Key);
+                    }
                 }
             }
+
+            // PHASE 1b - stamp "first tick close" on records that are still pending. Runs
+            // before the removals purely so the loop below cannot resurrect a carried record
+            // by writing to a key that was just deleted.
+            for (int i = 0; i < tmpStamp.Count; i++)
+            {
+                if (pending.TryGetValue(tmpStamp[i], out Transit st))
+                {
+                    st.nearSinceTick = now;
+                    pending[tmpStamp[i]] = st;
+                }
+            }
+            tmpStamp.Clear();
 
             // PHASE 2 - remove first, so a record re-added by StartPath below survives.
             for (int i = 0; i < tmpDone.Count; i++)
@@ -540,6 +587,9 @@ namespace AsAboveSoBelow
         }
 
         private static readonly List<int> tmpDone = new List<int>();
+
+        /// <summary>Records to stamp with nearSinceTick, deferred out of the enumeration.</summary>
+        private static readonly List<int> tmpStamp = new List<int>();
 
         /// <summary>Carries deferred out of the enumeration - see TickTransits phase 1.</summary>
         private static readonly List<KeyValuePair<Pawn, Transit>> tmpCarry =
