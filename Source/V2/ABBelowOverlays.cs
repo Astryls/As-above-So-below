@@ -143,34 +143,53 @@ namespace AsAboveSoBelow
                 // rendered fine.
                 CellRect view = Find.CameraDriver.CurrentViewRect;
                 FogGrid fog = map.fogGrid;
-                List<Thing> list = map.listerThings.ThingsInGroup(ThingRequestGroup.HasGUIOverlay);
-                for (int i = 0; i < list.Count; i++)
+                // Toggleable Overlays swaps this very group out from under vanilla's own loop
+                // at any zoom above Closest, so asking the bridge keeps the level below culled
+                // in step with the level you are standing on instead of showing labels the
+                // current level has already dropped. Plain HasGUIOverlay when TO is absent.
+                List<Thing> list = map.listerThings.ThingsInGroup(
+                    ToggleableOverlaysCompat.BelowOverlayGroup);
+                // ⚠ EVERY Toggleable Overlays gate is "is the cursor on this thing's cell",
+                // measured in VIEW-band coordinates - which a below thing's cell can never
+                // equal, so without this its overlays are unreachable by hover. Aim their
+                // mouse at the cell this column actually shows for the length of the pass.
+                ToggleableOverlaysCompat.PushBelowMouse(map, bands, viewBand);
+                try
                 {
-                    Thing thing = list[i];
-                    IntVec3 pos = thing.Position;
-                    if (bands.BandOf(pos) >= viewBand || fog.IsFogged(pos))
+                    for (int i = 0; i < list.Count; i++)
                     {
-                        continue;
+                        Thing thing = list[i];
+                        IntVec3 pos = thing.Position;
+                        if (bands.BandOf(pos) >= viewBand || fog.IsFogged(pos))
+                        {
+                            continue;
+                        }
+                        IntVec3 above = bands.Translate(pos, viewBand);
+                        if (!above.InBounds(map) || !view.Contains(above))
+                        {
+                            continue; // off screen
+                        }
+                        if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen, out _)
+                            || seen.x != pos.x || seen.z != pos.z)
+                        {
+                            continue; // not visible from up here
+                        }
+                        try
+                        {
+                            thing.DrawGUIOverlay();
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.ErrorOnce(ABLog.Tag + " V2 below overlay for " + thing.LabelCap
+                                + ": " + ex.Message, thing.thingIDNumber ^ 762195882);
+                        }
                     }
-                    IntVec3 above = bands.Translate(pos, viewBand);
-                    if (!above.InBounds(map) || !view.Contains(above))
-                    {
-                        continue; // off screen
-                    }
-                    if (!ABBands.TryResolveVisibleBelow(map, bands, above, out IntVec3 seen, out _)
-                        || seen.x != pos.x || seen.z != pos.z)
-                    {
-                        continue; // not visible from up here
-                    }
-                    try
-                    {
-                        thing.DrawGUIOverlay();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.ErrorOnce(ABLog.Tag + " V2 below overlay for " + thing.LabelCap
-                            + ": " + ex.Message, thing.thingIDNumber ^ 762195882);
-                    }
+                }
+                finally
+                {
+                    // Non-negotiable: a mouse left parked on a below cell would hide every
+                    // overlay on the CURRENT level until the cursor moved.
+                    ToggleableOverlaysCompat.PopMouse();
                 }
                 ABPerfStats.NoteOverlay(list.Count, ABPerfStats.Now() - perfT0);
             }

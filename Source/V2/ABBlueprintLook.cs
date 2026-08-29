@@ -43,7 +43,40 @@ namespace AsAboveSoBelow
         /// 0.6 blueprint wash. One number to taste - raise toward 1.0 for a more solid look,
         /// lower for a fainter plan.
         /// </summary>
-        internal const float BlueprintAlpha = 0.42f;
+        internal const float DefaultBlueprintAlpha = 0.42f;
+
+        /// <summary>
+        /// The live alpha. NOT a const any more, because Toggleable Overlays owns a global
+        /// "blueprint transparency" slider and rewrites <c>graphic.color.a</c> on every
+        /// blueprint def both at startup and on every settings write; rather than race it
+        /// (rule 39 - and mod load order would decide the startup winner anyway) that slider
+        /// is ADOPTED through <see cref="ApplyAlpha"/>. See ToggleableOverlaysCompat §4.
+        /// Read through the two consumers only: this GraphicData and Blueprint_ABBuild.
+        /// </summary>
+        internal static float BlueprintAlpha = DefaultBlueprintAlpha;
+
+        /// <summary>The blueprint defs this pass owns, kept so the alpha can be re-applied
+        /// later without re-running the whole match.</summary>
+        private static readonly List<ThingDef> Retinted = new List<ThingDef>();
+
+        /// <summary>GraphicData caches its resolved Graphic and nothing public invalidates
+        /// it, so a colour change after startup would otherwise never reach the screen.
+        /// Resolved defensively: if the field is ever renamed the retint still works at
+        /// startup, only the live re-apply stops taking effect.</summary>
+        private static readonly AccessTools.FieldRef<GraphicData, Graphic> CachedGraphicRef =
+            ResolveCachedGraphicRef();
+
+        private static AccessTools.FieldRef<GraphicData, Graphic> ResolveCachedGraphicRef()
+        {
+            try
+            {
+                return AccessTools.FieldRefAccess<GraphicData, Graphic>("cachedGraphic");
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         static ABBlueprintLook()
         {
@@ -71,12 +104,47 @@ namespace AsAboveSoBelow
                 gd.renderQueue = 2950;                   // the generator's blueprint queue
                 bp.graphicData = gd;
                 bp.graphic = gd.Graphic;                 // def.graphic was already resolved; replace it
+                Retinted.Add(bp);
                 touched++;
             }
             // Rule 33: a filter that can reject everything must say so.
             if (touched == 0)
             {
                 Log.Warning(ABLog.Tag + " blueprint retint matched no defs; blueprints will show vanilla blue.");
+            }
+        }
+
+        /// <summary>
+        /// Set the plan alpha and push it through both consumers.
+        ///
+        /// Stuffed links follow immediately and for free, because Blueprint_ABBuild.DrawColor
+        /// reads the field on every draw and Thing.DefaultGraphic re-colours from it. The
+        /// UNSTUFFED case needs the def rewritten, and needs the GraphicData cache dropped -
+        /// hence the field ref. Already-spawned blueprints keep the graphic they resolved on
+        /// first draw, which matches Toggleable Overlays' own mid-game behaviour, so a slider
+        /// change shows up on the next plan placed rather than retroactively.
+        ///
+        /// Safe to call before this class's own static ctor has run: touching it here forces
+        /// the ctor first, so <see cref="Retinted"/> is always populated by the time the loop
+        /// below executes.
+        /// </summary>
+        internal static void ApplyAlpha(float alpha)
+        {
+            BlueprintAlpha = alpha;
+            for (int i = 0; i < Retinted.Count; i++)
+            {
+                ThingDef bp = Retinted[i];
+                if (bp?.graphicData == null)
+                {
+                    continue;
+                }
+                Color c = bp.graphicData.color;
+                bp.graphicData.color = new Color(c.r, c.g, c.b, alpha);
+                if (CachedGraphicRef != null)
+                {
+                    CachedGraphicRef(bp.graphicData) = null;
+                    bp.graphic = bp.graphicData.Graphic;
+                }
             }
         }
     }

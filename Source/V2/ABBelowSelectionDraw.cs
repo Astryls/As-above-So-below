@@ -149,54 +149,70 @@ namespace AsAboveSoBelow
                 }
                 FogGrid fog = map.fogGrid;
                 TerrainGrid terrain = map.terrainGrid;
-
-                // Dictionary foreach uses a struct enumerator: no allocation on this per-frame path.
-                foreach (KeyValuePair<Thing, ThingOverlaysHandle> entry in handles)
+                // This redraw never enters OverlayDrawer.RenderForbiddenOverlay, which is
+                // where Toggleable Overlays' transpiler lives - so with "hide forbidden" on,
+                // the current level's X's vanished and the level below's stayed lit. The
+                // bridge re-applies their rule; the push is what makes their mouse test mean
+                // "the cell this column shows".
+                ToggleableOverlaysCompat.PushBelowMouse(map, bands, viewBand);
+                try
                 {
-                    Thing t = entry.Key;
-                    if (t == null || !t.Spawned || t.Map != map)
+                    // Dictionary foreach uses a struct enumerator: no allocation on this per-frame path.
+                    foreach (KeyValuePair<Thing, ThingOverlaysHandle> entry in handles)
                     {
-                        continue;
+                        Thing t = entry.Key;
+                        if (t == null || !t.Spawned || t.Map != map)
+                        {
+                            continue;
+                        }
+                        if (entry.Value == null
+                            || (entry.Value.OverlayTypes & ForbiddenAny) == OverlayTypes.None)
+                        {
+                            continue;
+                        }
+                        IntVec3 c = t.Position;
+                        int band = bands.BandOf(c);
+                        if (band < 0 || band >= viewBand || fog.IsFogged(c))
+                        {
+                            continue;
+                        }
+                        IntVec3 above = bands.Translate(c, viewBand);
+                        if (!above.InBounds(map) || !view.Contains(above))
+                        {
+                            continue; // off screen
+                        }
+                        if (!ABBands.TryResolveVisibleBelow(map, bands, above,
+                                out IntVec3 seen, out int drop)
+                            || seen.x != c.x || seen.z != c.z)
+                        {
+                            continue; // not what this column shows
+                        }
+                        if (!t.IsForbidden(Faction.OfPlayer))
+                        {
+                            continue;
+                        }
+                        if (!ToggleableOverlaysCompat.AllowForbiddenBelow(t))
+                        {
+                            continue; // hidden by the player's Toggleable Overlays settings
+                        }
+                        Vector3 pos = t.DrawPos;
+                        pos.z += drop;
+                        if (t.RotatedSize.z == 1)
+                        {
+                            pos.z -= 0.3f;
+                        }
+                        else
+                        {
+                            pos.z -= t.RotatedSize.z * 0.3f;
+                        }
+                        pos.y = AltitudeLayer.MetaOverlays.AltitudeFor();
+                        Graphics.DrawMesh(MeshPool.plane05,
+                            Matrix4x4.TRS(pos, Quaternion.identity, Vector3.one), ForbiddenMat, 0);
                     }
-                    if (entry.Value == null
-                        || (entry.Value.OverlayTypes & ForbiddenAny) == OverlayTypes.None)
-                    {
-                        continue;
-                    }
-                    IntVec3 c = t.Position;
-                    int band = bands.BandOf(c);
-                    if (band < 0 || band >= viewBand || fog.IsFogged(c))
-                    {
-                        continue;
-                    }
-                    IntVec3 above = bands.Translate(c, viewBand);
-                    if (!above.InBounds(map) || !view.Contains(above))
-                    {
-                        continue; // off screen
-                    }
-                    if (!ABBands.TryResolveVisibleBelow(map, bands, above,
-                            out IntVec3 seen, out int drop)
-                        || seen.x != c.x || seen.z != c.z)
-                    {
-                        continue; // not what this column shows
-                    }
-                    if (!t.IsForbidden(Faction.OfPlayer))
-                    {
-                        continue;
-                    }
-                    Vector3 pos = t.DrawPos;
-                    pos.z += drop;
-                    if (t.RotatedSize.z == 1)
-                    {
-                        pos.z -= 0.3f;
-                    }
-                    else
-                    {
-                        pos.z -= t.RotatedSize.z * 0.3f;
-                    }
-                    pos.y = AltitudeLayer.MetaOverlays.AltitudeFor();
-                    Graphics.DrawMesh(MeshPool.plane05,
-                        Matrix4x4.TRS(pos, Quaternion.identity, Vector3.one), ForbiddenMat, 0);
+                }
+                finally
+                {
+                    ToggleableOverlaysCompat.PopMouse();
                 }
             }
             catch (Exception e)
