@@ -121,6 +121,11 @@
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
+    <!-- Stated per-def rather than on AB2_LinkBase: that base also parents the ladders
+         and the elevator, which answer to their own projects. -->
+    <researchPrerequisites>
+      <li>AB2_Stairs</li>
+    </researchPrerequisites>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>-1</levelDelta>
@@ -151,6 +156,9 @@
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
+    <researchPrerequisites>
+      <li>AB2_Stairs</li>
+    </researchPrerequisites>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
@@ -196,6 +204,12 @@
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_Elevator</uiIconPath>
+    <!-- The ResearchProjectDef is AB2_ElevatorTech, not AB2_Elevator: def names are only
+         unique per DefType, so a project called AB2_Elevator would legally coexist with
+         this ThingDef and make every log line and xpath about "AB2_Elevator" ambiguous. -->
+    <researchPrerequisites>
+      <li>AB2_ElevatorTech</li>
+    </researchPrerequisites>
     <modExtensions>
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <linksAllLevels>true</linksAllLevels>
@@ -222,6 +236,12 @@
   <ThingDef ParentName="AB2_LinkBase" Name="AB2_GrandBase" Abstract="True">
     <size>(3,3)</size>
     <costStuffCount>300</costStuffCount>
+    <!-- The grand staircase rides the SAME project as the plain one, by explicit
+         decision: it is a wider version of a thing you already know how to cut, and a
+         second stair project would only tax throughput. -->
+    <researchPrerequisites>
+      <li>AB2_Stairs</li>
+    </researchPrerequisites>
     <statBases>
       <WorkToBuild>12000</WorkToBuild>
       <Flammability>0</Flammability>
@@ -291,6 +311,9 @@
 
   <ThingDef ParentName="AB2_LinkBase" Name="AB2_LadderBase" Abstract="True">
     <costStuffCount>25</costStuffCount>
+    <researchPrerequisites>
+      <li>AB2_Ladders</li>
+    </researchPrerequisites>
     <statBases>
       <WorkToBuild>900</WorkToBuild>
       <Mass>12</Mass>

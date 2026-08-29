@@ -116,10 +116,25 @@ namespace AsAboveSoBelow
         // persists as the default for the next colony. The GENERATED layout is scribed on
         // ABBandMap, so an existing save never depends on these.
 
-        /// <summary>Levels above the surface (0-3).</summary>
+        /// <summary>
+        /// The master switch for the whole level plan, toggled by the "Enable multiple
+        /// levels" checkbox on the advanced-config screen.
+        ///
+        /// ⚠ IT IS NOT THE SAME THING AS upperLevels = lowerLevels = 0, even though both
+        /// end at BandCount 1. Zeroing the spinners DESTROYS the player's level plan; this
+        /// suspends it, so re-checking the box restores whatever they had chosen. It also
+        /// switches off <c>ABMapSizeLimit.Active</c>, which is what hands the map-size
+        /// radio buttons back to vanilla - a single-level colony has no stacked cell cost
+        /// to budget, so there is nothing left for us to lock.
+        /// </summary>
+        public bool multiLevel = true;
+
+        /// <summary>Levels above the surface (0-3). Read through
+        /// <c>ABMapSizeLimit.UpperLevels</c>, which returns 0 while multiLevel is off -
+        /// this field is the stored plan, not the effective one.</summary>
         public int upperLevels = 1;
 
-        /// <summary>Levels below the surface (0-3).</summary>
+        /// <summary>Levels below the surface (0-3). See upperLevels.</summary>
         public int lowerLevels = 1;
 
         // ---- camera ---------------------------------------------------------
@@ -299,6 +314,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref unclampMapSize, "unclampMapSize", false);
             Scribe_Values.Look(ref pathHeuristic, "pathHeuristic", 1f);
+            Scribe_Values.Look(ref multiLevel, "multiLevel", true);
             Scribe_Values.Look(ref upperLevels, "upperLevels", 1);
             Scribe_Values.Look(ref lowerLevels, "lowerLevels", 1);
             Scribe_Values.Look(ref naturalPeaks, "naturalPeaks", true);
@@ -536,8 +552,18 @@ namespace AsAboveSoBelow
             }
 
             list.Gap(8f);
+            // ⚠ Reports the STORED plan and its band count, not ABMapSizeLimit.BandCount:
+            // with the level plan suspended that property returns 1, and this line would
+            // then read "1 above, 1 below (1 levels)", which is nonsense.
             list.Label("AB_LevelsDefault".Translate(upperLevels, lowerLevels,
-                ABMapSizeLimit.BandCount));
+                upperLevels + lowerLevels + 1));
+            if (!multiLevel)
+            {
+                Color off = GUI.color;
+                GUI.color = NoteDim;
+                list.Label("AB_LevelsSuspendedNote".Translate());
+                GUI.color = off;
+            }
 
             Color dim = GUI.color;
             GUI.color = NoteDim;

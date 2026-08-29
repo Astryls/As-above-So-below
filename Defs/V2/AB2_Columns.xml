@@ -44,12 +44,18 @@
       <Steel>60</Steel>
       <ComponentIndustrial>2</ComponentIndustrial>
     </costList>
-    <!-- NO researchPrerequisites (§75.f). A column is this mod's core infrastructure,
-         not a tech reward: gating it behind Electricity + Machining left a fresh
-         banded colony unable to join its levels' utilities until mid game. The
-         PER-NETWORK connect toggles still respect each host mod's own research
+    <!-- ONE FREE-STANDING PROJECT, AND THAT IS THE WHOLE GATE (supersedes §75.f).
+         §75.f removed researchPrerequisites outright because gating a column behind
+         Electricity + Machining left a fresh banded colony unable to join its levels'
+         utilities until mid game. AB2_TransferColumns keeps that concern intact: it has
+         NO prerequisites of its own, so the only thing between a new colony and its
+         columns is 1200 of bench time, reachable from turn one.
+         The PER-NETWORK connect toggles still respect each host mod's own research
          (Building_ABColumn.GetGizmos -> AB2_ColumnNeedsResearch), so a network you
-         have not unlocked still cannot be carried. -->
+         have not unlocked still cannot be carried even with this finished. -->
+    <researchPrerequisites>
+      <li>AB2_TransferColumns</li>
+    </researchPrerequisites>
     <building>
       <isInert>true</isInert>
       <ai_chillDestination>false</ai_chillDestination>
@@ -186,7 +192,11 @@
       <Steel>35</Steel>
       <ComponentIndustrial>1</ComponentIndustrial>
     </costList>
-    <!-- NO researchPrerequisites, same reasoning as the column (§75.f). -->
+    <!-- Same project as the column: a riser IS a column in a different form factor, and
+         splitting them would let a player unlock the awkward one and not the other. -->
+    <researchPrerequisites>
+      <li>AB2_TransferColumns</li>
+    </researchPrerequisites>
     <building>
       <isInert>true</isInert>
       <isEdifice>false</isEdifice>

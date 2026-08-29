@@ -159,11 +159,60 @@ namespace AsAboveSoBelow
         /// revisit whether even 146,000 is right.</summary>
         public const int CellBudget = 146000;
 
-        public static int UpperLevels =>
-            Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels);
+        /// <summary>
+        /// The player's per-colony master switch ("Enable multiple levels" on the
+        /// advanced-config screen), and the gate on everything below.
+        ///
+        /// ⚠ IT SUSPENDS THE PLAN, IT DOES NOT ERASE IT. <c>upperLevels</c> and
+        /// <c>lowerLevels</c> keep whatever the player chose; only the EFFECTIVE counts
+        /// read as 0 here, so BandCount collapses to 1 and
+        /// <c>Patch_MapGenerator_GenerateMap</c> takes its existing "single level -
+        /// generate an ordinary map" branch. Re-checking the box restores the plan intact.
+        ///
+        /// ⚠ NO RECURSION, THOUGH IT LOOKS LIKE THERE IS: this reads
+        /// <c>ABV2.Enabled</c>, a plain bool field, NOT <c>ABV2.BandCount</c> - which
+        /// forwards straight back to <c>BandCount</c> below.
+        /// </summary>
+        public static bool MultiLevel => ABV2.Enabled && (ABMod.Settings?.multiLevel ?? true);
 
-        public static int LowerLevels =>
-            Mathf.Clamp(ABMod.Settings?.lowerLevels ?? 1, 0, MaxLowerLevels);
+        public static int UpperLevels => MultiLevel
+            ? Mathf.Clamp(ABMod.Settings?.upperLevels ?? 1, 0, MaxUpperLevels)
+            : 0;
+
+        public static int LowerLevels => MultiLevel
+            ? Mathf.Clamp(ABMod.Settings?.lowerLevels ?? 1, 0, MaxLowerLevels)
+            : 0;
+
+        // ================= THE CHOOSER'S BOTTOM STRIP =================
+        // The strip is anchored to the BOTTOM of a window we made taller, so the height it
+        // occupies and the height we added are one quantity read in two places. They are
+        // stated here, once, because when they disagree the strip either overlaps vanilla's
+        // size column or floats off past the Close button.
+
+        /// <summary>What the strip needs right now: the full chooser, or just the divider
+        /// and the enable checkbox.</summary>
+        public const float ExpandedStripHeight = 240f;
+
+        public const float CollapsedStripHeight = 44f;
+
+        /// <summary>Slack between the strip and the bottom of the window.</summary>
+        public const float StripPadding = 48f;
+
+        public static float WantedStripHeight =>
+            MultiLevel ? ExpandedStripHeight : CollapsedStripHeight;
+
+        /// <summary>
+        /// What the OPEN window was actually sized for, which is not always what the strip
+        /// wants.
+        ///
+        /// ⚠ <c>InitialSize</c> is consulted exactly once, by
+        /// <c>Window.SetInitialSizeAndPosition</c>, so ticking the checkbox mid-dialog
+        /// cannot change the window's height by itself - and drawing a 240px section into a
+        /// 44px allowance would put it straight through vanilla's columns. The chooser
+        /// therefore lays out against THIS number and requests a resize; the frame in
+        /// between draws the collapsed row, which is one frame nobody sees.
+        /// </summary>
+        internal static float GrantedStripHeight = ExpandedStripHeight;
 
         /// <summary>Bands per column, surface included. 1 means an ordinary unbanded map.</summary>
         public static int BandCount => UpperLevels + LowerLevels + 1;
@@ -172,7 +221,18 @@ namespace AsAboveSoBelow
         /// simply the number of levels below it.</summary>
         public static int SurfaceBand => LowerLevels;
 
-        public static bool Active => ABV2.Enabled && !(ABMod.Settings?.unclampMapSize ?? false);
+        /// <summary>
+        /// Whether the cell budget governs the map-size chooser at all.
+        ///
+        /// ⚠ MultiLevel IS PART OF THIS, AND THAT IS THE POINT OF THE CHECKBOX. A
+        /// single-level colony stacks nothing, so it has no stacked cell cost to budget and
+        /// nothing left for us to lock: with the box unticked, <c>Fits</c> is unconditional,
+        /// <c>Clamp</c> is the identity, <c>BeginChooser</c> returns before it locks or
+        /// relabels anything, and vanilla's own size list is handed straight back to the
+        /// player.
+        /// </summary>
+        public static bool Active => ABV2.Enabled && MultiLevel
+            && !(ABMod.Settings?.unclampMapSize ?? false);
 
         /// <summary>Total cells RimWorld actually allocates and paths over for a banded
         /// colony of this per-level size at a given level count.</summary>
@@ -407,11 +467,11 @@ namespace AsAboveSoBelow
             ABMapSizeLimit.BeginChooser();
         }
 
-        private static void Postfix(Rect inRect)
+        private static void Postfix(Rect inRect, Dialog_AdvancedGameConfig __instance)
         {
             try
             {
-                DrawLevelChooser(inRect);
+                DrawLevelChooser(inRect, __instance);
 
                 // Snap whatever is selected onto an offered size that fits the budget.
                 // Vanilla's default is 250, which is not in our list, and raising the level
@@ -461,7 +521,7 @@ namespace AsAboveSoBelow
         /// InitialSize patch) and we own the space we added - nothing can overlap because
         /// vanilla lays out from the top and never sees the extra height.
         /// </summary>
-        private static void DrawLevelChooser(Rect inRect)
+        private static void DrawLevelChooser(Rect inRect, Window window)
         {
             if (!ABV2.Enabled || Find.GameInitData == null)
             {
@@ -472,16 +532,59 @@ namespace AsAboveSoBelow
             {
                 return;
             }
-            // Bottom strip, clear of the close button vanilla draws below us.
-            float stripH = 240f;
+            // Bottom strip, clear of the close button vanilla draws below us. Laid out
+            // against the height the window WAS GIVEN, never against the height the strip
+            // currently wants - see ABMapSizeLimit.GrantedStripHeight.
+            float stripH = ABMapSizeLimit.GrantedStripHeight;
             float top = inRect.height - stripH - CloseButtonClearance;
             Widgets.DrawLineHorizontal(0f, top, inRect.width);
             float y = top + 8f;
 
             Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(0f, y, 300f, 32f), "AB_LevelsHeading".Translate());
+            Widgets.Label(new Rect(0f, y, 160f, 32f), "AB_LevelsHeading".Translate());
             Text.Font = GameFont.Small;
+
+            // THE MASTER SWITCH, ON THE HEADING ROW. It sits beside the word it governs so
+            // there is no doubt about what collapses: unticking it takes the whole section
+            // below away AND hands vanilla's map-size column back (ABMapSizeLimit.Active).
+            bool multi = s.multiLevel;
+            Rect toggle = new Rect(174f, y + 4f, 300f, 24f);
+            Widgets.CheckboxLabeled(toggle, "AB_LevelsEnable".Translate(), ref multi);
+            TooltipHandler.TipRegion(toggle, "AB_LevelsEnableTip".Translate());
+            if (multi != s.multiLevel)
+            {
+                s.multiLevel = multi;
+                s.Write();
+                Patch_AdvancedGameConfig_ABTallerWindow.RequestResize(window);
+                if (!multi)
+                {
+                    // Leave the player on a size VANILLA offers, or its radio column comes
+                    // back with nothing selected: our tiers (126/190/254) are not in
+                    // vanilla's list, and 250 is the value GameInitData starts on anyway.
+                    Find.GameInitData.mapSize = 250;
+                }
+                // Turning it back ON needs no snap here - Active is live, so the postfix's
+                // own every-frame snap clamps the vanilla size onto our ladder below.
+            }
             y += 34f;
+
+            if (!multi)
+            {
+                Color offCol = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, 0.62f);
+                Widgets.Label(new Rect(0f, y, Mathf.Min(inRect.width, 900f), 24f),
+                    "AB_LevelsDisabledNote".Translate());
+                GUI.color = offCol;
+                return;
+            }
+            if (stripH < ABMapSizeLimit.ExpandedStripHeight - 0.5f)
+            {
+                // Just ticked ON inside a window that was sized for the collapsed strip.
+                // The resize requested above lands at the end of this frame; drawing the
+                // full section into the short allowance would put it through vanilla's
+                // columns for exactly one frame, so skip it instead.
+                return;
+            }
 
             int upper = s.upperLevels;
             int lower = s.lowerLevels;
@@ -625,17 +728,87 @@ namespace AsAboveSoBelow
         MethodType.Getter)]
     public static class Patch_AdvancedGameConfig_ABTallerWindow
     {
+        /// <summary>Vanilla's own size, captured BEFORE we add to it, so a mid-dialog
+        /// collapse can re-derive the window rather than subtract from itself.</summary>
+        private static Vector2 vanillaSize;
+
         private static void Postfix(ref Vector2 __result)
         {
+            vanillaSize = __result;
             if (ABV2.Enabled)
             {
                 // Room for the levels + per-level-size strip. Vanilla lays its columns out
                 // from the top and never consults the height, so this is space we own.
-                // 288 not 260: the strip grew a fourth size row at 28px when the tiers went
-                // to 126/190/250/300. Adding a size means revisiting this number.
-                __result.y += 288f;
+                // Was a flat 288 (= 240 + 48); it is now derived, because the strip
+                // collapses to a single checkbox row when multiple levels are off. Adding a
+                // size row means revisiting ExpandedStripHeight, not this line.
+                ABMapSizeLimit.GrantedStripHeight = ABMapSizeLimit.WantedStripHeight;
+                __result.y += ABMapSizeLimit.GrantedStripHeight + ABMapSizeLimit.StripPadding;
                 __result.x = Mathf.Max(__result.x, 1000f);
             }
+        }
+
+        /// <summary>
+        /// Ask for the open window to be re-sized to the strip's new height.
+        ///
+        /// ⚠ THE WRITE CANNOT HAPPEN HERE, AND THAT IS NOT OBVIOUS.
+        /// <c>Window.WindowOnGUI</c> ends with <c>windowRect = GUI.Window(ID, windowRect,
+        /// callback, ...)</c> - it passes the OLD rect in and assigns the return value back
+        /// AFTER the callback returns. DoWindowContents runs inside that callback, so any
+        /// windowRect written from here is overwritten by Unity within the same frame, and
+        /// the resize silently never happens. It is handed to a postfix on WindowOnGUI
+        /// instead, which is the one point past that assignment.
+        /// </summary>
+        internal static void RequestResize(Window window)
+        {
+            if (window == null || vanillaSize.y <= 0f)
+            {
+                return;
+            }
+            float grant = ABMapSizeLimit.WantedStripHeight;
+            float w = Mathf.Max(vanillaSize.x, 1000f);
+            float h = vanillaSize.y + grant + ABMapSizeLimit.StripPadding;
+            Patch_Window_ABResizeAfterDraw.Request(window,
+                new Rect((UI.screenWidth - w) / 2f, (UI.screenHeight - h) / 2f, w, h), grant);
+        }
+    }
+
+    /// <summary>
+    /// Applies a pending window resize at the only moment it survives: after
+    /// <c>windowRect = GUI.Window(...)</c> has already run. See
+    /// <c>Patch_AdvancedGameConfig_ABTallerWindow.RequestResize</c> for why nowhere inside
+    /// DoWindowContents works.
+    ///
+    /// This is a patch on the base <c>Window</c>, so it is on the draw path of every window
+    /// in the game - hence the reference-equality bail on the very first line and nothing
+    /// allocated or translated above it. It is armed only by a checkbox click and disarms
+    /// itself on the next frame.
+    /// </summary>
+    [HarmonyPatch(typeof(Window), nameof(Window.WindowOnGUI))]
+    public static class Patch_Window_ABResizeAfterDraw
+    {
+        private static Window pending;
+
+        private static Rect pendingRect;
+
+        private static float pendingStrip;
+
+        internal static void Request(Window window, Rect rect, float strip)
+        {
+            pending = window;
+            pendingRect = rect;
+            pendingStrip = strip;
+        }
+
+        private static void Postfix(Window __instance)
+        {
+            if (pending == null || !ReferenceEquals(pending, __instance))
+            {
+                return;
+            }
+            pending = null;
+            __instance.windowRect = pendingRect;
+            ABMapSizeLimit.GrantedStripHeight = pendingStrip;
         }
     }
 

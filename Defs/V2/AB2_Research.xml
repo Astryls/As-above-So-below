@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    THE FOUR VERTICAL-LINK PROJECTS.
+
+    ⚠ THIS REVERSES §75.f, WHICH SAID "NO researchPrerequisites". That note was written
+    about the utility COLUMNS specifically, and its reasoning stands: gating them behind
+    Electricity + Machining left a fresh banded colony unable to join its levels'
+    utilities until mid game. What ships here is the weaker version of the same idea -
+    ONE free-standing project per link family, no vanilla prerequisites at all, so the
+    only thing between a new colony and its columns is bench time. The PER-NETWORK
+    connect toggles still respect each host mod's own research
+    (Building_ABColumn.GetGizmos -> AB2_ColumnNeedsResearch), so a network you have not
+    unlocked still cannot be carried, research or no research.
+
+    ⚠ ClassicStart ON THE TWO NEOLITHIC PROJECTS ONLY. FactionDef PlayerColony lists
+    ClassicStart in startingResearchTags, so a standard (crashlanded/rich explorer)
+    start begins with stairs and ladders already known - i.e. it can always reach the
+    level it was given. PlayerTribe does NOT carry that tag, so a TRIBAL start begins
+    with no vertical link at all and must spend 400 on one first. That is deliberate:
+    it is the cheapest pair of projects in the mod and it makes "dig down" an early
+    tribal goal rather than a freebie. Adding <li>TribalStart</li> here is the one-line
+    reversal if that ever reads as too harsh.
+
+    ⚠ researchViewY 6.40 IS A DELIBERATELY EMPTY ROW. The tallest vanilla project across
+    Core + every DLC sits at 5.70, so this row is ours alone and nothing overlaps. X
+    columns match the tech era: 0/1 sit under the neolithic column, 6/7 under the
+    industrial block. RECHECK THIS if a future DLC extends the tree downward.
+  -->
+
+  <!-- ============================ neolithic ============================ -->
+
+  <ResearchProjectDef>
+    <defName>AB2_Stairs</defName>
+    <label>stairs</label>
+    <description>Cut and shore a stairwell between two levels of the colony. Unlocks stairs up, stairs down, and the wide grand staircases that let traffic pass in both directions at once.</description>
+    <baseCost>400</baseCost>
+    <techLevel>Neolithic</techLevel>
+    <researchViewX>0.00</researchViewX>
+    <researchViewY>6.40</researchViewY>
+    <tags>
+      <li>ClassicStart</li>
+    </tags>
+    <generalRules>
+      <rulesStrings>
+        <li>subject->stairwells</li>
+        <li>subject->shoring a stairwell</li>
+
+        <li>subject_story->spent a season timbering a mineshaft and learned which steps hold</li>
+        <li>subject_story->grew up in a cliff village where every home was reached by a cut stair</li>
+
+        <li>subject_gerund->building stairwells</li>
+      </rulesStrings>
+    </generalRules>
+  </ResearchProjectDef>
+
+  <ResearchProjectDef>
+    <defName>AB2_Ladders</defName>
+    <label>ladders</label>
+    <description>Lash a fixed ladder into a shaft between two levels of the colony. Cheap and cramped - one cell wide, so colonists queue - but it can be raised almost anywhere.</description>
+    <baseCost>400</baseCost>
+    <techLevel>Neolithic</techLevel>
+    <researchViewX>1.00</researchViewX>
+    <researchViewY>6.40</researchViewY>
+    <tags>
+      <li>ClassicStart</li>
+    </tags>
+    <generalRules>
+      <rulesStrings>
+        <li>subject->ladders</li>
+        <li>subject->fixed ladders</li>
+
+        <li>subject_story->rigged rope ladders down sea cliffs to gather eggs</li>
+        <li>subject_story->learned lashing from a scaffolder and never trusted a nail since</li>
+
+        <li>subject_gerund->building ladders</li>
+      </rulesStrings>
+    </generalRules>
+  </ResearchProjectDef>
+
+  <!-- ============================ industrial =========================== -->
+
+  <ResearchProjectDef>
+    <defName>AB2_TransferColumns</defName>
+    <label>transfer columns</label>
+    <description>Run power, piping, ducting and signal lines through a sealed service column so networks on neighbouring levels pool into one. Unlocks the four utility columns and their wall-mounted risers.</description>
+    <baseCost>1200</baseCost>
+    <techLevel>Industrial</techLevel>
+    <researchViewX>6.00</researchViewX>
+    <researchViewY>6.40</researchViewY>
+    <generalRules>
+      <rulesStrings>
+        <li>subject->service columns</li>
+        <li>subject->vertical utility transfer</li>
+
+        <li>subject_story->maintained the riser shafts of an arcology and knew every trunk by its hum</li>
+        <li>subject_story->rebuilt a habitat's service spine after a coolant burst took out three floors</li>
+
+        <li>subject_gerund->building transfer columns</li>
+      </rulesStrings>
+    </generalRules>
+  </ResearchProjectDef>
+
+  <ResearchProjectDef>
+    <defName>AB2_ElevatorTech</defName>
+    <label>elevator</label>
+    <description>Sink a counterweighted elevator shaft that serves every level of the colony from a single footprint, linking each level directly to every other.</description>
+    <baseCost>1600</baseCost>
+    <techLevel>Industrial</techLevel>
+    <researchViewX>7.00</researchViewX>
+    <researchViewY>6.40</researchViewY>
+    <generalRules>
+      <rulesStrings>
+        <li>subject->elevators</li>
+        <li>subject->counterweighted lifts</li>
+
+        <li>subject_story->serviced the freight lifts of a deep mine and rode the counterweight for fun</li>
+        <li>subject_story->studied hoist mechanics from a salvaged maintenance manual</li>
+
+        <li>subject_gerund->building elevators</li>
+      </rulesStrings>
+    </generalRules>
+  </ResearchProjectDef>
+
+</Defs>
