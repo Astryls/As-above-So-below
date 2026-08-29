@@ -41,6 +41,24 @@ namespace AsAboveSoBelow
             /// which is where the clip is allowed to start.</summary>
             public IntVec3 entryCell;
 
+            /// <summary>
+            /// §85.19 LEG ONE'S DESTINATION: the tile in FRONT of the opening, off the
+            /// footprint. Invalid when there isn't a usable one, and then the walk is the
+            /// single leg it always was.
+            ///
+            /// ⚠⚠ WHY A SECOND LEG EXISTS AT ALL. Setting the destination to the mouth cell
+            /// does NOT constrain which side the pawn enters it from - RimWorld has no notion
+            /// of an approach direction, so a pawn coming from the east steps onto the mouth
+            /// through the handrail and the field report is "the pathing line goes through
+            /// the side of the stairs". Two legs is the only way to say "come round to the
+            /// front": walk to the tile in front, THEN take one cardinal step in.
+            /// </summary>
+            public IntVec3 approachCell;
+
+            /// <summary>True once the one-cell step onto the mouth has been dispatched, so it
+            /// is issued exactly once.</summary>
+            public bool legTwo;
+
             /// <summary>When the record was made, for the approach-patience backstop.</summary>
             public int startedTick;
 
@@ -227,6 +245,7 @@ namespace AsAboveSoBelow
             everSegmented.Clear();
             tmpDone.Clear();
             tmpStamp.Clear();
+            tmpLegTwo.Clear();
             tmpCarry.Clear();
             holding.Clear();
             tmpHoldDone.Clear();
@@ -316,6 +335,38 @@ namespace AsAboveSoBelow
                 // the way. Clearing on any of them wiped the in-flight transit and the pawn
                 // arrived at the stairs with nothing pending. Records now expire on a
                 // timeout instead (see the tick sweep), which cannot misfire.
+                //
+                // ⚠⚠ §85.20 EXCEPT WHEN THE NEW ORDER IS NOT OUR OWN LEG. "Leave it alone"
+                // was right about re-issues and wrong about SUPERSESSION: a player who
+                // re-orders a pawn somewhere else on its own band lands in this same branch,
+                // so the transit record survived an order that cancelled it. Observed in run
+                // #391 as `ARRIVE-MISMATCH Frazee at (73,0,274) | patherDest=(73,0,274) |
+                // aimedAtEntry=False` - the pawn had walked to a completely different cell,
+                // arrived correctly, and our arrival hook was still holding a transit for it.
+                //
+                // ⚠ THE HAZARD IS NOT THE LOG LINE. A stale record stays live for 4000 ticks,
+                // and the tick sweep carries ANY pawn holding one that comes within
+                // ArriveRadius of the anchor - so a pawn merely walking past the stairwell on
+                // an unrelated job could be teleported a level away. The mismatch line is the
+                // symptom that was visible; the surprise teleport is the one that was not.
+                //
+                // The distinction the old comment lacked is cheap: we know every cell we
+                // dispatch a pawn to. Anything else is a new order and supersedes us.
+                if (pending.TryGetValue(pawn.thingIDNumber, out Transit cur))
+                {
+                    bool ourLeg = destCell == cur.entryCell
+                                  || destCell == cur.approachCell
+                                  || (cur.near != null && cur.near.Spawned
+                                      && cur.near.OccupiedRect().Contains(destCell));
+                    if (!ourLeg)
+                    {
+                        ABV2Debug.Transit("SUPERSEDED " + pawn.LabelShort
+                            + ": new same-band order to " + destCell
+                            + " is not this transit's leg (mouth " + cur.entryCell
+                            + ", approach " + cur.approachCell + "); dropping the record");
+                        Clear(pawn);
+                    }
+                }
                 return false;
             }
             // ONE log call per attempt, carrying the whole outcome. Separate calls share an
@@ -355,6 +406,7 @@ namespace AsAboveSoBelow
                 return false;
             }
             IntVec3 entry = EntryCellFor(near, pawn);
+            IntVec3 approach = ApproachCellFor(near, pawn, entry);
             // The other half of the CARRY line: if the walk-to-the-mouth never happened, this
             // says whether it was never ASKED FOR (entry invalid) or asked for and abandoned.
             ABV2Debug.Transit("  entry cell for " + near.def.defName + " " + near.Rotation
@@ -368,6 +420,7 @@ namespace AsAboveSoBelow
                 near = near,
                 far = far,
                 entryCell = entry,
+                approachCell = approach,
                 startedTick = Find.TickManager.TicksGame,
                 expiresAtTick = Find.TickManager.TicksGame + TransitTimeoutTicks
             };
@@ -377,12 +430,18 @@ namespace AsAboveSoBelow
             // happened to favour, i.e. usually across a handrail. EntryCellFor returns
             // IntVec3.Invalid whenever that cell is not usable, and then this falls back to
             // the old behaviour verbatim.
-            dest = entry.IsValid ? new LocalTargetInfo(entry) : (LocalTargetInfo)near;
+            // §85.19: LEG ONE. Aim at the tile in front of the opening when there is one, so
+            // the pawn arrives facing the mouth; the tick sweep then issues the single step
+            // in. Falls back to the mouth itself, and then to the building, exactly as before.
+            dest = approach.IsValid
+                ? new LocalTargetInfo(approach)
+                : (entry.IsValid ? new LocalTargetInfo(entry) : (LocalTargetInfo)near);
             peMode = PathEndMode.OnCell;
             // ⚠ §85.18: the LAST thing this prefix does, so the log records what StartPath
             // was actually handed. If a later line shows the pawn aimed elsewhere, something
             // re-dispatched the pather AFTER us and that is the bug, not this rewrite.
-            ABV2Debug.Transit("  StartPath rewritten -> " + dest + " (OnCell)");
+            ABV2Debug.Transit("  StartPath rewritten -> " + dest + " (OnCell)"
+                + (approach.IsValid ? "  [leg 1 of 2, mouth is " + entry + "]" : "  [single leg]"));
             return true;
         }
 
@@ -443,6 +502,63 @@ namespace AsAboveSoBelow
             }
             // Must be on the pawn's own side of the wormhole, or we would be asking it to
             // path to a cell it can only get to by crossing the link it has not crossed yet.
+            if (!ABBands.SameBand(map, pawn.Position, c))
+            {
+                return IntVec3.Invalid;
+            }
+            if (!pawn.CanReach(c, PathEndMode.OnCell, Danger.Deadly))
+            {
+                return IntVec3.Invalid;
+            }
+            return c;
+        }
+
+
+        /// <summary>
+        /// §85.19 The cell a pawn should walk to BEFORE stepping onto the link: the tile
+        /// directly outside the opening, off the footprint. IntVec3.Invalid when there is no
+        /// usable one, and then the caller keeps the single-leg behaviour.
+        ///
+        /// ⚠ STANDABLE, NOT WALKABLE - the opposite of EntryCellFor's test, and deliberately.
+        /// That cell is OFF the footprint, so a walkable-but-not-standable cell out here is
+        /// somebody else's doorway, and parking the whole approach in a doorway is the jam
+        /// §85.4 exists to avoid. Inside the footprint the link is PassThroughOnly and only
+        /// Walkable is true, which is why the two tests differ.
+        ///
+        /// ⚠ TRANSIENT OCCUPANCY IS NOT CHECKED ON PURPOSE. A pawn standing on the approach
+        /// tile right now does not make it the wrong tile - it makes a queue, which is the
+        /// correct behaviour for a staircase and the reason this fixes the crowd case. Cells
+        /// are not reserved; a pawn that cannot get its exact cell comes to rest beside it and
+        /// the sweep's stoppedShort backstop carries it.
+        ///
+        /// ⚠ ORDERED CHEAP-FIRST AND CanReach IS LAST, same as EntryCellFor: this runs inside
+        /// a StartPath prefix and the reachability cache is the only expensive clause.
+        /// </summary>
+        private static IntVec3 ApproachCellFor(Building_Door link, Pawn pawn, IntVec3 entry)
+        {
+            if (link == null || pawn == null || !entry.IsValid)
+            {
+                return IntVec3.Invalid;   // no mouth resolved: nothing to stand in front of
+            }
+            if (pawn.Position == entry)
+            {
+                // Already standing on the art. Sending it out to the front tile so it can
+                // walk back in would be a visible round trip for no gain - and it is the
+                // exact shape of an oscillation, so it is refused rather than tolerated.
+                return IntVec3.Invalid;
+            }
+            Map map = link.Map;
+            if (map == null || !ABLinkApproach.TryGet(link, out ABApproach a))
+            {
+                return IntVec3.Invalid;
+            }
+            IntVec3 c = a.outside;
+            if (!c.InBounds(map) || !c.Standable(map))
+            {
+                return IntVec3.Invalid;
+            }
+            // A seam runs between bands; the cell in front of a link built flush against one
+            // belongs to another level entirely.
             if (!ABBands.SameBand(map, pawn.Position, c))
             {
                 return IntVec3.Invalid;
@@ -534,6 +650,25 @@ namespace AsAboveSoBelow
                     // Standing on the link itself: the clip can start on the art, which is
                     // the whole point of §78c.
                     bool onEntry = t.entryCell.IsValid && pawn.Position == t.entryCell;
+
+                    // ⚠⚠ §85.19 LEG TWO, AND IT MUST BE TESTED BEFORE THE TRIGGERS BELOW.
+                    // The pawn finishing leg one STOPS, so `stoppedShort` is true on that
+                    // very tick and would carry it from the approach tile - one cell short of
+                    // the art, which is the bug this whole thing exists to fix. Dispatching
+                    // the step in and skipping the triggers for this tick is what makes the
+                    // two-leg walk actually happen.
+                    //
+                    // ⚠ NOT A GATE (rule 43). The record stays pending, the patience clock
+                    // keeps running, and if leg two never completes - blocked mouth, failed
+                    // path - stoppedShort or outOfPatience carries the pawn from wherever it
+                    // stands on a later tick. This can DELAY a crossing by one path, never
+                    // deny it.
+                    if (!onEntry && t.entryCell.IsValid && t.approachCell.IsValid
+                        && !t.legTwo && pawn.Position == t.approachCell)
+                    {
+                        tmpLegTwo.Add(new KeyValuePair<Pawn, int>(pawn, kv.Key));
+                        continue;
+                    }
                     // Stopped short - blocked by a pawn that just landed, or the entry cell
                     // was never reachable. Carrying now is the old behaviour and is right.
                     bool stoppedShort = pawn.pather == null || !pawn.pather.Moving;
@@ -542,6 +677,8 @@ namespace AsAboveSoBelow
                     // than reading as infinitely old - which is the whole defect being fixed.
                     bool outOfPatience = t.nearSinceTick != 0
                                          && now - t.nearSinceTick > ApproachPatienceTicks;
+                    bool onApproach = t.approachCell.IsValid
+                                      && pawn.Position == t.approachCell;
                     if (onEntry || stoppedShort || outOfPatience)
                     {
                         // ⚠ NAME THE CLAUSE THAT FIRED (rule 31, inverted). "The pawn was
@@ -558,6 +695,7 @@ namespace AsAboveSoBelow
                             + " | nearSince=" + (t.nearSinceTick == 0
                                 ? "this tick" : (now - t.nearSinceTick) + "t")
                             + " | moving=" + (pawn.pather != null && pawn.pather.Moving)
+                            + " | legTwo=" + t.legTwo + " onApproach=" + onApproach
                             + " | dest=" + (pawn.pather != null
                                 ? pawn.pather.Destination.ToString() : "none"));
                         tmpDone.Add(kv.Key);
@@ -571,6 +709,39 @@ namespace AsAboveSoBelow
                     }
                 }
             }
+
+            // PHASE 1c - issue the one-cell step onto the mouth. Deferred out of the
+            // enumeration for the same reason the carries are: StartPath re-enters
+            // TrySegment, which writes `pending`.
+            //
+            // ⚠ THE FLAG IS SET BEFORE StartPath, NOT AFTER. StartPath can complete and fire
+            // PatherArrived synchronously (vanilla's own "already at destination" branch), so
+            // a flag set afterwards would be written over the top of a record the arrival
+            // path had already consumed - and on the tick after, this would dispatch again.
+            for (int i = 0; i < tmpLegTwo.Count; i++)
+            {
+                Pawn p2 = tmpLegTwo[i].Key;
+                if (!pending.TryGetValue(tmpLegTwo[i].Value, out Transit t2) || p2?.pather == null)
+                {
+                    continue;
+                }
+                t2.legTwo = true;
+                pending[tmpLegTwo[i].Value] = t2;
+                ABV2Debug.Transit("LEG2 " + p2.LabelShort + " at " + p2.Position
+                    + " -> mouth " + t2.entryCell);
+                try
+                {
+                    p2.pather.StartPath(new LocalTargetInfo(t2.entryCell), PathEndMode.OnCell);
+                }
+                catch (Exception e)
+                {
+                    // Never strand a pawn over the second leg: leave the record pending and
+                    // let the sweep's backstops carry it from the approach tile next tick.
+                    Log.ErrorOnce(ABLog.Tag + " V2: leg-2 dispatch threw for "
+                        + p2.LabelShortCap + ": " + e, p2.thingIDNumber ^ 762195937);
+                }
+            }
+            tmpLegTwo.Clear();
 
             // PHASE 1b - stamp "first tick close" on records that are still pending. Runs
             // before the removals purely so the loop below cannot resurrect a carried record
@@ -615,6 +786,11 @@ namespace AsAboveSoBelow
 
         /// <summary>Records to stamp with nearSinceTick, deferred out of the enumeration.</summary>
         private static readonly List<int> tmpStamp = new List<int>();
+
+        /// <summary>Pawns owed the §85.19 step onto the mouth, deferred out of the
+        /// enumeration because StartPath re-enters TrySegment.</summary>
+        private static readonly List<KeyValuePair<Pawn, int>> tmpLegTwo =
+            new List<KeyValuePair<Pawn, int>>();
 
         /// <summary>Carries deferred out of the enumeration - see TickTransits phase 1.</summary>
         private static readonly List<KeyValuePair<Pawn, Transit>> tmpCarry =
@@ -1098,6 +1274,33 @@ namespace AsAboveSoBelow
                     Clear(pawn);
                 }
                 return false; // arrived somewhere else; not our transit
+            }
+
+            // ⚠⚠ §85.19 LEG ONE FINISHED HERE: the pawn is standing in front of the opening.
+            // Step it in and CONSUME the arrival, because the journey genuinely is not over.
+            //
+            // ⚠ THIS IS THE ONE CASE THAT MUST BE HANDLED ON THE ARRIVAL PATH AS WELL AS IN
+            // THE SWEEP. A pawn ordered while ALREADY standing on the approach tile gets
+            // dest == its own position, and StartPath's "already there" branch fires
+            // PatherArrived synchronously - so the sweep never sees an intermediate tick and
+            // the crossing would start one cell short of the art.
+            //
+            // ⚠ SAFE AGAINST THE §33c LOOP BELOW, and the difference is worth stating: that
+            // loop happened because the arrival was suppressed while the pawn was NOT
+            // re-dispatched anywhere new, so the job re-issued the same path forever. Here a
+            // real one-cell path to a DIFFERENT cell is issued first, legTwo latches so it
+            // can happen at most once per record, and every backstop in the sweep still
+            // applies if that path fails.
+            if (t.entryCell.IsValid && t.approachCell.IsValid && !t.legTwo
+                && pawn.Position == t.approachCell && pawn.Position != t.entryCell
+                && pawn.pather != null)
+            {
+                t.legTwo = true;
+                pending[pawn.thingIDNumber] = t;
+                ABV2Debug.Transit("LEG2-ON-ARRIVAL " + pawn.LabelShort + " at " + pawn.Position
+                    + " -> mouth " + t.entryCell);
+                pawn.pather.StartPath(new LocalTargetInfo(t.entryCell), PathEndMode.OnCell);
+                return true;
             }
 
             // ⚠ AND NOTHING MAY GATE IT HERE EITHER, WHICH IS THE MORE DANGEROUS OF THE TWO.
