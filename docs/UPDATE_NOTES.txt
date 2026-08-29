@@ -1,47 +1,10 @@
-[h1]Clicking through open air now works everywhere[/h1]
+[h1]Colonists finish beside the staircase, not on it[/h1]
 
-Open air is not a place, so the cursor no longer stops there. Point at a hole in the floor and you are pointing at whatever the column actually shows you, in every part of the game at once: psycast and ability targeting, jump packs, mortar and turret force targets, ordinary right click orders, left click selection, and the dev tools.
+Order a colonist up or down with the right click menu on a staircase or a ladder and they now finish the trip on the tile in front of the opening, instead of walking back onto the staircase and standing in the middle of it.
 
-This used to be handled one feature at a time, which meant anything new started out broken until somebody noticed. It is now the default everywhere, with a short list of deliberate exceptions, so other mods' targeting gets it too without a patch having been written for them.
+The arrival was already right. The order was not: a colonist was set down neatly in front of the stairs on the far level and then immediately walked back on, because the order itself still pointed at the staircase. This is most obvious with Perspective Shift, where a colonist standing on a staircase is drawn inside the art rather than beside it.
 
-[b]Build and mine deliberately do NOT click through.[/b] Placement and designation stay on the level you are looking at, so a wall ghost never drops through a hole and a mining drag never runs off the bottom of your level.
-
-[h1]Staircases are now one cell wide[/h1]
-
-[b]Normal staircases (up and down) are now 1x2 instead of 2x2.[/b] The art was always a single narrow flight; the old footprint bought two extra cells of solid building that colonists could not walk on and that arrivals were sometimes set down inside. Grand staircases are unchanged at 3x3.
-
-Existing saves are fine. Old staircases reload at the smaller size in the same spot, both ends shrink together, and a shrink cannot overlap anything.
-
-[h1]Colonists use the opening[/h1]
-
-Pawns taking a staircase now walk to the tile in front of the opening and step in through it, instead of arriving on the handrail or stopping beside the building. Arriving on the far level works the same way: they are set down in front of the opening and step off it.
-
-[list]
-[*]Up stairs are entered from the side they face; down stairs from the notch, so one staircase is entered at one end and left at the other and you keep your direction of travel across the level change.
-[*]Several colonists sent at once queue in front of the opening instead of stacking on one tile.
-[*]Climb animations now match in both directions: leaving always recedes, arriving always appears, so a colonist heading up reads as leaving rather than growing.
-[*]Right clicking an elevator or a ladder now says elevator or ladder instead of "take the stairs".
-[/list]
-
-[h1]Range rings and target highlights follow the level you are viewing[/h1]
-
-Turret and weapon range rings, jump range, and target highlights are drawn on the band you are actually looking at, so a range ring around something one level down lands where you can see it instead of hundreds of cells away.
-
-[h1]Raiders jump between levels[/h1]
-
-Hostiles that carry a jump ability now use it to cross levels when they cannot walk to you, in both directions, and the jump is drawn correctly on the way through instead of vanishing mid flight.
-
-[b]Honest scope:[/b] this affects sanguophages, Biotech mechs, and raiders from mods that hand out jump abilities. No vanilla raider kind carries a jump pack, so on a vanilla load list you will mostly see this from sanguophages.
-
-[h1]Fixes[/h1]
-
-[list]
-[*][b]Perspective Shift:[/b] the "Return to character" button works again when your avatar is on a different level from the one you are viewing. It now brings the view back to your avatar's level as well as the camera.
-[*]Cross level ability and psycast targeting: cell targeted abilities (jump destinations, location psycasts, mortar target cells) resolved onto the empty sky cell instead of the ground you were pointing at. Two internal fixes that had been quietly cancelling each other out.
-[*]Turret force targets across levels no longer measure range through the gap between levels, so a mortar no longer accepts a target it will then refuse to fire at.
-[*]East and west facing staircases draw on their own footprint instead of hanging off it.
-[*]Blueprints and placement ghosts now match the built thing for every link.
-[/list]
+[b]Elevators are unchanged.[/b] Colonists still ride to the car and arrive inside it, which is where you want them.
 
 [h1]Known[/h1]
 
