@@ -119,9 +119,16 @@ dialog textarea{width:100%;height:46vh;background:#0b0e13;color:var(--tx);border
 // 1x2 FOOTPRINT under a (2,2) DRAW, because the sprite is a narrow flight that fits inside
 // one cell of width. The stage below draws the footprint box at footprint scale and the
 // sprite at draw scale, centred on it - i.e. exactly what the game does, overhang included.
+//
+// ⚠ `off` IS graphicData.drawOffsetNorth/East/South/West, IN CELLS, IN ROT4 ORDER. Verse
+// applies it on both the Print and the DrawWorker path, so it is part of "what the game
+// draws" and this tool would be lying without it (§85.9 pinned the east/west staircases).
+// Keep it in sync with Defs/V2/AB2_Stairs.xml by hand - there is no import.
 const DEFS = [
-  { defName:"AB2_StairsDown",      label:"stairs down",       w:1, h:2, dw:2, dh:2, tex:"AB_StairsDown"      },
-  { defName:"AB2_StairsUp",        label:"stairs up",         w:1, h:2, dw:2, dh:2, tex:"AB_StairsUp"        },
+  { defName:"AB2_StairsDown",      label:"stairs down",       w:1, h:2, dw:2, dh:2, tex:"AB_StairsDown",
+    off:[[0,0],[0.109,-0.414],[0,0],[-0.109,-0.418]] },
+  { defName:"AB2_StairsUp",        label:"stairs up",         w:1, h:2, dw:2, dh:2, tex:"AB_StairsUp",
+    off:[[0,0],[0.156,0],[0,0],[-0.156,0]] },
   { defName:"AB2_GrandStairsDown", label:"grand stairs down", w:3, h:3, dw:3, dh:3, tex:"AB_GrandStairsDown" },
   { defName:"AB2_GrandStairsUp",   label:"grand stairs up",   w:3, h:3, dw:3, dh:3, tex:"AB_GrandStairsUp"   },
   { defName:"AB2_LadderDown",      label:"ladder down",       w:1, h:1, dw:1, dh:1, tex:"AB_LadderDown"      },
@@ -217,9 +224,11 @@ function card(d, r, rotName){
     }
   }
 
-  // The sprite is drawn at DRAW size, centred on the footprint - so an overhang shows up
-  // here exactly as it does in game.
-  const imgL = pcx * (1 + (s.w - ds.w) / 2), imgT = pcy * (1 + (s.h - ds.h) / 2);
+  // The sprite is drawn at DRAW size, centred on the footprint and then shifted by the def's
+  // drawOffset for this rotation - so an overhang shows up here exactly as it does in game.
+  // Screen y is inverted relative to map z, hence the minus.
+  const o = (d.off && d.off[r]) || [0,0];
+  const imgL = pcx * (1 + (s.w - ds.w) / 2 + o[0]), imgT = pcy * (1 + (s.h - ds.h) / 2 - o[1]);
 
   el.innerHTML =
     '<h3>rot ' + rotName + ' <span style="color:#5d6b7a">(' + r + ') &middot; ' + s.w + 'x' + s.h + '</span></h3>' +

@@ -222,14 +222,29 @@ namespace AsAboveSoBelow
         /// AB_LadderUp_east is a 0.14-cell sliver drawn 0.30 cells west of its own cell.
         /// These numbers make the animation agree with what is actually on screen; the art
         /// itself is the user's to redraw (§77c).
+        ///
+        ///
+        /// ⚠⚠ THE TWO STAIRCASE EAST/WEST ROWS ARE ZERO ON PURPOSE (§85.9) - THEY ARE NOT
+        /// MISSING MEASUREMENTS. AB2_StairsDown/Up now carry drawOffsetEast/drawOffsetWest in
+        /// their graphicData, which MOVES the art onto the 1x2 footprint; once the sprite is
+        /// pinned, "where is the art relative to the cell" is zero by construction. Re-adding
+        /// the old transcriptions (-0.11,0.42) / (-0.16,0) would double-count the pin and walk
+        /// the clip back off the treads.
+        ///
+        /// ⚠ MEASURE, DO NOT EYEBALL: Tools/MeasureSprites.ps1 prints the alpha box of any
+        /// sprite in cells. Run against the shipped PNGs it reproduces every number in this
+        /// table to two decimals, which is how the east/west pin was derived.
         /// </summary>
         private static readonly Dictionary<string, Vector2[]> ArtOffsets =
             new Dictionary<string, Vector2[]>
         {
-            { "AB2_StairsDown", new[] { new Vector2(0f, -0.20f), new Vector2(-0.11f, 0.42f),
-                                        new Vector2(0f, 0.22f), new Vector2(0.11f, 0.42f) } },
-            { "AB2_StairsUp", new[] { new Vector2(0f, -0.31f), new Vector2(-0.16f, 0f),
-                                      new Vector2(0f, -0.11f), new Vector2(0.15f, 0f) } },
+            // east / west are ZEROED BY THE §85.9 PIN - see the banner. north / south are
+            // still the measured composition and are still correct: both fit inside the 1x2
+            // footprint uncorrected, so they were left alone.
+            { "AB2_StairsDown", new[] { new Vector2(0f, -0.20f), new Vector2(0f, 0f),
+                                        new Vector2(0f, 0.22f), new Vector2(0f, 0f) } },
+            { "AB2_StairsUp", new[] { new Vector2(0f, -0.31f), new Vector2(0f, 0f),
+                                      new Vector2(0f, -0.11f), new Vector2(0f, 0f) } },
             { "AB2_GrandStairsDown", new[] { new Vector2(0f, -0.21f), new Vector2(0f, -0.21f),
                                              new Vector2(0f, 0.23f), new Vector2(0f, -0.21f) } },
             { "AB2_GrandStairsUp", new[] { new Vector2(0.02f, -0.37f), new Vector2(0f, 0f),

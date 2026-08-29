@@ -134,6 +134,22 @@
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
+      <!-- §85.9 THE EAST/WEST PIN. Measured with Tools/MeasureSprites.ps1, not by eye:
+           AB_StairsDown_east's alpha box is 1.24 x 1.17 cells centred 0.109 WEST and 0.414
+           NORTH of the quad centre, and _west is its mirror (0.109 east, 0.418 north). Inside
+           the old 2x2 footprint that fitted; on the §85.8 1x2 it hung half a cell off the
+           north edge. These offsets put the drawn art back on the building it belongs to.
+           ⚠ Verse.Graphic applies DrawOffsetForRot on BOTH paths - Print (line 316, the
+           MapMeshOnly path these use) and DrawWorker (line 279, ghosts and blueprints) - so
+           one pair of numbers covers built, blueprint and placement ghost.
+           ⚠ THE MATCHING ABStairAnim.ArtOffsets ROWS ARE NOW ZERO. That table says "where is
+           the art drawn relative to the cell"; pinning the art IS the answer changing.
+           ⚠ THIS CENTRES, IT DOES NOT RESIZE. The east/west compositions are a different
+           SCALE from the north/south ones (1.24 x 1.17 vs 0.84 x 1.48), so the pinned sprite
+           still under-fills the 2-wide footprint by ~0.38 cells at each end. No drawSize can
+           fix both orientations at once - see the note on AB2_StairsUp. -->
+      <drawOffsetEast>(0.109, 0, -0.414)</drawOffsetEast>
+      <drawOffsetWest>(-0.109, 0, -0.418)</drawOffsetWest>
       <damageData>
         <enabled>false</enabled>
       </damageData>
@@ -143,6 +159,8 @@
         <texPath>Things/Building/AB_StairsDown</texPath>
         <graphicClass>Graphic_Multi</graphicClass>
         <drawSize>(2,2)</drawSize>
+        <drawOffsetEast>(0.109, 0, -0.414)</drawOffsetEast>
+        <drawOffsetWest>(-0.109, 0, -0.418)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
@@ -169,6 +187,16 @@
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(2,2)</drawSize>
+      <!-- §85.9 THE EAST/WEST PIN, LATERAL ONLY - and ⚠ THIS ONE IS A PATCH OVER BROKEN ART,
+           NOT A FIX. Measured: AB_StairsUp_east is 1.15 x 2.00 cells centred 0.156 west, and
+           _west mirrors it. It is ALREADY vertically centred, so no z term can help: the
+           sprite is 2.00 cells TALL on a footprint that is 1 cell deep, because the east and
+           west exports are the tall north/south flight rotated by ~15-20 degrees instead of
+           90 - the diagonal parallelogram visible in the tagger. The x term below at least
+           centres it; the overhang needs a REDRAW (or a switch to one rotating graphic), and
+           that is the user's call. -->
+      <drawOffsetEast>(0.156, 0, 0)</drawOffsetEast>
+      <drawOffsetWest>(-0.156, 0, 0)</drawOffsetWest>
       <damageData>
         <enabled>false</enabled>
       </damageData>
@@ -178,6 +206,8 @@
         <texPath>Things/Building/AB_StairsUp</texPath>
         <graphicClass>Graphic_Multi</graphicClass>
         <drawSize>(2,2)</drawSize>
+        <drawOffsetEast>(0.156, 0, 0)</drawOffsetEast>
+        <drawOffsetWest>(-0.156, 0, 0)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
