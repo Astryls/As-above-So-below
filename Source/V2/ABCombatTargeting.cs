@@ -65,10 +65,20 @@ namespace AsAboveSoBelow
         /// does - the property that makes "you can target what you can see" true by
         /// construction instead of by two predicates being kept in step by hand.
         /// </summary>
+        /// <remarks>
+        /// ⚠ GATED ON THE **RENDERING** GUARD, NOT THE COMBAT ONE, AND THE DIFFERENCE IS
+        /// DELIBERATE (window 12). "Which cell is the player pointing at" is a question about
+        /// what is DRAWN, and it is the same question the renderer, the right-click
+        /// translation and select-through all answer - all three sit behind ABGuard.Rendering.
+        /// Sitting behind ABGuard.Combat instead meant a fault anywhere in the shot solver
+        /// silently took away the player's ability to POINT at the level below, which is a
+        /// much larger blast radius than the fault deserved. Whether the resulting target can
+        /// actually be hit is still ABShaft's call, still behind the combat guard.
+        /// </remarks>
         public static bool TryResolveClicked(Map map, Vector3 clickPos, out IntVec3 below)
         {
             below = IntVec3.Invalid;
-            if (map == null || !ABCombatV2.Enabled)
+            if (map == null || !ABGuard.On(ABGuard.Rendering))
             {
                 return false;
             }

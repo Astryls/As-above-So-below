@@ -86,33 +86,37 @@ namespace AsAboveSoBelow
         }
     }
 
-    /// <summary>
-    /// TARGETING CURSOR. Targeter resolves what is under the mouse through
-    /// GenUI.TargetsAt, so translating the click position there lets the player target a
-    /// pawn they can SEE through open air - which was previously impossible, because the
-    /// cursor only ever tested the empty sky cell in front of it.
-    ///
-    /// Shares its see-through rule with the right-click and selection paths, so all three
-    /// agree on when a cell is genuinely a window.
-    /// </summary>
-    [HarmonyPatch(typeof(GenUI), nameof(GenUI.TargetsAt))]
-    public static class Patch_GenUI_ABTargetsAtThroughFloor
-    {
-        private static void Prefix(ref Vector3 clickPos)
-        {
-            try
-            {
-                if (ABBelowClickThrough.TryTranslate(Find.CurrentMap, clickPos, out Vector3 t))
-                {
-                    clickPos = t;
-                }
-            }
-            catch
-            {
-                // Targeting must never be broken by this; fall through to vanilla.
-            }
-        }
-    }
+    // ⚠⚠ TOMBSTONE - `Patch_GenUI_ABTargetsAtThroughFloor` LIVED HERE (window 8) AND WAS
+    // DELETED IN WINDOW 12. It was a PREFIX on GenUI.TargetsAt that rewrote `clickPos` down
+    // to the visible band. Window 9's ABCombatTargeting then added a POSTFIX on the SAME
+    // METHOD doing the same job properly - and the two silently cancelled each other out for
+    // a whole shipped year.
+    //
+    // HOW THEY FOUGHT, because the shape is worth keeping:
+    //   * vanilla's TargetsAt resolves THINGS from the `clickPos` argument but the bare CELL
+    //     from `UI.MouseCell()`, which no prefix can touch;
+    //   * so the prefix fixed the thing half and could never fix the cell half;
+    //   * and Harmony hands a POSTFIX the arguments AS THE PREFIX LEFT THEM, so
+    //     Patch_GenUI_ABTargetsAtSeeThrough received an ALREADY-DESCENDED clickPos, asked
+    //     "is this cell open air?" about a cell that is usually solid floor, got NO, and
+    //     declined to substitute. The yielded target stayed the raw sky cell.
+    //
+    // Player-visible result: you could point a psycast at a PAWN one level down (thing half,
+    // via the prefix) but every CELL-targeted verb - jump packs, Verb_CastAbilityJump, Skip's
+    // destination, any location psycast - resolved onto the empty air cell, where
+    // JumpUtility.ValidJumpTarget refuses (open air is Impassable) and drew the red
+    // TexCommand.CannotShoot cursor. Reported as "jumping and psycasts click through the air
+    // tiles".
+    //
+    // ⚠ THE LESSON IS A NEW SHAPE OF §33b: TWO OF OUR OWN PATCHES ON ONE VANILLA METHOD.
+    // The old rule was "when a fix lands in a click handler, find every other handler for the
+    // same gesture". This one is tighter - GREP OUR OWN [HarmonyPatch] LIST FOR THE TARGET
+    // METHOD BEFORE ADDING A PATCH TO IT. Nothing warns you: Harmony applies both happily,
+    // and a prefix that pre-consumes a postfix's input is invisible in every log.
+    //
+    // Do not reinstate it. The see-through target rule is ONE pair of postfixes now:
+    // Patch_GenUI_ABThingsUnderMouseSeeThrough (append the things the column shows) and
+    // Patch_GenUI_ABTargetsAtSeeThrough (substitute the cell the column shows).
 
     /// <summary>
     /// JOB LINES. The white lines from a selected pawn to its destination and queued
