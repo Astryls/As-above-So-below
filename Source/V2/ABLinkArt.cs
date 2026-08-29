@@ -64,6 +64,15 @@ namespace AsAboveSoBelow
                 }
                 sizes[def.graphicData.texPath] = ext.drawSizes.ToArray();
             }
+            // Rule 33: a filter that can reject everything must say so. A typo in the
+            // extension's Class attribute, or a drawSizes list that is not exactly four long,
+            // fails SILENTLY at def load - the links would just draw at vanilla sizes and the
+            // per-rotation bake would look like it had never been applied.
+            if (sizes.Count == 0)
+            {
+                Log.Warning(ABLog.Tag + " no ABLinkArtExt registered; link art falls back to "
+                    + "vanilla drawSize (per-rotation overdraw will not apply).");
+            }
         }
 
         public static bool TrySize(string path, Rot4 rot, out Vector2 size)
@@ -76,6 +85,29 @@ namespace AsAboveSoBelow
             }
             size = rows[rot.AsInt & 3];
             return size.x > 0f && size.y > 0f;
+        }
+
+        /// <summary>
+        /// The size this def's art is actually drawn at, for one rotation, in cells - the
+        /// per-rotation override when there is one, otherwise vanilla's own rule.
+        ///
+        /// ⚠ THE `.Rotated()` IS VANILLA'S, NOT AN EXTRA. Verse applies it in both MeshAt and
+        /// Print for horizontal rotations, so a caller reasoning about the drawn quad has to
+        /// apply it too or it will be wrong on east/west for every def that has no override.
+        /// The override path does NOT rotate, by design (see the class banner).
+        /// </summary>
+        public static Vector2 DrawSizeFor(ThingDef def, Rot4 rot)
+        {
+            GraphicData gd = def?.graphicData;
+            if (gd == null)
+            {
+                return Vector2.one;
+            }
+            if (TrySize(gd.texPath, rot, out Vector2 s))
+            {
+                return s;
+            }
+            return rot.IsHorizontal ? gd.drawSize.Rotated() : gd.drawSize;
         }
     }
 

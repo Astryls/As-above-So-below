@@ -210,60 +210,78 @@ namespace AsAboveSoBelow
         // =================================================================== art
 
         /// <summary>
-        /// ⚠ THE ART DOES NOT SIT CENTRED IN ITS OWN FOOTPRINT. Measured off the shipped
-        /// PNGs (alpha bounding-box centre, in cells, indexed by Rot4.AsInt): AB_StairsDown
-        /// facing south is drawn 0.22 cells NORTH of the cell it occupies, and the grand
-        /// staircase facing north is 0.37 off. A pawn animated to the CELL centre visibly
-        /// walks off the drawn treads, which is the second half of the "walks over the
-        /// railing" report.
+        /// WHERE THE ART IS ACTUALLY DRAWN, relative to the cell the link occupies, in cells.
+        /// The transit clips aim at the drawn treads rather than at the nominal cell centre;
+        /// without it the pawn visibly walks off the art, which was half of the original
+        /// "walks over the railing" report.
         ///
-        /// ⚠ THE EAST/WEST ROWS ARE HONEST TRANSCRIPTIONS OF BROKEN ART, NOT FIXES. The
-        /// grand staircase's east and west sprites are the north composition unrotated, and
-        /// AB_LadderUp_east is a 0.14-cell sliver drawn 0.30 cells west of its own cell.
-        /// These numbers make the animation agree with what is actually on screen; the art
-        /// itself is the user's to redraw (§77c).
+        /// ⚠⚠ THIS IS DERIVED NOW, NOT TRANSCRIBED (§85.12). It used to be a hand-written
+        /// table of FINISHED ANSWERS, one Vector2 per def per rotation, which had to be
+        /// re-measured by hand every time anyone touched a draw offset or a draw size. It had
+        /// already silently rotted: AB2_LadderUp's north and south rows were (0,0) while the
+        /// def has carried drawOffsetNorth/South of -0.33 / +0.33 since V1, so the ladder clip
+        /// had been anchored a third of a cell off its own art for as long as it has existed.
+        /// Nobody re-derived the table when those offsets were added, because nothing said
+        /// they were the same number. They are.
         ///
+        /// The split below is the fix, and it is the only division that survives editing:
+        ///   ART BOX       - a property of the PNG. Changes only when the artist redraws.
+        ///   OFFSET + SIZE - properties of the DEF. Change whenever the user tunes them.
+        /// Only the first is stored; the rest is read back off the def at call time, so the
+        /// animation now tracks Tools/LinkApproachTagger.html automatically.
         ///
-        /// ⚠⚠ THE TWO STAIRCASE EAST/WEST ROWS ARE ZERO ON PURPOSE (§85.9) - THEY ARE NOT
-        /// MISSING MEASUREMENTS. AB2_StairsDown/Up now carry drawOffsetEast/drawOffsetWest in
-        /// their graphicData, which MOVES the art onto the 1x2 footprint; once the sprite is
-        /// pinned, "where is the art relative to the cell" is zero by construction. Re-adding
-        /// the old transcriptions (-0.11,0.42) / (-0.16,0) would double-count the pin and walk
-        /// the clip back off the treads.
+        /// ⚠ VALUES ARE FRACTIONS OF THE IMAGE, NOT CELLS - that is exactly what makes them
+        /// immune to a draw-size change. Measured with
+        /// `Tools/MeasureSprites.ps1 -CellsX 1 -CellsZ 1`; after any redraw, re-run it and
+        /// paste the "centre offset" column straight in.
         ///
-        /// ⚠ MEASURE, DO NOT EYEBALL: Tools/MeasureSprites.ps1 prints the alpha box of any
-        /// sprite in cells. Run against the shipped PNGs it reproduces every number in this
-        /// table to two decimals, which is how the east/west pin was derived.
+        /// ⚠ THE WEST ROW OF A MIRRORED SPRITE HAS ITS X NEGATED. AB_GrandStairs*,
+        /// AB_LadderDown and AB_LadderUp ship no _west PNG, so Graphic_Multi draws _east
+        /// flipped (westFlipped) and the art's box flips with it.
         /// </summary>
-        private static readonly Dictionary<string, Vector2[]> ArtOffsets =
+        private static readonly Dictionary<string, Vector2[]> ArtBoxCentre =
             new Dictionary<string, Vector2[]>
         {
-            // east / west are ZEROED BY THE §85.9 PIN - see the banner. north / south are
-            // still the measured composition and are still correct: both fit inside the 1x2
-            // footprint uncorrected, so they were left alone.
-            { "AB2_StairsDown", new[] { new Vector2(0f, -0.20f), new Vector2(0f, 0f),
-                                        new Vector2(0f, 0.22f), new Vector2(0f, 0f) } },
-            { "AB2_StairsUp", new[] { new Vector2(0f, -0.31f), new Vector2(0f, 0f),
-                                      new Vector2(0f, -0.11f), new Vector2(0f, 0f) } },
-            { "AB2_GrandStairsDown", new[] { new Vector2(0f, -0.21f), new Vector2(0f, -0.21f),
-                                             new Vector2(0f, 0.23f), new Vector2(0f, -0.21f) } },
-            { "AB2_GrandStairsUp", new[] { new Vector2(0.02f, -0.37f), new Vector2(0f, 0f),
-                                           new Vector2(0.02f, -0.02f), new Vector2(0f, 0f) } },
-            { "AB2_LadderDown", new[] { new Vector2(0f, 0.04f), new Vector2(0f, -0.03f),
-                                        new Vector2(0f, 0f), new Vector2(0f, -0.03f) } },
-            { "AB2_LadderUp", new[] { new Vector2(0f, 0f), new Vector2(-0.30f, 0f),
-                                      new Vector2(0f, 0f), new Vector2(0.30f, 0f) } }
+            { "AB2_StairsDown", new[] { new Vector2(0.001f, -0.100f), new Vector2(-0.055f, 0.207f),
+                                        new Vector2(0f, 0.109f), new Vector2(0.055f, 0.209f) } },
+            { "AB2_StairsUp", new[] { new Vector2(0f, -0.156f), new Vector2(-0.078f, 0f),
+                                      new Vector2(-0.001f, -0.055f), new Vector2(0.078f, 0f) } },
+            { "AB2_GrandStairsDown", new[] { new Vector2(0f, -0.070f), new Vector2(-0.001f, -0.069f),
+                                             new Vector2(0f, 0.075f), new Vector2(0.001f, -0.069f) } },
+            { "AB2_GrandStairsUp", new[] { new Vector2(0.006f, -0.123f), new Vector2(-0.001f, 0f),
+                                           new Vector2(0.006f, -0.007f), new Vector2(0.001f, 0f) } },
+            { "AB2_LadderDown", new[] { new Vector2(-0.001f, 0.038f), new Vector2(0f, -0.033f),
+                                        new Vector2(-0.001f, 0f), new Vector2(0f, -0.033f) } },
+            { "AB2_LadderUp", new[] { new Vector2(0.001f, 0f), new Vector2(-0.295f, 0f),
+                                      new Vector2(0.001f, 0f), new Vector2(0.295f, 0f) } }
         };
 
+        /// <summary>
+        /// The drawn centre of this link's art relative to its own TrueCenter, in cells:
+        /// the def's per-rotation draw offset, plus the art box's centre scaled by the size
+        /// the art is drawn at.
+        ///
+        /// ⚠ THE OFFSET IS READ THROUGH GraphicData.DrawOffsetForRot, WHICH IS THE SAME CALL
+        /// Verse.Graphic makes on both draw paths - so this cannot disagree with the screen
+        /// even if a rotation's offset is left unset (it falls back to `drawOffset`).
+        /// </summary>
         private static Vector2 ArtOff(Thing link)
         {
-            if (link?.def == null)
+            if (link?.def?.graphicData == null)
             {
                 return Vector2.zero;
             }
-            return ArtOffsets.TryGetValue(link.def.defName, out Vector2[] rows)
-                ? rows[link.Rotation.AsInt & 3]
-                : Vector2.zero;
+            Rot4 rot = link.Rotation;
+            Vector3 o = link.def.graphicData.DrawOffsetForRot(rot);
+            Vector2 result = new Vector2(o.x, o.z);
+            if (ArtBoxCentre.TryGetValue(link.def.defName, out Vector2[] rows))
+            {
+                Vector2 f = rows[rot.AsInt & 3];
+                Vector2 size = ABLinkArt.DrawSizeFor(link.def, rot);
+                result.x += f.x * size.x;
+                result.y += f.y * size.y;
+            }
+            return result;
         }
 
         // ================================================================ facing

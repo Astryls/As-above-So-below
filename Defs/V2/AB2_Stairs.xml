@@ -134,33 +134,44 @@
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(2,2)</drawSize>
-      <!-- §85.9 THE EAST/WEST PIN. Measured with Tools/MeasureSprites.ps1, not by eye:
-           AB_StairsDown_east's alpha box is 1.24 x 1.17 cells centred 0.109 WEST and 0.414
-           NORTH of the quad centre, and _west is its mirror (0.109 east, 0.418 north). Inside
-           the old 2x2 footprint that fitted; on the §85.8 1x2 it hung half a cell off the
-           north edge. These offsets put the drawn art back on the building it belongs to.
-           ⚠ Verse.Graphic applies DrawOffsetForRot on BOTH paths - Print (line 316, the
-           MapMeshOnly path these use) and DrawWorker (line 279, ghosts and blueprints) - so
-           one pair of numbers covers built, blueprint and placement ghost.
-           ⚠ THE MATCHING ABStairAnim.ArtOffsets ROWS ARE NOW ZERO. That table says "where is
-           the art drawn relative to the cell"; pinning the art IS the answer changing.
-           ⚠ THIS CENTRES, IT DOES NOT RESIZE. The east/west compositions are a different
-           SCALE from the north/south ones (1.24 x 1.17 vs 0.84 x 1.48), so the pinned sprite
-           still under-fills the 2-wide footprint by ~0.38 cells at each end. No drawSize can
-           fix both orientations at once - see the note on AB2_StairsUp. -->
-      <drawOffsetEast>(0.109, 0, -0.414)</drawOffsetEast>
-      <drawOffsetWest>(-0.109, 0, -0.418)</drawOffsetWest>
+      <!-- §85.10 THE DRAW OFFSETS BELOW ARE BAKED FROM Tools/LinkApproachTagger.html.
+           DO NOT HAND-EDIT ONE IN ISOLATION - open the tool, move the sprite on its 1x1 tile
+           grid against the measured alpha box, and re-export. It writes all four rotations,
+           both graphic blocks, and the matching <drawSizes> in one go.
+
+           ⚠ Verse.Graphic applies DrawOffsetForRot on BOTH paths - Print (the MapMeshOnly
+           path these use) and DrawWorker (ghosts and blueprints) - so one set of numbers
+           covers built, blueprint and placement ghost. ABBlueprintLook then CopyFrom's this
+           whole block onto the blueprint def at startup, so the mirrored copy below is the
+           no-DLL fallback rather than a second source of truth.
+
+           ⚠ THE PER-ROTATION <drawSizes> IN modExtensions ARE PART OF THIS. Vanilla has one
+           drawSize and applies it as drawSize.Rotated() for east/west, which is correct only
+           when the four sprites are one composition rotated. These are not: measured, the
+           plain staircase is 0.42 x 0.74 of its image north/south but 0.62 x 0.59 east/west.
+           Graphic_ABLink reads the per-rotation size instead.
+
+           ⚠ ABStairAnim NO LONGER TRANSCRIBES ANY OF THIS. It stores the art's alpha box as
+           a FRACTION of the image and derives the drawn centre as
+           DrawOffsetForRot + box x drawSize, so the transit clips follow these numbers
+           automatically. -->
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <drawOffsetNorth>(0, 0, -0.05)</drawOffsetNorth>
+      <drawOffsetEast>(-0.25, 0, -0.35)</drawOffsetEast>
+      <drawOffsetSouth>(0, 0, 0.25)</drawOffsetSouth>
+      <drawOffsetWest>(0.3, 0, -0.35)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_StairsDown</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(2,2)</drawSize>
-        <drawOffsetEast>(0.109, 0, -0.414)</drawOffsetEast>
-        <drawOffsetWest>(-0.109, 0, -0.418)</drawOffsetWest>
+        <drawOffsetNorth>(0, 0, -0.05)</drawOffsetNorth>
+        <drawOffsetEast>(-0.25, 0, -0.35)</drawOffsetEast>
+        <drawOffsetSouth>(0, 0, 0.25)</drawOffsetSouth>
+        <drawOffsetWest>(0.3, 0, -0.35)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsDown</uiIconPath>
@@ -173,6 +184,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>-1</levelDelta>
         <counterpartDef>AB2_StairsUp</counterpartDef>
+        <approachCells>
+          <li>(0,-1)</li>   <!-- north -->
+          <li>(-1,0)</li>   <!-- east -->
+          <li>(0,2)</li>   <!-- south -->
+          <li>(2,0)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(2,2)</li>   <!-- north -->
+          <li>(2,1.9)</li>   <!-- east -->
+          <li>(2,2)</li>   <!-- south -->
+          <li>(2,1.9)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>
@@ -187,27 +212,33 @@
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(2,2)</drawSize>
-      <!-- §85.9 THE EAST/WEST PIN, LATERAL ONLY - and ⚠ THIS ONE IS A PATCH OVER BROKEN ART,
-           NOT A FIX. Measured: AB_StairsUp_east is 1.15 x 2.00 cells centred 0.156 west, and
-           _west mirrors it. It is ALREADY vertically centred, so no z term can help: the
-           sprite is 2.00 cells TALL on a footprint that is 1 cell deep, because the east and
-           west exports are the tall north/south flight rotated by ~15-20 degrees instead of
-           90 - the diagonal parallelogram visible in the tagger. The x term below at least
-           centres it; the overhang needs a REDRAW (or a switch to one rotating graphic), and
-           that is the user's call. -->
-      <drawOffsetEast>(0.156, 0, 0)</drawOffsetEast>
-      <drawOffsetWest>(-0.156, 0, 0)</drawOffsetWest>
+      <!-- §85.10 BAKED FROM THE TAGGER - see the note on AB2_StairsDown.
+
+           ⚠⚠ EAST AND WEST ARE A PATCH OVER BROKEN ART, NOT A FIX, AND NO NUMBER HERE CAN
+           FIX THEM. Measured, AB_StairsUp_east is 1.15 x 2.00 cells and already vertically
+           centred: the east and west exports are the tall north/south flight rotated by
+           ~15-20 degrees instead of 90, which is the diagonal parallelogram the tagger shows.
+           A sprite 2.00 cells tall cannot sit on a footprint 1 cell deep, so the offsets
+           below only place it as well as it can be placed. The real remedies are a REDRAW of
+           the two sprites, or switching this def to one rotating graphic - both the user's
+           call (§77c: building art is not ours to author). -->
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <drawOffsetNorth>(0, 0, -0.05)</drawOffsetNorth>
+      <drawOffsetEast>(-0.3, 0, 0)</drawOffsetEast>
+      <drawOffsetSouth>(0, 0, 0.3)</drawOffsetSouth>
+      <drawOffsetWest>(0.3, 0, 0)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_StairsUp</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(2,2)</drawSize>
-        <drawOffsetEast>(0.156, 0, 0)</drawOffsetEast>
-        <drawOffsetWest>(-0.156, 0, 0)</drawOffsetWest>
+        <drawOffsetNorth>(0, 0, -0.05)</drawOffsetNorth>
+        <drawOffsetEast>(-0.3, 0, 0)</drawOffsetEast>
+        <drawOffsetSouth>(0, 0, 0.3)</drawOffsetSouth>
+        <drawOffsetWest>(0.3, 0, 0)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_StairsUp</uiIconPath>
@@ -218,6 +249,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_StairsDown</counterpartDef>
+        <approachCells>
+          <li>(0,-1)</li>   <!-- north -->
+          <li>(-1,0)</li>   <!-- east -->
+          <li>(0,2)</li>   <!-- south -->
+          <li>(2,0)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(2,2)</li>   <!-- north -->
+          <li>(2,2)</li>   <!-- east -->
+          <li>(2,2)</li>   <!-- south -->
+          <li>(2,2)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>
@@ -316,12 +361,20 @@
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <drawOffsetNorth>(0, 0, -0.1)</drawOffsetNorth>
+      <drawOffsetEast>(-0.55, 0, 0.3)</drawOffsetEast>
+      <drawOffsetSouth>(0, 0, 0.65)</drawOffsetSouth>
+      <drawOffsetWest>(0.55, 0, 0.25)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_GrandStairsDown</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(3,3)</drawSize>
+        <drawOffsetNorth>(0, 0, -0.1)</drawOffsetNorth>
+        <drawOffsetEast>(-0.55, 0, 0.3)</drawOffsetEast>
+        <drawOffsetSouth>(0, 0, 0.65)</drawOffsetSouth>
+        <drawOffsetWest>(0.55, 0, 0.25)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_GrandStairsDown</uiIconPath>
@@ -329,6 +382,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>-1</levelDelta>
         <counterpartDef>AB2_GrandStairsUp</counterpartDef>
+        <approachCells>
+          <li>(1,-1)</li>   <!-- north -->
+          <li>(-1,1)</li>   <!-- east -->
+          <li>(1,3)</li>   <!-- south -->
+          <li>(3,1)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(3,3)</li>   <!-- north -->
+          <li>(3,3)</li>   <!-- east -->
+          <li>(3,3)</li>   <!-- south -->
+          <li>(3,3)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>
@@ -345,12 +412,20 @@
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <drawOffsetNorth>(0, 0, 0)</drawOffsetNorth>
+      <drawOffsetEast>(-0.55, 0, -0.05)</drawOffsetEast>
+      <drawOffsetSouth>(-0.02, 0, 0.5)</drawOffsetSouth>
+      <drawOffsetWest>(0.55, 0, -0.05)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_GrandStairsUp</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(3,3)</drawSize>
+        <drawOffsetNorth>(0, 0, 0)</drawOffsetNorth>
+        <drawOffsetEast>(-0.55, 0, -0.05)</drawOffsetEast>
+        <drawOffsetSouth>(-0.02, 0, 0.5)</drawOffsetSouth>
+        <drawOffsetWest>(0.55, 0, -0.05)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_GrandStairsUp</uiIconPath>
@@ -358,6 +433,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_GrandStairsDown</counterpartDef>
+        <approachCells>
+          <li>(1,-1)</li>   <!-- north -->
+          <li>(-1,1)</li>   <!-- east -->
+          <li>(1,3)</li>   <!-- south -->
+          <li>(3,1)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(3,3)</li>   <!-- north -->
+          <li>(3,3)</li>   <!-- east -->
+          <li>(3,3)</li>   <!-- south -->
+          <li>(3,3)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>
@@ -390,12 +479,20 @@
       <damageData>
         <enabled>false</enabled>
       </damageData>
+      <drawOffsetNorth>(0, 0, 0)</drawOffsetNorth>
+      <drawOffsetEast>(0, 0, 0)</drawOffsetEast>
+      <drawOffsetSouth>(0, 0, 0)</drawOffsetSouth>
+      <drawOffsetWest>(0, 0, 0)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_LadderDown</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(1,1)</drawSize>
+        <drawOffsetNorth>(0, 0, 0)</drawOffsetNorth>
+        <drawOffsetEast>(0, 0, 0)</drawOffsetEast>
+        <drawOffsetSouth>(0, 0, 0)</drawOffsetSouth>
+        <drawOffsetWest>(0, 0, 0)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_LadderDown</uiIconPath>
@@ -403,6 +500,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>-1</levelDelta>
         <counterpartDef>AB2_LadderUp</counterpartDef>
+        <approachCells>
+          <li>(0,-1)</li>   <!-- north -->
+          <li>(-1,0)</li>   <!-- east -->
+          <li>(0,1)</li>   <!-- south -->
+          <li>(1,0)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(1,1)</li>   <!-- north -->
+          <li>(1,1)</li>   <!-- east -->
+          <li>(1,1)</li>   <!-- south -->
+          <li>(1,1)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>
@@ -430,15 +541,20 @@
         toward the open side it faces, while the ladder is pushed back toward the wall it
         rests on.
       -->
-      <drawOffsetNorth>(0,0,-0.33)</drawOffsetNorth>
-      <drawOffsetSouth>(0,0,0.33)</drawOffsetSouth>
-      <drawOffsetEast>(0,0,0)</drawOffsetEast>
+      <drawOffsetNorth>(0, 0, -0.33)</drawOffsetNorth>
+      <drawOffsetEast>(0, 0, 0)</drawOffsetEast>
+      <drawOffsetSouth>(0, 0, 0.33)</drawOffsetSouth>
+      <drawOffsetWest>(0, 0, 0)</drawOffsetWest>
     </graphicData>
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_LadderUp</texPath>
         <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(1,1)</drawSize>
+        <drawOffsetNorth>(0, 0, -0.33)</drawOffsetNorth>
+        <drawOffsetEast>(0, 0, 0)</drawOffsetEast>
+        <drawOffsetSouth>(0, 0, 0.33)</drawOffsetSouth>
+        <drawOffsetWest>(0, 0, 0)</drawOffsetWest>
       </blueprintGraphicData>
     </building>
     <uiIconPath>Things/Building/AB_LadderUp</uiIconPath>
@@ -446,6 +562,20 @@
       <li Class="AsAboveSoBelow.ABBandStairsExt">
         <levelDelta>1</levelDelta>
         <counterpartDef>AB2_LadderDown</counterpartDef>
+        <approachCells>
+          <li>(0,-1)</li>   <!-- north -->
+          <li>(-1,0)</li>   <!-- east -->
+          <li>(0,1)</li>   <!-- south -->
+          <li>(1,0)</li>   <!-- west -->
+        </approachCells>
+      </li>
+      <li Class="AsAboveSoBelow.ABLinkArtExt">
+        <drawSizes>
+          <li>(1,1)</li>   <!-- north -->
+          <li>(1,1)</li>   <!-- east -->
+          <li>(1,1)</li>   <!-- south -->
+          <li>(1,1)</li>   <!-- west -->
+        </drawSizes>
       </li>
     </modExtensions>
   </ThingDef>

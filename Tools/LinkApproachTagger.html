@@ -135,28 +135,38 @@ dialog textarea{width:100%;height:54vh;background:#0b0e13;color:var(--tx);border
 // ============================================================== model
 // size / drawSize as authored in Defs/V2/AB2_Stairs.xml, in the NORTH orientation.
 // off  = graphicData.drawOffset<Rot> already in the defs, in CELLS, Rot4 order.
+// siz  = ABLinkArtExt.drawSizes already in the defs, in CELLS, Rot4 order, MAP SPACE.
+// ⚠ THESE THREE ARE THE SHIPPED STATE, so "reset" and the amber "edited" flag both mean
+//   "differs from what is in the defs right now". Re-seed them whenever a bake lands, or the
+//   tool will quietly invite you to redo work that is already done.
 // bbox = alpha bounding box of each PNG as a FRACTION OF THE IMAGE: [centreX, centreZ, w, h].
 //        Measured with Tools/MeasureSprites.ps1 -CellsX 1 -CellsZ 1. Because it is a fraction,
 //        it stays correct when you change the draw size below. West rows for the mirrored
 //        sprites have their centreX negated, which is what the flip does.
 const DEFS = [
 { defName:"AB2_StairsDown", label:"stairs down", w:1,h:2, dw:2,dh:2, tex:"AB_StairsDown",
-  off:[[0,0],[0.109,-0.414],[0,0],[-0.109,-0.418]],
+  off:[[0,-0.05],[-0.25,-0.35],[0,0.25],[0.3,-0.35]],
+  siz:[[2,2],[2,1.9],[2,2],[2,1.9]],
   bbox:[[0.001,-0.100,0.42,0.73],[-0.055,0.207,0.62,0.59],[0.000,0.109,0.42,0.74],[0.055,0.209,0.62,0.58]] },
 { defName:"AB2_StairsUp", label:"stairs up", w:1,h:2, dw:2,dh:2, tex:"AB_StairsUp",
-  off:[[0,0],[0.156,0],[0,0],[-0.156,0]],
+  off:[[0,-0.05],[-0.3,0],[0,0.3],[0.3,0]],
+  siz:[[2,2],[2,2],[2,2],[2,2]],
   bbox:[[0.000,-0.156,0.42,0.62],[-0.078,0.000,0.57,1.00],[-0.001,-0.055,0.42,0.84],[0.078,0.000,0.57,1.00]] },
 { defName:"AB2_GrandStairsDown", label:"grand stairs down", w:3,h:3, dw:3,dh:3, tex:"AB_GrandStairsDown",
-  off:[[0,0],[0,0],[0,0],[0,0]],
+  off:[[0,-0.1],[-0.55,0.3],[0,0.65],[0.55,0.25]],
+  siz:[[3,3],[3,3],[3,3],[3,3]],
   bbox:[[0.000,-0.070,0.62,0.81],[-0.001,-0.069,0.62,0.81],[0.000,0.075,0.62,0.81],[0.001,-0.069,0.62,0.81]] },
 { defName:"AB2_GrandStairsUp", label:"grand stairs up", w:3,h:3, dw:3,dh:3, tex:"AB_GrandStairsUp",
-  off:[[0,0],[0,0],[0,0],[0,0]],
+  off:[[0,0],[-0.55,-0.05],[-0.02,0.5],[0.55,-0.05]],
+  siz:[[3,3],[3,3],[3,3],[3,3]],
   bbox:[[0.006,-0.123,0.63,0.72],[-0.001,0.000,0.62,0.96],[0.006,-0.007,0.63,0.95],[0.001,0.000,0.62,0.96]] },
 { defName:"AB2_LadderDown", label:"ladder down", w:1,h:1, dw:1,dh:1, tex:"AB_LadderDown",
   off:[[0,0],[0,0],[0,0],[0,0]],
+  siz:[[1,1],[1,1],[1,1],[1,1]],
   bbox:[[-0.001,0.038,0.84,0.87],[0.000,-0.033,0.84,0.89],[-0.001,0.000,0.84,0.96],[0.000,-0.033,0.84,0.89]] },
 { defName:"AB2_LadderUp", label:"ladder up", w:1,h:1, dw:1,dh:1, tex:"AB_LadderUp",
   off:[[0,-0.33],[0,0],[0,0.33],[0,0]],
+  siz:[[1,1],[1,1],[1,1],[1,1]],
   bbox:[[0.001,0.000,0.62,0.96],[-0.295,0.000,0.14,0.98],[0.001,0.000,0.62,0.96],[0.295,0.000,0.14,0.98]] }
 ];
 const ROTS = ["north","east","south","west"];   // index == Rot4.AsInt
@@ -185,8 +195,8 @@ const state = {};
 function seed(){
   DEFS.forEach(d => state[d.defName] = ROTS.map((_, r) => ({
     off:  [d.off[r][0], d.off[r][1]],
-    size: defSize(d, r).slice(),
-    app:  defaultApproach(d, r)
+    size: d.siz ? d.siz[r].slice() : defSize(d, r).slice(),
+    app:  d.app ? d.app[r].slice() : defaultApproach(d, r)
   })));
 }
 seed();
@@ -197,7 +207,9 @@ const snap = v => SNAP > 0 ? Math.round(v / SNAP) * SNAP : v;
 const r3 = v => Math.round(v * 1000) / 1000;
 
 function isDefault(d, r){
-  const st = state[d.defName][r], ds = defSize(d, r), da = defaultApproach(d, r);
+  const st = state[d.defName][r];
+  const ds = d.siz ? d.siz[r] : defSize(d, r);
+  const da = d.app ? d.app[r] : defaultApproach(d, r);
   return st.off[0] === d.off[r][0] && st.off[1] === d.off[r][1]
       && st.size[0] === ds[0] && st.size[1] === ds[1]
       && st.app[0] === da[0] && st.app[1] === da[1];
@@ -299,7 +311,11 @@ function card(d, r, rotName){
 
   el.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => {
     const a = b.dataset.act, st = state[d.defName][r];
-    if (a === "reset"){ st.off = d.off[r].slice(); st.size = defSize(d, r); st.app = defaultApproach(d, r); }
+    if (a === "reset"){
+      st.off = d.off[r].slice();
+      st.size = d.siz ? d.siz[r].slice() : defSize(d, r);
+      st.app = d.app ? d.app[r].slice() : defaultApproach(d, r);
+    }
     if (a === "centre"){
       // put the ALPHA BOX centre on the footprint centre - the art, not the quad
       st.off = [ r3(-d.bbox[r][0] * st.size[0]), r3(-d.bbox[r][1] * st.size[1]) ];
