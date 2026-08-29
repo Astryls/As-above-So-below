@@ -78,15 +78,37 @@ namespace AsAboveSoBelow
         // as fast as it did on screen. If the motion now reads hurried rather than the
         // crossing reading long, DOUBLE these - that is the other defensible reading of the
         // same approval, and it costs 2.67s per staircase.
-        private const int StairsHalf = 40;
-        private const int GrandHalf = 46;
-        private const int LadderHalf = 56;
+        private const int StairsEntry = 90;
+        private const int GrandEntry = 90;
+        private const int LadderEntry = 110;
 
         /// <summary>Elevator rides scale with distance, but sub-linearly and capped: a
         /// sky-to-basement ride is three times the levels, not three times the patience.</summary>
-        private const int ElevHalfBase = 50;
-        private const int ElevHalfPerLevel = 14;
-        private const int ElevHalfMax = 78;
+        private const int ElevEntryBase = 90;
+        private const int ElevEntryPerLevel = 16;
+        private const int ElevEntryMax = 130;
+
+        /// <summary>V1's arrival flourish was 22 ticks for every link type and it does not
+        /// need to be longer: the pawn is already where it belongs, this only eases it out
+        /// of the stairwell.</summary>
+        private const int EmergeTicks = 22;
+
+        // ---- V1 CLIMB GRAMMAR (ported verbatim from AASB1 ClimbAnimation) ------
+        // ⚠ THE VERTICAL TERM IS THE WHOLE FIX. §78 read a crossing as "travel along the
+        // link's run axis and shrink", which is correct for a descent and WRONG for a climb:
+        // the field report was "the animation isn't going up the stairs but in and down".
+        // V1 separates the two ideas - a slide toward the stairwell, PLUS a screen-space
+        // rise or sink - so going up looks like going up no matter which way the run points.
+        private const float ClimbSink = -0.35f;   // z offset, descending
+        private const float ClimbRise = 0.30f;    // z offset, ascending
+        private const float ClimbShrink = 0.28f;  // scale lost, descending
+        private const float ClimbGrow = 0.10f;    // scale gained, ascending
+        private const float EmergeVert = 0.30f;
+        private const float EmergeBigger = 0.12f; // arriving from above
+        private const float EmergeSmaller = 0.18f; // arriving from below
+
+        /// <summary>Longest slide toward the stairwell centre, in cells. V1's value.</summary>
+        private const float SlideMax = 1.35f;
 
         private enum Phase { Entry, Emerge }
 
@@ -305,22 +327,22 @@ namespace AsAboveSoBelow
             c.phase = Phase.Entry;
             c.phaseStart = Find.TickManager.TicksGame;
 
-            int half;
+            int climb;
             switch (c.kind)
             {
-                case ClipKind.Grand: half = GrandHalf; break;
-                case ClipKind.Ladder: half = LadderHalf; break;
+                case ClipKind.Grand: climb = GrandEntry; break;
+                case ClipKind.Ladder: climb = LadderEntry; break;
                 case ClipKind.Elevator:
                 {
                     int levels = Mathf.Max(1, Mathf.Abs(toBand - fromBand));
-                    half = Mathf.Min(ElevHalfMax,
-                        ElevHalfBase + ElevHalfPerLevel * (levels - 1));
+                    climb = Mathf.Min(ElevEntryMax,
+                        ElevEntryBase + ElevEntryPerLevel * (levels - 1));
                     break;
                 }
-                default: half = StairsHalf; break;
+                default: climb = StairsEntry; break;
             }
-            c.entryTicks = half;
-            c.emergeTicks = half;
+            c.entryTicks = climb;
+            c.emergeTicks = EmergeTicks;
 
             // The target: the link's drawn centre, shifted by the art's bounding-box centre
             // so the walk lands on the treads that are actually painted rather than on the
@@ -344,14 +366,16 @@ namespace AsAboveSoBelow
                 c.dirX = tx / len;
                 c.dirZ = tz / len;
             }
-            // Overshoot the mouth slightly along the same line, so the pawn is swallowed
-            // rather than stopping dead on top of the opening.
-            c.travelX = tx + c.dirX * 0.45f;
-            c.travelZ = tz + c.dirZ * 0.45f;
+            // ⚠ CAPPED, V1's SlideMax. The slide is a flourish toward the opening, not a
+            // substitute for walking: a pawn that stopped short must not cover the whole gap
+            // by sliding, it should just lean into it.
+            float slide = Mathf.Min(len, SlideMax);
+            c.travelX = c.dirX * slide;
+            c.travelZ = c.dirZ * slide;
 
             clips[p.thingIDNumber] = c;
             PopsStarted++;
-            entryTicks = half;
+            entryTicks = climb;
 
             if (c.kind == ClipKind.Elevator && p.Map != null)
             {
@@ -519,22 +543,6 @@ namespace AsAboveSoBelow
             return t * t * (3f - 2f * t);
         }
 
-        /// <summary>Dwell-pull-dwell staircase easing: n discrete advances.</summary>
-        private static float StepEase(float p, int n)
-        {
-            p = Mathf.Clamp01(p);
-            float s = p * n;
-            int i = Mathf.FloorToInt(s);
-            if (i >= n) i = n - 1;
-            float f = s - i;
-            float m = Smooth(Mathf.Clamp01((f - 0.18f) / 0.55f));
-            return (i + m) / n;
-        }
-
-        /// <summary>The scale both halves meet at. Traveler's whole premise: the entry ends
-        /// here and the emerge starts here, so the teleport frame is a matched pose.</summary>
-        private const float MeetScale = 0.10f;
-
         /// <summary>
         /// The one draw-side query. Returns the pose for this pawn's current phase, or false
         /// when it has no clip. Worker-thread safe: count guard first, dictionary never
@@ -561,7 +569,7 @@ namespace AsAboveSoBelow
             if (c.phase == Phase.Entry)
             {
                 float p = c.entryTicks > 0 ? Mathf.Clamp01(age / (float)c.entryTicks) : 1f;
-                pose = EntryPose(c, p);
+                pose = EntryPose(c, p, age);
                 return true;
             }
             float q = c.emergeTicks > 0 ? Mathf.Clamp01(age / (float)c.emergeTicks) : 1f;
@@ -573,175 +581,86 @@ namespace AsAboveSoBelow
             return true;
         }
 
-        private static ClipPose EntryPose(Clip c, float p)
+        /// <summary>
+        /// THE CLIMB, ported from V1's AnimationWorker_ABClimb.
+        ///
+        /// Three independent terms, and keeping them independent is the point:
+        ///   SLIDE - an eased lean toward the stairwell's drawn centre, capped at SlideMax.
+        ///   BOB   - a step (or rung) cadence driven by TICKS, not by progress, so the
+        ///           footfall rate is the same whatever the clip's duration.
+        ///   VERT  - a screen-space rise or sink, the term that makes a climb read as a
+        ///           climb. §78 had only slide+shrink, so ascending looked like descending
+        ///           along a different axis ("not going up the stairs but in and down").
+        ///
+        /// ⚠ SCALE IS UNIFORM, ALWAYS, AND THAT IS NOT A STYLE CHOICE. A non-uniform scale
+        /// composed with a rotation is a SHEAR, and the pawn's own render nodes contribute
+        /// further scales either side of ours - so `sx != sz` while `rot != 0` skewed the
+        /// sprite into a parallelogram. V1 returns (k, 1, k) everywhere for this reason.
+        /// </summary>
+        private static ClipPose EntryPose(Clip c, float p, int ageTicks)
         {
             ClipPose o = default;
-            o.sx = o.sz = 1f;
             o.facing = FaceOf(c.dirX, c.dirZ);
-            switch (c.kind)
+
+            float ease = Smooth(p);
+            bool ladder = c.kind == ClipKind.Ladder;
+            bool elevator = c.kind == ClipKind.Elevator;
+
+            // Ladders get a slower, taller rung cadence; an elevator has no footfall at all.
+            float period = ladder ? 16f : 12f;
+            float amp = ladder ? 0.08f : 0.05f;
+            float bob = elevator ? 0f
+                : Mathf.Abs(Mathf.Sin(ageTicks * Mathf.PI / period)) * amp;
+
+            float vert = (c.up ? ClimbRise : ClimbSink) * ease;
+            float k = c.up ? 1f + ClimbGrow * ease : 1f - ClimbShrink * ease;
+
+            o.offX = c.travelX * ease;
+            o.offZ = c.travelZ * ease + bob + vert;
+            o.sx = o.sz = k;
+
+            // Alternating sway, one cycle per two steps. Stairs only: a ladder is climbed
+            // square-on, and a swaying elevator passenger reads as drunk.
+            o.rot = (ladder || elevator) ? 0f
+                : Mathf.Sin(ageTicks * Mathf.PI / 24f) * 3f;
+
+            if (elevator)
             {
-                case ClipKind.Grand:
-                {
-                    float pe = StepEase(p, 6);
-                    int beat = Mathf.Min(5, (int)(p * 6f));
-                    float f = Mathf.Clamp01(p * 6f - beat);
-                    float hop = Mathf.Sin(f * Mathf.PI);
-                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
-                    // Colonists keep to one side of a wide staircase. Eased in over the
-                    // first quarter rather than applied flat, or the clip opens with a
-                    // half-cell sideways jolt.
-                    float rail = 0.45f * Smooth(Mathf.Min(1f, p / 0.25f));
-                    o.sx = o.sz = s * (1f + hop * 0.04f);
-                    o.offX = c.travelX * pe - c.dirZ * rail;
-                    o.offZ = c.travelZ * pe + c.dirX * rail + hop * 0.05f;
-                    o.rot = ((beat & 1) == 0 ? 1f : -1f) * 5f * hop;
-                    break;
-                }
-                case ClipKind.Ladder:
-                {
-                    float pe = StepEase(p, 4);
-                    int rung = Mathf.Min(3, (int)(p * 4f));
-                    float f = Mathf.Clamp01(p * 4f - rung);
-                    float haul = Mathf.Sin(f * Mathf.PI);
-                    float sign = (rung & 1) == 0 ? 1f : -1f;
-                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
-                    o.sx = s * (1f - 0.05f * haul);
-                    o.sz = s * (1f + 0.07f * haul);
-                    // A ladder crossing has NO lateral travel of its own, which is what
-                    // makes it the cleanest midpoint match of the four: the two halves meet
-                    // on the same pixel rather than merely near it. The only travel is the
-                    // step onto the rungs from wherever the pawn stopped.
-                    o.offX = c.travelX * pe + sign * 0.07f * haul;
-                    o.offZ = c.travelZ * pe;
-                    o.rot = sign * 7f * haul;
-                    break;
-                }
-                case ClipKind.Elevator:
-                {
-                    const float board = 0.30f;
-                    if (p < board)
-                    {
-                        float m = Smooth(p / board);
-                        o.offX = c.travelX * m;
-                        o.offZ = c.travelZ * m;
-                        o.sz = 1f - 0.05f * Mathf.Sin(m * Mathf.PI);
-                        break;
-                    }
-                    float q = (p - board) / (1f - board);
-                    // Turn around inside the car and ride facing the doors.
-                    o.facing = Opposite(o.facing);
-                    float s2 = Mathf.Lerp(1f, MeetScale, Smooth(q));
-                    o.sx = o.sz = s2;
-                    // Realtime, not q: the shudder is a property of the machine, and tying
-                    // it to clip progress makes it step visibly at low game speeds.
-                    o.offX = c.travelX + Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f;
-                    o.offZ = c.travelZ;
-                    break;
-                }
-                default:
-                {
-                    float pe = StepEase(p, 4);
-                    int tread = Mathf.Min(3, (int)(p * 4f));
-                    float f = Mathf.Clamp01(p * 4f - tread);
-                    float hop = Mathf.Sin(f * Mathf.PI);
-                    float s = Mathf.Lerp(1f, MeetScale, Smooth(p));
-                    o.sx = o.sz = s * (1f + hop * 0.05f);
-                    // Zero at p=0 - the pawn walks in from where it is standing - and ends
-                    // 0.45 cells past the mouth, so the two halves meet under the opening.
-                    o.offX = c.travelX * pe;
-                    o.offZ = c.travelZ * pe + hop * 0.05f;
-                    o.rot = ((tread & 1) == 0 ? 1f : -1f) * 6f * hop;
-                    break;
-                }
+                // The car takes the load and the cable judders. Realtime, not progress, so
+                // it does not visibly step at low game speeds.
+                o.offX += Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.02f;
+                // Riding the car means facing out of it, not along the shaft.
+                o.facing = Opposite(o.facing);
             }
             return o;
         }
 
+        /// <summary>
+        /// THE ARRIVAL FLOURISH, ported from V1's AnimationWorker_ABEmerge. The pawn is
+        /// already standing where it belongs; this only eases it out of the stairwell.
+        ///
+        /// ⚠ THE VERTICAL TERM IS INVERTED RELATIVE TO THE CLIMB, WHICH IS WHAT MAKES THE
+        /// TWO HALVES READ AS ONE MOVEMENT. A pawn that went DOWN arrives from above, so it
+        /// starts raised and slightly enlarged and settles; a pawn that went UP arrives from
+        /// below, so it starts sunken and small and grows. Getting this backwards makes a
+        /// descent end by rising out of the floor.
+        /// </summary>
         private static ClipPose EmergePose(Clip c, float q)
         {
             ClipPose o = default;
-            o.sx = o.sz = 1f;
-            // c.dirX/dirZ is now the EXIT direction at the far end.
             o.facing = FaceOf(c.dirX, c.dirZ);
-            // Scale resolves slightly ahead of the walk, so the pawn is at full size for the
-            // last fifth and the clip hands over to ordinary movement without a step.
-            float grow = Mathf.Lerp(MeetScale, 1f, Smooth(Mathf.Min(1f, q / 0.80f)));
-            switch (c.kind)
-            {
-                case ClipKind.Grand:
-                {
-                    const float rail = 0.45f;
-                    float w = Smooth(q);
-                    float pe = StepEase(w, 4);
-                    int beat = Mathf.Min(3, (int)(w * 4f));
-                    float f = Mathf.Clamp01(w * 4f - beat);
-                    float hop = Mathf.Sin(f * Mathf.PI);
-                    o.sx = o.sz = grow * (1f + hop * 0.04f);
-                    // (1 - pe), NOT (1 - pe*0.5): the lateral term has to resolve to zero by
-                    // the end or the clip hands back a pawn standing a quarter-cell off its
-                    // own tile, which snaps the moment the pose stops being applied.
-                    o.offX = c.ox * (1f - pe) - c.dirZ * rail * (1f - pe);
-                    o.offZ = c.oz * (1f - pe) + c.dirX * rail * (1f - pe) + hop * 0.05f;
-                    o.rot = ((beat & 1) == 0 ? -1f : 1f) * 5f * hop;
-                    break;
-                }
-                case ClipKind.Ladder:
-                {
-                    float w = Smooth(q);
-                    float pe = StepEase(w, 4);
-                    int rung = Mathf.Min(3, (int)(w * 4f));
-                    float f = Mathf.Clamp01(w * 4f - rung);
-                    float haul = Mathf.Sin(f * Mathf.PI);
-                    float sign = (rung & 1) == 0 ? -1f : 1f;
-                    o.sx = grow * (1f - 0.05f * haul);
-                    o.sz = grow * (1f + 0.07f * haul);
-                    o.offX = c.ox * (1f - pe) + sign * 0.07f * haul;
-                    o.offZ = c.oz * (1f - pe);
-                    o.rot = sign * 7f * haul;
-                    // ⚠ FACING THE RUNGS MEANS FACING AWAY FROM THE EXIT. On this side the
-                    // ladder is behind the pawn's line of travel, so the climb beat is the
-                    // NEGATED exit vector; only the last fifth turns to walk off.
-                    if (q < 0.82f)
-                    {
-                        o.facing = FaceOf(-c.dirX, -c.dirZ);
-                    }
-                    break;
-                }
-                case ClipKind.Elevator:
-                {
-                    float jt = Mathf.Sin(Time.realtimeSinceStartup * 41f) * 0.03f
-                             * (q < 0.80f ? 1f : 0f);
-                    if (q > 0.88f)
-                    {
-                        // The landing bounce; the dust puff is thrown from the sweep on the
-                        // same frame.
-                        float b = Mathf.Sin(Mathf.PI * (q - 0.88f) / 0.12f);
-                        o.sx = grow * (1f + 0.08f * b);
-                        o.sz = grow * (1f - 0.10f * b);
-                    }
-                    else
-                    {
-                        o.sx = o.sz = grow;
-                    }
-                    float w2 = Smooth(Mathf.Clamp01((q - 0.45f) / 0.55f));
-                    o.offX = c.ox * (1f - w2) + jt;
-                    o.offZ = c.oz * (1f - w2);
-                    break;
-                }
-                default:
-                {
-                    float w = Smooth(q);
-                    float pe = StepEase(w, 3);
-                    int tread = Mathf.Min(2, (int)(w * 3f));
-                    float f = Mathf.Clamp01(w * 3f - tread);
-                    float hop = Mathf.Sin(f * Mathf.PI);
-                    o.sx = o.sz = grow * (1f + hop * 0.05f);
-                    o.offX = c.ox * (1f - pe);
-                    o.offZ = c.oz * (1f - pe) + hop * 0.05f;
-                    o.rot = ((tread & 1) == 0 ? -1f : 1f) * 6f * hop;
-                    break;
-                }
-            }
+
+            // Ease-out remainder: 1 the instant the pawn lands, 0 once settled.
+            float e = 1f - Mathf.Clamp01(q);
+            e *= e;
+
+            float vert = c.up ? -EmergeVert : EmergeVert;
+            float k = c.up ? 1f - EmergeSmaller * e : 1f + EmergeBigger * e;
+
+            o.offX = c.ox * e;
+            o.offZ = (c.oz + vert) * e;
+            o.sx = o.sz = k;
+            o.rot = 0f;
             return o;
         }
     }
