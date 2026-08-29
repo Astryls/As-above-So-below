@@ -2,92 +2,104 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>As above, So below II — Link Approach Tagger</title>
+<title>As above, So below II — Link Art &amp; Approach Tagger</title>
 <style>
 :root{
   --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
   --tx:#e6edf3; --dim:#8b98a5; --accent:#f0883e; --ok:#3fb950; --bad:#f85149; --warn:#d29922;
-  --pick:#5ec8f0;
+  --pick:#5ec8f0; --alpha:#f0883e;
   --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
-  --ground:#243033;
+  --ground:#232c2f;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
-header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0e1116 72%,rgba(14,17,22,.92));
-  border-bottom:1px solid var(--line);padding:14px 22px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0e1116 74%,rgba(14,17,22,.93));
+  border-bottom:1px solid var(--line);padding:12px 22px}
 h1{margin:0;font-size:17px}h1 span{color:var(--accent)}
-.sub{color:var(--dim);font-size:12px;margin-top:3px}
-main{padding:20px 22px 120px;max-width:1500px;margin:0 auto}
+.sub{color:var(--dim);font-size:12px;margin-top:2px}
+main{padding:18px 22px 140px;max-width:1560px;margin:0 auto}
 button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;
-  padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:inherit}
 button:hover{border-color:var(--accent);color:#fff}
 button.primary{background:var(--accent);color:#1a1005;border-color:var(--accent);font-weight:600}
+button.mini{padding:2px 7px;font-size:11px}
+select,input[type=number]{background:#0b0e13;color:var(--tx);border:1px solid var(--line);
+  border-radius:5px;padding:3px 5px;font-family:var(--mono);font-size:11.5px}
+input[type=number]{width:62px}
+label.chk{font-size:12px;color:var(--dim);cursor:pointer;user-select:none}
 .note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
-  border-radius:8px;padding:13px 16px;margin-bottom:18px;font-size:13px}
+  border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px}
 .note b{color:var(--accent)}
 .note code{font-family:var(--mono);font-size:11.5px;background:#0b0e13;padding:1px 5px;border-radius:3px}
-.note ul{margin:8px 0 0;padding-left:18px}
-h2{font-size:14px;margin:26px 0 10px;letter-spacing:.3px}
+.note ul{margin:7px 0 0;padding-left:18px}
+h2{font-size:14px;margin:24px 0 9px;letter-spacing:.3px}
 h2 small{color:var(--dim);font-weight:400;font-size:11.5px;margin-left:8px;font-family:var(--mono)}
-.row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px}
 .card.dirty{border-color:var(--warn)}
-.card h3{margin:0 0 2px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
-.card .src{font-family:var(--mono);font-size:10.5px;color:#5d6b7a;margin-bottom:8px;word-break:break-all}
+.card h3{margin:0 0 1px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.card h3 b{color:var(--tx)}
+.card .src{font-family:var(--mono);font-size:10.5px;color:#5d6b7a;margin-bottom:7px;word-break:break-all}
 .card .src.flip{color:var(--warn)}
-.stage{position:relative;width:100%;aspect-ratio:1/1;background:var(--ground);border-radius:6px;overflow:hidden}
-.stage .foot{position:absolute;outline:1px dashed #7f95a8;pointer-events:none;
-  background:rgba(127,149,168,.10)}
+
+.stage{position:relative;width:100%;background:var(--ground);border-radius:5px;overflow:hidden;
+  touch-action:none;cursor:grab;outline:none}
+.stage.drag{cursor:grabbing}
+.stage:focus{box-shadow:0 0 0 1px var(--accent) inset}
 .stage img{position:absolute;image-rendering:pixelated;pointer-events:none}
+.gl{position:absolute;background:rgba(255,255,255,.055);pointer-events:none}
+.foot{position:absolute;pointer-events:none;border:1px solid rgba(150,190,215,.55);
+  background:rgba(120,170,200,.09)}
+.abox{position:absolute;pointer-events:none;border:1px dashed rgba(240,136,62,.85)}
 .cell{position:absolute;border:1px solid transparent}
-.cell.ring{cursor:pointer;background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.07)}
-.cell.ring:hover{background:rgba(94,200,240,.28);border-color:var(--pick)}
-.cell.sel{background:rgba(94,200,240,.72);border-color:#bfe9fb;box-shadow:0 0 0 1px #0b0e13 inset}
+.cell.ring{cursor:pointer}
+.cell.ring:hover{background:rgba(94,200,240,.25);border-color:var(--pick)}
+.cell.sel{background:rgba(94,200,240,.62);border-color:#bfe9fb}
 .cell.dead{pointer-events:none}
-.grid-lines{position:absolute;inset:0;pointer-events:none}
-.grid-lines i{position:absolute;background:rgba(255,255,255,.05)}
-.meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:var(--dim)}
+
+.ctl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;align-items:center;
+  margin-top:8px;font-size:11px;color:var(--dim)}
+.ctl b{font-weight:600;color:#7c8b99;font-family:var(--mono);font-size:10.5px}
+.btns{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+.meta{margin-top:7px;font-size:11px;color:var(--dim);display:flex;justify-content:space-between;gap:6px}
 .meta code{font-family:var(--mono);color:var(--pick)}
-.meta .def{color:var(--ok)}
-.meta .ovr{color:var(--warn)}
-.mini{padding:2px 7px;font-size:11px}
-footer{position:fixed;bottom:0;left:0;right:0;background:rgba(14,17,22,.96);border-top:1px solid var(--line);
-  padding:12px 22px;display:flex;gap:10px;align-items:center;z-index:30}
-footer .grow{flex:1;color:var(--dim);font-size:12px}
+.meta .def{color:var(--ok)} .meta .ovr{color:var(--warn)}
+
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(14,17,22,.97);border-top:1px solid var(--line);
+  padding:10px 22px;display:flex;gap:12px;align-items:center;z-index:30;flex-wrap:wrap}
+footer .grow{flex:1;color:var(--dim);font-size:12px;min-width:220px}
 dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);border-radius:12px;
-  padding:0;width:min(900px,92vw)}
-dialog::backdrop{background:rgba(0,0,0,.6)}
-dialog .hd{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+  padding:0;width:min(980px,94vw)}
+dialog::backdrop{background:rgba(0,0,0,.62)}
+dialog .hd{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;gap:9px;align-items:center}
 dialog .hd b{flex:1;font-size:13px}
-dialog textarea{width:100%;height:46vh;background:#0b0e13;color:var(--tx);border:0;border-top:1px solid var(--line);
-  font-family:var(--mono);font-size:11.5px;padding:14px;resize:vertical}
-.tabs{display:flex;gap:6px}
+dialog textarea{width:100%;height:54vh;background:#0b0e13;color:var(--tx);border:0;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11.5px;padding:13px;resize:vertical}
 .tabs button.on{background:var(--accent);color:#1a1005;border-color:var(--accent)}
 </style>
 </head>
 <body>
 <header>
-  <div>
-    <h1>As above, So below II — <span>Link Approach Tagger</span></h1>
-    <div class="sub">Tag the tile a pawn should stand on when it arrives at (or steps into) each vertical link.</div>
-  </div>
+  <h1>As above, So below II — <span>Link Art &amp; Approach Tagger</span></h1>
+  <div class="sub">One grid square = one RimWorld tile. Drag a sprite to set its draw offset, resize it, and click a tile to set where pawns land.</div>
 </header>
 
 <main>
   <div class="note">
-    <b>Click the tile in front of the opening</b> — the one the pawn should land on when it comes out of that
-    staircase or ladder. One per sprite, 24 sprites total. The dashed box is the building's real footprint; only
-    the edge-adjacent ring tiles are clickable (corners are not reachable from a door cell).
+    <b>Two jobs on one grid.</b>
     <ul>
-      <li>Everything starts on the <span style="color:var(--ok)">derived default</span> — the edge opposite the
-        rotation, centred. Only re-tag the sprites where that's wrong; those turn <span style="color:var(--warn)">amber</span>.</li>
-      <li>The <b>west</b> cards for the grand staircase and both ladders show <b>east mirrored</b>, because there is
-        no <code>_west</code> PNG and that is literally what RimWorld draws (<code>Graphic_Multi.westFlipped</code>).</li>
-      <li>Elevators are excluded on purpose — the art has no open side.</li>
-      <li>The <b>plain staircases are now a 1x2 footprint</b> (the dashed box) under a 2x2 <i>draw</i>,
-        because the sprite is a narrow flight. Where the sprite spills outside the dashed box, that
-        is exactly what the game draws — the east/west compositions are the §77c defect.</li>
-      <li>When you're done: <b>Export</b> → paste the XML back to me, or save the JSON.</li>
+      <li><b>Overdraw</b> — <b>drag the sprite</b> (or type numbers) to set that texture's draw offset, and set its draw
+        size in cells. Both are <i>per rotation</i>. The dashed orange outline is the sprite's real
+        <b>alpha bounding box</b>, measured off the PNG, so you can judge alignment against the tinted footprint
+        instead of guessing.</li>
+      <li><b>Approach</b> — <b>click a tile</b> in the ring around the footprint to say where a pawn is set down when
+        it comes out of that link. Blue tile.</li>
+      <li><b>Blueprints and placement ghosts follow automatically</b> — they are rebuilt from the built thing's
+        graphicData at startup, and the exported XML writes both blocks anyway. You never tune them separately.</li>
+      <li>The <b>west</b> cards for the grand staircase and both ladders show <b>east mirrored</b>; there is no
+        <code>_west</code> PNG and that is what RimWorld draws (<code>Graphic_Multi.westFlipped</code>).</li>
+      <li>Elevators are excluded — <code>Graphic_Single</code>, no open side.</li>
+      <li>When you're done: <b>Export</b> → paste it back and it gets baked into the defs in one pass.</li>
     </ul>
   </div>
   <div id="defs"></div>
@@ -96,7 +108,16 @@ dialog textarea{width:100%;height:46vh;background:#0b0e13;color:var(--tx);border
 <footer>
   <button class="primary" onclick="doExport()">Export</button>
   <button onclick="doImport()">Import JSON</button>
-  <button onclick="resetAll()">Reset all to default</button>
+  <button onclick="resetAll()">Reset all</button>
+  <span style="color:var(--dim);font-size:12px">snap</span>
+  <select id="snap" onchange="setSnap()">
+    <option value="0">off</option><option value="0.01">0.01</option>
+    <option value="0.05" selected>0.05</option><option value="0.1">0.1</option>
+    <option value="0.25">0.25</option><option value="0.5">0.5</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="tGrid" checked onchange="build()"> grid</label>
+  <label class="chk"><input type="checkbox" id="tBox" checked onchange="build()"> alpha box</label>
+  <label class="chk"><input type="checkbox" id="tFoot" checked onchange="build()"> footprint</label>
   <div class="grow" id="status"></div>
 </footer>
 
@@ -111,88 +132,97 @@ dialog textarea{width:100%;height:46vh;background:#0b0e13;color:var(--tx);border
 </dialog>
 
 <script>
-// ---------------------------------------------------------------- model
-// size (x,z, as authored for rotation NORTH) + drawSize + texture base must match
-// Defs/V2/AB2_Stairs.xml.
-//
-// ⚠ SIZE AND DRAWSIZE ARE NOT THE SAME NUMBER ANY MORE (§85). The plain staircases are a
-// 1x2 FOOTPRINT under a (2,2) DRAW, because the sprite is a narrow flight that fits inside
-// one cell of width. The stage below draws the footprint box at footprint scale and the
-// sprite at draw scale, centred on it - i.e. exactly what the game does, overhang included.
-//
-// ⚠ `off` IS graphicData.drawOffsetNorth/East/South/West, IN CELLS, IN ROT4 ORDER. Verse
-// applies it on both the Print and the DrawWorker path, so it is part of "what the game
-// draws" and this tool would be lying without it (§85.9 pinned the east/west staircases).
-// Keep it in sync with Defs/V2/AB2_Stairs.xml by hand - there is no import.
+// ============================================================== model
+// size / drawSize as authored in Defs/V2/AB2_Stairs.xml, in the NORTH orientation.
+// off  = graphicData.drawOffset<Rot> already in the defs, in CELLS, Rot4 order.
+// bbox = alpha bounding box of each PNG as a FRACTION OF THE IMAGE: [centreX, centreZ, w, h].
+//        Measured with Tools/MeasureSprites.ps1 -CellsX 1 -CellsZ 1. Because it is a fraction,
+//        it stays correct when you change the draw size below. West rows for the mirrored
+//        sprites have their centreX negated, which is what the flip does.
 const DEFS = [
-  { defName:"AB2_StairsDown",      label:"stairs down",       w:1, h:2, dw:2, dh:2, tex:"AB_StairsDown",
-    off:[[0,0],[0.109,-0.414],[0,0],[-0.109,-0.418]] },
-  { defName:"AB2_StairsUp",        label:"stairs up",         w:1, h:2, dw:2, dh:2, tex:"AB_StairsUp",
-    off:[[0,0],[0.156,0],[0,0],[-0.156,0]] },
-  { defName:"AB2_GrandStairsDown", label:"grand stairs down", w:3, h:3, dw:3, dh:3, tex:"AB_GrandStairsDown" },
-  { defName:"AB2_GrandStairsUp",   label:"grand stairs up",   w:3, h:3, dw:3, dh:3, tex:"AB_GrandStairsUp"   },
-  { defName:"AB2_LadderDown",      label:"ladder down",       w:1, h:1, dw:1, dh:1, tex:"AB_LadderDown"      },
-  { defName:"AB2_LadderUp",        label:"ladder up",         w:1, h:1, dw:1, dh:1, tex:"AB_LadderUp"        }
+{ defName:"AB2_StairsDown", label:"stairs down", w:1,h:2, dw:2,dh:2, tex:"AB_StairsDown",
+  off:[[0,0],[0.109,-0.414],[0,0],[-0.109,-0.418]],
+  bbox:[[0.001,-0.100,0.42,0.73],[-0.055,0.207,0.62,0.59],[0.000,0.109,0.42,0.74],[0.055,0.209,0.62,0.58]] },
+{ defName:"AB2_StairsUp", label:"stairs up", w:1,h:2, dw:2,dh:2, tex:"AB_StairsUp",
+  off:[[0,0],[0.156,0],[0,0],[-0.156,0]],
+  bbox:[[0.000,-0.156,0.42,0.62],[-0.078,0.000,0.57,1.00],[-0.001,-0.055,0.42,0.84],[0.078,0.000,0.57,1.00]] },
+{ defName:"AB2_GrandStairsDown", label:"grand stairs down", w:3,h:3, dw:3,dh:3, tex:"AB_GrandStairsDown",
+  off:[[0,0],[0,0],[0,0],[0,0]],
+  bbox:[[0.000,-0.070,0.62,0.81],[-0.001,-0.069,0.62,0.81],[0.000,0.075,0.62,0.81],[0.001,-0.069,0.62,0.81]] },
+{ defName:"AB2_GrandStairsUp", label:"grand stairs up", w:3,h:3, dw:3,dh:3, tex:"AB_GrandStairsUp",
+  off:[[0,0],[0,0],[0,0],[0,0]],
+  bbox:[[0.006,-0.123,0.63,0.72],[-0.001,0.000,0.62,0.96],[0.006,-0.007,0.63,0.95],[0.001,0.000,0.62,0.96]] },
+{ defName:"AB2_LadderDown", label:"ladder down", w:1,h:1, dw:1,dh:1, tex:"AB_LadderDown",
+  off:[[0,0],[0,0],[0,0],[0,0]],
+  bbox:[[-0.001,0.038,0.84,0.87],[0.000,-0.033,0.84,0.89],[-0.001,0.000,0.84,0.96],[0.000,-0.033,0.84,0.89]] },
+{ defName:"AB2_LadderUp", label:"ladder up", w:1,h:1, dw:1,dh:1, tex:"AB_LadderUp",
+  off:[[0,-0.33],[0,0],[0,0.33],[0,0]],
+  bbox:[[0.001,0.000,0.62,0.96],[-0.295,0.000,0.14,0.98],[0.001,0.000,0.62,0.96],[0.295,0.000,0.14,0.98]] }
 ];
-
-// GenAdj: an east/west rotation swaps the footprint's dimensions. Every offset the exporter
-// writes is in MAP space for THAT rotation, which is what ABLinkApproach reads back off
-// CellRect.Width/Height - so the grid has to swap too.
-function dims(d, rot){
-  return (rot === 1 || rot === 3) ? { w:d.h, h:d.w } : { w:d.w, h:d.h };
-}
-function drawDims(d, rot){
-  return (rot === 1 || rot === 3) ? { w:d.dh, h:d.dw } : { w:d.dw, h:d.dh };
-}
-const ROTS = ["north","east","south","west"];      // index == Rot4.AsInt
+const ROTS = ["north","east","south","west"];   // index == Rot4.AsInt
 const TEXDIR = "../Textures/Things/Building/";
-// Grand + ladders ship no _west; RimWorld falls back to _east with westFlipped = true.
 const NO_WEST = new Set(["AB_GrandStairsDown","AB_GrandStairsUp","AB_LadderDown","AB_LadderUp"]);
+const MARGIN = 2;                                // cells of context drawn around the footprint
 
-// Offsets are measured from the footprint's SOUTH-WEST corner, in map cells, +x east +z north.
-// The tagged cell is always exactly one step OUTSIDE one edge of the footprint.
-// Mirrors ABLinkApproach.Derive: the edge OPPOSITE the rotation, centred with CellRect's own
-// CenterCell rounding (minX + width/2), so an untagged sprite lands where the C# would put it.
-function defaultApproach(d, rot){
-  const s = dims(d, rot);
-  const cx = Math.floor(s.w/2), cz = Math.floor(s.h/2);
-  switch(rot){
-    case 0: return [cx, -1];       // rot north  -> opening faces south
-    case 1: return [-1, cz];       // rot east   -> opening faces west
-    case 2: return [cx, s.h];      // rot south  -> opening faces north
-    default:return [s.w, cz];      // rot west   -> opening faces east
+// GenAdj swaps the footprint AND the drawn quad for horizontal rotations.
+const horiz = r => (r === 1 || r === 3);
+function dims(d, r){ return horiz(r) ? { w:d.h, h:d.w } : { w:d.w, h:d.h }; }
+function defSize(d, r){ return horiz(r) ? [d.dh, d.dw] : [d.dw, d.dh]; }
+
+// Approach offsets are measured from the footprint's SOUTH-WEST corner, +x east +z north, and
+// always name a cell exactly one step OUTSIDE one edge. Mirrors ABLinkApproach.Derive.
+function defaultApproach(d, r){
+  const s = dims(d, r), cx = Math.floor(s.w/2), cz = Math.floor(s.h/2);
+  switch(r){
+    case 0: return [cx, -1];
+    case 1: return [-1, cz];
+    case 2: return [cx, s.h];
+    default:return [s.w, cz];
   }
 }
-const state = {};   // defName -> [ [dx,dz] x4 ]
-DEFS.forEach(d => state[d.defName] = ROTS.map((_,r)=>defaultApproach(d,r)));
 
-const eq = (a,b) => a[0]===b[0] && a[1]===b[1];
-function isDefault(d, r){ return eq(state[d.defName][r], defaultApproach(d,r)); }
+const state = {};
+function seed(){
+  DEFS.forEach(d => state[d.defName] = ROTS.map((_, r) => ({
+    off:  [d.off[r][0], d.off[r][1]],
+    size: defSize(d, r).slice(),
+    app:  defaultApproach(d, r)
+  })));
+}
+seed();
 
-// A ring cell is taggable when it is cardinally adjacent to exactly one footprint cell.
+let SNAP = 0.05;
+function setSnap(){ SNAP = parseFloat(document.getElementById("snap").value) || 0; build(); }
+const snap = v => SNAP > 0 ? Math.round(v / SNAP) * SNAP : v;
+const r3 = v => Math.round(v * 1000) / 1000;
+
+function isDefault(d, r){
+  const st = state[d.defName][r], ds = defSize(d, r), da = defaultApproach(d, r);
+  return st.off[0] === d.off[r][0] && st.off[1] === d.off[r][1]
+      && st.size[0] === ds[0] && st.size[1] === ds[1]
+      && st.app[0] === da[0] && st.app[1] === da[1];
+}
 function ringKind(s, dx, dz){
   const inX = dx>=0 && dx<s.w, inZ = dz>=0 && dz<s.h;
   if (inX && inZ) return "foot";
-  const edgeX = (dx===-1 || dx===s.w), edgeZ = (dz===-1 || dz===s.h);
-  if (edgeX && inZ) return "ring";
-  if (edgeZ && inX) return "ring";
-  return "corner";
+  if ((dx===-1 || dx===s.w) && inZ) return "ring";
+  if ((dz===-1 || dz===s.h) && inX) return "ring";
+  return "outer";
 }
 function outwardOf(s, dx, dz){
-  if (dx < 0)      return "west";
-  if (dx >= s.w)   return "east";
-  if (dz < 0)      return "south";
+  if (dx < 0) return "west";
+  if (dx >= s.w) return "east";
+  if (dz < 0) return "south";
   return "north";
 }
 
-// ---------------------------------------------------------------- view
+// ============================================================== view
 function build(){
   const host = document.getElementById("defs");
   host.innerHTML = "";
   DEFS.forEach(d => {
     const h = document.createElement("h2");
-    h.innerHTML = d.label + " <small>" + d.defName + " &middot; footprint " + d.w + "x" + d.h
-      + ((d.w !== d.dw || d.h !== d.dh) ? " &middot; drawn " + d.dw + "x" + d.dh : "") + "</small>";
+    h.innerHTML = d.label + " <small>" + d.defName + " &middot; footprint " + d.w + "x" + d.h + "</small>";
     host.appendChild(h);
     const row = document.createElement("div");
     row.className = "row";
@@ -208,48 +238,130 @@ function card(d, r, rotName){
 
   const flip = rotName === "west" && NO_WEST.has(d.tex);
   const file = flip ? d.tex + "_east.png" : d.tex + "_" + rotName + ".png";
+  const s = dims(d, r);
+  const gw = s.w + 2*MARGIN, gh = s.h + 2*MARGIN;
+  const pcx = 100/gw, pcy = 100/gh;
 
-  const s = dims(d, r), ds = drawDims(d, r);
-  const nx = s.w + 2, nz = s.h + 2;           // grid is the footprint plus a one-cell ring
-  const pcx = 100 / nx, pcy = 100 / nz;
+  // grid lines: one per RimWorld tile, across the whole stage
+  let grid = "";
+  if (document.getElementById("tGrid").checked){
+    for (let i = 1; i < gw; i++) grid += '<div class="gl" style="left:' + (i*pcx) + '%;top:0;width:1px;height:100%"></div>';
+    for (let j = 1; j < gh; j++) grid += '<div class="gl" style="top:' + (j*pcy) + '%;left:0;height:1px;width:100%"></div>';
+  }
 
+  // clickable ring + inert context cells
   let cells = "";
-  for (let row = 0; row < nz; row++){
-    for (let col = 0; col < nx; col++){
-      const dx = col - 1, dz = s.h - row;     // screen row 0 is the NORTH-most ring row
+  for (let row = 0; row < gh; row++){
+    for (let col = 0; col < gw; col++){
+      const dx = col - MARGIN, dz = s.h - 1 - (row - MARGIN);
       const kind = ringKind(s, dx, dz);
-      const cls = kind === "ring" ? "cell ring" : "cell dead";
-      cells += '<div class="' + cls + '" style="left:' + (col*pcx) + '%;top:' + (row*pcy) + '%;width:' + pcx + '%;height:' + pcy + '%"'
+      cells += '<div class="cell ' + (kind === "ring" ? "ring" : "dead") + '"'
+             + ' style="left:' + (col*pcx) + '%;top:' + (row*pcy) + '%;width:' + pcx + '%;height:' + pcy + '%"'
              + (kind === "ring" ? ' data-dx="' + dx + '" data-dz="' + dz + '"' : '') + '></div>';
     }
   }
 
-  // The sprite is drawn at DRAW size, centred on the footprint and then shifted by the def's
-  // drawOffset for this rotation - so an overhang shows up here exactly as it does in game.
-  // Screen y is inverted relative to map z, hence the minus.
-  const o = (d.off && d.off[r]) || [0,0];
-  const imgL = pcx * (1 + (s.w - ds.w) / 2 + o[0]), imgT = pcy * (1 + (s.h - ds.h) / 2 - o[1]);
-
   el.innerHTML =
-    '<h3>rot ' + rotName + ' <span style="color:#5d6b7a">(' + r + ') &middot; ' + s.w + 'x' + s.h + '</span></h3>' +
+    '<h3><b>rot ' + rotName + '</b> <span style="color:#5d6b7a">(' + r + ') &middot; ' + s.w + 'x' + s.h + '</span></h3>' +
     '<div class="src' + (flip ? ' flip' : '') + '">' + file + (flip ? '  (mirrored)' : '') + '</div>' +
-    '<div class="stage" style="aspect-ratio:' + nx + '/' + nz + '">' +
-      '<img src="' + TEXDIR + file + '" style="left:' + imgL + '%;top:' + imgT + '%;width:' + (pcx*ds.w) + '%;height:' + (pcy*ds.h) + '%'
-        + (flip ? ';transform:scaleX(-1)' : '') + '" alt="">' +
-      '<div class="foot" style="left:' + pcx + '%;top:' + pcy + '%;width:' + (pcx*s.w) + '%;height:' + (pcy*s.h) + '%"></div>' +
+    '<div class="stage" id="st-' + d.defName + '-' + r + '" tabindex="0" style="aspect-ratio:' + gw + '/' + gh + '">' +
+      '<img id="im-' + d.defName + '-' + r + '" src="' + TEXDIR + file + '"' +
+        (flip ? ' style="transform:scaleX(-1)"' : '') + ' alt="">' +
+      (document.getElementById("tFoot").checked
+        ? '<div class="foot" style="left:' + (MARGIN*pcx) + '%;top:' + (MARGIN*pcy) + '%;width:' + (s.w*pcx) + '%;height:' + (s.h*pcy) + '%"></div>'
+        : '') +
+      grid +
+      '<div class="abox" id="ab-' + d.defName + '-' + r + '"></div>' +
       cells +
     '</div>' +
-    '<div class="meta"><span id="lbl-' + d.defName + '-' + r + '"></span>' +
-      '<button class="mini" data-reset="1">default</button></div>';
+    '<div class="ctl">' +
+      '<b>off x</b><input type="number" step="0.01" id="ox-' + d.defName + '-' + r + '">' +
+      '<b>off z</b><input type="number" step="0.01" id="oz-' + d.defName + '-' + r + '">' +
+      '<b>size w</b><input type="number" step="0.01" min="0.05" id="sw-' + d.defName + '-' + r + '">' +
+      '<b>size h</b><input type="number" step="0.01" min="0.05" id="sh-' + d.defName + '-' + r + '">' +
+    '</div>' +
+    '<div class="btns">' +
+      '<button class="mini" data-act="centre">centre</button>' +
+      '<button class="mini" data-act="fit">fit</button>' +
+      '<button class="mini" data-act="reset">reset</button>' +
+    '</div>' +
+    '<div class="meta"><span id="lbl-' + d.defName + '-' + r + '"></span></div>';
 
-  el.querySelectorAll(".cell.ring").forEach(c => c.addEventListener("click", () => {
-    state[d.defName][r] = [ +c.dataset.dx, +c.dataset.dz ];
+  // ---- numeric inputs
+  const bind = (id, fn) => {
+    const e = el.querySelector("#" + id);
+    e.addEventListener("change", () => { fn(parseFloat(e.value)); paint(d, r); });
+  };
+  bind("ox-"+d.defName+"-"+r, v => state[d.defName][r].off[0]  = isNaN(v) ? 0 : v);
+  bind("oz-"+d.defName+"-"+r, v => state[d.defName][r].off[1]  = isNaN(v) ? 0 : v);
+  bind("sw-"+d.defName+"-"+r, v => state[d.defName][r].size[0] = isNaN(v) ? 1 : Math.max(0.05, v));
+  bind("sh-"+d.defName+"-"+r, v => state[d.defName][r].size[1] = isNaN(v) ? 1 : Math.max(0.05, v));
+
+  el.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => {
+    const a = b.dataset.act, st = state[d.defName][r];
+    if (a === "reset"){ st.off = d.off[r].slice(); st.size = defSize(d, r); st.app = defaultApproach(d, r); }
+    if (a === "centre"){
+      // put the ALPHA BOX centre on the footprint centre - the art, not the quad
+      st.off = [ r3(-d.bbox[r][0] * st.size[0]), r3(-d.bbox[r][1] * st.size[1]) ];
+    }
+    if (a === "fit"){
+      // uniform scale so the alpha box fits inside the footprint, then centre it
+      const bw = d.bbox[r][2] * st.size[0], bh = d.bbox[r][3] * st.size[1];
+      const k = Math.min(s.w / bw, s.h / bh);
+      st.size = [ r3(st.size[0] * k), r3(st.size[1] * k) ];
+      st.off = [ r3(-d.bbox[r][0] * st.size[0]), r3(-d.bbox[r][1] * st.size[1]) ];
+    }
     paint(d, r);
-    say("tagged " + d.defName + " / " + rotName + " → (" + c.dataset.dx + "," + c.dataset.dz + ")");
+    say(a + " applied to " + d.defName + " / " + ROTS[r]);
   }));
-  el.querySelector("[data-reset]").addEventListener("click", () => {
-    state[d.defName][r] = defaultApproach(d, r);
+
+  // ---- drag to move, click to tag
+  const stage = el.querySelector("#st-" + d.defName + "-" + r);
+  let down = null;
+  stage.addEventListener("pointerdown", ev => {
+    down = { x:ev.clientX, y:ev.clientY, ox:state[d.defName][r].off[0], oz:state[d.defName][r].off[1],
+             moved:false, target:ev.target };
+    stage.setPointerCapture(ev.pointerId);
+  });
+  stage.addEventListener("pointermove", ev => {
+    if (!down) return;
+    const dxp = ev.clientX - down.x, dyp = ev.clientY - down.y;
+    if (!down.moved && Math.abs(dxp) + Math.abs(dyp) < 3) return;
+    down.moved = true;
+    stage.classList.add("drag");
+    const rect = stage.getBoundingClientRect();
+    const cellPx = rect.width / gw;              // square cells, so one number does both axes
+    let nx = down.ox + dxp / cellPx;
+    let nz = down.oz - dyp / cellPx;             // screen y down, map z up
+    if (ev.shiftKey){ if (Math.abs(dxp) > Math.abs(dyp)) nz = down.oz; else nx = down.ox; }
+    state[d.defName][r].off = [ r3(snap(nx)), r3(snap(nz)) ];
     paint(d, r);
+  });
+  const end = ev => {
+    if (!down) return;
+    stage.classList.remove("drag");
+    if (!down.moved && down.target.classList.contains("ring")){
+      state[d.defName][r].app = [ +down.target.dataset.dx, +down.target.dataset.dz ];
+      say("landing tile for " + d.defName + " / " + ROTS[r] + " = ("
+          + down.target.dataset.dx + "," + down.target.dataset.dz + ")");
+    }
+    down = null;
+    paint(d, r);
+  };
+  stage.addEventListener("pointerup", end);
+  stage.addEventListener("pointercancel", end);
+
+  // ---- arrow keys nudge the focused stage
+  stage.addEventListener("keydown", ev => {
+    const step = SNAP > 0 ? SNAP : 0.01;
+    const st = state[d.defName][r];
+    let used = true;
+    if (ev.key === "ArrowLeft")       st.off[0] = r3(st.off[0] - step);
+    else if (ev.key === "ArrowRight") st.off[0] = r3(st.off[0] + step);
+    else if (ev.key === "ArrowUp")    st.off[1] = r3(st.off[1] + step);
+    else if (ev.key === "ArrowDown")  st.off[1] = r3(st.off[1] - step);
+    else used = false;
+    if (used){ ev.preventDefault(); paint(d, r); }
   });
 
   setTimeout(() => paint(d, r), 0);
@@ -259,36 +371,84 @@ function card(d, r, rotName){
 function paint(d, r){
   const el = document.getElementById("card-" + d.defName + "-" + r);
   if (!el) return;
-  const [dx, dz] = state[d.defName][r];
+  const st = state[d.defName][r], s = dims(d, r);
+  const gw = s.w + 2*MARGIN, gh = s.h + 2*MARGIN;
+  const pcx = 100/gw, pcy = 100/gh;
+
+  // sprite: drawn at `size` cells, centred on the footprint centre, shifted by `off`
+  const cx = MARGIN + s.w/2 + st.off[0], cz = MARGIN + s.h/2 - st.off[1];
+  const img = document.getElementById("im-" + d.defName + "-" + r);
+  img.style.left   = ((cx - st.size[0]/2) * pcx) + "%";
+  img.style.top    = ((cz - st.size[1]/2) * pcy) + "%";
+  img.style.width  = (st.size[0] * pcx) + "%";
+  img.style.height = (st.size[1] * pcy) + "%";
+
+  // alpha box: a fraction of the sprite, so it tracks size and offset for free
+  const ab = document.getElementById("ab-" + d.defName + "-" + r);
+  if (document.getElementById("tBox").checked){
+    const bw = d.bbox[r][2] * st.size[0], bh = d.bbox[r][3] * st.size[1];
+    const bx = cx + d.bbox[r][0] * st.size[0], bz = cz - d.bbox[r][1] * st.size[1];
+    ab.style.display = "block";
+    ab.style.left = ((bx - bw/2) * pcx) + "%";
+    ab.style.top  = ((bz - bh/2) * pcy) + "%";
+    ab.style.width = (bw * pcx) + "%";
+    ab.style.height = (bh * pcy) + "%";
+  } else {
+    ab.style.display = "none";
+  }
+
   el.querySelectorAll(".cell").forEach(c => c.classList.remove("sel"));
-  const hit = el.querySelector('.cell.ring[data-dx="' + dx + '"][data-dz="' + dz + '"]');
+  const hit = el.querySelector('.cell.ring[data-dx="' + st.app[0] + '"][data-dz="' + st.app[1] + '"]');
   if (hit) hit.classList.add("sel");
+
+  el.querySelector("#ox-"+d.defName+"-"+r).value = st.off[0];
+  el.querySelector("#oz-"+d.defName+"-"+r).value = st.off[1];
+  el.querySelector("#sw-"+d.defName+"-"+r).value = st.size[0];
+  el.querySelector("#sh-"+d.defName+"-"+r).value = st.size[1];
+
   const def = isDefault(d, r);
   el.classList.toggle("dirty", !def);
+  const overW = r3(d.bbox[r][2] * st.size[0] - s.w), overH = r3(d.bbox[r][3] * st.size[1] - s.h);
   document.getElementById("lbl-" + d.defName + "-" + r).innerHTML =
-    'opens <code>' + outwardOf(dims(d, r), dx, dz) + '</code> &middot; <code>(' + dx + ',' + dz + ')</code> ' +
-    (def ? '<span class="def">default</span>' : '<span class="ovr">tagged</span>');
+    'opens <code>' + outwardOf(s, st.app[0], st.app[1]) + '</code> at <code>('
+    + st.app[0] + ',' + st.app[1] + ')</code> &middot; overdraw <code>'
+    + (overW > 0 ? "+" : "") + overW + ' / ' + (overH > 0 ? "+" : "") + overH + '</code> '
+    + (def ? '<span class="def">default</span>' : '<span class="ovr">edited</span>');
 }
 
 function say(m){ document.getElementById("status").textContent = m; }
-function resetAll(){
-  DEFS.forEach(d => ROTS.forEach((_,r) => { state[d.defName][r] = defaultApproach(d,r); paint(d,r); }));
-  say("reset to derived defaults");
-}
+function resetAll(){ seed(); build(); say("reset to the values currently in the defs"); }
 
-// ---------------------------------------------------------------- export
+// ============================================================== export
+function v3(a){ return "(" + r3(a[0]) + ", 0, " + r3(a[1]) + ")"; }
 function xmlOut(){
-  let out = "<!-- Link approach cells, tagged in Tools/LinkApproachTagger.html.\n"
-          + "     One <li> per rotation, in Rot4 order: north, east, south, west.\n"
-          + "     (dx,dz) is the landing tile measured from the footprint's SW corner,\n"
-          + "     always one step OUTSIDE the open edge. Paste each block into the\n"
-          + "     matching <li Class=\"AsAboveSoBelow.ABBandStairsExt\"> in Defs/V2/AB2_Stairs.xml. -->\n\n";
+  let out =
+"<!-- Baked from Tools/LinkApproachTagger.html.\n" +
+"     drawOffset<Rot> : graphicData AND blueprintGraphicData, in cells, (x, y, z).\n" +
+"     ABLinkArtExt    : per-rotation DRAW SIZE in cells, map space, Rot4 order\n" +
+"                       (north, east, south, west). Applied by Graphic_ABLink; it is NOT\n" +
+"                       rotated again, so what the tagger showed is what the game draws.\n" +
+"     approachCells   : landing tile, (dx,dz) from the footprint SW corner, one step\n" +
+"                       OUTSIDE the open edge. Read by ABLinkApproach. -->\n\n";
   DEFS.forEach(d => {
-    out += "<!-- " + d.defName + " (" + d.w + "x" + d.h + ") -->\n<approachCells>\n";
+    out += "<!-- ================= " + d.defName + " (" + d.w + "x" + d.h + ") ================= -->\n";
+    out += "<!-- into <graphicData> and <blueprintGraphicData> -->\n";
     ROTS.forEach((rn, r) => {
-      const [dx,dz] = state[d.defName][r];
-      out += "  <li>(" + dx + "," + dz + ")</li>   <!-- rot " + rn
-           + " · opens " + outwardOf(dims(d,r),dx,dz) + (isDefault(d,r) ? "" : " · TAGGED") + " -->\n";
+      const tag = "drawOffset" + rn.charAt(0).toUpperCase() + rn.slice(1);
+      out += "<" + tag + ">" + v3(state[d.defName][r].off) + "</" + tag + ">\n";
+    });
+    out += "\n<!-- into <modExtensions> -->\n";
+    out += "<li Class=\"AsAboveSoBelow.ABLinkArtExt\">\n  <drawSizes>\n";
+    ROTS.forEach((rn, r) => {
+      const st = state[d.defName][r];
+      out += "    <li>(" + r3(st.size[0]) + "," + r3(st.size[1]) + ")</li>   <!-- " + rn + " -->\n";
+    });
+    out += "  </drawSizes>\n</li>\n";
+    out += "<!-- add to the existing ABBandStairsExt -->\n<approachCells>\n";
+    ROTS.forEach((rn, r) => {
+      const a = state[d.defName][r].app;
+      out += "  <li>(" + a[0] + "," + a[1] + ")</li>   <!-- " + rn
+           + " \u00b7 opens " + outwardOf(dims(d, r), a[0], a[1]) + " -->\n";
     });
     out += "</approachCells>\n\n";
   });
@@ -296,54 +456,59 @@ function xmlOut(){
 }
 function jsonOut(){
   const o = {};
-  DEFS.forEach(d => o[d.defName] = { size:[d.w,d.h], approach:state[d.defName] });
+  DEFS.forEach(d => o[d.defName] = {
+    footprint:[d.w,d.h],
+    rotations: ROTS.map((rn, r) => ({ rot:rn, offset:state[d.defName][r].off,
+                                      drawSize:state[d.defName][r].size,
+                                      approach:state[d.defName][r].app }))
+  });
   return JSON.stringify(o, null, 2);
 }
 let outMode = "xml";
 function doExport(){
-  const dlg = document.getElementById("dlg");
-  document.getElementById("dlgTitle").textContent = "Export";
-  const tabs = document.getElementById("dlgTabs");
-  tabs.innerHTML = '<button id="tx" onclick="setMode(\'xml\')">XML</button>'
-                 + '<button id="tj" onclick="setMode(\'json\')">JSON</button>';
+  document.getElementById("dlgTitle").textContent = "Export — paste this back";
+  document.getElementById("dlgTabs").innerHTML =
+    '<button id="tx" onclick="setMode(\'xml\')">XML</button><button id="tj" onclick="setMode(\'json\')">JSON</button>';
   setMode("xml");
-  dlg.showModal();
+  document.getElementById("dlg").showModal();
 }
 function setMode(m){
   outMode = m;
   document.getElementById("dlgText").value = m === "xml" ? xmlOut() : jsonOut();
   const tx = document.getElementById("tx"), tj = document.getElementById("tj");
-  if (tx && tj){ tx.classList.toggle("on", m==="xml"); tj.classList.toggle("on", m==="json"); }
+  if (tx && tj){ tx.classList.toggle("on", m === "xml"); tj.classList.toggle("on", m === "json"); }
 }
 function copyOut(){
   const t = document.getElementById("dlgText");
   t.select(); document.execCommand("copy");
-  say("copied " + outMode + " to clipboard");
+  say("copied " + outMode);
 }
 function doImport(){
-  const dlg = document.getElementById("dlg");
-  document.getElementById("dlgTitle").textContent = "Import JSON — paste, then Close";
+  document.getElementById("dlgTitle").textContent = "Import JSON — paste, then Apply";
   document.getElementById("dlgTabs").innerHTML = '<button onclick="applyImport()">Apply</button>';
   document.getElementById("dlgText").value = "";
-  dlg.showModal();
+  document.getElementById("dlg").showModal();
 }
 function applyImport(){
   try{
     const o = JSON.parse(document.getElementById("dlgText").value);
     DEFS.forEach(d => {
-      const row = o[d.defName] && o[d.defName].approach;
-      if (Array.isArray(row) && row.length === 4){
-        state[d.defName] = row.map(p => [ +p[0], +p[1] ]);
-        ROTS.forEach((_,r) => paint(d,r));
-      }
+      const rows = o[d.defName] && o[d.defName].rotations;
+      if (!Array.isArray(rows) || rows.length !== 4) return;
+      state[d.defName] = rows.map(x => ({
+        off:[+x.offset[0], +x.offset[1]],
+        size:[+x.drawSize[0], +x.drawSize[1]],
+        app:[+x.approach[0], +x.approach[1]]
+      }));
     });
     document.getElementById("dlg").close();
+    build();
     say("imported");
   }catch(e){ say("import failed: " + e.message); }
 }
 
 build();
-say(DEFS.length * 4 + " sprites; all on derived defaults");
+say(DEFS.length * 4 + " sprites \u00b7 drag to move, click a ring tile to set the landing, arrows nudge");
 </script>
 </body>
 </html>

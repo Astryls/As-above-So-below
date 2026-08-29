@@ -132,7 +132,7 @@
     <size>(1,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(2,2)</drawSize>
       <!-- §85.9 THE EAST/WEST PIN. Measured with Tools/MeasureSprites.ps1, not by eye:
            AB_StairsDown_east's alpha box is 1.24 x 1.17 cells centred 0.109 WEST and 0.414
@@ -157,7 +157,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_StairsDown</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(2,2)</drawSize>
         <drawOffsetEast>(0.109, 0, -0.414)</drawOffsetEast>
         <drawOffsetWest>(-0.109, 0, -0.418)</drawOffsetWest>
@@ -185,7 +185,7 @@
     <size>(1,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(2,2)</drawSize>
       <!-- §85.9 THE EAST/WEST PIN, LATERAL ONLY - and ⚠ THIS ONE IS A PATCH OVER BROKEN ART,
            NOT A FIX. Measured: AB_StairsUp_east is 1.15 x 2.00 cells centred 0.156 west, and
@@ -204,7 +204,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_StairsUp</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(2,2)</drawSize>
         <drawOffsetEast>(0.156, 0, 0)</drawOffsetEast>
         <drawOffsetWest>(-0.156, 0, 0)</drawOffsetWest>
@@ -311,7 +311,7 @@
     <description>A broad staircase leading down. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the basement level below and creates a matching staircase there.</description>
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsDown</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(3,3)</drawSize>
       <damageData>
         <enabled>false</enabled>
@@ -320,7 +320,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_GrandStairsDown</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(3,3)</drawSize>
       </blueprintGraphicData>
     </building>
@@ -340,7 +340,7 @@
     <description>A broad staircase leading up. Three cells wide, so colonists going up and down no longer queue for the same step. Completing it opens the sky level above and creates a matching staircase there.</description>
     <graphicData>
       <texPath>Things/Building/AB_GrandStairsUp</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(3,3)</drawSize>
       <damageData>
         <enabled>false</enabled>
@@ -349,7 +349,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_GrandStairsUp</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(3,3)</drawSize>
       </blueprintGraphicData>
     </building>
@@ -385,7 +385,7 @@
     <size>(1,1)</size>
     <graphicData>
       <texPath>Things/Building/AB_LadderDown</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(1,1)</drawSize>
       <damageData>
         <enabled>false</enabled>
@@ -394,7 +394,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_LadderDown</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(1,1)</drawSize>
       </blueprintGraphicData>
     </building>
@@ -415,7 +415,7 @@
     <size>(1,1)</size>
     <graphicData>
       <texPath>Things/Building/AB_LadderUp</texPath>
-      <graphicClass>Graphic_Multi</graphicClass>
+      <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
       <drawSize>(1,1)</drawSize>
       <damageData>
         <enabled>false</enabled>
@@ -437,7 +437,7 @@
     <building>
       <blueprintGraphicData>
         <texPath>Things/Building/AB_LadderUp</texPath>
-        <graphicClass>Graphic_Multi</graphicClass>
+        <graphicClass>AsAboveSoBelow.Graphic_ABLink</graphicClass>
         <drawSize>(1,1)</drawSize>
       </blueprintGraphicData>
     </building>
