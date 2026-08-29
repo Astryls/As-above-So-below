@@ -38,6 +38,7 @@ namespace AsAboveSoBelow
             sb.AppendLine("  " + ABCombatAcquisition.CounterReport());
             sb.AppendLine("  " + ABCombatPosition.CounterReport());
             sb.AppendLine("  " + ABCombatTargeting.CounterReport());
+            sb.AppendLine("  " + ABRangeOverlay.CounterReport());
             sb.AppendLine("  " + ABCombatRelay.CounterReport());
             sb.AppendLine("  " + ABBandLeap.CounterReport());
             sb.AppendLine("  " + ABCombatAbilities.CounterReport());
@@ -64,6 +65,7 @@ namespace AsAboveSoBelow
             ABCombatAcquisition.ResetCounters();
             ABCombatPosition.ResetCounters();
             ABCombatTargeting.ResetCounters();
+            ABRangeOverlay.ResetCounters();
             ABCombatRelay.ResetCounters();
             ABBandLeap.ResetCounters();
             ABCombatAbilities.ResetCounters();
