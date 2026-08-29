@@ -409,8 +409,15 @@ namespace AsAboveSoBelow
                 // The far link's drawn mouth, relative to the cell the pawn was set down
                 // on. The emerge walks from there to zero, so the pawn climbs out of the
                 // opening instead of appearing beside it.
+                //
+                // ⚠ §85: THE MOUTH, NOT THE MIDDLE. This was TrueCenter - the centre of the
+                // whole building - so on a 2x2 staircase the clip began with the pawn drawn
+                // standing on the solid half of the art and walking out THROUGH it. The
+                // anchor is now the midpoint of the OPEN EDGE, which for a 1x1 ladder is
+                // still exactly TrueCenter. Combined with a landing cell one step outside
+                // that edge, the emerge is a single cell of travel out of the hole.
                 Vector2 a = ArtOff(far);
-                Vector3 mouth = far.TrueCenter();
+                Vector3 mouth = ABLinkApproach.MouthPoint(far);
                 Vector3 landAt = landing.ToVector3Shifted();
                 c.ox = mouth.x + a.x - landAt.x;
                 c.oz = mouth.z + a.y - landAt.z;

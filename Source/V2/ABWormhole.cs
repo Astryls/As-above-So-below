@@ -306,9 +306,15 @@ namespace AsAboveSoBelow
             // Compare WIDTH and HEIGHT, not just Area. Index-order pairing below is only a
             // valid positional correspondence when the two rects have the same shape - and a
             // rotated non-square end has identical Area with its dimensions swapped, so an
-            // Area-only check would wave it through and silently pair the wrong cells. Every
-            // link def is square today; this guard is what stops a future non-square one
-            // failing invisibly.
+            // Area-only check would wave it through and silently pair the wrong cells.
+            //
+            // ⚠ THIS GUARD IS NO LONGER HYPOTHETICAL. It was written when every link def was
+            // square and read "stops a FUTURE non-square one failing invisibly"; §85 made the
+            // plain staircases 1x2. Pairs stay safe only because both ends share a def SIZE
+            // and a ROTATION (Building_ABStairs2 spawns the counterpart with this end's
+            // Rotation, and that line is load-bearing for exactly this reason) - so if a
+            // future link ever pairs two different defs, or something re-rotates one end,
+            // this is the warning that will fire instead of a silent cell mismatch.
             if (ra.Width != rb.Width || ra.Height != rb.Height)
             {
                 Log.WarningOnce(ABLog.Tag + " V2: wormhole ends differ in shape ("

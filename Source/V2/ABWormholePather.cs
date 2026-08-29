@@ -391,25 +391,13 @@ namespace AsAboveSoBelow
             {
                 return IntVec3.Invalid;
             }
-            CellRect r = link.OccupiedRect();
-            IntVec3 face = link.Rotation.FacingCell;
-            IntVec3 c;
-            if (face.z > 0)
-            {
-                c = new IntVec3(r.CenterCell.x, 0, r.minZ);
-            }
-            else if (face.z < 0)
-            {
-                c = new IntVec3(r.CenterCell.x, 0, r.maxZ);
-            }
-            else if (face.x > 0)
-            {
-                c = new IntVec3(r.minX, 0, r.CenterCell.z);
-            }
-            else
-            {
-                c = new IntVec3(r.maxX, 0, r.CenterCell.z);
-            }
+            // §85: the edge math that used to live here moved to ABLinkApproach, so the
+            // departure and the arrival read the SAME per-def table and cannot disagree
+            // about which side of the art is open. The derived fallback there is this code
+            // verbatim, so an untagged def behaves exactly as it did.
+            IntVec3 c = ABLinkApproach.TryGet(link, out ABApproach a)
+                ? a.mouth
+                : link.Position; // elevator: no open side, any footprint cell will do
             // ⚠ WALKABLE, NOT STANDABLE. This cell is INSIDE the footprint, and the link is
             // a Building_Door - `passability` is PassThroughOnly, so GenGrid.Standable is
             // false for it and a Standable test would reject every link there is. Walkable
@@ -592,6 +580,21 @@ namespace AsAboveSoBelow
         /// for a moment and immediately walks on, because Carry re-issues its path. Stacking
         /// is only a risk while the cell is genuinely occupied, which is exactly the case the
         /// fallback handles.
+        ///
+        /// ⚠⚠ §85 SUPERSEDES THE PARAGRAPHS ABOVE FOR STAIRS, GRAND STAIRS AND LADDERS, and
+        /// they are kept because they are still the reasoning for the elevator and for every
+        /// fallback below. Both of the earlier answers - "the anchor" and "a cell near it" -
+        /// were arguing about WHERE AROUND the building to stand, and the real answer was in
+        /// the art all along: come out of the opening. `far.Position` is a cell INSIDE a
+        /// multi-cell Building_Door, so an arrival parked there pays a door's path cost and
+        /// reads as standing in the middle of the staircase; the random-near fallback put
+        /// pawns at the SIDES, across a handrail. Field report, with a picture: land on the
+        /// tile in front of whichever way the stairs open.
+        ///
+        /// The ordered candidates are all IN FRONT OF, or ON, the open edge - never beside
+        /// it. Only when every one of them is taken does this fall through to the old
+        /// anchor-then-anywhere behaviour, which is the crowd case and wants a body-shaped
+        /// answer more than a pretty one.
         /// </summary>
         private static IntVec3 LandingCell(Pawn pawn, Building_Door far)
         {
@@ -600,6 +603,14 @@ namespace AsAboveSoBelow
             if (map == null)
             {
                 return anchor;
+            }
+            if (ABLinkApproach.TryGet(far, out ABApproach a))
+            {
+                IntVec3 front = ApproachLanding(map, far, a);
+                if (front.IsValid)
+                {
+                    return front;
+                }
             }
             if (anchor.GetFirstPawn(map) == null)
             {
@@ -618,6 +629,81 @@ namespace AsAboveSoBelow
                 return spot;
             }
             return anchor;
+        }
+
+        /// <summary>Scratch for ApproachLanding. Never held across a call.</summary>
+        private static readonly List<IntVec3> tmpLanding = new List<IntVec3>();
+
+        /// <summary>
+        /// The best free cell at the far link's opening, or Invalid when the whole mouth is
+        /// blocked or occupied.
+        ///
+        /// Order: the tagged tile in front of the opening, then the rest of that outside
+        /// edge working outwards from it, then the mouth cell itself, then the rest of the
+        /// open edge ON the footprint. A pawn set down on the footprint is no worse than what
+        /// shipped for eight windows, and it is still at the opening rather than beside it.
+        ///
+        /// ⚠ STANDABLE OUTSIDE, WALKABLE ON THE FOOTPRINT. The link is a Building_Door and
+        /// its passability is PassThroughOnly, so GenGrid.Standable is FALSE for every cell
+        /// of its own footprint - testing Standable there would reject the mouth of every
+        /// link in the game (the same trap EntryCellFor documents). Outside the footprint the
+        /// test must be Standable, because a Walkable-but-not-Standable cell out there is
+        /// somebody ELSE's doorway, and parking an arrival in it is the jam this is trying to
+        /// stop.
+        /// </summary>
+        private static IntVec3 ApproachLanding(Map map, Building_Door far, ABApproach a)
+        {
+            CellRect r = far.OccupiedRect();
+            // 90 degrees from outward: the run of the open edge.
+            IntVec3 lateral = new IntVec3(a.outward.z, 0, a.outward.x);
+            tmpLanding.Clear();
+            tmpLanding.Add(a.outside);
+            for (int i = 1; i <= 2; i++)
+            {
+                IntVec3 p = a.outside + lateral * i;
+                if (r.Contains(p - a.outward))
+                {
+                    tmpLanding.Add(p);
+                }
+                IntVec3 q = a.outside - lateral * i;
+                if (r.Contains(q - a.outward))
+                {
+                    tmpLanding.Add(q);
+                }
+            }
+            int outsideCount = tmpLanding.Count;
+            tmpLanding.Add(a.mouth);
+            for (int i = 1; i <= 2; i++)
+            {
+                IntVec3 p = a.mouth + lateral * i;
+                if (r.Contains(p))
+                {
+                    tmpLanding.Add(p);
+                }
+                IntVec3 q = a.mouth - lateral * i;
+                if (r.Contains(q))
+                {
+                    tmpLanding.Add(q);
+                }
+            }
+            IntVec3 found = IntVec3.Invalid;
+            for (int i = 0; i < tmpLanding.Count; i++)
+            {
+                IntVec3 c = tmpLanding[i];
+                if (!c.InBounds(map)
+                    || c.GetFirstPawn(map) != null
+                    || !(i < outsideCount ? c.Standable(map) : c.Walkable(map))
+                    // A landing may never cross a seam: the cell in front of a link built
+                    // flush against a band edge is another level entirely.
+                    || !ABBands.SameBand(map, c, far.Position))
+                {
+                    continue;
+                }
+                found = c;
+                break;
+            }
+            tmpLanding.Clear();
+            return found;
         }
 
         /// <summary>
@@ -838,10 +924,17 @@ namespace AsAboveSoBelow
                 // left a live job on a dead pather: the pawn stood at the stairwell forever
                 // and only a draft/undraft (jobs.StopAll) freed it.
                 //
-                // It fires exactly when realDest IS the far anchor - LandingCell prefers the
-                // anchor's own cell whenever it is free - i.e. every "go down the stairs"
-                // order, which is how it was reported. Reported for mechs, but nothing here
-                // is mech-specific; any pawn ordered onto a stairwell could hang.
+                // It fired exactly when realDest IS the far anchor, because LandingCell then
+                // preferred the anchor's own cell whenever it was free - i.e. every "go down
+                // the stairs" order, which is how it was reported. Reported for mechs, but
+                // nothing here is mech-specific; any pawn ordered onto a stairwell could hang.
+                //
+                // ⚠ §85 MADE THAT CASE RARER, NOT GONE, AND THE GUARD MUST STAY. Arrivals now
+                // land in FRONT of the opening, so a pawn ordered onto the stairs usually has
+                // one real step left to walk - but the fallback chain can still return the
+                // anchor when the whole mouth is blocked, and that is the exact shape that
+                // wedged. A landing that happens to equal the destination must keep going
+                // through StartPath.
                 //
                 // Handing the case to vanilla is both shorter and more correct: StartPath
                 // opens with `if (AtDestinationPosition()) { PatherArrived(); return; }`, so

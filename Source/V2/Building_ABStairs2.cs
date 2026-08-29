@@ -16,6 +16,25 @@ namespace AsAboveSoBelow
         /// <summary>The elevator: one shaft member on EVERY level of the column, all
         /// pairwise linked, instead of a single far end. levelDelta is ignored when set.</summary>
         public bool linksAllLevels;
+
+        /// <summary>
+        /// WHERE THE ART'S OPENING IS, one entry per rotation in Rot4 order (north, east,
+        /// south, west). Each is the landing tile as (dx,dz) from the footprint's SOUTH-WEST
+        /// corner, always one step OUTSIDE the open edge - so a 2x2 rotated south, opening
+        /// north, is (1,2).
+        ///
+        /// ⚠ TAGGED BY HAND IN Tools/LinkApproachTagger.html AND THAT IS NOT LAZINESS. The
+        /// open side is a property of the PNG, and §77c records that some of these sprites
+        /// disagree with their own rotation (the grand staircase's east/west are the north
+        /// composition unrotated). Rotation math cannot see that; a human looking at the
+        /// sprite can.
+        ///
+        /// ⚠ OPTIONAL. Omit it, give it the wrong length, or name a cell that is not
+        /// edge-adjacent, and ABLinkApproach falls back to the derived default, which is the
+        /// pre-table behaviour exactly. Nothing breaks; the arrival is just placed by
+        /// rotation instead of by art.
+        /// </summary>
+        public List<IntVec2> approachCells;
     }
 
     /// <summary>

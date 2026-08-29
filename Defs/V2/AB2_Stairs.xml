@@ -85,14 +85,39 @@
 
   <!-- ============================ stairs ============================ -->
 
-  <!-- SIZE MATCHES THE ART.
+  <!-- SIZE MATCHES THE ART, AND THE ART IS A NARROW FLIGHT (1 WIDE, 2 LONG).
 
-       These were drawSize (2,2) with no <size>, so a 2x2 staircase sat on a ONE CELL
-       footprint. A Building_Door is enterable only from its four cardinal neighbours, so the
-       visual overhang covered cells that were solid to the pathfinder: whether a pawn got
-       through depended on which side it approached from, which is why the stairs worked
-       "sometimes". A real 2x2 footprint gives eight cardinal approach cells instead of four
-       and makes the walkable shape match what the player sees. -->
+       HISTORY, BOTH CORRECTIONS, BECAUSE THE FIRST ONE OVERSHOT.
+
+       (1) These shipped as drawSize (2,2) with no <size>, so a 2x2 staircase sat on a ONE
+           CELL footprint. A Building_Door is enterable only from its cardinal neighbours,
+           so the visual overhang covered cells that were solid to the pathfinder: whether a
+           pawn got through depended on which side it approached from, which is why the
+           stairs worked "sometimes".
+
+       (2) The fix was <size>(2,2)</size> - matching the drawSize rather than the DRAWING.
+           Measured off the shipped PNGs, the north/south sprites are about 0.85 cells wide
+           by 1.5 long: a single narrow flight with a rail either side. So half of that 2x2
+           was empty door - cells that cost a door's path price, that arrivals were being
+           set down in (§85), and that read to the player as standing inside the staircase.
+
+       (1,2) is the honest footprint: one cell wide, two along the run, authored in the
+       NORTH orientation and rotated by GenAdj like any other building. It still gives six
+       cardinal approach cells (one at each end, two down each side), and with §85 the mouth
+       cell and the tile in front of it are now unambiguous - there is exactly one cell of
+       stair at the opening.
+
+       ⚠ drawSize STAYS (2,2). It is a DRAW size, not a footprint, and the sprite (0.85 x
+       1.5 cells) fits inside a 1x2 rect with room to spare. Shrinking it to (1,2) would
+       squash the art to half height, and it would invalidate every measured row in
+       ABStairAnim.ArtOffsets, which are in cells relative to the drawn centre.
+
+       ⚠ THE EAST/WEST SPRITES ARE COMPOSED DIFFERENTLY AND NOW HANG OFF THE FOOTPRINT.
+       AB_StairsDown_east is about 1.24 x 1.13 cells drawn ~0.42 cells north of its own
+       centre (transcribed in ArtOffsets), which fitted inside a 2x2 rect and does not fit
+       inside a 1-deep one. That is the §77c art defect becoming visible, not a new bug; the
+       remedies are a per-rotation drawOffsetEast/West pin or a redraw, and both are the
+       user's call. -->
   <ThingDef ParentName="AB2_LinkBase">
     <defName>AB2_StairsDown</defName>
     <label>stairs down</label>
@@ -104,7 +129,7 @@
          wall risers 2080-2083. -->
     <uiOrder>2062</uiOrder>
     <description>A stairwell leading down. Completing it opens the basement level below and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
-    <size>(2,2)</size>
+    <size>(1,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsDown</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
@@ -139,7 +164,7 @@
     <label>stairs up</label>
     <uiOrder>2063</uiOrder>
     <description>A stairwell leading up. Completing it opens the sky level above and creates a matching stairwell there. Colonists haul, work, sleep and fight across the connection exactly as they would across a corridor.</description>
-    <size>(2,2)</size>
+    <size>(1,2)</size>
     <graphicData>
       <texPath>Things/Building/AB_StairsUp</texPath>
       <graphicClass>Graphic_Multi</graphicClass>
