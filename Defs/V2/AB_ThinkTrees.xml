@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+  <!--
+    AI cross-level jumping (§83b).
+
+    Hung off vanilla's OWN modder insertion hook rather than patched into the Humanlike tree
+    by XPath: ThinkNode_SubtreesByTag splices every ThinkTreeDef declaring the matching
+    insertTag, so this adds a node without touching a vanilla def and cannot collide with
+    another mod doing the same thing.
+
+    Humanlike_PostDuty is the correct tag and the choice is load-bearing, not cosmetic. A pawn
+    only reaches it once its Lord duty subtree has produced NO job - so "the AI wanted to get
+    somewhere and could not" is a structural fact at this point in the tree instead of a
+    heuristic we would otherwise have to invent and tune. An ordinary raid, where the duty
+    works, never runs a line of this.
+  -->
+  <ThinkTreeDef>
+    <defName>AB2_BandLeap</defName>
+    <insertTag>Humanlike_PostDuty</insertTag>
+    <insertPriority>50</insertPriority>
+    <thinkRoot Class="ThinkNode_Priority">
+      <subNodes>
+        <li Class="AsAboveSoBelow.JobGiver_ABBandLeap" />
+      </subNodes>
+    </thinkRoot>
+  </ThinkTreeDef>
+
+</Defs>

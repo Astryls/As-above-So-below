@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using HarmonyLib;
 using RimWorld;
+using RimWorld.Utility;
 using UnityEngine;
 using Verse;
 using Verse.AI;
@@ -51,7 +53,7 @@ namespace AsAboveSoBelow
         /// <summary>How many landing candidates get the EXPENSIVE tests (shaft solve +
         /// reachability). The cheap filters run over the whole disc; only the best few by
         /// distance-to-goal are solved, so cost is bounded regardless of jump range.</summary>
-        private const int MaxSolveCandidates = 24;
+        private const int MaxSolveCandidates = 40;
 
         /// <summary>Ticks before a pawn that found nothing may scan again. The scan is behind
         /// a duty that already failed, so it repeats every think until something changes;
@@ -80,6 +82,73 @@ namespace AsAboveSoBelow
 
         private static readonly float[] BestScores = new float[MaxSolveCandidates];
 
+        /// <summary>
+        /// When non-null, every decision point appends the value that caused it, and the
+        /// pawn's real cooldown is left alone.
+        ///
+        /// ⚠ THE SAME CODE PATH, INSTRUMENTED - not a second explainer, by the §14 rule and
+        /// exactly as ABShaft.Explain does it. A parallel "why not" routine agrees with your
+        /// belief about the decision rather than with the decision.
+        ///
+        /// ⚠ IT DOUBLES AS THE "AM I PROBING" FLAG. `Charge` below writes no cooldown while
+        /// tracing, because a diagnostic that gags the thing it is diagnosing for the next
+        /// 300 ticks is worse than no diagnostic at all.
+        /// </summary>
+        [ThreadStatic]
+        private static StringBuilder trace;
+
+        private static void Trace(string line)
+        {
+            trace?.AppendLine("    " + line);
+        }
+
+        private static void Charge(Pawn pawn, int untilTick)
+        {
+            if (trace == null)
+            {
+                Cooldown.ChargeUntil(pawn, untilTick);
+            }
+        }
+
+        /// <summary>Clear a pawn's leap cooldown, for `AB2: force leap now`.</summary>
+        public static void ClearCooldown(Pawn pawn)
+        {
+            Cooldown.ChargeUntil(pawn, 0);
+        }
+
+        /// <summary>
+        /// Runs the REAL decision with tracing on and the cooldown bypassed, then puts every
+        /// counter back: a probe must not leave `leaps=1` behind for a leap that never
+        /// happened (§36 lets us restore them - nothing may read them to decide anything).
+        /// </summary>
+        public static string Explain(Pawn pawn)
+        {
+            StringBuilder sb = new StringBuilder();
+            int sScans = scans;
+            int sLeaps = leaps;
+            int sNoLanding = noLanding;
+            trace = sb;
+            try
+            {
+                Job job = TryGiveLeapJob(pawn, ignoreCooldown: true);
+                sb.AppendLine("    => " + (job != null
+                    ? "WOULD LEAP to " + job.targetA.Cell + " (job " + job.def.defName + ")"
+                    : "NO LEAP"));
+            }
+            catch (Exception e)
+            {
+                sb.AppendLine("    => THREW: " + e.Message);
+            }
+            finally
+            {
+                trace = null;
+                scans = sScans;
+                leaps = sLeaps;
+                noLanding = sNoLanding;
+            }
+            return sb.ToString();
+        }
+
         public static void ResetCounters()
         {
             scans = 0;
@@ -96,12 +165,13 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>The whole decision, from the think node.</summary>
-        public static Job TryGiveLeapJob(Pawn pawn)
+        public static Job TryGiveLeapJob(Pawn pawn, bool ignoreCooldown = false)
         {
             try
             {
                 if (pawn == null || !pawn.Spawned || pawn.Downed || !ABGuard.On(ABGuard.Movement))
                 {
+                    Trace("declined: null, unspawned, downed, or the movement guard is OFF");
                     return null;
                 }
                 // ⚠ NEVER FOR A DRAFTED PAWN. A drafted pawn is doing exactly what the player
@@ -112,53 +182,71 @@ namespace AsAboveSoBelow
                 // not already proved reachable.
                 if (pawn.Drafted)
                 {
+                    Trace("declined: DRAFTED - a drafted pawn does what the player said");
                     return null;
                 }
                 Map map = pawn.Map;
                 ABBandMap bands = ABBands.CompOf(map);
                 if (bands == null || !bands.Banded)
                 {
+                    Trace("declined: map is not banded");
                     return null;
                 }
                 int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
-                if (!Cooldown.Ready(pawn, now))
+                if (!ignoreCooldown && !Cooldown.Ready(pawn, now))
                 {
+                    Trace("declined: on leap cooldown (idle " + IdleCooldownTicks
+                        + " / post-leap " + LeapCooldownTicks + " ticks)");
                     return null;
                 }
                 if (!TryFindJumpSource(pawn, out Ability ability, out Verb verb))
                 {
+                    Trace("declined: no usable jump - no ready Verb_CastAbilityJump ability "
+                        + "and no worn jump pack with a charge");
                     // No cooldown charge: having no jump pack is not a failed scan, and
                     // charging here would just fill the dictionary with every pawn on the map.
                     return null;
                 }
                 scans++;
+                Trace("jump source: " + (ability != null
+                    ? "ability " + ability.def.defName
+                    : "apparel " + verb.EquipmentSource.ToStringSafe())
+                    + ", range " + verb.EffectiveRange.ToString("0.0"));
                 if (!TryFindGoal(pawn, bands, out LocalTargetInfo goal) || !goal.IsValid)
                 {
-                    Cooldown.ChargeUntil(pawn, now + IdleCooldownTicks);
+                    Trace("declined: NO GOAL - no enemy target, no duty focus, no job target, "
+                        + "and not hostile to the player (so no colony fallback)");
+                    Charge(pawn, now + IdleCooldownTicks);
                     return null;
                 }
                 int goalBand = bands.BandOf(goal.Cell);
+                Trace("goal " + goal.ToStringSafe() + " at " + goal.Cell + " band " + goalBand
+                    + "; pawn band " + bands.BandOf(pawn.Position));
                 if (goalBand == bands.BandOf(pawn.Position))
                 {
+                    Trace("declined: goal is on the pawn's OWN band - cross-band only, so "
+                        + "flat-map behaviour is untouched by construction");
                     // Same level: vanilla's own behaviour owns this, and adding to it would be
                     // a balance change on flat maps too. Cross-band only, by construction.
-                    Cooldown.ChargeUntil(pawn, now + IdleCooldownTicks);
+                    Charge(pawn, now + IdleCooldownTicks);
                     return null;
                 }
                 // THE CONSERVATIVE GATE. If it can walk there, it walks; this never makes an
                 // existing raid faster or an existing route redundant.
                 if (pawn.CanReach(goal, PathEndMode.Touch, Danger.Deadly))
                 {
-                    Cooldown.ChargeUntil(pawn, now + IdleCooldownTicks);
+                    Trace("declined: the pawn can WALK to the goal (stairs exist) - "
+                        + "conservative gate, walking always wins");
+                    Charge(pawn, now + IdleCooldownTicks);
                     return null;
                 }
                 if (!TryFindLanding(pawn, bands, verb, goal, goalBand, out IntVec3 landing))
                 {
                     noLanding++;
-                    Cooldown.ChargeUntil(pawn, now + IdleCooldownTicks);
+                    Charge(pawn, now + IdleCooldownTicks);
                     return null;
                 }
-                Cooldown.ChargeUntil(pawn, now + LeapCooldownTicks);
+                Charge(pawn, now + LeapCooldownTicks);
                 leaps++;
                 ABV2Debug.Combat("AI leap " + pawn.LabelShortCap + " band "
                     + bands.BandOf(pawn.Position) + " -> " + goalBand + " landing " + landing
@@ -317,12 +405,38 @@ namespace AsAboveSoBelow
             float range = verb.EffectiveRange;
             if (range <= 0f || range > GenRadial.MaxRadialPatternRadius)
             {
+                Trace("declined: jump range " + range.ToString("0.0") + " is unusable");
+                return false;
+            }
+            // ⚠⚠ THE DISC IS THE HORIZONTAL BUDGET, NOT THE RAW RANGE, AND GETTING THIS WRONG
+            // MADE THE WHOLE FEATURE INERT (run #383). ABShaft charges VerticalCostPerLevel
+            // for each band crossed, so a cell at the rim of a full-range disc computes as
+            // `range + 3*levels` and is always refused. That alone would only have wasted a
+            // few solves - but the candidates are ranked by DISTANCE TO GOAL, and when the
+            // goal is far away the nearest cells to it are exactly the rim ones. The ranking
+            // therefore hand-picked the twenty-four cells guaranteed to fail, every time, and
+            // the trace read "24 candidates out of jump reach" with 1307 cells available.
+            //
+            // ⚠ THE LESSON: WHEN YOU RANK CANDIDATES BY ONE COST AND FILTER THEM BY ANOTHER,
+            // THE RANKING WILL FIND THE FILTER'S BLIND SPOT. Spend the vertical cost up front
+            // and the disc only contains cells the range rule can accept.
+            int levels = Mathf.Abs(goalBand - bands.BandOf(pawn.Position));
+            float budget = range - ABShaft.VerticalCostPerLevel * levels;
+            if (budget <= 0f)
+            {
+                Trace("declined: jump range " + range.ToString("0.0") + " is entirely consumed "
+                    + "by the vertical cost of " + levels + " level(s) ("
+                    + (ABShaft.VerticalCostPerLevel * levels).ToString("0.0") + ")");
                 return false;
             }
             IntVec3 anchor = bands.Translate(pawn.Position, goalBand);
             IntVec3 goalCell = goal.Cell;
             int filled = 0;
-            int count = Mathf.Min(GenRadial.NumCellsInRadius(range), GenRadial.RadialPattern.Length);
+            int cheapPass = 0;
+            int noSolution = 0;
+            int noRoute = 0;
+            int count = Mathf.Min(GenRadial.NumCellsInRadius(budget),
+                GenRadial.RadialPattern.Length);
             for (int i = 0; i < count; i++)
             {
                 IntVec3 c = anchor + GenRadial.RadialPattern[i];
@@ -336,9 +450,14 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
+                cheapPass++;
                 float score = (c - goalCell).LengthHorizontalSquared;
                 filled = Insert(c, score, filled);
             }
+            Trace("landing search: horizontal budget " + budget.ToString("0.0") + " (range "
+                + range.ToString("0.0") + " less " + levels + " level(s) of vertical cost); "
+                + cheapPass + " cells passed the cheap filters (band, gutter, ValidJumpTarget, "
+                + "forbidden); solving the best " + filled + " by distance to goal");
             for (int k = 0; k < filled; k++)
             {
                 IntVec3 c = BestCells[k];
@@ -348,16 +467,29 @@ namespace AsAboveSoBelow
                 // path entirely, so nothing is parked for Projectile.Launch (rule 52).
                 if (!verb.CanHitTargetFrom(pawn.Position, c))
                 {
+                    noSolution++;
                     continue;
                 }
                 if (!map.reachability.CanReach(c, goal, PathEndMode.Touch,
                         TraverseParms.For(pawn, Danger.Deadly)))
                 {
+                    noRoute++;
                     continue;
                 }
                 landing = c;
+                Trace("landing " + c + " accepted after " + noSolution
+                    + " out of jump reach and " + noRoute + " with no route onward");
                 return true;
             }
+            // Now that the disc is budgeted, a CanHitTargetFrom failure can no longer be a
+            // range verdict - it means the shaft solver found no opening with sight lines at
+            // both ends. Naming it precisely is the difference between "tune the numbers" and
+            // "there is no hole in that floor".
+            Trace("declined: NO LANDING - " + noSolution + " candidates with NO OPENING in "
+                + "reach (no open column, or no sight line from the pawn to it, or the landing "
+                + "cell is more than " + ABShaft.MaxDriftPerLevel + " cells per level from the "
+                + "opening's mouth), " + noRoute + " jumpable but with NO ROUTE from the "
+                + "landing cell to the goal (that clause is what stops a jump stranding a pawn)");
             return false;
         }
 
