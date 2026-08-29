@@ -246,4 +246,154 @@ namespace AsAboveSoBelow
             }
         }
     }
+
+    /// <summary>
+    /// REPAIR 3: A PAWN IN FLIGHT IS VISIBLE FROM THE LEVEL ABOVE, like every other thing the
+    /// column shows. Reported as "the leaping pawn is not visible across layers like drop pods
+    /// and everything else should be", and it was §82.6's parked residue coming due.
+    ///
+    /// ⚠ THE BELOW-THINGS PASS ALREADY TRIED AND COULD NOT WIN, WHICH IS THE WHOLE LESSON.
+    /// ABBelowDynamicDraw hands every below-band thing a LIFTED position via
+    /// `t.DynamicDrawPhaseAt(phase, loc)` - and <c>PawnFlyer</c> is the one thing in the game
+    /// that ignores the position it is given:
+    ///
+    ///     public override void DynamicDrawPhaseAt(DrawPhase phase, Vector3 drawLoc, ...)
+    ///     {
+    ///         RecomputePosition();
+    ///         FlyingPawn.DynamicDrawPhaseAt(phase, effectivePos);   // &lt;-- not drawLoc
+    ///         base.DynamicDrawPhaseAt(phase, drawLoc, flip);
+    ///     }
+    ///
+    /// So the carrier was lifted and the passenger was not, and the pawn drew a whole Slot
+    /// below the screen. **Rule 38 from the other side: when a thing insists on drawing itself
+    /// at a position of its own, the offset has to be applied to THAT position, not to the one
+    /// you pass it.**
+    ///
+    /// Hence a postfix on the private recompute, moving `effectivePos` (the pawn and its
+    /// carried thing) and `groundPos` (the shadow) into the viewed band.
+    ///
+    /// ⚠⚠ AND IT MUST ONLY FIRE WHEN THE BODY ACTUALLY RECOMPUTED. `RecomputePosition` opens
+    /// with `if (positionLastComputedTick != ticksFlying)` and is called from BOTH `DrawPos`
+    /// and `DynamicDrawPhaseAt`, several times a frame. A postfix that added the offset every
+    /// call would add it to an already-offset field and the flyer would climb off the top of
+    /// the map within a second. The prefix records whether the recompute was going to happen;
+    /// only then does the postfix touch anything.
+    ///
+    /// ⚠ `base.Position` IS ASSIGNED INSIDE THE BODY, FROM THE UNLIFTED `groundPos`, BEFORE
+    /// THIS RUNS - which is exactly right and must stay that way. The flyer's real cell is
+    /// what our own below-pass gate, the fog test and the landing all read; only the DRAW is a
+    /// fiction (rule 28: a fiction installed for one subsystem is read as fact by every other).
+    ///
+    /// ⚠⚠ AND UPWARD LEAPS ARE DRAWN TOO - THE ONE PLACE THIS MOD LOOKS UP.
+    /// Everything else here is downward-only: you see your level and whatever the open columns
+    /// show beneath it. A flyer heading UP is the exception that earns itself, because §82b
+    /// remapped its arc into the DESTINATION band, so from the moment it leaves the ground it
+    /// is a band above you and vanishes at takeoff - the player watches a pawn delete itself.
+    ///
+    /// The gate is the same resolver, run the other way round: ask what the FLYER'S OWN column
+    /// shows beneath it, and draw it here only if the answer is a cell on the band you are
+    /// looking at. That is exactly the hole it is flying up through, so nothing is invented -
+    /// and it degrades honestly: the moment the pawn crosses over solid ground on the level
+    /// above, its column stops showing you anything and it leaves the screen, which is what a
+    /// ceiling is for.
+    /// </summary>
+    [HarmonyPatch(typeof(PawnFlyer), "RecomputePosition")]
+    public static class Patch_PawnFlyer_ABLiftInTransit
+    {
+        private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> EffectivePosRef =
+            AccessTools.FieldRefAccess<PawnFlyer, Vector3>("effectivePos");
+
+        private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> GroundPosRef =
+            AccessTools.FieldRefAccess<PawnFlyer, Vector3>("groundPos");
+
+        private static readonly AccessTools.FieldRef<PawnFlyer, int> LastComputedRef =
+            AccessTools.FieldRefAccess<PawnFlyer, int>("positionLastComputedTick");
+
+        private static readonly AccessTools.FieldRef<PawnFlyer, int> TicksFlyingRef =
+            AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");
+
+        private static bool Prepare()
+        {
+            return AccessTools.Method(typeof(PawnFlyer), "RecomputePosition") != null
+                && AccessTools.Field(typeof(PawnFlyer), "effectivePos") != null
+                && AccessTools.Field(typeof(PawnFlyer), "groundPos") != null
+                && AccessTools.Field(typeof(PawnFlyer), "positionLastComputedTick") != null
+                && AccessTools.Field(typeof(PawnFlyer), "ticksFlying") != null;
+        }
+
+        private static void Prefix(PawnFlyer __instance, ref bool __state)
+        {
+            __state = LastComputedRef(__instance) != TicksFlyingRef(__instance);
+        }
+
+        private static void Postfix(PawnFlyer __instance, bool __state)
+        {
+            try
+            {
+                if (!__state || !__instance.Spawned || !ABGuard.On(ABGuard.Rendering))
+                {
+                    return;
+                }
+                Map map = __instance.Map;
+                ABBandMap bands = ABBands.CompOf(map);
+                if (bands == null || !bands.Banded)
+                {
+                    return;
+                }
+                if (!TryTransitOffset(map, bands, ABBandView.CurrentBand(map),
+                        __instance.Position, out float dz))
+                {
+                    return;
+                }
+                Vector3 offset = new Vector3(0f, 0f, dz);
+                EffectivePosRef(__instance) += offset;
+                GroundPosRef(__instance) += offset;
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " V2: flyer transit lift threw: " + e.Message,
+                    762195937);
+            }
+        }
+
+        /// <summary>
+        /// How far to move the DRAW so a flyer on another band appears on the one being
+        /// viewed, or false when it should not be drawn at all.
+        ///
+        /// Both directions go through a see-through test and neither invents visibility:
+        /// BELOW uses the shared lift (the column the player is looking down), ABOVE asks the
+        /// flyer's own column what it shows and accepts only the view band - which is the same
+        /// opening, read from the other end.
+        /// </summary>
+        private static bool TryTransitOffset(Map map, ABBandMap bands, int viewBand, IntVec3 pos,
+            out float dz)
+        {
+            dz = 0f;
+            int band = bands.BandOf(pos);
+            if (band == viewBand)
+            {
+                return false; // vanilla draws it exactly where it is
+            }
+            if (band < viewBand)
+            {
+                if (!ABRangeOverlay.TryLiftCell(map, bands, viewBand, pos, out IntVec3 lifted))
+                {
+                    return false;
+                }
+                dz = lifted.z - pos.z;
+                return true;
+            }
+            if (!ABBands.TryResolveVisibleFrom(map, bands, pos, requireUnfogged: true,
+                    out IntVec3 shown, out int drop))
+            {
+                return false; // solid ground under it: there is a ceiling in the way
+            }
+            if (bands.BandOf(shown) != viewBand)
+            {
+                return false; // the column bottoms out on some other level, not this one
+            }
+            dz = -drop;
+            return true;
+        }
+    }
 }

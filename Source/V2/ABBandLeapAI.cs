@@ -288,10 +288,18 @@ namespace AsAboveSoBelow
                     }
                 }
             }
-            if (pawn.apparel != null)
+            // ⚠ WornApparel + the comp's own list, NOT `pawn.apparel.AllApparelVerbs`. That
+            // property is a `yield` iterator, so it allocates an enumerator per call - and
+            // since the giver moved to `Humanlike_PostMentalState` (§84.3) this runs for every
+            // humanlike on every think, not just for pawns whose duty ran dry. Same traversal,
+            // no garbage.
+            List<Apparel> worn = pawn.apparel != null ? pawn.apparel.WornApparel : null;
+            for (int i = 0; worn != null && i < worn.Count; i++)
             {
-                foreach (Verb v in pawn.apparel.AllApparelVerbs)
+                List<Verb> verbs = worn[i].GetComp<CompApparelVerbOwner>()?.AllVerbs;
+                for (int j = 0; verbs != null && j < verbs.Count; j++)
                 {
+                    Verb v = verbs[j];
                     if (!(v is Verb_Jump) || !v.Available())
                     {
                         continue;

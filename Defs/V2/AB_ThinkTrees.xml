@@ -9,15 +9,30 @@
     insertTag, so this adds a node without touching a vanilla def and cannot collide with
     another mod doing the same thing.
 
-    Humanlike_PostDuty is the correct tag and the choice is load-bearing, not cosmetic. A pawn
-    only reaches it once its Lord duty subtree has produced NO job - so "the AI wanted to get
-    somewhere and could not" is a structural fact at this point in the tree instead of a
-    heuristic we would otherwise have to invent and tune. An ordinary raid, where the duty
-    works, never runs a line of this.
+    WHICH TAG IS LOAD-BEARING, AND THE FIRST CHOICE WAS WRONG (run #384).
+
+    Humanlike_PostDuty looked perfect: a pawn reaches it only once the Lord duty subtree has
+    produced no job, which reads as "the AI wanted to get somewhere and could not" for free.
+    It is not what that tag means. A duty that fails to reach anything does NOT return empty -
+    AssaultColony falls back to a wander/wait job, so the duty node returns a Job, the priority
+    root stops there, and the tag is never evaluated. The probe caught it exactly: a raider
+    with a perfect leap solution sat at `curJob=Wait_Wander, duty=AssaultColony` and the node
+    had never once been asked.
+
+    Humanlike_PostMentalState is evaluated on every think, ahead of the Lord duty, and it is
+    the neighbourhood vanilla itself uses for ability reflexes - Humanlike.xml line 66 puts
+    `Abilities_Escape` two entries above this tag. Preempting the duty is safe here because the
+    giver's own gate is that the pawn CANNOT WALK to its goal: if walking works, the duty is
+    left alone.
+
+    (`Abilities_Aggressive` was the other candidate. Rejected: it is referenced from DutyDefs
+    rather than inserted by tag, so using it would mean patching vanilla defs, and its
+    ThinkNode_ConditionalColonist/invert gate would exclude colonists - which contradicts the
+    user's "anyone with a jump pack or jump ability".)
   -->
   <ThinkTreeDef>
     <defName>AB2_BandLeap</defName>
-    <insertTag>Humanlike_PostDuty</insertTag>
+    <insertTag>Humanlike_PostMentalState</insertTag>
     <insertPriority>50</insertPriority>
     <thinkRoot Class="ThinkNode_Priority">
       <subNodes>
