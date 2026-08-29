@@ -68,6 +68,15 @@ namespace AsAboveSoBelow
         /// unfreeze an avatar PS deliberately froze. Rule 28.</summary>
         private static bool lockedByUs;
 
+        /// <summary>Last frame's answer to "is PS's camera lock held", by ANYONE. The
+        /// falling edge of this is the only signal PS's "return to character" button
+        /// emits - see <see cref="SyncPeek"/>.</summary>
+        private static bool lockSeen;
+
+        /// <summary>Re-entrancy guard: <see cref="ReturnToAvatar"/> calls
+        /// <c>ABBandView.SetBand</c>, which calls <see cref="SyncPeek"/> straight back.</summary>
+        private static bool returning;
+
         private static void Resolve()
         {
             resolved = true;
@@ -212,9 +221,9 @@ namespace AsAboveSoBelow
             {
                 Resolve();
             }
-            if (!present)
+            if (!present || returning)
             {
-                return;
+                return; // `returning`: SetBand calls straight back into here
             }
             try
             {
@@ -235,6 +244,36 @@ namespace AsAboveSoBelow
                     Release();
                     return;
                 }
+
+                // ⚠⚠ PS'S "RETURN TO CHARACTER" BUTTON IS NOTHING BUT A CLEARED FIELD, AND
+                // WE HAD REMOVED THE ONLY THING THAT READ IT.
+                //
+                // Avatar_UI.DrawCameraLockReturnButton draws only while
+                // State.CameraLockPosition.HasValue, and the entire click handler is
+                // `State.CameraLockPosition = null`. It works because PS's UpdateCamera then
+                // re-centres on the avatar next frame. While the viewed band is not the
+                // avatar's we PREFIX UpdateCamera out (§76, rule 24 - remove the other
+                // driver rather than out-write it), so the button cleared the field, vanished,
+                // and the camera never moved. Reported as "return to character does nothing":
+                // avatar downstairs, colonist-bar double-click on someone upstairs, press it.
+                //
+                // ⚠ WATCH THE FIELD, NOT `lockedByUs`, AND THAT DISTINCTION IS THE WHOLE FIX.
+                // In the reported repro the lock was set by PS ITSELF (its
+                // JumpToCurrentMapLoc postfix fires on the colonist-bar jump), so lockedByUs
+                // is FALSE and a "did we set this" test misses exactly the case that was
+                // reported. The falling edge is the signal regardless of who set it.
+                //
+                // Every other PS path that nulls this field means the same thing anyway -
+                // "the camera has re-anchored on the avatar" (a jump whose target IS the
+                // avatar's cell, SetAvatar, ClearAvatar, load) - and the correct response to
+                // all of them is the same: bring the VIEW back to the avatar's level.
+                bool lockNow = LockHeld();
+                if (suspendCamera && lockSeen && !lockNow)
+                {
+                    ReturnToAvatar(map, bands, avatar);
+                    return;
+                }
+
                 suspendCamera = true;
                 ABSettings set = ABMod.Settings;
                 bool freeze = set == null || set.psFreezeAvatarWhilePeeking;
@@ -252,12 +291,72 @@ namespace AsAboveSoBelow
                 {
                     ClearOurLock();
                 }
+                // Re-read rather than reusing `lockNow`: the freeze branch above may have
+                // just set the field itself, and recording the pre-write value would make
+                // our OWN lock look like a button press on the very next frame.
+                lockSeen = LockHeld();
             }
             catch (Exception e)
             {
                 Release();
                 Log.ErrorOnce(ABLog.Tag + " Perspective Shift peek sync threw: " + e,
                     0x2B10AD);
+            }
+        }
+
+        /// <summary>Is PS's camera lock held by anyone? False when PS is absent or the
+        /// field could not be bound, which correctly reads as "no button to press".</summary>
+        private static bool LockHeld()
+        {
+            try
+            {
+                return cameraLockField != null && cameraLockField.GetValue(null) != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Honour "return to character": move the VIEWED BAND to the avatar's, then hand the
+        /// camera back to PS.
+        ///
+        /// Order matters. The band change goes FIRST and the suspend is released only once it
+        /// succeeded: releasing first would let PS's UpdateCamera drag the camera toward a
+        /// band our clip refuses to draw, which is the window-7 curtain bug the suspend was
+        /// built to prevent. A band that cannot be viewed (an undug level - SetBand refuses
+        /// and says so) therefore leaves the peek exactly as it was rather than half-torn-down.
+        /// </summary>
+        private static void ReturnToAvatar(Map map, ABBandMap bands, Pawn avatar)
+        {
+            returning = true;
+            try
+            {
+                int band = bands.BandOf(avatar.Position);
+                if (band < 0 || !bands.BandExists(band)
+                    || !ABBandView.SetBand(map, band, preserveXZ: false))
+                {
+                    lockSeen = LockHeld();
+                    return; // could not follow: stay suspended, keep the view coherent
+                }
+                ABLog.Dev("Perspective Shift: return-to-character, view band -> " + band + ".");
+                Release();
+                // Same reason FollowTransit calls it: preserveXZ:false leaves the camera for
+                // the follower, and PS lerps 10% a frame, so a band stride would be a long
+                // glide through the gutter instead of a cut.
+                SnapToAvatar(avatar);
+                lockSeen = false;
+            }
+            catch (Exception e)
+            {
+                Release();
+                Log.ErrorOnce(ABLog.Tag + " Perspective Shift return-to-character threw: "
+                    + e, 0x2B10AF);
+            }
+            finally
+            {
+                returning = false;
             }
         }
 
@@ -320,6 +419,7 @@ namespace AsAboveSoBelow
         private static void Release()
         {
             suspendCamera = false;
+            lockSeen = false;
             ClearOurLock();
         }
 
