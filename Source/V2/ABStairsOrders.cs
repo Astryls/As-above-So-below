@@ -39,6 +39,20 @@ namespace AsAboveSoBelow
         /// </summary>
         public override IEnumerable<FloatMenuOption> GetOptionsFor(Thing clickedThing, FloatMenuContext context)
         {
+            return TravelOptionsFor(context.FirstSelectedPawn, clickedThing as Building_ABStairs2);
+        }
+
+        /// <summary>
+        /// The travel options for one pawn and one link, shared verbatim between the
+        /// float-menu provider above and the Perspective Shift bridge (a hauling avatar's
+        /// left-click on a link travels instead of depositing - window 15). Extracted so the
+        /// two entry points cannot drift: same labels, same reachability rule, same
+        /// disembark-tile destination. Null-action "(no path)" rows are included, exactly as
+        /// the provider always served them; callers that need only executable orders filter
+        /// on <c>action != null</c>.
+        /// </summary>
+        internal static List<FloatMenuOption> TravelOptionsFor(Pawn pawn, Building_ABStairs2 stairs)
+        {
             List<FloatMenuOption> options = new List<FloatMenuOption>();
             try
             {
@@ -46,12 +60,10 @@ namespace AsAboveSoBelow
                 {
                     return options;
                 }
-                Building_ABStairs2 stairs = clickedThing as Building_ABStairs2;
                 if (stairs == null || !stairs.Spawned)
                 {
                     return options;
                 }
-                Pawn pawn = context.FirstSelectedPawn;
                 if (pawn == null || pawn.Map != stairs.Map)
                 {
                     return options;

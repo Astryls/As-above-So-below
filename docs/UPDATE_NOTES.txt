@@ -1,14 +1,18 @@
-[h1]Colonists finish beside the staircase, not on it[/h1]
+Update notes (window 15)
 
-Order a colonist up or down with the right click menu on a staircase or a ladder and they now finish the trip on the tile in front of the opening, instead of walking back onto the staircase and standing in the middle of it.
+Climate:
+- Altitude temperature offsets now ship OFF by default. New colonies get no per-level temperature change unless you opt in.
+- Mod settings gained climate presets (Off / Gentle / Standard / Alpine), a master toggle, and a live status line showing whether the temperature patch is active.
+- Existing installs keep their configured offsets and existing colonies keep their frozen climate snapshots. Nothing changes mid-save.
 
-The arrival was already right. The order was not: a colonist was set down neatly in front of the stairs on the far level and then immediately walked back on, because the order itself still pointed at the staircase. This is most obvious with Perspective Shift, where a colonist standing on a staircase is drawn inside the art rather than beside it.
+Performance:
+- The see-below resolver is now cached per map, removing the biggest frame spikes when many cells change at once.
+- The temperature patch now unloads itself entirely while no map needs it, so it costs nothing when unused.
+- The below-view render and overlay passes are skipped while every level below the view is still undiscovered, which is most of the time for most colonies.
 
-[b]Elevators are unchanged.[/b] Colonists still ride to the car and arrive inside it, which is where you want them.
+Blueprints:
+- Stairs, ladders and elevators now show a proper vanilla-style blueprint (blue outline wash) instead of looking like the finished building.
 
-[h1]Known[/h1]
-
-[list]
-[*]The Combat Extended bridge is still marked experimental. Manned CE weapons are the next piece of work there.
-[*]East and west grand staircase art is still being redrawn.
-[/list]
+Perspective Shift:
+- The drafted avatar now faces your cursor correctly when the cursor is over open air on another level.
+- An avatar carrying something who clicks a stairway, ladder or elevator now travels through it (still carrying) instead of putting the load down on it. Elevators offer the destination menu.

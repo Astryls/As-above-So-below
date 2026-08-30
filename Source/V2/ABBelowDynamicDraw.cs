@@ -74,6 +74,15 @@ namespace AsAboveSoBelow
             }
             int slot = bands.Slot;
             int viewBand = ABBandView.CurrentBand(map);
+            // Fog gate: every rejection below includes a per-thing fog test, so when
+            // every band under the view is fully fogged (the undug-basement common case)
+            // this whole pass - and the realtime pass it ends with - provably draws
+            // nothing. Skip before walking any list. Verdicts are event-driven
+            // (MapEvents.CellFogChanged/MapFogged) and fail open.
+            if (!bands.AnyUnfoggedBelow(viewBand))
+            {
+                return;
+            }
             // Perf sampling starts AFTER the cheap early-outs above, so the counters
             // describe frames where a below view actually exists.
             long perfT0 = ABPerfStats.Now();

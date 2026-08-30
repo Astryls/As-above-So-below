@@ -123,6 +123,46 @@ namespace AsAboveSoBelow
             return last + (last - prev) * (index - count + 1);
         }
 
+        /// <summary>
+        /// True when this banded map's EFFECTIVE temperature offsets contain any nonzero
+        /// entry - the demand test for ABPatchLifecycle, sited HERE so it can only mirror
+        /// <see cref="FromTable"/>'s tier rule (snapshot if present, else live settings,
+        /// else compiled defaults) rather than re-derive it and drift (rule 62).
+        ///
+        /// A null settings object returns true: FromTable would fall through to the
+        /// compiled default tables, which are nonzero, so the patch must be on. All-zero
+        /// tables extrapolate to zero past the end, so zero tables genuinely mean "off".
+        /// </summary>
+        public static bool AnyOffsetConfigured(ABBandMap bands)
+        {
+            ABSettings s = ABMod.Settings;
+            List<float> sky = bands?.climateSky != null && bands.climateSky.Count > 0
+                ? bands.climateSky
+                : s?.skyTempOffsets;
+            List<float> deep = bands?.climateDeep != null && bands.climateDeep.Count > 0
+                ? bands.climateDeep
+                : s?.deepTempOffsets;
+            if (sky == null || sky.Count == 0 || deep == null || deep.Count == 0)
+            {
+                return true; // a missing tier falls back to the nonzero compiled defaults
+            }
+            for (int i = 0; i < sky.Count; i++)
+            {
+                if (sky[i] != 0f)
+                {
+                    return true;
+                }
+            }
+            for (int i = 0; i < deep.Count; i++)
+            {
+                if (deep[i] != 0f)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static BiomeDef undergroundBiome;
 
         private static BiomeDef skyBiome;
@@ -252,7 +292,11 @@ namespace AsAboveSoBelow
     /// non-surface band; roofed interiors already get correct room temperature from
     /// vanilla, which is the majority of the basement.
     /// </summary>
-    [HarmonyPatch(typeof(GenTemperature), nameof(GenTemperature.TryGetTemperatureForCell))]
+    // ⚠ NO [HarmonyPatch] ATTRIBUTE, ON PURPOSE: this postfix is owned by
+    // ABPatchLifecycle, which applies it only while a banded map with nonzero effective
+    // offsets exists (and the master toggle is on) and removes it when none does.
+    // HarmonyBoot's attribute scan must not see it or it would be double-applied.
+    // Target: GenTemperature.TryGetTemperatureForCell.
     public static class Patch_GenTemperature_ABBandOffset
     {
         private static void Postfix(IntVec3 c, Map map, ref float tempResult, bool __result)

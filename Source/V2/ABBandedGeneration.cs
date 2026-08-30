@@ -210,6 +210,7 @@ namespace AsAboveSoBelow
                             + " post-init (slow path).");
                         bands.Setup(p.bandCount, p.bandHeight, p.surfaceBand);
                         bands.SnapshotClimate(ABMod.Settings);
+                        ABPatchLifecycle.Recheck("post-init-carve");
                         var slow = System.Diagnostics.Stopwatch.StartNew();
                         ABStructureFit.RescueStraddlingStructures(__result, bands);
                         RescueStrandedColonists(__result, bands);
@@ -306,6 +307,9 @@ namespace AsAboveSoBelow
                     // read live from settings instead and moving a slider would re-climate
                     // every existing save.
                     bands.SnapshotClimate(ABMod.Settings);
+                    // The map just became banded with a freshly frozen climate - ask the
+                    // patch lifecycle to converge (defers itself off the loader thread).
+                    ABPatchLifecycle.Recheck("in-window-carve");
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     // Structures BEFORE pawns: a scenario that starts the colony sealed
                     // inside a vault places its pawns within the rect, so moving the

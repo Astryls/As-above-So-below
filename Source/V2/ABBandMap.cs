@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -71,7 +72,15 @@ namespace AsAboveSoBelow
 
         public List<float> climateWind;
 
-        /// <summary>Freeze the current settings onto this map. Called once, beside Setup.</summary>
+        /// <summary>Freeze the current settings onto this map. Called once, beside Setup.
+        ///
+        /// ⚠ ALL-ZERO TEMPERATURE TABLES ARE NOT SNAPSHOTTED. Altitude temperature now
+        /// ships OFF (all offsets 0), and a zero snapshot would WIN over live settings
+        /// forever - a player who generates a colony at the defaults and later enables
+        /// offsets would see nothing happen and no reason why. Leaving the snapshot null
+        /// makes such a colony follow live settings (so enabling works), while a colony
+        /// generated WITH a climate keeps the no-retro-climate protection the snapshot
+        /// exists for. Wind always snapshots; its defaults are nonzero and unchanged.</summary>
         public void SnapshotClimate(ABSettings s)
         {
             if (s == null)
@@ -79,9 +88,210 @@ namespace AsAboveSoBelow
                 return;
             }
             s.EnsureClimateLists();
-            climateSky = new List<float>(s.skyTempOffsets);
-            climateDeep = new List<float>(s.deepTempOffsets);
+            climateSky = AnyNonZero(s.skyTempOffsets) ? new List<float>(s.skyTempOffsets) : null;
+            climateDeep = AnyNonZero(s.deepTempOffsets) ? new List<float>(s.deepTempOffsets) : null;
             climateWind = new List<float>(s.skyWindFactors);
+        }
+
+        private static bool AnyNonZero(List<float> list)
+        {
+            if (list == null)
+            {
+                return false;
+            }
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] != 0f)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ---- see-below resolve cache (session-only, never scribed) ----------------
+        //
+        // Memoizes ABBands.TryResolveVisibleBelow per cell: value array holds
+        // belowIndex + 1 (0 = "resolves to nothing"), stamp array holds the version the
+        // entry was computed under. Invalidation is one Interlocked increment from the
+        // terrain-write funnel (ABSeeBelowDirty); nothing is ever cleared or scanned.
+        // Cost: two int[] of map.Area, lazily allocated on first banded resolve only
+        // (~1.2 MB on a 7-level map - the price of turning regen-burst re-resolves and
+        // the four-layers-same-frame redundancy into array reads).
+
+        private int[] seeBelowCache;
+
+        private int[] seeBelowStamp;
+
+        private int seeBelowVersion = 1;
+
+        private readonly object seeBelowGate = new object();
+
+        public int SeeBelowVersion => System.Threading.Volatile.Read(ref seeBelowVersion);
+
+        /// <summary>O(1) whole-map invalidation. Terrain writes are rare; re-resolves
+        /// amortize onto next touch. Safe from any thread.</summary>
+        public void DirtySeeBelowCache()
+        {
+            System.Threading.Interlocked.Increment(ref seeBelowVersion);
+        }
+
+        // ---- below-view fog gate (session-only, never scribed) --------------------
+        //
+        // Per-band verdict: does this band contain ANY unfogged cell? Every per-frame
+        // below pass (pawns, realtime things, thing overlays, forbidden markers)
+        // rejects fogged cells per thing, so when every band below the view is fully
+        // fogged those whole-map walks provably produce nothing - the gate skips them
+        // outright. Maintained EVENT-DRIVEN, zero Harmony: 1.6 raises
+        // MapEvents.CellFogChanged from Unfog/Refog and MapEvents.MapFogged from
+        // SetAllFogged, and the audit (2026-08-29) confirmed every writer funnels
+        // through them - FloodFillerFog's unsafe ref is READ-only (PassCheck); its
+        // Processor calls fogGrid.Unfog per cell. Only a foreign mod writing
+        // FogGrid_Unsafe directly can bypass this, which would break vanilla's own
+        // event consumers too; the debug assertion below catches that in test runs.
+        //
+        // Verdicts: 0 = unknown (scan on next ask), 1 = fully fogged, 2 = has
+        // unfogged. An unfog event landing on a verdict-1 band IS proof it opened -
+        // flip to 2, no scan. Scans therefore run once per band per session (lazily,
+        // on the first below-view frame) plus after rare refog-class events. A refog
+        // resets to unknown rather than trying to count. Fog only ever shrinks in
+        // ordinary play, so a band that opens stays open for the save.
+
+        private byte[] fogVerdict;
+
+        private bool fogEventsHooked;
+
+        private int lastFogAssertFrame = -1;
+
+        /// <summary>Idempotent; called from FinalizeInit. The delegate and this
+        /// component share the map's lifetime, so there is nothing to unhook.</summary>
+        public void HookFogEvents()
+        {
+            if (fogEventsHooked || map?.events == null)
+            {
+                return;
+            }
+            fogEventsHooked = true;
+            map.events.CellFogChanged += OnCellFogChanged;
+            map.events.MapFogged += OnMapFogged;
+        }
+
+        private void OnCellFogChanged(IntVec3 c, bool fogged)
+        {
+            byte[] v = fogVerdict;
+            if (v == null || !Banded)
+            {
+                return; // nothing asked yet: first ask scans fresh truth
+            }
+            int band = BandOf(c);
+            if (band < 0 || band >= v.Length)
+            {
+                return; // gutter or malformed - no band owns it
+            }
+            if (fogged)
+            {
+                v[band] = 0; // refog: unknown; rescan on next ask
+            }
+            else if (v[band] == 1)
+            {
+                v[band] = 2; // the event is itself proof the band opened
+            }
+        }
+
+        private void OnMapFogged()
+        {
+            byte[] v = fogVerdict;
+            if (v != null)
+            {
+                Array.Clear(v, 0, v.Length);
+            }
+        }
+
+        /// <summary>The gate. True when any band strictly below <paramref name="viewBand"/>
+        /// contains at least one unfogged cell - i.e. a below pass could draw something.
+        /// Fails OPEN on any doubt: an open gate merely pays the old cost.</summary>
+        public bool AnyUnfoggedBelow(int viewBand)
+        {
+            if (!Banded)
+            {
+                return true;
+            }
+            byte[] v = fogVerdict ?? (fogVerdict = new byte[bandCount]);
+            int lo = Math.Min(viewBand, v.Length);
+            for (int b = 0; b < lo; b++)
+            {
+                byte verdict = v[b];
+                if (verdict == 2)
+                {
+                    return true;
+                }
+                if (verdict == 0)
+                {
+                    if (!ScanBandFullyFogged(b))
+                    {
+                        v[b] = 2;
+                        return true;
+                    }
+                    v[b] = 1;
+                }
+            }
+            // Debug-only drift tripwire (LogTransit is #if DEBUG): the gate is about to
+            // suppress the below passes, so periodically re-derive the verdicts from the
+            // grid itself. A mismatch means a fog write path escaped the event audit.
+            if (ABV2Debug.LogTransit && UnityEngine.Time.frameCount - lastFogAssertFrame > 600)
+            {
+                lastFogAssertFrame = UnityEngine.Time.frameCount;
+                for (int b = 0; b < lo; b++)
+                {
+                    if (!ScanBandFullyFogged(b))
+                    {
+                        Log.Error(ABLog.Tag + " V2 fog-gate DRIFT: band " + b
+                            + " has unfogged cells but verdict said fully fogged."
+                            + " A fog write path bypassed MapEvents - report this.");
+                        v[b] = 2;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool ScanBandFullyFogged(int band)
+        {
+            FogGrid fog = map.fogGrid;
+            foreach (IntVec3 c in RectOfBand(band))
+            {
+                if (!fog.IsFogged(c))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>Lazy alloc under a gate (cold path, once per session per map). The
+        /// stamp array is published LAST so a racing reader that sees it non-null sees a
+        /// fully constructed pair; entries start 0, i.e. stale against version 1.</summary>
+        public void GetSeeBelowCache(out int[] cache, out int[] stamp)
+        {
+            int[] s = seeBelowStamp;
+            if (s != null)
+            {
+                cache = seeBelowCache;
+                stamp = s;
+                return;
+            }
+            lock (seeBelowGate)
+            {
+                if (seeBelowStamp == null)
+                {
+                    int n = map.cellIndices.NumGridCells;
+                    seeBelowCache = new int[n];
+                    System.Threading.Thread.MemoryBarrier();
+                    seeBelowStamp = new int[n];
+                }
+                cache = seeBelowCache;
+                stamp = seeBelowStamp;
+            }
         }
 
         /// <summary>The biome the basement was carved as, or null for plain solid rock.
@@ -125,6 +335,15 @@ namespace AsAboveSoBelow
         public override void FinalizeInit()
         {
             base.FinalizeInit();
+            // A banded map just became live (fresh generation or load) - give the patch
+            // lifecycle a chance to apply the band temperature postfix before gameplay
+            // reads temperatures. Self-defers to the main thread when this runs on the
+            // loader thread.
+            ABPatchLifecycle.Recheck("map-finalize");
+            // Subscribe the below-view fog gate to vanilla's fog events. Verdicts stay
+            // lazy, so anything that happened before this line is simply scanned fresh
+            // on first use.
+            HookFogEvents();
             // FIRST, unconditionally: this instance is the authoritative component, so
             // repair any cache that latched a mid-load placeholder (see RebindAfterLoad).
             ABBands.RebindAfterLoad(map, this);

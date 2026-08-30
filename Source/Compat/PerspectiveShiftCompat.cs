@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -36,6 +37,9 @@ namespace AsAboveSoBelow
     ///   State.CameraLockPosition        - public static FIELD, Vector3?
     ///   Avatar.physicsPosition          - public instance FIELD, Vector3?
     ///   Avatar.UpdateCamera             - public instance METHOD, void, no args
+    ///   Avatar.RotateTowardsMouse       - private instance METHOD, void, no args
+    ///   Avatar.HandleDropOrInteract     - private instance METHOD, bool,
+    ///                                     (IntVec3 cell, bool itemInRange, Thing carriedThing)
     /// </summary>
     internal static class PerspectiveShiftCompat
     {
@@ -100,6 +104,8 @@ namespace AsAboveSoBelow
                 if (present)
                 {
                     InstallCameraSuspend();
+                    InstallRawMouseFacing();
+                    InstallHaulLinkTravel();
                 }
                 if (!present)
                 {
@@ -207,6 +213,175 @@ namespace AsAboveSoBelow
         private static bool SuspendCameraPrefix()
         {
             return !suspendCamera;
+        }
+
+        /// <summary>
+        /// THE DRAFTED AVATAR MUST FACE THE CURSOR ON SCREEN, NOT THE CELL THE COLUMN SHOWS.
+        ///
+        /// PS's Avatar.RotateTowardsMouse (idle drafted facing plus the aimAngle the weapon
+        /// is drawn at) computes its direction from UI.MouseMapPosition() - which §87's
+        /// global click-through DESCENDS whenever the cursor sits over see-through open air.
+        /// From any upper level, every cell that is not foundation resolves a whole band
+        /// stride down in -z, the direction is dominated by that stride, and the avatar
+        /// locks facing south the moment the cursor leaves the platform (field report,
+        /// window 15: "doesn't face your cursor while drafted when not aiming on a non
+        /// upper floor foundation"). Facing is a SCREEN-SPACE question - the raw cursor is
+        /// by definition where the cursor visually is relative to the avatar - so this is
+        /// rule 70's flip side: one more caller for §87's opt-out list, installed from here
+        /// because the target type is PS's.
+        ///
+        /// ⚠ THE COMBAT PATH IS DELIBERATELY NOT SUPPRESSED. Avatar_Combat's fire handler
+        /// reads UI.MouseCell() as the TARGET cell, and the descended answer is exactly what
+        /// makes shooting the level you are looking at work (§82/§66 own the aim visuals).
+        /// Suppress only the facing method; aiming already behaves.
+        /// </summary>
+        private static void InstallRawMouseFacing()
+        {
+            try
+            {
+                MethodInfo target = AccessTools.Method(avatarField.FieldType, "RotateTowardsMouse");
+                if (target == null)
+                {
+                    Log.WarningOnce(ABLog.Tag + " Perspective Shift is loaded but"
+                        + " Avatar.RotateTowardsMouse was not found; the drafted avatar will"
+                        + " face the wrong way while the cursor is over open air.", 0x2B10B4);
+                    return;
+                }
+                HarmonyBoot.Harmony.Patch(target,
+                    prefix: new HarmonyMethod(typeof(PerspectiveShiftCompat),
+                        nameof(RawMousePrefix)),
+                    finalizer: new HarmonyMethod(typeof(PerspectiveShiftCompat),
+                        nameof(RawMouseFinalizer)));
+                ABLog.Dev("Perspective Shift raw-mouse facing INSTALLED.");
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " Perspective Shift raw-mouse facing failed to"
+                    + " install: " + e.Message, 0x2B10B5);
+            }
+        }
+
+        /// <summary>Prefix/finalizer pair, not prefix/postfix: an exception inside PS's
+        /// method must still pop, or the descend stays suppressed for the rest of the frame
+        /// (ABMouseDescend's frame stamp would catch it next frame, but one bad frame of
+        /// wrong pointing is one too many when it is free to avoid).</summary>
+        private static void RawMousePrefix()
+        {
+            ABMouseDescend.Push();
+        }
+
+        private static void RawMouseFinalizer()
+        {
+            ABMouseDescend.Pop();
+        }
+
+        /// <summary>
+        /// A HAULING AVATAR'S CLICK ON A LINK MEANS "TAKE IT", NOT "PUT THIS DOWN ON IT".
+        ///
+        /// While the avatar carries something, PS routes EVERY left-click through
+        /// Avatar.HandleDropOrInteract before any float-menu logic can run - so our
+        /// stairs/ladder/elevator travel verbs (§85.23) were unreachable in haul mode and
+        /// the click deposited the cargo on the link's own cell instead (field report,
+        /// window 15). The prefix diverts exactly one case: a spawned Building_ABStairs2 on
+        /// the clicked cell with at least one executable travel option. The order comes
+        /// from the SAME helper the float-menu provider uses
+        /// (FloatMenuOptionProvider_ABStairsTravel.TravelOptionsFor), so labels,
+        /// reachability and the §90 disembark-tile destination cannot drift between the two
+        /// entry points. One destination executes immediately; an elevator with several
+        /// opens the same destination menu the non-hauling click gets.
+        ///
+        /// The cargo rides along for free: PS's own HandleCarriedThing keeps reserving the
+        /// carried thing while an UNDRAFTED pawn holds any job (a drafted avatar always
+        /// drops - PS's rule, untouched), and the carryTracker container travels with the
+        /// pawn through the wormhole. No executable option (unlinked staircase, no path)
+        /// falls through to PS's vanilla drop behaviour unchanged.
+        /// </summary>
+        private static void InstallHaulLinkTravel()
+        {
+            try
+            {
+                MethodInfo target = AccessTools.Method(avatarField.FieldType, "HandleDropOrInteract");
+                if (target == null)
+                {
+                    Log.WarningOnce(ABLog.Tag + " Perspective Shift is loaded but"
+                        + " Avatar.HandleDropOrInteract was not found; a hauling avatar's"
+                        + " click on stairs will drop the cargo instead of travelling.",
+                        0x2B10B6);
+                    return;
+                }
+                HarmonyBoot.Harmony.Patch(target,
+                    prefix: new HarmonyMethod(typeof(PerspectiveShiftCompat),
+                        nameof(DropOrInteractPrefix)));
+                ABLog.Dev("Perspective Shift haul-mode link travel INSTALLED.");
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " Perspective Shift haul-mode link travel failed"
+                    + " to install: " + e.Message, 0x2B10B7);
+            }
+        }
+
+        /// <summary>
+        /// Foreign-type-free by the folder's rule: __instance is object (it is PS's Avatar),
+        /// `cell` binds PS's own parameter by name. Runs regardless of PS's grab range - a
+        /// distant link click while hauling previously did nothing at all, and "walk there
+        /// and take the stairs" is the only sane reading of it.
+        /// </summary>
+        private static bool DropOrInteractPrefix(object __instance, IntVec3 cell, ref bool __result)
+        {
+            try
+            {
+                Pawn pawn = __instance == null ? null : pawnField.GetValue(__instance) as Pawn;
+                if (pawn == null || !pawn.Spawned || pawn.Map == null || !cell.InBounds(pawn.Map))
+                {
+                    return true;
+                }
+                Building_ABStairs2 link = null;
+                List<Thing> things = pawn.Map.thingGrid.ThingsListAtFast(cell);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] is Building_ABStairs2 s && s.Spawned)
+                    {
+                        link = s;
+                        break;
+                    }
+                }
+                if (link == null)
+                {
+                    return true; // not a link: PS's drop/deposit logic proceeds untouched
+                }
+                List<FloatMenuOption> options =
+                    FloatMenuOptionProvider_ABStairsTravel.TravelOptionsFor(pawn, link);
+                List<FloatMenuOption> live = new List<FloatMenuOption>();
+                for (int i = 0; i < options.Count; i++)
+                {
+                    FloatMenuOption o = options[i];
+                    if (o != null && o.action != null)
+                    {
+                        live.Add(o); // "(no path)" rows carry a null action by construction
+                    }
+                }
+                if (live.Count == 0)
+                {
+                    return true; // unlinked or unreachable: old behaviour is the honest one
+                }
+                if (live.Count == 1)
+                {
+                    live[0].action();
+                }
+                else
+                {
+                    Find.WindowStack.Add(new FloatMenu(live));
+                }
+                __result = true;
+                return false;
+            }
+            catch (Exception e)
+            {
+                Log.WarningOnce(ABLog.Tag + " Perspective Shift haul-mode link travel threw: "
+                    + e, 0x2B10B8);
+                return true; // a bridge must never take the click down with it
+            }
         }
 
         /// <summary>

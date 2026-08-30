@@ -36,6 +36,10 @@ namespace AsAboveSoBelow
         public override void WriteSettings()
         {
             base.WriteSettings();
+            // The master toggle or the offset sliders may have changed what the band
+            // temperature patch has to do - converge its applied/idle state now rather
+            // than waiting for the next sweep.
+            ABPatchLifecycle.Recheck("write-settings");
             if (!ABSettings.ConsumeBakedVisualDirty()
                 || Current.ProgramState != ProgramState.Playing)
             {

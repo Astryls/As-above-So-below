@@ -138,6 +138,12 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // Fog gate: the handle walk below fog-rejects per thing; skip it whole
+                // when every band under the view is fully fogged.
+                if (!bands.AnyUnfoggedBelow(viewBand))
+                {
+                    return;
+                }
                 // The view rect in the VIEWING band; visibility of anything under it is
                 // resolved per column. Shifting the rect down one Slot only ever found the
                 // level directly below, so interaction icons vanished from level 2 upward.

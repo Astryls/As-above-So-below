@@ -61,7 +61,13 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_PathHeuristicTip>Raising this makes pawns on a stacked map search fewer cells when working out a route. They find their way just as reliably, but may occasionally take a slightly longer walk instead of the perfect one. Leave it off unless a large colony is stuttering when many pawns pick new jobs at once. Ordinary maps are never affected.</AB_PathHeuristicTip>
 
   <!-- Climate -->
-  <AB_ClimateNewColonyNote>Climate is fixed when a colony is generated. Changes here affect NEW colonies only. Your existing saves keep the climate they were made with.</AB_ClimateNewColonyNote>
+  <AB_ClimateNewColonyNote>Climate is fixed when a colony is generated. Changes here affect NEW colonies only. Your existing saves keep the climate they were made with. (Exception: a colony generated with altitude temperature OFF follows these settings if you enable it later.)</AB_ClimateNewColonyNote>
+  <AB_ClimateMaster>Altitude temperature offsets</AB_ClimateMaster>
+  <AB_ClimateMasterTip>Applies the per-level temperature offsets below. When this is off, or every offset is zero, the game code that computes them is removed entirely and costs nothing. Altitude temperature ships OFF; pick a preset or drag the sliders to enable it for new colonies.</AB_ClimateMasterTip>
+  <AB_ClimatePatchActive>Status: active (a colony with altitude climate is loaded).</AB_ClimatePatchActive>
+  <AB_ClimatePatchDormant>Status: dormant (no loaded colony uses altitude temperature; zero cost).</AB_ClimatePatchDormant>
+  <AB_ClimateOffHint>An offset of 0 means that level uses the surface temperature.</AB_ClimateOffHint>
+  <AB_PresetOff>Off</AB_PresetOff>
   <AB_PresetGentle>Gentle</AB_PresetGentle>
   <AB_PresetStandard>Standard</AB_PresetStandard>
   <AB_PresetAlpine>Alpine</AB_PresetAlpine>

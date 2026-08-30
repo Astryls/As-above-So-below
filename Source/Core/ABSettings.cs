@@ -59,6 +59,19 @@ namespace AsAboveSoBelow
         // 3 down, and showing all six regardless of the current plan lets a player tune a
         // layout before they choose it.
 
+        /// <summary>Master switch for altitude temperature (B of the 2026-08 perf pass).
+        /// OFF does not merely zero the effect - ABPatchLifecycle REMOVES the
+        /// GenTemperature postfix entirely, so the 174k+ calls/window pay nothing. The
+        /// lifecycle also auto-idles the patch when every offset is zero (the shipped
+        /// default) or no banded map exists, so this toggle is the manual override on
+        /// top of that automatic behaviour, not the only gate.</summary>
+        public bool bandTemperatureOffsets = true;
+
+        /// <summary>⚠ ALTITUDE TEMPERATURE SHIPS OFF: these default to all-zero via
+        /// <see cref="OffTempDefaults"/> in EnsureClimateLists. The classic curves live
+        /// on as the presets below; ABBandEnv.Default* remain only as FromTable's
+        /// last-ditch fallback for a null settings object. Existing installs keep
+        /// whatever their config XML already scribes.</summary>
         public List<float> skyTempOffsets;
 
         public List<float> deepTempOffsets;
@@ -86,10 +99,12 @@ namespace AsAboveSoBelow
         /// load and before every read: a hand-edited config or a version that shipped a
         /// different level cap must not produce an index-out-of-range deep inside the
         /// temperature patch.</summary>
+        private static readonly float[] OffTempDefaults = { 0f, 0f, 0f };
+
         public void EnsureClimateLists()
         {
-            skyTempOffsets = Fix(skyTempOffsets, ABBandEnv.DefaultSkyTempOffsets);
-            deepTempOffsets = Fix(deepTempOffsets, ABBandEnv.DefaultDeepTempOffsets);
+            skyTempOffsets = Fix(skyTempOffsets, OffTempDefaults);
+            deepTempOffsets = Fix(deepTempOffsets, OffTempDefaults);
             skyWindFactors = Fix(skyWindFactors, ABBandEnv.DefaultSkyWindFactors);
         }
 
@@ -352,6 +367,7 @@ namespace AsAboveSoBelow
                 true);
             Scribe_Values.Look(ref belowPawnCache, "belowPawnCache",
                 ABBelowRenderCache.ModeAuto);
+            Scribe_Values.Look(ref bandTemperatureOffsets, "bandTemperatureOffsets", true);
             Scribe_Collections.Look(ref skyTempOffsets, "skyTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref deepTempOffsets, "deepTempOffsets", LookMode.Value);
             Scribe_Collections.Look(ref skyWindFactors, "skyWindFactors", LookMode.Value);
@@ -725,19 +741,34 @@ namespace AsAboveSoBelow
             GUI.color = old;
             list.Gap(4f);
 
+            list.CheckboxLabeled("AB_ClimateMaster".Translate(), ref bandTemperatureOffsets,
+                "AB_ClimateMasterTip".Translate());
+            GUI.color = NoteDim;
+            list.Label((ABPatchLifecycle.Applied
+                ? "AB_ClimatePatchActive"
+                : "AB_ClimatePatchDormant").Translate());
+            list.Label("AB_ClimateOffHint".Translate());
+            GUI.color = old;
+            list.Gap(4f);
+
             Rect presetRow = list.GetRect(30f);
-            float w = presetRow.width / 3f - 6f;
+            float w = presetRow.width / 4f - 7f;
             if (Widgets.ButtonText(new Rect(presetRow.x, presetRow.y, w, 30f),
+                "AB_PresetOff".Translate()))
+            {
+                ApplyPresetOff();
+            }
+            if (Widgets.ButtonText(new Rect(presetRow.x + w + 9f, presetRow.y, w, 30f),
                 "AB_PresetGentle".Translate()))
             {
                 ApplyPreset(0);
             }
-            if (Widgets.ButtonText(new Rect(presetRow.x + w + 9f, presetRow.y, w, 30f),
+            if (Widgets.ButtonText(new Rect(presetRow.x + (w + 9f) * 2f, presetRow.y, w, 30f),
                 "AB_PresetStandard".Translate()))
             {
                 ApplyPreset(1);
             }
-            if (Widgets.ButtonText(new Rect(presetRow.x + (w + 9f) * 2f, presetRow.y, w, 30f),
+            if (Widgets.ButtonText(new Rect(presetRow.x + (w + 9f) * 3f, presetRow.y, w, 30f),
                 "AB_PresetAlpine".Translate()))
             {
                 ApplyPreset(2);
@@ -782,6 +813,14 @@ namespace AsAboveSoBelow
         {
             skyTempOffsets = new List<float>(SkyPresets[index]);
             deepTempOffsets = new List<float>(DeepPresets[index]);
+        }
+
+        /// <summary>The shipped default: no altitude temperature. One button beats
+        /// dragging six sliders to zero.</summary>
+        private void ApplyPresetOff()
+        {
+            skyTempOffsets = new List<float>(OffTempDefaults);
+            deepTempOffsets = new List<float>(OffTempDefaults);
         }
 
         // ---- sky tab ---------------------------------------------------------

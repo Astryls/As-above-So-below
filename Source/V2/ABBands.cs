@@ -284,6 +284,46 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // ---- resolve cache -------------------------------------------------
+            // The descent below is pure given terrain (ShowsBelow reads defs only) and
+            // band geometry (fixed per map), so the answer is memoized per cell under a
+            // per-map version stamp bumped by ABSeeBelowDirty on every terrain write.
+            // Four section layers ask for the SAME cells in the same regen frame; the
+            // first computes, the rest hit. Encoding: 0 = resolves to nothing,
+            // else belowIndex + 1 (drop is derivable: the descent is z-only).
+            //
+            // ⚠ THREAD POSTURE: readers may be off-main (render prep). Safe without
+            // locks because the function is pure per version - concurrent writers of
+            // one cell write IDENTICAL values. The entry's stamp is Volatile-written
+            // LAST and Volatile-read FIRST, so a torn pair reads as stale and merely
+            // recomputes. The version is read BEFORE computing: if terrain changes
+            // mid-compute, we stamp the OLD version and stay invisible to readers of
+            // the new one.
+            bands.GetSeeBelowCache(out int[] cache, out int[] stamp);
+            int idx = map.cellIndices.CellToIndex(cell);
+            int version = bands.SeeBelowVersion;
+            if (System.Threading.Volatile.Read(ref stamp[idx]) == version)
+            {
+                int enc = cache[idx];
+                if (enc == 0)
+                {
+                    return false;
+                }
+                below = map.cellIndices.IndexToCell(enc - 1);
+                drop = cell.z - below.z;
+                return true;
+            }
+            bool ok = ResolveVisibleBelowUncached(map, bands, cell, out below, out drop);
+            cache[idx] = ok ? map.cellIndices.CellToIndex(below) + 1 : 0;
+            System.Threading.Volatile.Write(ref stamp[idx], version);
+            return ok;
+        }
+
+        private static bool ResolveVisibleBelowUncached(Map map, ABBandMap bands, IntVec3 cell,
+            out IntVec3 below, out int drop)
+        {
+            below = cell;
+            drop = 0;
             if (!ShowsBelow(map.terrainGrid.TerrainAt(cell)))
             {
                 return false; // opaque from here

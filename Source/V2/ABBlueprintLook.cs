@@ -8,42 +8,42 @@ using Verse;
 namespace AsAboveSoBelow
 {
     /// <summary>
-    /// Blueprints of AB2 buildables render as their FINISHED art (§74).
+    /// Blueprints of AB2 buildables render VANILLA-STYLE, but from the REAL art (§74,
+    /// reworked window 15).
     ///
-    /// Vanilla's ThingDefGenerator_Buildings.NewBlueprintDef_Thing builds every blueprint
-    /// graphic with an unconditional BlueprintColor wash - (0.82, 0.92, 1.0) at 0.6 alpha -
+    /// History, because this pass has now flipped twice. Vanilla's
+    /// ThingDefGenerator_Buildings.NewBlueprintDef_Thing builds every blueprint graphic
+    /// with an unconditional BlueprintColor wash - (0.82, 0.92, 1.0) at 0.6 alpha -
     /// through either the Transparent shader (defs that author blueprintGraphicData: the
-    /// stairs family) or EdgeDetect (everything else: the columns). Both read as a washed
-    /// out blue smear over the MORTON art, which is what "blueprints don't look like the
-    /// finished building" was. The color assignment is hardcoded C#, unreachable from XML;
-    /// the per-def blueprintGraphicData blocks in AB2_Stairs.xml stay as a no-dll fallback
-    /// (blue but at least per-def art) and this pass is the real look.
+    /// stairs family) or EdgeDetect (everything else: the columns). Over the old MORTON
+    /// placeholder art that read as a washed-out blue smear, so §74.b replaced it with the
+    /// finished art, white, translucent. FIELD REPORT (window 15) killed that look: even
+    /// at 0.42 alpha, stuff-tinted finished art reads as an ALREADY-BUILT staircase - and
+    /// under Toggleable Overlays' default slider (1.0, adopted by §79.4) it was literally
+    /// opaque. So the wash is BACK, vanilla's own default-branch treatment exactly:
+    /// EdgeDetect over the real art, BlueprintColor, colorTwo white, no stuff tint.
+    ///
+    /// What survives of §74 is the REBUILD, and it is still load-bearing: the authored
+    /// blueprintGraphicData blocks never carried the ladder's per-rotation drawOffsets, so
+    /// the generator's own graphic sat centred while the built ladder hugs the wall, and
+    /// the door-class ghost fix below still needs a rotatable blueprint graphic to wrap.
     ///
     /// Timing: HarmonyBoot is [StaticConstructorOnStartup], which runs AFTER
     /// GenerateImpliedDefs_PreResolve, so a postfix on the generator can never see these
     /// defs - the blueprint ThingDefs already exist before we can patch anything. This
-    /// pass therefore MUTATES the generated defs: rebuild the blueprint GraphicData from
-    /// the source def's real graphicData (art, class, drawSize, per-rotation offsets, link
-    /// data - the authored blueprintGraphicData blocks never carried the ladder's
-    /// drawOffsets, so its blueprint also sat centred while the built ladder hugs the
-    /// wall), drop the blue wash, keep translucency so a plan never reads as a built
-    /// thing, and re-resolve the cached graphic. GraphicData.CopyFrom nulls cachedGraphic,
-    /// and static ctors run on the main thread inside ExecuteWhenFinished, after the def
-    /// PostLoad callbacks that resolved def.graphic - so texture loads are legal here and
-    /// the reassignment sticks. Even if a PostLoad callback ran later, it would re-resolve
-    /// from bp.graphicData, which is already ours: self-healing in either order.
+    /// pass therefore MUTATES the generated defs and re-resolves the cached graphic.
+    /// GraphicData.CopyFrom nulls cachedGraphic, and static ctors run on the main thread
+    /// inside ExecuteWhenFinished, after the def PostLoad callbacks that resolved
+    /// def.graphic - so texture loads are legal here and the reassignment sticks. Even if
+    /// a PostLoad callback ran later, it would re-resolve from bp.graphicData, which is
+    /// already ours: self-healing in either order.
     /// </summary>
     [StaticConstructorOnStartup]
     public static class ABBlueprintLook
     {
-        /// <summary>
-        /// Finished art, heavily translucent: recognizable at a glance, never mistakable
-        /// for the built thing. 0.70 read as "already constructed" in the field, especially
-        /// for the dark-wood links over dark stone, so the plan now sits below vanilla's own
-        /// 0.6 blueprint wash. One number to taste - raise toward 1.0 for a more solid look,
-        /// lower for a fainter plan.
-        /// </summary>
-        internal const float DefaultBlueprintAlpha = 0.42f;
+        /// <summary>Vanilla's own blueprint wash alpha (the 0.6 in BlueprintColor). The
+        /// rgb stays the wash blue regardless; this is only the translucency.</summary>
+        internal const float DefaultBlueprintAlpha = 0.6f;
 
         /// <summary>
         /// The live alpha. NOT a const any more, because Toggleable Overlays owns a global
@@ -51,7 +51,8 @@ namespace AsAboveSoBelow
         /// blueprint def both at startup and on every settings write; rather than race it
         /// (rule 39 - and mod load order would decide the startup winner anyway) that slider
         /// is ADOPTED through <see cref="ApplyAlpha"/>. See ToggleableOverlaysCompat §4.
-        /// Read through the two consumers only: this GraphicData and Blueprint_ABBuild.
+        /// With the wash restored their default (1.0) now means "opaque BLUE plan" - the
+        /// same thing it means for every vanilla blueprint - instead of "looks built".
         /// </summary>
         internal static float BlueprintAlpha = DefaultBlueprintAlpha;
 
@@ -97,10 +98,14 @@ namespace AsAboveSoBelow
                 }
                 ThingDef bp = def.blueprintDef;
                 GraphicData gd = new GraphicData();
-                gd.CopyFrom(def.graphicData);            // the real finished-art data
+                gd.CopyFrom(def.graphicData);            // the real art: offsets, rotations, link data
                 gd.shadowData = null;                    // plans cast no shadow (generator invariant)
-                gd.shaderType = ShaderTypeDefOf.Transparent;
-                gd.color = new Color(1f, 1f, 1f, BlueprintAlpha);
+                // Vanilla's default branch verbatim (EdgeDetect + wash): what "a blueprint
+                // looks like" to a player. Only the alpha is live, for the TO slider.
+                gd.shaderType = ShaderTypeDefOf.EdgeDetect;
+                Color wash = ThingDefGenerator_Buildings.BlueprintColor;
+                gd.color = new Color(wash.r, wash.g, wash.b, BlueprintAlpha);
+                gd.colorTwo = Color.white;
                 gd.renderQueue = 2950;                   // the generator's blueprint queue
                 bp.graphicData = gd;
                 bp.graphic = gd.Graphic;                 // def.graphic was already resolved; replace it
@@ -115,14 +120,13 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
-        /// Set the plan alpha and push it through both consumers.
+        /// Set the plan alpha and rewrite the defs.
         ///
-        /// Stuffed links follow immediately and for free, because Blueprint_ABBuild.DrawColor
-        /// reads the field on every draw and Thing.DefaultGraphic re-colours from it. The
-        /// UNSTUFFED case needs the def rewritten, and needs the GraphicData cache dropped -
-        /// hence the field ref. Already-spawned blueprints keep the graphic they resolved on
-        /// first draw, which matches Toggleable Overlays' own mid-game behaviour, so a slider
-        /// change shows up on the next plan placed rather than retroactively.
+        /// Rgb is preserved (the wash), only alpha moves. The GraphicData cache must be
+        /// dropped for the change to reach the screen - hence the field ref. Already-spawned
+        /// blueprints keep the graphic they resolved on first draw, which matches Toggleable
+        /// Overlays' own mid-game behaviour, so a slider change shows up on the next plan
+        /// placed rather than retroactively.
         ///
         /// Safe to call before this class's own static ctor has run: touching it here forces
         /// the ctor first, so <see cref="Retinted"/> is always populated by the time the loop
@@ -150,29 +154,16 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
-    /// Blueprint_Build plus the finished building's stuff tint. The retinted blueprint art
-    /// is white at 0.7 alpha; the links are stuffed (Metallic/Woody/Stony) and the BUILT
-    /// thing draws stuff-colored, so without this a wooden staircase planned in sandstone
-    /// and a granite one planned identically. stuffToUse is assigned by
-    /// GenConstruct.PlaceBlueprintForBuild before spawn; Thing.Graphic sees DrawColor
-    /// differ from the graphic's color and serves the recolored version through the same
-    /// GetColoredVersion path the built thing uses. White fallback covers a null stuff.
+    /// KEPT AS A SHELL (window 15). The stairs defs name this class in blueprintClass and
+    /// spawned plans in existing saves resolve their thingClass through the def, so the
+    /// type must keep existing - but the stuff-tint DrawColor override it used to carry is
+    /// deliberately GONE. Vanilla blueprints draw the uniform BlueprintColor wash whatever
+    /// the stuff (Blueprint_Build has no DrawColor override, and Thing.DrawColor falls
+    /// through to graphicData.color because a blueprint def is not MadeFromStuff);
+    /// stuff-tinting the plan was half of what made it read as the built thing.
     /// </summary>
     public class Blueprint_ABBuild : Blueprint_Build
     {
-        public override Color DrawColor
-        {
-            get
-            {
-                ThingDef built = def.entityDefToBuild as ThingDef;
-                if (stuffToUse != null && built != null)
-                {
-                    Color c = built.GetColorForStuff(stuffToUse);
-                    return new Color(c.r, c.g, c.b, ABBlueprintLook.BlueprintAlpha);
-                }
-                return base.DrawColor;
-            }
-        }
     }
 
     /// <summary>

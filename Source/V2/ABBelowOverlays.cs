@@ -135,6 +135,12 @@ namespace AsAboveSoBelow
                 {
                     return;
                 }
+                // Fog gate: the loop below fog-rejects per thing, so a fully fogged
+                // below stack makes this walk of the whole overlay lister group a no-op.
+                if (!bands.AnyUnfoggedBelow(viewBand))
+                {
+                    return;
+                }
                 long perfT0 = ABPerfStats.Now();
                 // Test the COLUMN, not one band's rect. Offsetting the view rect by a single
                 // Slot only ever found things exactly one level down, so from level 2 upward
