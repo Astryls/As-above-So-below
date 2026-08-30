@@ -443,16 +443,28 @@ namespace AsAboveSoBelow
         /// flight by hand. Reported as "pawns can't path through the first set of stairs to
         /// proceed to the second one".
         ///
-        /// Now it BFSes the band graph (bands = nodes, wormhole pairs = edges) and returns
-        /// the best pair that makes real progress along a shortest route. Chaining then
-        /// comes for free from machinery that already exists: after each transit,
+        /// §94: it now runs an EXACT planner - Dijkstra over the anchor graph, seeded at
+        /// the destination - and returns the first crossing of the cheapest FULL chain
+        /// (walks + flights), not the best-looking single hop. Chaining still comes for
+        /// free from machinery that already exists: after each transit,
         /// ABWormholePather.Carry re-issues StartPath toward the true destination, which
-        /// re-enters TrySegment and asks for the next hop. Nothing has to know the length of
-        /// the journey.
+        /// re-enters TrySegment and asks for the next hop - and because every suffix of a
+        /// cheapest chain is itself a cheapest chain, the per-hop re-plans agree with each
+        /// other instead of needing the old strict-progress hop filter.
         ///
-        /// The x/z cost metric stays meaningful across a multi-hop route because bands are
-        /// aligned 1:1 in x/z: "how far is this anchor from the destination column" is the
-        /// right question on every level.
+        /// ⚠⚠ §94 WHY THE PREDECESSOR (min-hop BFS + greedy two-term proxy) HAD TO GO. Its
+        /// proxy measured (far anchor -> FINAL destination) RAW across bands, and upper
+        /// bands sit NORTH in map space - so for any multi-hop UP trip, "north of the
+        /// destination" and "closer to it" were the same number, up to a full Slot of free
+        /// discount. Field report: every ground -> 3rd-floor trip detoured through
+        /// battlement ladders ~a hundred cells north while the pawn stood BESIDE the grand
+        /// staircase; the reverse trip, where the same term PENALIZES northness, chose
+        /// correctly; single-hop trips (same-band term) were always clean. The proxy also
+        /// let min-hop dominate (a full-meshed elevator pair spanning N bands is ONE hop
+        /// and would beat every staircase chain regardless of walking) and measured
+        /// progress against the destination COLUMN rather than the NEXT FLIGHT
+        /// (split-flight layouts mis-picked). Dijkstra answers all three with one piece of
+        /// arithmetic - see TryPlanFirstHop.
         /// </summary>
         public static bool TryGetTransit(Map map, IntVec3 from, IntVec3 to,
             out Building_Door near, out Building_Door far)
@@ -526,26 +538,10 @@ namespace AsAboveSoBelow
                 // Same island: an ordinary intra-band path. Not our business.
                 return false;
             }
-            Dictionary<int, int> hopsToDest = HopDistances(map, list, compTo, forbidAware);
-            if (hopsToDest == null || !hopsToDest.TryGetValue(compFrom, out int hops)
-                || hops <= 0)
-            {
-                return false; // no chain of wormholes joins these islands at all
-            }
-            float best = float.MaxValue;
-            for (int i = 0; i < list.Count; i++)
-            {
-                Pair p = list[i];
-                if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
-                {
-                    continue;
-                }
-                Consider(map, from, to, compFrom, forbidAware, hops, hopsToDest, p.a, p.b,
-                    ref best, ref near, ref far);
-                Consider(map, from, to, compFrom, forbidAware, hops, hopsToDest, p.b, p.a,
-                    ref best, ref near, ref far);
-            }
-            return near != null;
+            // §94: the walkable-destination case seeds the planner with one island.
+            var destComps = new HashSet<int> { compTo };
+            return TryPlanFirstHop(map, list, from, to, compFrom, destComps, forbidAware,
+                out near, out far);
         }
 
         /// <summary>
@@ -557,7 +553,7 @@ namespace AsAboveSoBelow
         /// ⚠ IF ANY ADJACENT ISLAND IS THE PAWN'S OWN, THERE IS NOTHING TO SEGMENT and we
         /// must say so. The pawn can already stand next to the target without a staircase,
         /// and routing it through one would send a miner on a tour of the colony to reach
-        /// rock at its feet. This is the same soundness rule as `Consider`'s near-anchor
+        /// rock at its feet. This is the same soundness rule as `ConsiderHop`'s near-anchor
         /// check, applied to the far end.
         ///
         /// ⚠ NEIGHBOURS MUST BE IN THE TARGET'S OWN BAND. Bands are slices of one Map along
@@ -574,22 +570,21 @@ namespace AsAboveSoBelow
             near = null;
             far = null;
 
-            int bestHops = int.MaxValue;
-            Dictionary<int, int> bestTable = null;
-
-            // At most 8 candidates, and duplicates are common (a rock face's neighbours
-            // usually share one island), so dedupe before paying for a BFS each.
-            int[] seen = new int[8];
-            int seenCount = 0;
-
+            // §94: EVERY approach island seeds the planner at once. The old shape picked
+            // the min-hop island first and ranked anchors only within its table, so a rock
+            // face touchable from two rooms never let the genuinely cheaper approach
+            // compete. The planner's seed edge measures each destination-island anchor
+            // against the REAL target cell, so the chosen staircase is still the one
+            // nearest the rock.
+            HashSet<int> destComps = null;
             for (int i = 0; i < 8; i++)
             {
-                IntVec3 n = to + GenAdj.AdjacentCells[i];
-                if (!n.InBounds(map) || !ABBands.SameBand(map, n, to))
+                IntVec3 nb = to + GenAdj.AdjacentCells[i];
+                if (!nb.InBounds(map) || !ABBands.SameBand(map, nb, to))
                 {
                     continue;
                 }
-                int cn = ABBandComponents.ComponentOf(map, n, forbidAware);
+                int cn = ABBandComponents.ComponentOf(map, nb, forbidAware);
                 if (cn < 0)
                 {
                     continue;
@@ -599,41 +594,160 @@ namespace AsAboveSoBelow
                     // Already touchable from the pawn's own island: no transit wanted.
                     return false;
                 }
-                bool dup = false;
-                for (int s = 0; s < seenCount; s++)
+                if (destComps == null)
                 {
-                    if (seen[s] == cn)
-                    {
-                        dup = true;
-                        break;
-                    }
+                    destComps = new HashSet<int>();
                 }
-                if (dup)
+                destComps.Add(cn);
+            }
+            if (destComps == null)
+            {
+                return false;
+            }
+            return TryPlanFirstHop(map, list, from, to, compFrom, destComps, forbidAware,
+                out near, out far);
+        }
+
+        /// <summary>
+        /// §94: cost of one wormhole crossing, in walk-cell equivalents (a cell is ~13
+        /// ticks at baseline speed; the §78 hold plus climb clip is on the order of 90
+        /// ticks, so ~7 cells).
+        ///
+        /// Two duties beyond realism:
+        ///  - it keeps chains SHORT on ties: with a zero crossing cost, a two-flight chain
+        ///    with marginally less walking would beat one flight next door;
+        ///  - it is the anti-regress margin for per-hop re-planning. A crossed pawn lands
+        ///    within LandingRadius of the far anchor (diagonal ~2.8 cells), so a re-plan
+        ///    starts at most that far from where the chain thought it stood. FlightCost
+        ///    exceeds twice that displacement, so "cross straight back" can never price
+        ///    below continuing an optimal chain - the weighted successor of the old
+        ///    `farHops == hops - 1` strict-progress filter, which Dijkstra obsoletes.
+        /// </summary>
+        private const float FlightCost = 7f;
+
+        /// <summary>
+        /// §94 THE EXACT FIRST-HOP PLANNER. Multi-source Dijkstra over the anchor graph,
+        /// seeded at the destination island(s); the crossing that begins the cheapest full
+        /// chain from the pawn is returned.
+        ///
+        /// Nodes are anchor BUILDINGS (deduped - an elevator car appears once however many
+        /// counterpart pairs it sits in). Edges are the wormhole pairs at FlightCost each,
+        /// plus straight-line walks between anchors sharing an island. Seeds are the
+        /// anchors standing in a destination island, at their walk distance to the target
+        /// cell; the pawn enters the graph only through anchors of its own island, ranked
+        /// in ConsiderHop.
+        ///
+        /// ⚠⚠ NO DISTANCE IS EVER MEASURED ACROSS BANDS, BY CONSTRUCTION. Every walk edge
+        /// joins two members of ONE island, and an island never spans bands (component ids
+        /// encode their band - see ABBandComponents.ComponentOf). Crossings are a CONSTANT
+        /// because the map-space separation of a pair's ends is band scaffolding, not
+        /// geometry. That is the structural guarantee that the §94 mis-route - "north" and
+        /// "up" priced as the same number - cannot be reintroduced by any future layout.
+        ///
+        /// ⚠ STRAIGHT LINES, NOT PATHS, on the walk edges: staircase CHOICE does not see
+        /// walls or path-avoid areas between anchors; the legs themselves do. FindPathNow
+        /// per edge inside a StartPath prefix is the rejected perf trap (see
+        /// ABTransitVisuals' banner on synchronous A*).
+        ///
+        /// ⚠ CROSSINGS ARE UNDIRECTED. Every link type today conducts both ways; if a
+        /// one-way link ever ships, the cross-edge relaxation below needs a direction
+        /// check.
+        ///
+        /// Budget: O(nodes^2) with linear-scan extraction, nodes = 2 x live pairs, only on
+        /// genuinely cross-island StartPaths - the same order of work as the per-call
+        /// dictionaries the old BFS built (and the Touch case ran up to eight of those).
+        /// </summary>
+        private static bool TryPlanFirstHop(Map map, List<Pair> list, IntVec3 from,
+            IntVec3 to, int compFrom, HashSet<int> destComps, bool forbidAware,
+            out Building_Door near, out Building_Door far)
+        {
+            near = null;
+            far = null;
+
+            // ---- nodes ------------------------------------------------------------
+            var index = new Dictionary<Building_Door, int>();
+            var nodes = new List<Building_Door>();
+            var comps = new List<int>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                Pair p = list[i];
+                if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
                 {
                     continue;
                 }
-                seen[seenCount++] = cn;
-
-                Dictionary<int, int> table = HopDistances(map, list, cn, forbidAware);
-                if (table == null || !table.TryGetValue(compFrom, out int hops) || hops <= 0)
-                {
-                    continue; // no chain of wormholes joins the pawn to this approach island
-                }
-                if (hops < bestHops)
-                {
-                    bestHops = hops;
-                    bestTable = table;
-                }
+                AddNode(map, p.a, forbidAware, index, nodes, comps);
+                AddNode(map, p.b, forbidAware, index, nodes, comps);
             }
-
-            if (bestTable == null)
+            int n = nodes.Count;
+            if (n == 0)
             {
                 return false;
             }
 
-            // Anchor selection is unchanged, and still measures the far anchor against the
-            // REAL target cell so the chosen staircase is the one nearest the rock.
-            float best = float.MaxValue;
+            // ---- Dijkstra from the destination ------------------------------------
+            // dist[i] = cheapest cost from STANDING AT nodes[i] to reaching `to`.
+            float[] dist = new float[n];
+            bool[] done = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                dist[i] = destComps.Contains(comps[i])
+                    ? (nodes[i].Position - to).LengthHorizontal
+                    : float.MaxValue;
+            }
+            for (int round = 0; round < n; round++)
+            {
+                int u = -1;
+                float best = float.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    if (!done[i] && dist[i] < best)
+                    {
+                        best = dist[i];
+                        u = i;
+                    }
+                }
+                if (u < 0)
+                {
+                    break; // everything still open is unreachable
+                }
+                done[u] = true;
+                // Walk edges: every other anchor on the settled node's island.
+                for (int i = 0; i < n; i++)
+                {
+                    if (done[i] || comps[i] != comps[u])
+                    {
+                        continue;
+                    }
+                    float cand = dist[u]
+                        + (nodes[i].Position - nodes[u].Position).LengthHorizontal;
+                    if (cand < dist[i])
+                    {
+                        dist[i] = cand;
+                    }
+                }
+                // Crossing edges: every pair this building is an end of.
+                for (int i = 0; i < list.Count; i++)
+                {
+                    Pair p = list[i];
+                    Building_Door other = p.a == nodes[u] ? p.b
+                        : (p.b == nodes[u] ? p.a : null);
+                    if (other == null || !index.TryGetValue(other, out int vi) || vi < 0
+                        || done[vi])
+                    {
+                        continue;
+                    }
+                    float cand = dist[u] + FlightCost;
+                    if (cand < dist[vi])
+                    {
+                        dist[vi] = cand;
+                    }
+                }
+            }
+
+            // ---- the first hop ----------------------------------------------------
+            // The first hop IS a crossing whose near end the pawn can walk to, so rank
+            // every pair orientation by walk-in + FlightCost + settled far-side cost.
+            float bestTotal = float.MaxValue;
             for (int i = 0; i < list.Count; i++)
             {
                 Pair p = list[i];
@@ -641,132 +755,78 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                Consider(map, from, to, compFrom, forbidAware, bestHops, bestTable, p.a, p.b,
-                    ref best, ref near, ref far);
-                Consider(map, from, to, compFrom, forbidAware, bestHops, bestTable, p.b, p.a,
-                    ref best, ref near, ref far);
+                ConsiderHop(from, compFrom, index, comps, dist, p.a, p.b,
+                    ref bestTotal, ref near, ref far);
+                ConsiderHop(from, compFrom, index, comps, dist, p.b, p.a,
+                    ref bestTotal, ref near, ref far);
             }
             return near != null;
         }
 
-        private sealed class ChainCache
-        {
-            public int builtVersion = -1;
-
-            public readonly Dictionary<int, Dictionary<int, int>> byTarget =
-                new Dictionary<int, Dictionary<int, int>>();
-        }
-
-        private static readonly ConditionalWeakTable<Map, ChainCache> chainCache =
-            new ConditionalWeakTable<Map, ChainCache>();
-
         /// <summary>
-        /// Hops from every reachable component to <paramref name="target"/> over the wormhole
-        /// graph. Absent key means unreachable.
+        /// Register one anchor building as a planner node, resolving its island ONCE.
         ///
-        /// ⚠ A DICTIONARY, NOT AN ARRAY, AND THAT IS THE ONE REAL COST OF PHASE 2. Bands were
-        /// a dense 0..bandCount-1 range so an int[] indexed directly; component ids are dense
-        /// too but there are far more of them (12 on a first real map, and player building
-        /// only adds islands), and more importantly the set CHANGES as walls go up. Sizing an
-        /// array to the live component count every call would allocate just as much. The
-        /// graph is still tiny - one entry per island that can reach the target.
+        /// ⚠ AN ANCHOR WITH NO COMPONENT IS AN ANCHOR NOBODY CAN STAND ON, and it is not in
+        /// the graph at all - not a waypoint, not a crossing end, not a seed. That keeps
+        /// the old guarantees: a staircase sealed inside rock conducts nothing, and §59's
+        /// widening still holds - anchors are Building_Door subclasses, so a FORBIDDEN
+        /// staircase resolves to -1 on the forbid-aware partition and forbidding it
+        /// actually closes it to colonists. Recorded as index -1 so each pair membership
+        /// does not re-resolve the island of a dropped building.
         /// </summary>
-        private static Dictionary<int, int> HopDistances(Map map, List<Pair> list, int target,
-            bool forbidAware)
+        private static void AddNode(Map map, Building_Door d, bool forbidAware,
+            Dictionary<Building_Door, int> index, List<Building_Door> nodes, List<int> comps)
         {
-            if (target < 0)
+            if (index.ContainsKey(d))
             {
-                return null;
+                return;
             }
-            // Adjacency between components, built from the wormhole pairs. A pair joins the
-            // component containing anchor A to the component containing anchor B.
-            var adj = new Dictionary<int, List<int>>();
-            for (int i = 0; i < list.Count; i++)
+            int c = ABBandComponents.ComponentOf(map, d.Position, forbidAware);
+            if (c < 0)
             {
-                Pair p = list[i];
-                if (p.a == null || p.b == null || !p.a.Spawned || !p.b.Spawned)
-                {
-                    continue;
-                }
-                int ca = ABBandComponents.ComponentOf(map, p.a.Position, forbidAware);
-                int cb = ABBandComponents.ComponentOf(map, p.b.Position, forbidAware);
-                // ⚠ AN ANCHOR WITH NO COMPONENT IS AN ANCHOR NOBODY CAN STAND ON. Dropping it
-                // is the whole point: the old band-keyed version would happily route a pawn
-                // to a staircase sealed inside rock.
-                //
-                // §59 WIDENED WHAT "NOBODY CAN STAND ON" MEANS, AND THAT IS A FEATURE. Our
-                // anchors are Building_Door subclasses, so a FORBIDDEN staircase resolves to
-                // -1 on the forbid-aware partition and is dropped from the graph here -
-                // forbidding a staircase now actually closes it to colonists. Previously the
-                // anchor kept its island, the route was planned straight through it, and only
-                // the leg to it failed.
-                if (ca < 0 || cb < 0 || ca == cb)
-                {
-                    continue;
-                }
-                if (!adj.TryGetValue(ca, out List<int> la))
-                {
-                    adj[ca] = la = new List<int>();
-                }
-                la.Add(cb);
-                if (!adj.TryGetValue(cb, out List<int> lb))
-                {
-                    adj[cb] = lb = new List<int>();
-                }
-                lb.Add(ca);
+                index.Add(d, -1);
+                return;
             }
-
-            var dist = new Dictionary<int, int> { [target] = 0 };
-            var queue = new List<int> { target };
-            for (int head = 0; head < queue.Count; head++)
-            {
-                int cur = queue[head];
-                if (!adj.TryGetValue(cur, out List<int> ns))
-                {
-                    continue;
-                }
-                for (int n = 0; n < ns.Count; n++)
-                {
-                    if (!dist.ContainsKey(ns[n]))
-                    {
-                        dist[ns[n]] = dist[cur] + 1;
-                        queue.Add(ns[n]);
-                    }
-                }
-            }
-            return dist;
+            index.Add(d, nodes.Count);
+            nodes.Add(d);
+            comps.Add(c);
         }
 
-        private static void Consider(Map map, IntVec3 from, IntVec3 to, int compFrom,
-            bool forbidAware, int hops, Dictionary<int, int> hopsToDest,
-            Building_Door candNear, Building_Door candFar, ref float best,
+        /// <summary>Rank one pair orientation as the pawn's first hop: walk from the pawn
+        /// to the near end, cross, then the far end's settled cost-to-destination.</summary>
+        private static void ConsiderHop(IntVec3 from, int compFrom,
+            Dictionary<Building_Door, int> index, List<int> comps, float[] dist,
+            Building_Door candNear, Building_Door candFar, ref float bestTotal,
             ref Building_Door near, ref Building_Door far)
         {
+            if (!index.TryGetValue(candNear, out int ni) || ni < 0
+                || !index.TryGetValue(candFar, out int fi) || fi < 0)
+            {
+                return; // an end nobody can stand on never became a node (§59)
+            }
             // ⚠ THE NEAR ANCHOR MUST BE IN THE PAWN'S OWN ISLAND, NOT MERELY ITS OWN BAND.
-            // This one line is the soundness fix: under the band-keyed version a pawn could be
-            // dispatched to a staircase on the correct level that it had no way of walking to,
-            // and would then stall at the edge of its island re-issuing the same order.
-            if (ABBandComponents.ComponentOf(map, candNear.Position, forbidAware) != compFrom)
+            // Still the soundness line it always was: a pawn dispatched to a staircase it
+            // cannot walk to stalls at the edge of its island re-issuing the same order.
+            if (comps[ni] != compFrom)
             {
                 return;
             }
-            int farComp = ABBandComponents.ComponentOf(map, candFar.Position, forbidAware);
-            if (farComp < 0 || !hopsToDest.TryGetValue(farComp, out int farHops))
+            if (comps[fi] == comps[ni])
             {
-                return;
+                return; // both ends in one island conduct nothing worth crossing
             }
-            // Only hops that get strictly CLOSER to the destination island. Without this a
-            // pawn could be sent sideways or back the way it came and ping-pong forever,
-            // because each hop re-plans from scratch with no memory of the last one.
-            if (farHops != hops - 1)
+            if (dist[fi] >= float.MaxValue)
             {
-                return;
+                return; // no chain from the far side reaches the destination
             }
-            float cost = (candNear.Position - from).LengthHorizontal
-                + (candFar.Position - to).LengthHorizontal;
-            if (cost < best)
+            // The walk-in term is same-band by the compFrom check; the far side's cost is
+            // built from same-island walks and constant flights - nothing here measures
+            // across a band boundary (rule 75).
+            float total = (candNear.Position - from).LengthHorizontal + FlightCost
+                + dist[fi];
+            if (total < bestTotal)
             {
-                best = cost;
+                bestTotal = total;
                 near = candNear;
                 far = candFar;
             }
