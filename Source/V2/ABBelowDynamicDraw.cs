@@ -46,17 +46,18 @@ namespace AsAboveSoBelow
         public static float BelowDrawScale = 1f;
 
         /// <summary>Armed ONLY around the three draw phases of ONE below realtime THING
-        /// (never pawns). Read by Patch_Graphic_ABBelowLegacyCompDraw, which translates
-        /// legacy position-blind comp overlay draws - CompFireOverlay's campfire flame
-        /// above all - into the view band. Zero outside the window, same arm/disarm
-        /// discipline as BelowDrawOffsetZ next door (§95 Tier E).</summary>
+        /// (never pawns - the atlas-bake trap, see ABBelowMeshTranslate's banner). Read by
+        /// ABBelowMeshTranslate's Graphics.Internal_DrawMesh prefix, which translates every
+        /// position-blind map-space draw - campfire flames, windmill blades, hoses, domes,
+        /// bars, lines - into the view band. Zero outside the window, same arm/disarm
+        /// discipline as BelowDrawOffsetZ next door (§95 Tiers E/E2).</summary>
         public static float RealtimeDropZ;
 
         /// <summary>The raw source-band z of the thing currently being drawn, for the
-        /// discrimination test in the Graphic.Draw patch: a call still NEAR this z is a
-        /// legacy comp reading parent.DrawPos; a call already a Slot away is the thing's
-        /// own graphic receiving our translated loc. Bands are >= a Slot apart, so the
-        /// 8-cell tolerance can never confuse the two.</summary>
+        /// discrimination test in the mesh-translate seam: a matrix still NEAR this z is a
+        /// legacy draw reading parent.DrawPos; one already a Slot away is the thing's own
+        /// graphic built from our translated loc. Bands are >= a Slot apart, so the 8-cell
+        /// tolerance can never confuse the two.</summary>
         public static float RealtimeRawZ;
 
         private static readonly System.Text.StringBuilder report = new System.Text.StringBuilder();
@@ -359,11 +360,11 @@ namespace AsAboveSoBelow
                     // while their cached render results stay flagged valid; skipping either
                     // phase is how a below thing ends up drawn stale. Do not re-attempt
                     // without a measured reason.
-                    // §95 Tier E: legacy comps (CompFireOverlay et al) draw their overlay
-                    // at parent.DrawPos, ignoring our loc - the campfire's flame landed on
-                    // the source band, off-camera. Arm the translation window for the
-                    // Graphic.Draw patch; cleared in a finally so a throw cannot leave
-                    // every later Graphic.Draw on the map translated a band down.
+                    // §95 Tiers E/E2: legacy comps and buildings draw overlays at
+                    // parent.DrawPos, ignoring our loc - flames, blades, hoses, bars all
+                    // landed on the source band, off-camera. Arm the translation window
+                    // for the mesh-translate seam; cleared in a finally so a throw cannot
+                    // leave every later DrawMesh on the map translated a band down.
                     RealtimeDropZ = dropRt;
                     RealtimeRawZ = t.DrawPos.z;
                     try
