@@ -45,6 +45,20 @@ namespace AsAboveSoBelow
         /// shrunk when the setting is on, and the two must disarm independently.</summary>
         public static float BelowDrawScale = 1f;
 
+        /// <summary>Armed ONLY around the three draw phases of ONE below realtime THING
+        /// (never pawns). Read by Patch_Graphic_ABBelowLegacyCompDraw, which translates
+        /// legacy position-blind comp overlay draws - CompFireOverlay's campfire flame
+        /// above all - into the view band. Zero outside the window, same arm/disarm
+        /// discipline as BelowDrawOffsetZ next door (§95 Tier E).</summary>
+        public static float RealtimeDropZ;
+
+        /// <summary>The raw source-band z of the thing currently being drawn, for the
+        /// discrimination test in the Graphic.Draw patch: a call still NEAR this z is a
+        /// legacy comp reading parent.DrawPos; a call already a Slot away is the thing's
+        /// own graphic receiving our translated loc. Bands are >= a Slot apart, so the
+        /// 8-cell tolerance can never confuse the two.</summary>
+        public static float RealtimeRawZ;
+
         private static readonly System.Text.StringBuilder report = new System.Text.StringBuilder();
 
         public static void DrawBelowPawns(Map map)
@@ -345,9 +359,24 @@ namespace AsAboveSoBelow
                     // while their cached render results stay flagged valid; skipping either
                     // phase is how a below thing ends up drawn stale. Do not re-attempt
                     // without a measured reason.
-                    t.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
-                    t.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
-                    t.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                    // §95 Tier E: legacy comps (CompFireOverlay et al) draw their overlay
+                    // at parent.DrawPos, ignoring our loc - the campfire's flame landed on
+                    // the source band, off-camera. Arm the translation window for the
+                    // Graphic.Draw patch; cleared in a finally so a throw cannot leave
+                    // every later Graphic.Draw on the map translated a band down.
+                    RealtimeDropZ = dropRt;
+                    RealtimeRawZ = t.DrawPos.z;
+                    try
+                    {
+                        t.DynamicDrawPhaseAt(DrawPhase.EnsureInitialized, loc);
+                        t.DynamicDrawPhaseAt(DrawPhase.ParallelPreDraw, loc);
+                        t.DynamicDrawPhaseAt(DrawPhase.Draw, loc);
+                    }
+                    finally
+                    {
+                        RealtimeDropZ = 0f;
+                        RealtimeRawZ = 0f;
+                    }
                     drawn++;
                 }
                 catch (Exception e)
