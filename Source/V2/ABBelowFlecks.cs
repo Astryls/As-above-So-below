@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 using Verse;
@@ -48,9 +50,22 @@ namespace AsAboveSoBelow
     /// method looks DOWN a column and accepts AB_WallTop (seeing a wall top is legitimate),
     /// but looking UP through your own ceiling requires strict open air the whole way. Same
     /// pair of rules, same one copy each, as the projectile and skyfaller relays.
+    ///
+    /// ⚠ §95 SEAM MOVE (rule 16 extended): FleckManager.CreateFleck is NOT the only
+    /// creation seam. Owlchemist's SimpleFX family caches the FleckSystem and calls
+    /// system.CreateFleck DIRECTLY (chimney smoke was invisible cross-band). The concrete
+    /// body every path funnels through is FleckSystemBase&lt;TFleck&gt;.CreateFleck - a
+    /// CLOSED-GENERIC method per TFleck struct, so there is no single MethodInfo to patch.
+    /// ABFleckMirrorBoot therefore enumerates every fleckSystemClass in the DefDatabase at
+    /// startup, resolves each class's concrete CreateFleck (walking up to its closed base),
+    /// dedupes by MethodInfo and patches each - vanilla, BloodAnimations, and any modded
+    /// system alike. The manager-level patch is GONE (both seams live = double mirror);
+    /// it survives only as ABFleckMirror.PostfixManager, the rule-33 fallback installed
+    /// when enumeration patches NOTHING. Binding is positional (__0) because
+    /// FleckSystemBase names the parameter "creationData" while the abstract declares
+    /// "fleckData" - and a modded override could pick anything.
     /// </summary>
-    [HarmonyPatch(typeof(FleckManager), nameof(FleckManager.CreateFleck))]
-    public static class Patch_FleckManager_ABMirrorBelow
+    public static class ABFleckMirror
     {
         /// <summary>The mirrored creation re-enters the patched method; without this it is
         /// unbounded recursion, and a StackOverflow in .NET is UNCATCHABLE.</summary>
@@ -71,7 +86,20 @@ namespace AsAboveSoBelow
             mirroring = false;
         }
 
-        private static void Postfix(FleckManager __instance, FleckCreationData fleckData)
+        internal static void Postfix(FleckSystem __instance, FleckCreationData __0)
+        {
+            MirrorCore(__instance?.parent?.parent, __0);
+        }
+
+        /// <summary>Rule-33 fallback shape: the pre-§95 manager seam, installed by
+        /// ABFleckMirrorBoot ONLY when the system-level enumeration patched nothing.
+        /// Misses direct system.CreateFleck callers, but a degraded mirror beats none.</summary>
+        internal static void PostfixManager(FleckManager __instance, FleckCreationData __0)
+        {
+            MirrorCore(__instance?.parent, __0);
+        }
+
+        private static void MirrorCore(Map map, FleckCreationData fleckData)
         {
             if (mirroring)
             {
@@ -79,7 +107,6 @@ namespace AsAboveSoBelow
             }
             try
             {
-                Map map = __instance?.parent;
                 if (map == null || fleckData.def == null)
                 {
                     return;
@@ -150,7 +177,10 @@ namespace AsAboveSoBelow
                 mirroring = true;
                 try
                 {
-                    __instance.CreateFleck(d);
+                    // Through the MANAGER, deliberately: it re-normalizes y from the def
+                    // and dispatches to the right (patched) system, where the latch above
+                    // stops the recursion. Works identically under the fallback seam.
+                    map.flecks.CreateFleck(d);
                 }
                 finally
                 {
@@ -164,6 +194,92 @@ namespace AsAboveSoBelow
                 // would silently disable every later mirror.
                 mirroring = false;
                 Log.ErrorOnce(ABLog.Tag + " below-fleck mirror threw: " + e, 0x2B10F1);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Seats ABFleckMirror.Postfix on every concrete CreateFleck override reachable from a
+    /// loaded FleckDef. [StaticConstructorOnStartup] is the timing requirement, not
+    /// decoration: fleckSystemClass values come from the DefDatabase, which is only
+    /// complete after defs load - HarmonyBoot's PatchAll pass runs too early to see them,
+    /// which is why this class owns its own installation (same shape as ABDesignatorClamp).
+    /// Per-method try/catch: one alien override that Harmony cannot chew must not take the
+    /// vanilla seams down with it (PipeSystemCompat's lesson, inverted).
+    /// </summary>
+    [StaticConstructorOnStartup]
+    public static class ABFleckMirrorBoot
+    {
+        static ABFleckMirrorBoot()
+        {
+            int patched = 0;
+            try
+            {
+                HarmonyMethod postfix = new HarmonyMethod(
+                    AccessTools.Method(typeof(ABFleckMirror), nameof(ABFleckMirror.Postfix)));
+                HashSet<MethodBase> seen = new HashSet<MethodBase>();
+                List<FleckDef> defs = DefDatabase<FleckDef>.AllDefsListForReading;
+                for (int i = 0; i < defs.Count; i++)
+                {
+                    Type cls = defs[i]?.fleckSystemClass;
+                    if (cls == null)
+                    {
+                        continue;
+                    }
+                    MethodInfo m = null;
+                    try
+                    {
+                        m = AccessTools.Method(cls, "CreateFleck",
+                            new[] { typeof(FleckCreationData) });
+                    }
+                    catch (Exception)
+                    {
+                        // An unresolvable foreign class; skip it, keep enumerating.
+                    }
+                    if (m == null || m.IsAbstract || !seen.Add(m))
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        HarmonyBoot.Harmony.Patch(m, postfix: postfix);
+                        patched++;
+                    }
+                    catch (Exception e)
+                    {
+                        Log.WarningOnce(ABLog.Tag + " fleck mirror could not seat on "
+                            + cls.FullName + ".CreateFleck; flecks from that system will"
+                            + " not mirror across levels. " + e.Message, 0x2B10DC);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " fleck mirror enumeration threw: " + e, 0x2B10DD);
+            }
+            if (patched == 0)
+            {
+                // Rule 33: a filter that can reject everything must say so - and this one
+                // falls back to the old manager seam rather than shipping no mirror at all.
+                try
+                {
+                    HarmonyBoot.Harmony.Patch(
+                        AccessTools.Method(typeof(FleckManager), nameof(FleckManager.CreateFleck)),
+                        postfix: new HarmonyMethod(AccessTools.Method(
+                            typeof(ABFleckMirror), nameof(ABFleckMirror.PostfixManager))));
+                    Log.WarningOnce(ABLog.Tag + " fleck mirror fell back to the manager seam"
+                        + " (system enumeration patched nothing); direct system.CreateFleck"
+                        + " callers (SimpleFX Smoke) will not mirror across levels.", 0x2B10DE);
+                }
+                catch (Exception e)
+                {
+                    Log.ErrorOnce(ABLog.Tag + " fleck mirror fallback failed too: " + e,
+                        0x2B10DF);
+                }
+            }
+            else
+            {
+                ABLog.Dev("fleck mirror seated on " + patched + " CreateFleck override(s).");
             }
         }
     }
