@@ -48,15 +48,33 @@ namespace AsAboveSoBelow
 
         public static bool ForceDepthBlack;
 
+        /// <summary>§96 round 2: publish _MapSize as a SQUARE (x,x) instead of the full
+        /// stack (x,z). By elimination (run #448: flow exonerated, depth alive, subcamera
+        /// synced) the 1:4 aspect of the stacked map's _MapSize is the last divergent
+        /// shader input - and the old "disproof" never tested a square value: both the
+        /// full stack and the one-band republish were taller than wide.</summary>
+        public static bool ForceSquareMapSize;
+
+        /// <summary>Material-local delivery of the same square: Unity lets a material
+        /// property SHADOW a global of the same name, but only when the shader declares
+        /// the property - HasProperty says whether this delivery can work at all. If it
+        /// does, the eventual fix can scope itself to water materials and leave every
+        /// other _MapSize consumer untouched.</summary>
+        private static bool waterMatsSquare;
+
+        private static readonly System.Collections.Generic.HashSet<Material> waterMats =
+            new System.Collections.Generic.HashSet<Material>();
+
         private static Texture2D flowBlackTex;
 
         private static Texture2D flowNorthTex;
 
         private static Texture2D depthBlackTex;
 
-        public static bool AnyOverride => ForceFlowBlack || ForceFlowNorth || ForceDepthBlack;
+        public static bool AnyOverride => ForceFlowBlack || ForceFlowNorth || ForceDepthBlack
+            || ForceSquareMapSize;
 
-        public static void ApplyOverrides()
+        public static void ApplyOverrides(WaterInfo wi)
         {
             EnsureTextures();
             if (ForceFlowBlack)
@@ -70,6 +88,11 @@ namespace AsAboveSoBelow
             if (ForceDepthBlack)
             {
                 Shader.SetGlobalTexture(ShaderPropertyIDs.WaterOutputTex, depthBlackTex);
+            }
+            if (ForceSquareMapSize && wi?.map != null)
+            {
+                float x = wi.map.Size.x;
+                Shader.SetGlobalVector(ShaderPropertyIDs.MapSize, new Vector4(x, x));
             }
         }
 
@@ -133,6 +156,89 @@ namespace AsAboveSoBelow
                 MessageTypeDefOf.TaskCompletion, false);
         }
 
+        [DebugAction("As above", "AB2: water lab - toggle _MapSize SQUARE (global)",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void ToggleSquareMapSize()
+        {
+            ForceSquareMapSize = !ForceSquareMapSize;
+            if (!ForceSquareMapSize)
+            {
+                // Hand the global straight back to vanilla's value rather than waiting a
+                // frame for SetTextures to republish it.
+                Map map = Find.CurrentMap;
+                if (map != null)
+                {
+                    Shader.SetGlobalVector(ShaderPropertyIDs.MapSize,
+                        new Vector4(map.Size.x, map.Size.z));
+                }
+            }
+            Messages.Message("AB2 water lab: _MapSize " + (ForceSquareMapSize
+                    ? "FORCED SQUARE (x,x) - watch fog/edge effects for collateral too"
+                    : "vanilla (x,z full stack)"),
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
+        [DebugAction("As above", "AB2: water lab - toggle _MapSize SQUARE (water mats only)",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void ToggleSquareWaterMats()
+        {
+            try
+            {
+                Map map = Find.CurrentMap;
+                if (map == null)
+                {
+                    return;
+                }
+                if (waterMats.Count == 0)
+                {
+                    foreach (TerrainDef t in DefDatabase<TerrainDef>.AllDefsListForReading)
+                    {
+                        if (t == null || !t.IsWater)
+                        {
+                            continue;
+                        }
+                        try
+                        {
+                            if (t.DrawMatSingle != null)
+                            {
+                                waterMats.Add(t.DrawMatSingle);
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            // a def with no graphic; irrelevant
+                        }
+                        if (t.waterDepthMaterial != null)
+                        {
+                            waterMats.Add(t.waterDepthMaterial);
+                        }
+                    }
+                }
+                waterMatsSquare = !waterMatsSquare;
+                Vector4 v = waterMatsSquare
+                    ? new Vector4(map.Size.x, map.Size.x)
+                    : new Vector4(map.Size.x, map.Size.z);
+                int hasProp = 0;
+                foreach (Material m in waterMats)
+                {
+                    if (m.HasProperty(ShaderPropertyIDs.MapSize))
+                    {
+                        hasProp++;
+                    }
+                    m.SetVector(ShaderPropertyIDs.MapSize, v);
+                }
+                Messages.Message("AB2 water lab: water mats _MapSize "
+                    + (waterMatsSquare ? "SQUARE" : "full-stack") + " on " + waterMats.Count
+                    + " material(s); " + hasProp + " declare the property (0 = shadowing"
+                    + " cannot work, use the GLOBAL toggle)",
+                    MessageTypeDefOf.TaskCompletion, false);
+            }
+            catch (Exception e)
+            {
+                Log.Error(ABLog.Tag + " water lab mats toggle threw: " + e);
+            }
+        }
+
         [DebugAction("As above", "AB2: water lab - paint test pond",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void PaintTestPond()
@@ -186,7 +292,34 @@ namespace AsAboveSoBelow
                 sb.Append(ABWaterBand.Report(map));
                 sb.AppendLine("--- lab state ---");
                 sb.AppendLine("overrides: flowBlack=" + ForceFlowBlack
-                    + " flowNorth=" + ForceFlowNorth + " depthBlack=" + ForceDepthBlack);
+                    + " flowNorth=" + ForceFlowNorth + " depthBlack=" + ForceDepthBlack
+                    + " squareMapSize=" + ForceSquareMapSize
+                    + " waterMatsSquare=" + waterMatsSquare);
+                if (map != null)
+                {
+                    int withProp = 0;
+                    int total = 0;
+                    foreach (TerrainDef t in DefDatabase<TerrainDef>.AllDefsListForReading)
+                    {
+                        if (t == null || !t.IsWater)
+                        {
+                            continue;
+                        }
+                        Material m = null;
+                        try { m = t.DrawMatSingle; } catch (Exception) { }
+                        if (m != null)
+                        {
+                            total++;
+                            bool has = m.HasProperty(ShaderPropertyIDs.MapSize);
+                            if (has) { withProp++; }
+                            sb.AppendLine("  waterMat " + t.defName + ": shader="
+                                + (m.shader != null ? m.shader.name : "NULL")
+                                + " hasMapSizeProp=" + has);
+                        }
+                    }
+                    sb.AppendLine("water materials with _MapSize property: " + withProp
+                        + " of " + total);
+                }
                 sb.AppendLine("drawTerrainWater=" + DebugViewSettings.drawTerrainWater
                     + " belowWaterPass=" + ABV2Debug.DrawBelowWater);
                 ABBandMap bands = map != null ? ABBands.CompOf(map) : null;
@@ -232,11 +365,11 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(WaterInfo), nameof(WaterInfo.SetTextures))]
     public static class Patch_WaterInfo_ABWaterLab
     {
-        private static void Postfix()
+        private static void Postfix(WaterInfo __instance)
         {
             if (ABWaterLab.AnyOverride)
             {
-                ABWaterLab.ApplyOverrides();
+                ABWaterLab.ApplyOverrides(__instance);
             }
         }
     }
