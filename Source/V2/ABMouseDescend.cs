@@ -368,6 +368,20 @@ namespace AsAboveSoBelow
             yield return E("MultiPawnGotoController.ProcessInputEvents",
                 AccessTools.Method(typeof(MultiPawnGotoController),
                     nameof(MultiPawnGotoController.ProcessInputEvents)));
+
+            // (a) DEV TOOLS (field report, w17). A ToolMap debug action reads
+            // UI.MouseCell() inside its click lambda, and every lambda is invoked from
+            // DebugTool.DebugToolOnGUI - so this one entry covers every dev cell tool,
+            // stock and modded, label draw included. Without it, a dev tool pointed at
+            // open air on a sky band acts on the GROUND band's visible cell: the descent
+            // was designed for gameplay clicks, and a god tool is the user's explicit
+            // call on the cell they point at - same policy as the designator entries
+            // above (rule 1), and rule 70's exact shape: a consumer that meant the RAW
+            // value, fixed by one more exclusion. NOT a w17 regression - this gap shipped
+            // with §87 itself (w12) and went unnoticed because the stair-rig dev action
+            // is camera-anchored and designators were already exempt.
+            yield return E("DebugTool.DebugToolOnGUI",
+                AccessTools.Method(typeof(LudeonTK.DebugTool), "DebugToolOnGUI"));
         }
 
         private static void Prefix()
