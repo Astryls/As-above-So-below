@@ -119,23 +119,51 @@ namespace AsAboveSoBelow
         /// <summary>Recover the band layout from a map's dimensions alone - see the preview
         /// note in TryPendingSurfaceRect. Requires the current level plan to be the one the
         /// size was built from, which for a preview is true by construction.</summary>
+        /// <summary>⚠ TEMPORARY DIAGNOSTIC (w18): the inference is what a MAP PREVIEW relies
+        /// on, and it is silent about WHY it declined. Logged once per map (reference
+        /// compare, no allocation) so a preview generation reports the size it actually
+        /// received exactly once instead of once per genstep patch.</summary>
+        private static Map inferLoggedFor;
+
         private static bool TryInferredSurfaceRect(Map map, out CellRect surface, out int slot)
         {
             surface = default(CellRect);
             slot = 0;
             int bands = ABV2.BandCount;
+            bool logThis = !ReferenceEquals(inferLoggedFor, map);
+            if (logThis)
+            {
+                inferLoggedFor = map;
+            }
             if (!ABV2.Enabled || bands <= 1)
             {
+                if (logThis)
+                {
+                    ABLog.Dev("V2: inferred layout DECLINED for " + map.Size
+                        + " - enabled=" + ABV2.Enabled + " bands=" + bands);
+                }
                 return false;
             }
             int bandHeight = map.Size.x;
             int s = ABBandMap.SlotFor(bandHeight);
             if (s <= 0 || bands * s != map.Size.z)
             {
+                if (logThis)
+                {
+                    ABLog.Dev("V2: inferred layout DECLINED for " + map.Size
+                        + " - expected z=" + (bands * s) + " (bands=" + bands + " x slot=" + s
+                        + " from width " + bandHeight + "), got z=" + map.Size.z
+                        + ". THIS MAP IS NOT STACKED.");
+                }
                 return false;
             }
             slot = s;
             surface = new CellRect(0, ABV2.SurfaceBand * s, map.Size.x, bandHeight);
+            if (logThis)
+            {
+                ABLog.Dev("V2: inferred layout ACCEPTED for " + map.Size + " - bands=" + bands
+                    + " slot=" + s + " surface rows " + surface.minZ + ".." + surface.maxZ);
+            }
             return true;
         }
 

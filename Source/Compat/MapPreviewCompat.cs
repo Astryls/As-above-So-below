@@ -327,11 +327,24 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!ShouldInflateForTile(world, tile) || AlreadyStacked(size))
+                // ⚠ TEMPORARY DIAGNOSTIC (w18). Everything upstream of this method checks
+                // out on paper, so the only unanswered question is whether the transform is
+                // REACHED and what it decides. Behind verboseLogging like every other compat
+                // line, i.e. off for players.
+                bool inflate = ShouldInflateForTile(world, tile);
+                bool already = AlreadyStacked(size);
+                if (!inflate || already)
                 {
+                    ABLog.Dev("Map Preview transform CALLED: in=" + size.x + "x" + size.z
+                        + " banding=" + Banding + " bands=" + ABV2.BandCount
+                        + " inflate=" + inflate + " alreadyStacked=" + already
+                        + " -> UNCHANGED");
                     return size;
                 }
-                return Stacked(size.x, size.z);
+                IntVec2 stacked = Stacked(size.x, size.z);
+                ABLog.Dev("Map Preview transform CALLED: in=" + size.x + "x" + size.z
+                    + " bands=" + ABV2.BandCount + " -> " + stacked.x + "x" + stacked.z);
+                return stacked;
             }
             catch (Exception e)
             {
@@ -648,6 +661,9 @@ namespace AsAboveSoBelow
         {
             try
             {
+                // ⚠ TEMPORARY DIAGNOSTIC (w18): says WHICH of the two size paths is live.
+                ABLog.Dev("Map Preview FALLBACK postfix fired: in=" + __result.x + "x"
+                    + __result.z + " inflate=" + MapPreviewCompat.ShouldInflateFor(mapParent));
                 if (!MapPreviewCompat.ShouldInflateFor(mapParent))
                 {
                     return;
