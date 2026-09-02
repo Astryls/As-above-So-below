@@ -382,6 +382,11 @@ namespace AsAboveSoBelow
             internal Func<IntVec3, BiomeDef> biomeRead;
             internal Action<IntVec3, BiomeDef> biomeWrite;
 
+            /// <summary>§56r: the surface-band context lent to the anchor rows for the
+            /// duration of GL's pass. Null when nothing could be borrowed, in which case GL
+            /// decides from basement rows exactly as it did before.</summary>
+            internal ABGLContextBorrow borrow;
+
             internal int Index(int x, int j)
             {
                 return x * h + j;
@@ -1014,6 +1019,11 @@ namespace AsAboveSoBelow
                     GeologicalLandformsCompat.TerrainWriteMaskH = 0;
                 }
                 GeologicalLandformsCompat.TerrainWriteArmed = true;
+                // §56r LAST, once every snapshot above is safely taken: from here until the
+                // postfix releases it, the anchor rows answer with the SURFACE band's
+                // edifices, fertility, caves and biome, so GL decides what to author against
+                // the level the player will actually live on.
+                s.borrow = ABGLContextBorrow.Take(map, z0, h);
                 __state = s;
             }
             catch (Exception e)
@@ -1029,6 +1039,17 @@ namespace AsAboveSoBelow
             {
                 return;
             }
+            // ⚠⚠ RELEASE BEFORE ANYTHING ELSE. LiftTerrainSlice writes through
+            // TerrainGrid.SetTerrain, which fires DoTerrainChangedEffects and reads live map
+            // state; it must never run while the anchor rows are still lying about their
+            // edifices. This is the first statement in the postfix for that reason.
+            string borrowed = "context=BASEMENT(not borrowed)";
+            if (__state.borrow != null)
+            {
+                borrowed = "context=SURFACE(" + __state.borrow.Cells + " cells borrowed)";
+                __state.borrow.Restore();
+                ABGLContextBorrow.AssertNoneOutstanding("GL terrain transplant postfix");
+            }
             try
             {
                 int lifted = LiftTerrainSlice(map, __state);
@@ -1042,6 +1063,7 @@ namespace AsAboveSoBelow
                 {
                     GeologicalLandformsCompat.Diag("V2: GL landform pass (terrain), grids authored"
                         + " by GL:" + (moved.Length == 0 ? " NONE" : moved)
+                        + " | " + borrowed
                         + " | ANCHOR rows 0.." + (__state.h - 1) + " ["
                         + GeologicalLandformsCompat.CensusOf(map, 0, __state.h) + "]"
                         + " | SURFACE rows " + __state.z0 + ".." + (__state.z0 + __state.h - 1) + " ["

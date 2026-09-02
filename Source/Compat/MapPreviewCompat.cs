@@ -160,6 +160,24 @@ namespace AsAboveSoBelow
             }
         }
 
+        /// <summary>
+        /// ⚠⚠ EVERY LOOKUP IS ISOLATED, AND THE CLASS BANNER'S INDEPENDENCE CLAIM DEPENDS
+        /// ON IT.
+        ///
+        /// This method used to be one big try/catch. The banner above promised "each patch
+        /// is independent: any one failing to resolve leaves the others working" - and that
+        /// was FALSE in practice, because the FIRST failing lookup jumped straight to the
+        /// catch and skipped everything after it, including <c>RaiseSizeCaps</c>.
+        ///
+        /// It cost the entire bridge. `AccessTools.Method(sizeUtilType, "DetermineMapSize")`
+        /// throws AmbiguousMatchException on the shipped 1.6 assembly (two overloads survive
+        /// there), so Resolve aborted at its second statement, MaxMapSize was never raised,
+        /// no size hook was ever installed, and every preview on a banded save was generated
+        /// at vanilla's 250x250 while the colony was 126x896. It failed SILENTLY behind a
+        /// verboseLogging-only line, which is why it survived so long (rule 64).
+        ///
+        /// Each step now stands alone: one dead lookup disables one feature and says which.
+        /// </summary>
         private static void Resolve()
         {
             if (resolved)
@@ -167,18 +185,19 @@ namespace AsAboveSoBelow
                 return;
             }
             resolved = true;
-            try
+            sizeUtilType = AccessTools.TypeByName(SizeUtilTypeName);
+            if (sizeUtilType == null)
             {
-                sizeUtilType = AccessTools.TypeByName(SizeUtilTypeName);
-                if (sizeUtilType == null)
-                {
-                    // Not an error: their components live under Lunar/Components and are
-                    // loaded by LunarLoader, so absence just means the mod is not installed.
-                    ABLog.Dev("Map Preview compat: not present.");
-                    return;
-                }
-                determineMapSize = AccessTools.Method(sizeUtilType, "DetermineMapSize");
+                // Not an error: their components live under Lunar/Components and are
+                // loaded by LunarLoader, so absence just means the mod is not installed.
+                ABLog.Dev("Map Preview compat: not present.");
+                return;
+            }
 
+            Step("DetermineMapSize", () => determineMapSize = FindDetermineMapSize());
+
+            Step("MapPreviewResult", () =>
+            {
                 Type resultType = AccessTools.TypeByName(ResultTypeName);
                 if (resultType != null)
                 {
@@ -186,19 +205,31 @@ namespace AsAboveSoBelow
                     resultMapSize = AccessTools.Property(resultType, "MapSize");
                     resultTextureSize = AccessTools.Property(resultType, "TextureSize");
                 }
+            });
+
+            Step("MapPreviewWindow", () =>
+            {
                 Type windowType = AccessTools.TypeByName(WindowTypeName);
                 if (windowType != null)
                 {
                     onWorldTileSelected = AccessTools.Method(windowType, "OnWorldTileSelected");
                 }
+            });
+
+            Step("MapPreviewWidget", () =>
+            {
                 Type widgetType = AccessTools.TypeByName(WidgetTypeName);
                 if (widgetType != null)
                 {
                     mapPosFromScreenPos = AccessTools.Method(widgetType, "MapPosFromScreenPos");
                 }
-                // The seed-reroll grid. Everything here is optional: the reroll feature is
-                // OFF by default in their settings, and any one of these resolving to null
-                // simply leaves the grid patch unarmed rather than breaking the rest.
+            });
+
+            // The seed-reroll grid. Everything here is optional: the reroll feature is
+            // OFF by default in their settings, and any one of these resolving to null
+            // simply leaves the grid patch unarmed rather than breaking the rest.
+            Step("MapSeedRerollWindow", () =>
+            {
                 Type rerollType = AccessTools.TypeByName(RerollWindowTypeName);
                 if (rerollType != null)
                 {
@@ -208,19 +239,78 @@ namespace AsAboveSoBelow
                     rerollGridSize = AccessTools.Field(rerollType, "_gridSize");
                     rerollMapSize = AccessTools.Field(rerollType, "_mapSize");
                 }
+            });
+
+            Step("MapPreviewAPI", () =>
+            {
                 Type apiType = AccessTools.TypeByName(ApiTypeName);
                 if (apiType != null)
                 {
                     apiIsGeneratingPreview = AccessTools.Property(apiType, "IsGeneratingPreview");
                 }
+            });
 
-                RaiseSizeCaps();
-                ABLog.Dev("Map Preview compat: ACTIVE.");
+            // ⚠ LAST AND UNCONDITIONAL. This is the step that actually installs the size
+            // hook, and it must not depend on any lookup above it succeeding.
+            Step("sizeCaps", RaiseSizeCaps);
+
+            ABLog.Dev("Map Preview compat: ACTIVE (determineMapSize="
+                + (determineMapSize != null ? "FOUND" : "absent")
+                + " texCoords=" + (texCoordsGetter != null ? "FOUND" : "absent")
+                + " sizeTransform=" + (sizeTransformRegistered ? "REGISTERED" : "no") + ").");
+        }
+
+        /// <summary>Run one resolve step; a failure disables that feature only and names it.</summary>
+        private static void Step(string what, Action body)
+        {
+            try
+            {
+                body();
             }
             catch (Exception e)
             {
-                ABLog.Dev("Map Preview compat: resolve failed (" + e.Message + ") - leaving vanilla.");
+                ABLog.Dev("Map Preview compat: step '" + what + "' failed (" + e.Message
+                    + ") - that part stays inactive, the rest continues.");
             }
+        }
+
+        /// <summary>
+        /// Pick the right <c>DetermineMapSize</c> overload WITHOUT letting Harmony guess.
+        ///
+        /// ⚠ THE BARE `AccessTools.Method(type, name)` CALL THIS REPLACED THREW
+        /// AmbiguousMatchException AND TOOK THE WHOLE BRIDGE DOWN WITH IT. The shipped 1.6
+        /// assembly carries both the 1.6 form (World, PlanetTile, MapParent) and the legacy
+        /// one (World, MapParent), and a name-only lookup cannot choose between them.
+        ///
+        /// Selection is by SHAPE, not arity alone: returns IntVec2, last parameter is a
+        /// MapParent. Prefers the longest match, i.e. the 1.6 form when present. Never
+        /// throws - a null result just leaves the fallback postfix unarmed, which is
+        /// harmless now that the transform is the primary path.
+        /// </summary>
+        private static MethodInfo FindDetermineMapSize()
+        {
+            MethodInfo best = null;
+            int bestLen = -1;
+            foreach (MethodInfo m in sizeUtilType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (m.Name != "DetermineMapSize" || m.ReturnType != typeof(IntVec2))
+                {
+                    continue;
+                }
+                ParameterInfo[] ps = m.GetParameters();
+                if (ps.Length == 0 || ps[ps.Length - 1].ParameterType != typeof(MapParent))
+                {
+                    continue;
+                }
+                if (ps.Length > bestLen)
+                {
+                    best = m;
+                    bestLen = ps.Length;
+                }
+            }
+            ABLog.Dev("Map Preview compat: DetermineMapSize -> "
+                + (best == null ? "NONE" : bestLen + "-arg overload"));
+            return best;
         }
 
         /// <summary>
