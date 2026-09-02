@@ -236,6 +236,16 @@ namespace AsAboveSoBelow
                     {
                         // An unresolvable foreign class; skip it, keep enumerating.
                     }
+                    if (m != null && !m.IsDeclaredMember())
+                    {
+                        // FleckSystemStatic INHERITS CreateFleck from its closed generic
+                        // base and Harmony refuses reflected members ("You can only patch
+                        // implemented methods/constructors") - run #497's field catch.
+                        // GetDeclaredMember re-targets the method on its DECLARING closed
+                        // type, which also collapses every pure inheritor of one base onto
+                        // one MethodInfo for the dedupe below.
+                        m = m.GetDeclaredMember();
+                    }
                     if (m == null || m.IsAbstract || !seen.Add(m))
                     {
                         continue;

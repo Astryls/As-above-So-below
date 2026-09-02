@@ -40,6 +40,10 @@ namespace AsAboveSoBelow
     /// from a dev action would be overwritten one frame later. Session-local, default off,
     /// never scribed; the postfix costs two static bool reads per frame when idle.
     /// </summary>
+    [StaticConstructorOnStartup] // vanilla's static analyzer flags Texture2D statics
+                                 // without it (run #497); ours load lazily on the main
+                                 // thread from dev actions, so the attribute only
+                                 // silences the warning - there is no ctor work.
     public static class ABWaterLab
     {
         public static bool ForceFlowBlack;
