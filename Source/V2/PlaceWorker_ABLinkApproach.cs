@@ -98,19 +98,27 @@ namespace AsAboveSoBelow
                 return;
             }
             CellRect footprint = GenAdj.OccupiedRect(center, rot, def.Size);
-            List<IntVec3> open = new List<IntVec3>();
+            // Reused across frames: DrawGhost runs every frame for as long as the placement
+            // cursor is up, and DrawFieldEdges only reads the list. One allocation per frame
+            // of an at-most-perimeter-sized list is small but it is pure garbage, and this
+            // is the one draw path in the mod that a player holds open for minutes.
+            ghostOpen.Clear();
             foreach (IntVec3 c in ApproachCells(footprint))
             {
                 if (IsUsableApproach(c, map, thing))
                 {
-                    open.Add(c);
+                    ghostOpen.Add(c);
                 }
             }
-            if (open.Count > 0)
+            if (ghostOpen.Count > 0)
             {
-                GenDraw.DrawFieldEdges(open, Color.white);
+                GenDraw.DrawFieldEdges(ghostOpen, Color.white);
             }
         }
+
+        /// <summary>Scratch for <see cref="DrawGhost"/>. Main thread only - PlaceWorkers are
+        /// drawn from the UI pass and never off it.</summary>
+        private static readonly List<IntVec3> ghostOpen = new List<IntVec3>();
 
         private static bool AnyApproach(CellRect footprint, Map map, Thing thingToIgnore)
         {

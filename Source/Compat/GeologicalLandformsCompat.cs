@@ -48,6 +48,8 @@ namespace AsAboveSoBelow
         private const string BiomeGridType = "GeologicalLandforms.BiomeGrid";
         private const string CellFinderPatchType = "GeologicalLandforms.Patches.Patch_RimWorld_CellFinder";
 
+        private const string BiomeTransitionType = "GeologicalLandforms.BiomeTransition";
+
         private static bool resolved;
 
         private static MethodBase setRoofsFromLandform;
@@ -56,6 +58,9 @@ namespace AsAboveSoBelow
         private static MethodBase mutatorPostTerrain;
         private static MethodBase openGroundFractionUpdate;
         private static MethodBase unroofedCacheBuild;
+        private static MethodBase applyBufferedFloat;
+        private static MethodBase applyBufferedTerrain;
+        private static MethodBase postProcessBiomeGrid;
 
         private static Type biomeGrid;
         private static MethodInfo biomeGridBiomeAt;
@@ -127,12 +132,66 @@ namespace AsAboveSoBelow
                     ? null
                     : AccessTools.DeclaredMethod(cellFinder, "GetOrBuildUnroofedCacheForMap", new[] { typeof(Map) });
 
+                // §56n. ApplyBuffered<T> is GENERIC, and Harmony cannot patch an open
+                // definition - each instantiation has to be closed by hand. GL uses exactly
+                // two: <float> for elevation/fertility/caves and <TerrainDef> for terrain.
+                // (Biomes do NOT come through here; they go via BiomeGrid.SetBiomes.)
+                //
+                // ⚠ The CLR shares ONE native body across all reference-type
+                // instantiations, so patching <TerrainDef> may also divert <BiomeDef> if GL
+                // ever adds one. That is harmless HERE and it is worth saying why, because
+                // the identical sharing note on TransformIntoMapSpace argues the opposite
+                // way: this prefix CLAMPS, and a clamp is idempotent, whereas that one
+                // OFFSETS and would double-apply. Shape of the operation, not the seam.
+                if (worker != null)
+                {
+                    MethodInfo generic = null;
+                    foreach (MethodInfo m in worker.GetMethods(BindingFlags.Instance
+                        | BindingFlags.Public | BindingFlags.NonPublic))
+                    {
+                        if (m.Name != "ApplyBuffered" || !m.IsGenericMethodDefinition)
+                        {
+                            continue;
+                        }
+                        ParameterInfo[] ps = m.GetParameters();
+                        if (ps.Length == 3 && ps[0].ParameterType == typeof(IntVec3))
+                        {
+                            generic = m;
+                            break;
+                        }
+                    }
+                    if (generic != null)
+                    {
+                        try
+                        {
+                            applyBufferedFloat = generic.MakeGenericMethod(typeof(float));
+                            applyBufferedTerrain = generic.MakeGenericMethod(typeof(TerrainDef));
+                        }
+                        catch (Exception e)
+                        {
+                            applyBufferedFloat = null;
+                            applyBufferedTerrain = null;
+                            Log.WarningOnce(ABLog.Tag + " GL ApplyBuffered could not be"
+                                + " closed (" + e.Message + "); landform generation stays"
+                                + " full-column and the terrain lift stays whole-slice.",
+                                762195898);
+                        }
+                    }
+                }
+
+                Type transition = AccessTools.TypeByName(BiomeTransitionType);
+                postProcessBiomeGrid = transition == null
+                    ? null
+                    : AccessTools.DeclaredMethod(transition, "PostProcessBiomeGrid", new[] { typeof(Map) });
+
                 ABLog.Dev("Geological Landforms compat: roofPass="
                     + (setRoofsFromLandform != null ? "FOUND" : "absent")
                     + " prepare=" + (landformPrepare != null ? "FOUND" : "absent")
                     + " mutator=" + (mutatorPostElevationFertility != null ? "FOUND" : "absent")
                     + " biomeGrid=" + (biomeGridSetBiome != null ? "FOUND" : "absent")
-                    + " unroofed=" + (unroofedCacheBuild != null ? "FOUND" : "absent"));
+                    + " unroofed=" + (unroofedCacheBuild != null ? "FOUND" : "absent")
+                    + " applyBuffered=" + (applyBufferedTerrain != null ? "FOUND" : "absent")
+                    + " biomeTransition=" + (postProcessBiomeGrid != null ? "FOUND" : "absent"));
             }
             catch (Exception e)
             {
@@ -170,6 +229,39 @@ namespace AsAboveSoBelow
             get { Resolve(); return unroofedCacheBuild; }
         }
 
+        internal static MethodBase ApplyBufferedFloatTarget
+        {
+            get { Resolve(); return applyBufferedFloat; }
+        }
+
+        internal static MethodBase ApplyBufferedTerrainTarget
+        {
+            get { Resolve(); return applyBufferedTerrain; }
+        }
+
+        internal static MethodBase PostProcessBiomeGridTarget
+        {
+            get { Resolve(); return postProcessBiomeGrid; }
+        }
+
+        /// <summary>
+        /// §56n - TRUE once ApplyBuffered is confirmed clamped to the anchor rows.
+        ///
+        /// ⚠⚠ THIS IS THE PRECONDITION THAT MAKES THE AUTHORED-CELL TERRAIN LIFT LEGAL.
+        /// Read the §56m banner on <c>TerrainWriteArmed</c> before touching either half:
+        /// lifting only authored cells was tried, measured and REVERTED once, because GL
+        /// painted the surface band with out-of-range landform output and the unauthored
+        /// cells were exactly where that garbage survived. The clamp removes the painting,
+        /// which is what retires that objection - so the two changes are ONE change and
+        /// neither may ship without the other. If the clamp fails to seat, this stays false
+        /// and the lift falls back to the old whole-slice behaviour, which is wrong in a
+        /// different, milder, already-understood way.
+        /// </summary>
+        internal static bool AnchorScopedGeneration
+        {
+            get { Resolve(); return applyBufferedTerrain != null && Patch_GL_ABAnchorScope.Seated; }
+        }
+
         /// <summary>
         /// Armed for the duration of GL's terrain pass; set true if GL wrote ANY terrain
         /// cell anywhere on the map.
@@ -193,6 +285,42 @@ namespace AsAboveSoBelow
 
         [ThreadStatic]
         internal static bool TerrainWriteSeen;
+
+        /// <summary>
+        /// §56m/§56n - which ANCHOR cells GL's terrain pass wrote, one bool per cell of the
+        /// w x h anchor slice, indexed exactly like <c>AnchorState.Index</c>.
+        ///
+        /// Only meaningful when <c>AnchorScopedGeneration</c> is true. Allocated once per
+        /// terrain pass by the transplant prefix and read by <c>LiftTerrainSlice</c>; writes
+        /// outside the anchor rows (GL clamped, but a foreign patch may not be) are ignored
+        /// rather than resized, so a stray write can never widen the lift.
+        /// </summary>
+        [ThreadStatic]
+        internal static bool[] TerrainWriteMask;
+
+        [ThreadStatic]
+        internal static int TerrainWriteMaskW;
+
+        [ThreadStatic]
+        internal static int TerrainWriteMaskH;
+
+        /// <summary>Record one authored anchor cell. Hot: called once per SetTerrain for the
+        /// duration of GL's terrain pass and nowhere else.</summary>
+        internal static void NoteTerrainWrite(IntVec3 c)
+        {
+            bool[] mask = TerrainWriteMask;
+            if (mask == null)
+            {
+                return;
+            }
+            int x = c.x;
+            int j = c.z;
+            if (x < 0 || j < 0 || x >= TerrainWriteMaskW || j >= TerrainWriteMaskH)
+            {
+                return;
+            }
+            mask[x * TerrainWriteMaskH + j] = true;
+        }
 
         /// <summary>True for the duration of GL's landform roof sweep.
         ///
@@ -359,9 +487,9 @@ namespace AsAboveSoBelow
             int solid = 0;
             int open = 0;
             int w = map.Size.x;
-            for (int x = 0; x < w; x++)
+            for (int j = 0; j < h; j++)
             {
-                for (int j = 0; j < h; j++)
+                for (int x = 0; x < w; x++)
                 {
                     IntVec3 c = new IntVec3(x, 0, z0 + j);
                     TerrainDef t = map.terrainGrid.TerrainAt(c);
@@ -392,9 +520,9 @@ namespace AsAboveSoBelow
             var counts = new Dictionary<string, int>();
             int total = 0;
             int w = map.Size.x;
-            for (int x = 0; x < w; x++)
+            for (int j = 0; j < h; j++)
             {
-                for (int j = 0; j < h; j++)
+                for (int x = 0; x < w; x++)
                 {
                     Building b = new IntVec3(x, 0, z0 + j).GetEdifice(map);
                     if (b == null || b.def == null)
@@ -458,9 +586,13 @@ namespace AsAboveSoBelow
 
         internal static void Snapshot(MapGenFloatGrid grid, AnchorState s, float[] into)
         {
-            for (int x = 0; x < s.w; x++)
+            // z-outer/x-inner throughout the transplant: every one of these reads a
+            // MapGenFloatGrid or a TerrainGrid, both indexed z * sizeX + x, so the inner
+            // loop walks one contiguous row. The x-outer form strided by sizeX on every
+            // step and missed cache on essentially every access.
+            for (int j = 0; j < s.h; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
                     into[s.Index(x, j)] = grid[new IntVec3(x, 0, j)];
                 }
@@ -478,9 +610,9 @@ namespace AsAboveSoBelow
         internal static bool LiftIfAuthored(MapGenFloatGrid grid, AnchorState s, float[] before)
         {
             bool authored = false;
-            for (int x = 0; x < s.w && !authored; x++)
+            for (int j = 0; j < s.h && !authored; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
                     if (grid[new IntVec3(x, 0, j)] != before[s.Index(x, j)])
                     {
@@ -493,9 +625,9 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            for (int x = 0; x < s.w; x++)
+            for (int j = 0; j < s.h; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
                     grid[new IntVec3(x, 0, s.z0 + j)] = grid[new IntVec3(x, 0, j)];
                 }
@@ -716,9 +848,9 @@ namespace AsAboveSoBelow
                     s.biomeRead = read;
                     s.biomeWrite = write;
                     s.biome = new BiomeDef[n];
-                    for (int x = 0; x < s.w; x++)
+                    for (int j = 0; j < s.h; j++)
                     {
-                        for (int j = 0; j < s.h; j++)
+                        for (int x = 0; x < s.w; x++)
                         {
                             s.biome[s.Index(x, j)] = read(new IntVec3(x, 0, j));
                         }
@@ -775,9 +907,9 @@ namespace AsAboveSoBelow
                 return false;
             }
             bool authored = false;
-            for (int x = 0; x < s.w && !authored; x++)
+            for (int j = 0; j < s.h && !authored; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
                     if (s.biomeRead(new IntVec3(x, 0, j)) != s.biome[s.Index(x, j)])
                     {
@@ -790,9 +922,9 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
-            for (int x = 0; x < s.w; x++)
+            for (int j = 0; j < s.h; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
                     BiomeDef b = s.biomeRead(new IntVec3(x, 0, j));
                     if (b != null)
@@ -849,15 +981,32 @@ namespace AsAboveSoBelow
                 };
                 s.terrain = new TerrainDef[s.w * s.h];
                 TerrainGrid grid = map.terrainGrid;
-                for (int x = 0; x < s.w; x++)
+                // z-outer/x-inner: TerrainAt indexes z * sizeX + x, so the inner loop now
+                // walks one contiguous row instead of striding by sizeX every step.
+                for (int j = 0; j < s.h; j++)
                 {
-                    for (int j = 0; j < s.h; j++)
+                    for (int x = 0; x < s.w; x++)
                     {
                         s.terrain[s.Index(x, j)] = grid.TerrainAt(new IntVec3(x, 0, j));
                     }
                 }
                 s.flowRef = map.waterInfo?.riverFlowMap;
                 GeologicalLandformsCompat.TerrainWriteSeen = false;
+                // §56m: only arm the per-cell mask when §56n's clamp is confirmed seated.
+                // Without the clamp GL paints the surface band and the mask is actively
+                // harmful - fall back to the whole-slice lift instead.
+                if (GeologicalLandformsCompat.AnchorScopedGeneration)
+                {
+                    GeologicalLandformsCompat.TerrainWriteMask = new bool[s.w * s.h];
+                    GeologicalLandformsCompat.TerrainWriteMaskW = s.w;
+                    GeologicalLandformsCompat.TerrainWriteMaskH = s.h;
+                }
+                else
+                {
+                    GeologicalLandformsCompat.TerrainWriteMask = null;
+                    GeologicalLandformsCompat.TerrainWriteMaskW = 0;
+                    GeologicalLandformsCompat.TerrainWriteMaskH = 0;
+                }
                 GeologicalLandformsCompat.TerrainWriteArmed = true;
                 __state = s;
             }
@@ -900,28 +1049,36 @@ namespace AsAboveSoBelow
             finally
             {
                 // ⚠ Cleared in a finally: a recorder left armed would keep observing writes
-                // for the rest of the session on this thread.
+                // for the rest of the session on this thread. The mask is released too - it
+                // is one bool per anchor cell and there is no reason to hold it between
+                // landform layers.
                 GeologicalLandformsCompat.TerrainWriteArmed = false;
                 GeologicalLandformsCompat.TerrainWriteSeen = false;
+                GeologicalLandformsCompat.TerrainWriteMask = null;
+                GeologicalLandformsCompat.TerrainWriteMaskW = 0;
+                GeologicalLandformsCompat.TerrainWriteMaskH = 0;
             }
         }
 
-        /// <summary>Replace the whole surface slice with the anchor slice when GL's terrain
-        /// pass ran (§56m).
+        /// <summary>Lift GL's terrain output from the anchor slice into the surface band
+        /// (§56m).
         ///
         /// "Ran" is detected by the SetTerrain recorder; if that patch is missing we fall
         /// back to "did anything at the anchor rows change", which is the same question asked
         /// less reliably. When GL's landform declares no terrain output at all, ApplyBuffered
-        /// is never called, nothing is polluted, and we correctly leave the surface alone.</summary>
+        /// is never called, nothing is polluted, and we correctly leave the surface alone.
+        ///
+        /// WHICH cells get lifted depends on whether §56n's anchor clamp is seated - see the
+        /// comment at the loop.</summary>
         private static int LiftTerrainSlice(Map map, GeologicalLandformsCompat.AnchorState s)
         {
             TerrainGrid grid = map.terrainGrid;
             bool ran = GeologicalLandformsCompat.TerrainWriteSeen;
             if (!ran)
             {
-                for (int x = 0; x < s.w && !ran; x++)
+                for (int j = 0; j < s.h && !ran; j++)
                 {
-                    for (int j = 0; j < s.h; j++)
+                    for (int x = 0; x < s.w; x++)
                     {
                         if (grid.TerrainAt(new IntVec3(x, 0, j)) != s.terrain[s.Index(x, j)])
                         {
@@ -935,11 +1092,24 @@ namespace AsAboveSoBelow
             {
                 return 0;
             }
+            // §56m/§56n. With the anchor clamp seated the surface band is untouched by GL, so
+            // an UNAUTHORED cell holds its own correct vanilla terrain and must be left
+            // alone - lifting it would import the basement row's terrain instead, which is
+            // exactly the "landform generates with missing chunks" defect. Without the clamp
+            // the destination is polluted and the whole slice has to be replaced (§56m).
+            bool[] mask = GeologicalLandformsCompat.TerrainWriteMask;
+            bool authoredOnly = mask != null
+                && GeologicalLandformsCompat.TerrainWriteMaskW == s.w
+                && GeologicalLandformsCompat.TerrainWriteMaskH == s.h;
             int lifted = 0;
-            for (int x = 0; x < s.w; x++)
+            for (int j = 0; j < s.h; j++)
             {
-                for (int j = 0; j < s.h; j++)
+                for (int x = 0; x < s.w; x++)
                 {
+                    if (authoredOnly && !mask[x * s.h + j])
+                    {
+                        continue;
+                    }
                     TerrainDef def = grid.TerrainAt(new IntVec3(x, 0, j));
                     if (def == null)
                     {
@@ -968,6 +1138,11 @@ namespace AsAboveSoBelow
             {
                 return false;
             }
+            // ⚠ X-OUTER IS CORRECT HERE AND MUST STAY. Every other loop in this file walks
+            // a RimWorld grid (z * sizeX + x, so x is the fast axis); riverFlowMap is GL's
+            // own array indexed (x * Size.z + z) * 2, which is X-MAJOR. Here it is j that is
+            // contiguous, so this nesting is already the sequential one - "fixing" it to
+            // match the others would be the only cache-hostile loop left in the file.
             for (int x = 0; x < s.w; x++)
             {
                 for (int j = 0; j < s.h; j++)
@@ -1038,27 +1213,178 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>
-    /// §56m  DID GL'S TERRAIN PASS RUN AT ALL?
+    /// §56n  GENERATE THE LANDFORM AT THE ANCHOR ROWS ONLY.
+    ///
+    /// <c>ApplyBuffered(map.Size, generator, apply)</c> allocates a <c>T[x, z]</c> the size
+    /// of the WHOLE STACKED COLUMN and evaluates the landform module at every cell in it.
+    /// Two costs, one of which is a correctness bug:
+    ///
+    ///   - WASTE. On a 190x768 map that is 145,920 evaluations where 36,480 matter, per
+    ///     module, and there are four (elevation, fertility, caves, terrain). The transplant
+    ///     only ever READS rows [0, h); everything above is computed, written, and then
+    ///     deleted by the carve.
+    ///   - POLLUTION. Those writes land in the surface band too, sampled far outside the
+    ///     landform's intended domain - for an Island or a Coast that resolves to open
+    ///     ocean. §56m measured the damage: 13,001 open land cells at the anchor, 4,191
+    ///     surviving in the surface band.
+    ///
+    /// Clamping mapSize.z to the anchor height fixes both, because ApplyBuffered derives its
+    /// buffer AND both loop bounds from that one argument. The generator still samples at
+    /// (x, z) with z in [0, h), which is exactly the band-local coordinate space §56.1 told
+    /// GL it was generating for, so the landform it produces is unchanged.
+    ///
+    /// ⚠⚠ THIS IS HALF OF A TWO-PART FIX AND THE OTHER HALF DEPENDS ON IT. Removing the
+    /// pollution is what makes an authored-cell terrain lift legal (see
+    /// <c>AnchorScopedGeneration</c> and the §56m banner). Do not revert one without the
+    /// other; reverting this alone silently un-fixes the lift.
+    ///
+    /// ⚠ Shrink-only, and never below the anchor. If the layout cannot be read we leave the
+    /// argument alone, so an unbanded map and any resolve failure both behave exactly as
+    /// before (rule 33: the guard says which clause).
+    /// </summary>
+    [HarmonyPatch]
+    public static class Patch_GL_ABAnchorScope
+    {
+        /// <summary>Observed by <c>AnchorScopedGeneration</c>: the authored-cell lift is
+        /// only safe once this patch is actually on the method.</summary>
+        internal static bool Seated;
+
+        private static bool Prepare()
+        {
+            bool ok = GeologicalLandformsCompat.ApplyBufferedTerrainTarget != null;
+            if (ok)
+            {
+                Seated = true;
+            }
+            return ok;
+        }
+
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodBase f = GeologicalLandformsCompat.ApplyBufferedFloatTarget;
+            MethodBase t = GeologicalLandformsCompat.ApplyBufferedTerrainTarget;
+            if (f != null)
+            {
+                yield return f;
+            }
+            if (t != null)
+            {
+                yield return t;
+            }
+        }
+
+        /// <summary>Named to match GL's parameter so Harmony binds it by name.</summary>
+        private static void Prefix(ref IntVec3 mapSize)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.LevelGen))
+                {
+                    return;
+                }
+                Map map = MapGenerator.mapBeingGenerated;
+                if (map == null || mapSize.z <= 0)
+                {
+                    return;
+                }
+                if (!GeologicalLandformsCompat.TryTransplantGeometry(map, out int z0, out int h))
+                {
+                    return; // ordinary map, or nothing to transplant - leave GL alone
+                }
+                if (h <= 0 || h >= mapSize.z)
+                {
+                    return;
+                }
+                mapSize = new IntVec3(mapSize.x, mapSize.y, h);
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: GL anchor scope patch threw: " + e, 762195899);
+            }
+        }
+    }
+
+    /// <summary>
+    /// §56p  BIOME TRANSITION SMOOTHING IS A WHOLE-COLUMN FLOOD FILL.
+    ///
+    /// <c>BiomeTransition.PostProcessBiomeGrid</c> walks every cell of the map and, at each
+    /// biome boundary it finds, runs a <c>FloodFiller</c> that can travel arbitrarily far.
+    /// On a banded map that means it smooths ACROSS BAND SEAMS - the surface band's northern
+    /// edge is blended against the gutter and whatever band sits above it - and it pays for
+    /// the whole column to do it.
+    ///
+    /// It runs INSIDE GeneratePostElevationFertility, i.e. before our transplant postfix has
+    /// lifted anything, so the damage is already baked into the anchor rows we then copy up.
+    ///
+    /// Suppressed on banded maps rather than scoped: the flood fill has no rect parameter to
+    /// narrow, and the biome grid our transplant lifts is GL's pre-smoothing output, which is
+    /// the correct landform biome layout. What is lost is cosmetic TPM boundary tidying
+    /// within one band; what is gained is that the seam no longer leaks one band's biome into
+    /// another. Fails open: unbanded maps and resolve failures keep vanilla GL behaviour.
+    /// </summary>
+    [HarmonyPatch]
+    public static class Patch_GL_ABBiomeTransitionScope
+    {
+        private static bool Prepare()
+        {
+            return GeologicalLandformsCompat.PostProcessBiomeGridTarget != null;
+        }
+
+        private static MethodBase TargetMethod()
+        {
+            return GeologicalLandformsCompat.PostProcessBiomeGridTarget;
+        }
+
+        private static bool Prefix(Map map)
+        {
+            try
+            {
+                if (!ABGuard.On(ABGuard.LevelGen) || map == null)
+                {
+                    return true;
+                }
+                if (!GeologicalLandformsCompat.TryTransplantGeometry(map, out _, out _))
+                {
+                    return true; // ordinary map - let GL smooth normally
+                }
+                return false;
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " V2: GL biome transition scope threw: " + e, 762195900);
+                return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// §56m  WHICH CELLS DID GL'S TERRAIN PASS ACTUALLY WRITE?
     ///
     /// Armed only for the duration of <c>TileMutatorWorker_Landform.GeneratePostTerrain</c>,
     /// so on every other SetTerrain call in the entire game this is a single ThreadStatic
     /// bool test.
     ///
-    /// Deliberately records nothing about WHICH cell. An earlier version kept a per-cell mask
-    /// over the anchor rows and used it to lift only authored cells - which was precise,
-    /// well-tested, and wrong, because GL has already overwritten the surface band with
-    /// out-of-range landform output and the unauthored cells are exactly where that garbage
-    /// survives. See the §56m note on <c>TerrainWriteArmed</c>.
+    /// ⚠⚠ THE PER-CELL MASK IS BACK, AND THE §56m BANNER EXPLAINS WHY IT WAS REMOVED - READ
+    /// BOTH BEFORE JUDGING THIS. The mask was correct arithmetic on a poisoned input: GL's
+    /// ApplyBuffered painted the surface band with out-of-range landform output, so lifting
+    /// only authored cells left that garbage in every cell GL declined (run #40: 13,001 open
+    /// land cells at the anchor, 4,191 in the surface band). §56n now CLAMPS ApplyBuffered to
+    /// the anchor rows, so the surface band is never painted at all and an unauthored cell
+    /// holds its own correct vanilla terrain. The mask is only re-enabled when that clamp is
+    /// confirmed seated - see <c>AnchorScopedGeneration</c>; otherwise we fall back to the
+    /// whole-slice lift this replaced.
     /// </summary>
     [HarmonyPatch(typeof(TerrainGrid), nameof(TerrainGrid.SetTerrain))]
     public static class Patch_TerrainGrid_ABLandformWriteProbe
     {
-        private static void Prefix()
+        private static void Prefix(IntVec3 c)
         {
-            if (GeologicalLandformsCompat.TerrainWriteArmed)
+            if (!GeologicalLandformsCompat.TerrainWriteArmed)
             {
-                GeologicalLandformsCompat.TerrainWriteSeen = true;
+                return;
             }
+            GeologicalLandformsCompat.TerrainWriteSeen = true;
+            GeologicalLandformsCompat.NoteTerrainWrite(c);
         }
     }
 

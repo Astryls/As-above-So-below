@@ -69,6 +69,25 @@ namespace AsAboveSoBelow
         /// band helper answers as if the map were ordinary. Anything that has to be
         /// band-correct DURING generation has to read the pending layout instead.
         /// </summary>
+        /// <summary>
+        /// Is a REAL map generation in flight for this map?
+        ///
+        /// ⚠ THIS IS NOT <c>TryPendingSurfaceRect</c> AND THE DIFFERENCE IS DELIBERATE.
+        /// That method answers "what is this map's band layout", and it answers for a MAP
+        /// PREVIEW too - by design, because every generation-time patch that shapes terrain
+        /// must produce the same answer in the preview as in the real thing, or the preview
+        /// is a picture of a different map.
+        ///
+        /// This one answers "is this the real colony being built", which is a different
+        /// question with a different consumer: anything that owns SHARED MUTABLE STATE.
+        /// Map Preview runs gensteps on a BACKGROUND THREAD, so a profiler, a counter or a
+        /// cache keyed on "generation is happening" must key on this, not on the layout.
+        /// </summary>
+        internal static bool RealGenerationInFlight(Map map)
+        {
+            return map != null && pending != null;
+        }
+
         internal static bool TryPendingSurfaceRect(Map map, out CellRect surface, out int slot)
         {
             surface = default(CellRect);

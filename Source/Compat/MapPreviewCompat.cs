@@ -224,7 +224,7 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>
-        /// The no-Harmony half, using their own public integration fields.
+        /// The no-Harmony half, using their own public integration points.
         ///
         /// MUST run before the preview window is first opened: the widget is a field
         /// initialiser on <c>MapPreviewWindow</c>, so it snapshots MaxMapSize at construction
@@ -239,33 +239,128 @@ namespace AsAboveSoBelow
                 maxField.SetValue(null, new IntVec2(max.x, MaxStackedZ));
             }
 
-            // MapSizeOverride is only consulted while CHOOSING a landing site (their
-            // DetermineMapSizeUnclamped takes the world.info.initialMapSize branch once a
-            // game is running). That is the case that matters most - it is the preview you
-            // look at before committing - and using their hook rather than a patch means the
-            // Better Map Sizes path stays intact if the user runs both.
-            FieldInfo overrideField = AccessTools.Field(sizeUtilType, "MapSizeOverride");
-            if (overrideField != null && overrideField.GetValue(null) == null)
-            {
-                overrideField.SetValue(null, new Func<IntVec2>(LandingSiteSizeOverride));
-            }
+            TryRegisterSizeTransform();
         }
 
-        /// <summary>Their convention: a non-positive component means "no opinion".</summary>
-        private static IntVec2 LandingSiteSizeOverride()
+        /// <summary>
+        /// §56q  THE SUPPORTED SIZE HOOK, AND WHY IT REPLACED BOTH OF THE OLD ONES.
+        ///
+        /// Map Preview 1.6 added <c>MapSizeUtility.MapSizeTransforms</c> - a public list of
+        /// <c>(World, PlanetTile, IntVec2) -&gt; IntVec2</c> delegates, aggregated inside
+        /// <c>DetermineMapSize</c> before the clamp. It is the same hook their own VEF bridge
+        /// uses, and it is strictly better than what we were doing:
+        ///
+        ///   - The field we USED to set, <c>MapSizeOverride</c>, DOES NOT EXIST. It was
+        ///     renamed <c>GameInitMapSizeOverride</c>, so <c>AccessTools.Field</c> returned
+        ///     null and the assignment silently did nothing - for however many versions.
+        ///     Nothing broke, because the Harmony postfix below covered the same case, which
+        ///     is exactly why nobody noticed. (Its dead double-inflation guard,
+        ///     <c>AlreadyStacked</c>, is now live and used here.)
+        ///   - The postfix REPLACED <c>__result</c> outright, discarding whatever the
+        ///     transform chain had just agreed on. A player running Vanilla Expanded's
+        ///     tile-mutator size overrides had them silently dropped on banded maps. A
+        ///     transform COMPOSES: we receive their answer and inflate it.
+        ///
+        /// Registered by reflection because the delegate type is theirs; our target method is
+        /// all vanilla types, so <c>Delegate.CreateDelegate</c> binds cleanly.
+        ///
+        /// Rule 33: if the list is absent (an older Map Preview), we say so and the Harmony
+        /// postfix stays armed as the fallback. Exactly one of the two is ever live.
+        /// </summary>
+        private static void TryRegisterSizeTransform()
         {
             try
             {
-                GameInitData init = Find.GameInitData;
-                if (init == null || init.mapSize <= 0 || !Banding)
+                FieldInfo listField = AccessTools.Field(sizeUtilType, "MapSizeTransforms");
+                Type delegateType = sizeUtilType.GetNestedType("MapSizeTransform");
+                if (listField == null || delegateType == null
+                    || !(listField.GetValue(null) is System.Collections.IList list))
                 {
-                    return new IntVec2(-1, -1);
+                    ABLog.Dev("Map Preview compat: MapSizeTransforms absent - falling back"
+                        + " to the DetermineMapSize postfix.");
+                    return;
                 }
-                return Stacked(init.mapSize, init.mapSize);
+                MethodInfo mine = AccessTools.Method(typeof(MapPreviewCompat), nameof(TransformMapSize));
+                Delegate d = Delegate.CreateDelegate(delegateType, mine, false);
+                if (d == null)
+                {
+                    ABLog.Dev("Map Preview compat: MapSizeTransform signature changed -"
+                        + " falling back to the DetermineMapSize postfix.");
+                    return;
+                }
+                list.Add(d);
+                sizeTransformRegistered = true;
+                ABLog.Dev("Map Preview compat: registered a MapSizeTransform.");
+            }
+            catch (Exception e)
+            {
+                sizeTransformRegistered = false;
+                ABLog.Dev("Map Preview compat: could not register a MapSizeTransform ("
+                    + e.Message + ") - falling back to the DetermineMapSize postfix.");
+            }
+        }
+
+        /// <summary>True once our transform is in their list; disarms the Harmony
+        /// fallback so the inflation can never be applied twice.</summary>
+        internal static bool SizeTransformRegistered
+        {
+            get { Resolve(); return sizeTransformRegistered; }
+        }
+
+        private static bool sizeTransformRegistered;
+
+        /// <summary>
+        /// Their contract: take the size agreed so far, return the size we want.
+        ///
+        /// ⚠ Signature is bound by <c>Delegate.CreateDelegate</c> against THEIR delegate
+        /// type, so these parameter types are load-bearing and all three are vanilla
+        /// (<c>PlanetTile</c> is 1.6's tile handle, not a Map Preview type).
+        ///
+        /// ⚠ The tile is deliberately ignored. Banding is a property of the COLONY, not the
+        /// tile, and the parent-based test is the one that mirrors
+        /// <c>ABBandedGeneration.ShouldBand</c>. Their aggregate does not hand us the
+        /// MapParent, so the landing-site case (parent == null) is inferred from program
+        /// state instead - see ShouldInflateForTile.
+        /// </summary>
+        private static IntVec2 TransformMapSize(RimWorld.Planet.World world,
+            RimWorld.Planet.PlanetTile tile, IntVec2 size)
+        {
+            try
+            {
+                if (!ShouldInflateForTile(world, tile) || AlreadyStacked(size))
+                {
+                    return size;
+                }
+                return Stacked(size.x, size.z);
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce(ABLog.Tag + " Map Preview size transform threw: " + e, 762195893);
+                return size;
+            }
+        }
+
+        /// <summary>
+        /// The transform runs before we know the MapParent, so resolve it from the world
+        /// object at that tile - the same question <see cref="ShouldInflateFor"/> answers,
+        /// asked one step earlier.
+        /// </summary>
+        private static bool ShouldInflateForTile(RimWorld.Planet.World world,
+            RimWorld.Planet.PlanetTile tile)
+        {
+            if (!Banding)
+            {
+                return false;
+            }
+            try
+            {
+                MapParent parent = world?.worldObjects?.MapParentAt(tile);
+                return ShouldInflateFor(parent);
             }
             catch
             {
-                return new IntVec2(-1, -1);
+                // No world object yet is the ordinary pre-game landing site.
+                return true;
             }
         }
 
@@ -299,10 +394,15 @@ namespace AsAboveSoBelow
         }
 
         /// <summary>Is a stacked size what this size already is? Guards against inflating a
-        /// value we (or a re-entrant call) already inflated.</summary>
+        /// value we (or a re-entrant call) already inflated.
+        ///
+        /// ⚠ Dead for as long as the only caller was the override that never installed
+        /// (§56q). It is live again now that the transform composes over a size other mods
+        /// may also have touched, and it is the reason a doubled aggregate cannot compound.</summary>
         private static bool AlreadyStacked(IntVec2 size)
         {
-            return size.z == ABV2.BandCount * ABBandMap.SlotFor(size.x);
+            return size.x > 0 && ABV2.BandCount > 1
+                && size.z == ABV2.BandCount * ABBandMap.SlotFor(size.x);
         }
 
         /// <summary>Only PLAYER COLONY maps are banded, mirroring
@@ -523,13 +623,20 @@ namespace AsAboveSoBelow
     }
 
     /// <summary>Generate the preview at the full stacked height so its noise matches the real
-    /// map. See <see cref="MapPreviewCompat"/>.</summary>
+    /// map. See <see cref="MapPreviewCompat"/>.
+    ///
+    /// ⚠ FALLBACK ONLY (§56q). When <c>MapSizeTransforms</c> exists we register there
+    /// instead and this patch stays unarmed - two live inflations would compound, and the
+    /// postfix additionally discards other mods' transforms, which is why the hook is
+    /// preferred whenever it is available.</summary>
     [HarmonyPatch]
     public static class Patch_MapPreview_ABStackedSize
     {
         private static bool Prepare()
         {
-            return MapPreviewCompat.Active && MapPreviewCompat.DetermineMapSizeTarget != null;
+            return MapPreviewCompat.Active
+                && !MapPreviewCompat.SizeTransformRegistered
+                && MapPreviewCompat.DetermineMapSizeTarget != null;
         }
 
         private static MethodBase TargetMethod()

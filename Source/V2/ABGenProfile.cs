@@ -328,11 +328,25 @@ namespace AsAboveSoBelow
     [HarmonyPatch(typeof(MapGenerator), nameof(MapGenerator.GenerateContentsIntoMap))]
     public static class Patch_GenerateContents_ABGenProfile
     {
+        /// <summary>
+        /// ⚠ ARMS ON REAL GENERATION ONLY - <c>pending</c>, NOT the inferred layout.
+        ///
+        /// Map Preview calls <c>MapGenerator.GenerateContentsIntoMap</c> directly, on a
+        /// BACKGROUND THREAD, for a map it sized to our stacked dimensions. That means
+        /// <c>TryPendingSurfaceRect</c> answers TRUE there via its size-inference branch -
+        /// which is correct for the generation-time patches that must reproduce the real map,
+        /// and wrong for a profiler. Arming on the preview thread pointed <c>genThreadId</c>
+        /// at a worker, started the shared static stopwatches, and let a preview's genstep
+        /// timings contend with (or stand in for) a real colony's.
+        ///
+        /// The carve postfix in ABBandedGeneration already keys off <c>pending</c> for the
+        /// same reason; this is the one generation-time hook that had drifted from it.
+        /// </summary>
         private static void Prefix(Map map)
         {
             try
             {
-                if (ABBandedGeneration.TryPendingSurfaceRect(map, out _, out _))
+                if (ABBandedGeneration.RealGenerationInFlight(map))
                 {
                     ABGenProfile.Arm();
                 }
