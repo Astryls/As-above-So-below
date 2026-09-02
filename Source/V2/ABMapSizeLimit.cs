@@ -604,16 +604,14 @@ namespace AsAboveSoBelow
             float sizeX = 330f;
             float sizeY = y;
             Text.Font = GameFont.Small;
-            Widgets.Label(new Rect(sizeX, sizeY - 26f, 300f, 24f), "AB_LevelsPerLevelSize".Translate());
+            Widgets.Label(new Rect(sizeX, sizeY - 26f, 300f, 24f), ChooserStrings.PerLevelSize);
             int[] sizes = ABMapSizeLimit.Sizes;
             for (int i = 0; i < sizes.Length; i++)
             {
                 int candidate = sizes[i];
                 bool affordable = ABMapSizeLimit.Fits(candidate, ABMapSizeLimit.BandCount);
                 Rect row = new Rect(sizeX, sizeY, 300f, 26f);
-                string label = candidate + "x" + candidate + "  ("
-                    + ABMapSizeLimit.StackedCells(candidate, ABMapSizeLimit.BandCount).ToString("N0")
-                    + " cells)";
+                string label = ChooserStrings.SizeLabel(i);
                 Color prev = GUI.color;
                 if (!affordable)
                 {
@@ -646,8 +644,8 @@ namespace AsAboveSoBelow
             float infoX = 660f;
             float infoW = Mathf.Max(220f, inRect.width - infoX);
             float infoY = y;
-            Widgets.Label(new Rect(infoX, infoY, infoW, 24f),
-                "AB_LevelsSummary".Translate(bandCount, size));
+            ChooserStrings.Refresh(bandCount, size, cells);
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f), ChooserStrings.Summary);
             infoY += 26f;
 
             // Colour against the BUDGET ITSELF, not against Fits(): once the player has
@@ -660,14 +658,11 @@ namespace AsAboveSoBelow
             {
                 GUI.color = new Color(1f, 0.4f, 0.4f);
             }
-            Widgets.Label(new Rect(infoX, infoY, infoW, 24f), "AB_LevelsCells".Translate(
-                cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0")));
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f), ChooserStrings.Cells);
             infoY += 26f;
             if (over)
             {
-                Widgets.Label(new Rect(infoX, infoY, infoW, 44f),
-                    "AB_LevelsOverBudget".Translate(
-                        (cells / (float)ABMapSizeLimit.CellBudget).ToString("0.0")));
+                Widgets.Label(new Rect(infoX, infoY, infoW, 44f), ChooserStrings.OverBudget);
                 infoY += 46f;
             }
             GUI.color = old;
@@ -676,16 +671,132 @@ namespace AsAboveSoBelow
             // afford", not only "what am I spending". Makes the dimension-versus-levels
             // trade visible BEFORE a size option greys out.
             GUI.color = new Color(1f, 1f, 1f, 0.7f);
-            Widgets.Label(new Rect(infoX, infoY, infoW, 24f),
-                "AB_LevelsHeadroom".Translate(ABMapSizeLimit.MaxLevelsFor(size), size));
+            Widgets.Label(new Rect(infoX, infoY, infoW, 24f), ChooserStrings.Headroom);
             GUI.color = old;
             infoY += 26f;
 
             if (bandCount <= 1)
             {
                 GUI.color = new Color(1f, 1f, 1f, 0.62f);
-                Widgets.Label(new Rect(infoX, infoY, infoW, 44f), "AB_LevelsNoneNote".Translate());
+                Widgets.Label(new Rect(infoX, infoY, infoW, 44f), ChooserStrings.NoneNote);
                 GUI.color = old;
+            }
+        }
+
+        /// <summary>
+        /// The chooser's derived strings, rebuilt only when an input actually changes.
+        ///
+        /// DoWindowContents runs EVERY FRAME for as long as the advanced-config page is open,
+        /// and this panel was doing twelve <c>Translate()</c> lookups plus four <c>N0</c>
+        /// formats per frame to render text that only changes when the player clicks
+        /// something. Translate is a dictionary hit plus a format; N0 allocates. None of it
+        /// is expensive once, all of it is pure garbage sixty times a second.
+        ///
+        /// ⚠ KEYED ON THE ACTIVE LANGUAGE TOO. Without that, switching language with this
+        /// page open (or opening it again after switching) would keep serving strings from
+        /// the old one - a stale-cache bug that is invisible to every English-speaking
+        /// tester.
+        /// </summary>
+        private static class ChooserStrings
+        {
+            private static object language;
+            private static int bandCount = -1;
+            private static int size = -1;
+            private static int cells = -1;
+            private static string[] sizeLabels;
+
+            private static string perLevelSize;
+            private static string noneNote;
+
+            /// <summary>Read by the chooser BEFORE Refresh runs on the first frame (the size
+            /// buttons are drawn above the info column), so these two warm the cache
+            /// themselves rather than handing null to a Widgets call.</summary>
+            internal static string PerLevelSize
+            {
+                get { EnsureWarm(); return perLevelSize; }
+                private set { perLevelSize = value; }
+            }
+
+            internal static string NoneNote
+            {
+                get { EnsureWarm(); return noneNote; }
+                private set { noneNote = value; }
+            }
+
+            internal static string Summary { get; private set; }
+            internal static string Cells { get; private set; }
+            internal static string OverBudget { get; private set; }
+            internal static string Headroom { get; private set; }
+
+            private static void EnsureWarm()
+            {
+                if (perLevelSize == null)
+                {
+                    Refresh(ABMapSizeLimit.BandCount,
+                        Find.GameInitData != null ? Find.GameInitData.mapSize : 0, 0);
+                }
+            }
+
+            private static bool LanguageChanged()
+            {
+                object now = LanguageDatabase.activeLanguage;
+                if (ReferenceEquals(now, language) && perLevelSize != null)
+                {
+                    return false;
+                }
+                language = now;
+                return true;
+            }
+
+            internal static void Refresh(int newBandCount, int newSize, int newCells)
+            {
+                bool rebuildAll = LanguageChanged();
+                if (rebuildAll || newBandCount != bandCount)
+                {
+                    bandCount = newBandCount;
+                    PerLevelSize = "AB_LevelsPerLevelSize".Translate();
+                    NoneNote = "AB_LevelsNoneNote".Translate();
+                    int[] sizes = ABMapSizeLimit.Sizes;
+                    if (sizeLabels == null || sizeLabels.Length != sizes.Length)
+                    {
+                        sizeLabels = new string[sizes.Length];
+                    }
+                    for (int i = 0; i < sizes.Length; i++)
+                    {
+                        int candidate = sizes[i];
+                        sizeLabels[i] = candidate + "x" + candidate + "  ("
+                            + ABMapSizeLimit.StackedCells(candidate, bandCount).ToString("N0")
+                            + " cells)";
+                    }
+                    rebuildAll = true;
+                }
+                if (rebuildAll || newSize != size || newCells != cells)
+                {
+                    size = newSize;
+                    cells = newCells;
+                    Summary = "AB_LevelsSummary".Translate(bandCount, size);
+                    Cells = "AB_LevelsCells".Translate(
+                        cells.ToString("N0"), ABMapSizeLimit.CellBudget.ToString("N0"));
+                    OverBudget = "AB_LevelsOverBudget".Translate(
+                        (cells / (float)ABMapSizeLimit.CellBudget).ToString("0.0"));
+                    Headroom = "AB_LevelsHeadroom".Translate(
+                        ABMapSizeLimit.MaxLevelsFor(size), size);
+                }
+            }
+
+            /// <summary>The per-size radio labels. Built alongside the rest; the chooser asks
+            /// for these BEFORE Refresh runs on the first frame, so build on demand if the
+            /// cache is still cold rather than returning null into a Widgets call.</summary>
+            internal static string SizeLabel(int i)
+            {
+                if (sizeLabels == null || i < 0 || i >= sizeLabels.Length)
+                {
+                    Refresh(ABMapSizeLimit.BandCount,
+                        Find.GameInitData != null ? Find.GameInitData.mapSize : 0, 0);
+                }
+                return sizeLabels != null && i >= 0 && i < sizeLabels.Length
+                    ? sizeLabels[i]
+                    : string.Empty;
             }
         }
 

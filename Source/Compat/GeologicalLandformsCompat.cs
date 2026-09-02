@@ -477,10 +477,16 @@ namespace AsAboveSoBelow
         ///
         /// Counted at the END of the terrain mutator pass, i.e. BEFORE GenStep_RocksFromGrid
         /// has spawned anything, so "edifice" here is whatever already stood there and the
-        /// interesting figure is water vs open. Comparing the ANCHOR slice against the
-        /// SURFACE slice is the whole experiment: identical censuses mean the lift is
-        /// faithful and the landform really is that wet, divergent ones mean the lift is
-        /// dropping land.</summary>
+        /// interesting figure is water vs open.
+        ///
+        /// ⚠⚠ HOW TO READ THE ANCHOR-VS-SURFACE COMPARISON CHANGED WITH §56n. It used to be
+        /// "identical censuses mean the lift is faithful", because the lift replaced the
+        /// whole slice. It no longer does: with the anchor clamp seated the lift copies only
+        /// the cells GL actually authored, so the surface band legitimately keeps its own
+        /// terrain everywhere GL declined - most obviously under rock, where GL's TerrainAt
+        /// returns null by design. DIVERGENCE IS NOW EXPECTED AND IS NOT EVIDENCE OF A BUG.
+        /// What still is: a surface census with far FEWER open cells than the anchor, which
+        /// is the §56m pollution signature (run #40: 13,001 anchor, 4,191 surface).</summary>
         internal static string CensusOf(Map map, int z0, int h)
         {
             int water = 0;
@@ -1249,28 +1255,41 @@ namespace AsAboveSoBelow
         /// only safe once this patch is actually on the method.</summary>
         internal static bool Seated;
 
+        /// <summary>
+        /// ⚠ BOTH INSTANTIATIONS OR NEITHER (rule 33's §95.j corollary: count per-class
+        /// failures, because an all-or-nothing fallback never trips on a PARTIAL one).
+        ///
+        /// Scoping &lt;TerrainDef&gt; while &lt;float&gt; stayed open would be the worst of
+        /// both worlds: elevation, fertility and caves would still be painted across the
+        /// surface band, so the destination would still be polluted - but the terrain lift
+        /// would have switched to authored-cells-only on the strength of this flag and would
+        /// no longer replace that pollution. That is precisely the §56m failure, re-armed.
+        /// So a half-resolve disables the whole feature and says so.
+        /// </summary>
         private static bool Prepare()
         {
-            bool ok = GeologicalLandformsCompat.ApplyBufferedTerrainTarget != null;
-            if (ok)
+            MethodBase f = GeologicalLandformsCompat.ApplyBufferedFloatTarget;
+            MethodBase t = GeologicalLandformsCompat.ApplyBufferedTerrainTarget;
+            if (f == null || t == null)
             {
-                Seated = true;
+                if (f != null || t != null)
+                {
+                    Log.WarningOnce(ABLog.Tag + " GL ApplyBuffered resolved for only one of"
+                        + " its two instantiations (float=" + (f != null ? "FOUND" : "absent")
+                        + ", terrain=" + (t != null ? "FOUND" : "absent") + "); anchor"
+                        + " scoping is DISABLED and the terrain lift stays whole-slice.",
+                        762195901);
+                }
+                return false;
             }
-            return ok;
+            Seated = true;
+            return true;
         }
 
         private static IEnumerable<MethodBase> TargetMethods()
         {
-            MethodBase f = GeologicalLandformsCompat.ApplyBufferedFloatTarget;
-            MethodBase t = GeologicalLandformsCompat.ApplyBufferedTerrainTarget;
-            if (f != null)
-            {
-                yield return f;
-            }
-            if (t != null)
-            {
-                yield return t;
-            }
+            yield return GeologicalLandformsCompat.ApplyBufferedFloatTarget;
+            yield return GeologicalLandformsCompat.ApplyBufferedTerrainTarget;
         }
 
         /// <summary>Named to match GL's parameter so Harmony binds it by name.</summary>
