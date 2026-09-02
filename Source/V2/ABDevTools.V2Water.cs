@@ -182,6 +182,23 @@ namespace AsAboveSoBelow
                 MessageTypeDefOf.TaskCompletion, false);
         }
 
+        /// <summary>§96.d shipped the square publish permanently; this turns it OFF so the
+        /// original streaking can be reproduced on demand. Distinct from the lab's own
+        /// square toggle, which forces the value the other way for a map the fix would not
+        /// otherwise touch.</summary>
+        [DebugAction("As above", "AB2: water - toggle SHIPPED band _MapSize fix",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void ToggleShippedBandMapSize()
+        {
+            Patch_WaterInfo_ABBandSquareMapSize.Enabled =
+                !Patch_WaterInfo_ABBandSquareMapSize.Enabled;
+            Messages.Message("AB2: shipped band _MapSize fix "
+                + (Patch_WaterInfo_ABBandSquareMapSize.Enabled
+                    ? "ON (water uses the BAND's square size)"
+                    : "OFF (vanilla stacked size - ripples should run vertical again)"),
+                MessageTypeDefOf.TaskCompletion, false);
+        }
+
         [DebugAction("As above", "AB2: water lab - toggle _MapSize SQUARE (water mats only)",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void ToggleSquareWaterMats()
