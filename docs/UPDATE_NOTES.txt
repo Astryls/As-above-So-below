@@ -1,18 +1,32 @@
-Update notes (window 15)
+Update notes (windows 16-19)
 
-Climate:
-- Altitude temperature offsets now ship OFF by default. New colonies get no per-level temperature change unless you opt in.
-- Mod settings gained climate presets (Off / Gentle / Standard / Alpine), a master toggle, and a live status line showing whether the temperature patch is active.
-- Existing installs keep their configured offsets and existing colonies keep their frozen climate snapshots. Nothing changes mid-save.
+Every level is a real level:
+- Upper and lower levels now generate the same natural features the ground level gets: steam geysers, gas vents, rock chunks, boulders, cave debris and biome scatter. Previously they generated bare.
+- Vegetation on every level is now planted by the game's own wild plant system at that level's real biome density, instead of a thinner approximation. Summits no longer have a bald ring around the rim.
+- Every level is built from its own biome's stone and its own biome's ground, including modded rock and modded biome terrain. A volcanic level gets volcanic rock and volcanic gravel; a cavern level gets cavern stone.
+- Landmark features carry up and down the column where it makes sense: hot springs, ground patches, mineral deposits and the equivalents added by mods. Lakes, coasts, rivers, craters and cave shaping deliberately stay on the ground level, where the surrounding geography makes sense of them.
+- Because levels are now floored with their real biome terrain, content from other mods that looks for specific ground finds the upper levels on its own. Alpha Biomes' bones and skeletons, for example, now appear on high plateaus.
+- New settings: natural features per level, full biome vegetation per level, and landmark features per level. All on by default, all can be turned off for faster generation.
 
-Performance:
-- The see-below resolver is now cached per map, removing the biggest frame spikes when many cells change at once.
-- The temperature patch now unloads itself entirely while no map needs it, so it costs nothing when unused.
-- The below-view render and overlay passes are skipped while every level below the view is still undiscovered, which is most of the time for most colonies.
+Ground level generation fix:
+- The ground level was only receiving a fraction of its intended steam geysers, rock chunks, vents and scatter. The game sizes those counts from one dimension of the map, so a stacked colony spread a single level's worth of content across the whole column. Your ground level now gets its full share. Expect visibly more geysers and chunks on new colonies.
 
-Blueprints:
-- Stairs, ladders and elevators now show a proper vanilla-style blueprint (blue outline wash) instead of looking like the finished building.
+Levels stay where they belong:
+- Anima trees are now restricted to the ground level, including when one arrives later through the anima tree event rather than at map generation.
+- Ancient wreckage stays on the ground level: ancient junk and debris, mechanitor wreckage, and the wrecked vehicle props added by Vanilla Vehicles Expanded and Vehicle Framework.
 
-Perspective Shift:
-- The drafted avatar now faces your cursor correctly when the cursor is over open air on another level.
-- An avatar carrying something who clicks a stairway, ladder or elevator now travels through it (still carrying) instead of putting the load down on it. Elevators offer the destination menu.
+Map previews:
+- Map previews now match the colony you actually generate. The bridge that keeps them in sync had stopped working, so previews had been showing a different landform from the map you settled.
+- Geological Landforms coastlines, rock masses and peninsulas now line up with the generated colony.
+
+Visual effects mods:
+- Smoke, vapour, splashes, blood animations, light beams and cloud effects from other mods now render on the correct level instead of only on the surface.
+- Water rendering on stacked maps has been adjusted.
+
+Cross level travel:
+- Route planning for the first hop between levels is now exact, so colonists pick the stair, ladder or elevator that genuinely gets them there fastest rather than the one that looks closest.
+
+Fixes:
+- Fixed the debug action palette not opening for some players.
+- Plants can no longer be placed over open air on a sky level.
+- Fixed a case where a level with no plantable species generated completely bare instead of falling back to its own seeding.
