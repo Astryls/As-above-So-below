@@ -332,6 +332,21 @@ namespace AsAboveSoBelow
         [HarmonyPatch(typeof(MapGenerator), nameof(MapGenerator.GenerateContentsIntoMap))]
         public static class Patch_GenerateContents_ABCarveInWindow
         {
+            /// <summary>
+            /// §99: capture EXACTLY the gensteps that ran, from the engine's own argument.
+            ///
+            /// The band dressing pass needs to re-run a subset of them per band, and the
+            /// obvious source - <c>MapGeneratorDef.genSteps</c> - is the wrong one: it misses
+            /// everything tile mutators, DLCs and mods inject at runtime, which on a modded
+            /// profile is most of the interesting content. The argument is the ground truth
+            /// and it is a public signature, so it cannot rot the way a private static field
+            /// name can (rule 62: finished-answer tables rot, and so do foreign field names).
+            /// </summary>
+            private static void Prefix(IEnumerable<GenStepWithParams> genStepDefs)
+            {
+                ABBandDressing.CaptureSteps(genStepDefs);
+            }
+
             private static void Postfix(Map map)
             {
                 PendingLayout p = pending;
@@ -601,6 +616,14 @@ namespace AsAboveSoBelow
                 {
                     return true; // not generating a banded map - normal play path
                 }
+                // §99: the dressing pass IS the deferred plant pass for these bands. The
+                // carve that doomed them has finished, so "doomed" is no longer true and this
+                // suppressor must stand down or it would veto the very thing it created the
+                // need for (rule 20: earlier work turns on every readiness gate).
+                if (ABBandDressing.Active)
+                {
+                    return true;
+                }
                 if (!TryPendingSurfaceRect(___map, out CellRect surface, out _)
                     || surface.Contains(c))
                 {
@@ -754,6 +777,20 @@ namespace AsAboveSoBelow
             ABBandWeather.SeedAltitudeSnow(map, bands);
             ABGenProfile.Phase("SeedAltitudeSnow", tail.Elapsed.TotalMilliseconds);
             GeologicalLandformsCompat.ProbeSurfacePhase(map, surf, ref surfWatch, "SeedAltitudeSnow");
+            tail.Restart();
+
+            // §99 BAND DRESSING. Placed here for two reasons that are both about what has
+            // ALREADY happened rather than about convenience:
+            //   - the gutters exist, so no scatterer can straddle a seam;
+            //   - we are still inside CarveInProgress, so ABAirSpawnGuard is standing down.
+            //     That is not incidental: the guard's entire job is moving things OUT of
+            //     non-surface bands, and it would walk every geyser we place back upstairs,
+            //     exactly as it walked 18,075 basement rocks upstairs at run #46 (§57).
+            // And still AHEAD of the basement refog below, so cave dressing is hidden until
+            // it is mined out, like any vanilla mountain content.
+            ABBandDressing.Dress(map, bands);
+            ABGenProfile.Phase("BandDressing", tail.Elapsed.TotalMilliseconds);
+            GeologicalLandformsCompat.ProbeSurfacePhase(map, surf, ref surfWatch, "BandDressing");
             tail.Restart();
 
             // Fog policy differs by direction, matching V1:

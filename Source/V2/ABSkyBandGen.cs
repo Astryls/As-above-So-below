@@ -268,7 +268,30 @@ namespace AsAboveSoBelow
             // the finished terrain (and never into open water, which has no fertility).
             CarveTarns(map, rect, w, h, kind, edgeDist, settings);
             ScatterRimScree(map, rect, w, h, kind, edgeDist, rocks, noises);
-            SeedFlora(map, plateauCells, settings, edgeDist, rect, w);
+            if (ABBandDressing.WillDressFlora(map))
+            {
+                // §99: vanilla's own plant pass dresses this band a moment later, at the
+                // band biome's true density. That is the user's explicit choice over raising
+                // the constants below, and it also DROPS THE ALPINE RIM CURVE - a summit
+                // meadow should read like the ground it sits above, which is what "parity"
+                // means and which the exposure lerp deliberately prevented.
+                //
+                // Registered as a fallback rather than deleted: if the biome offers nothing
+                // that can legally stand on plateau soil and gravel, vanilla's pass places
+                // zero and this seeder - which weights by fertility and relaxes the
+                // temperature gate - is called after all. Rule 33: a filter that can reject
+                // everything must say so, and something must answer for it.
+                List<IntVec3> fallbackCells = plateauCells;
+                int[] fallbackEdge = edgeDist;
+                CellRect fallbackRect = rect;
+                int fallbackWidth = w;
+                ABBandDressing.RegisterFloraFallback(band, () => SeedFlora(map, fallbackCells,
+                    settings, fallbackEdge, fallbackRect, fallbackWidth));
+            }
+            else
+            {
+                SeedFlora(map, plateauCells, settings, edgeDist, rect, w);
+            }
         }
 
         /// <summary>No tarn water within this many cells of a drop. The user's rule -

@@ -597,7 +597,21 @@ namespace AsAboveSoBelow
         {
             try
             {
-                if (!__result || !ABBandSafety.TryBandRectOf(map, loc, out CellRect band))
+                if (!__result)
+                {
+                    return;
+                }
+                // §99: while a band scope is armed the scatterer has been told the map IS
+                // one band, and this is the veto half of that lie. It lives HERE, inside the
+                // existing seam postfix, rather than in a second postfix of our own on the
+                // same target - rule 50: two own patches cancel silently, and one funnel with
+                // two clauses is always easier to reason about than two patches with one.
+                if (!ABBandScope.Allows(map, loc))
+                {
+                    __result = false;
+                    return;
+                }
+                if (!ABBandSafety.TryBandRectOf(map, loc, out CellRect band))
                 {
                     return;
                 }

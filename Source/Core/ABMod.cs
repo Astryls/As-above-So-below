@@ -65,6 +65,12 @@ namespace AsAboveSoBelow
     {
         public const string Tag = "[As above, So below]";
 
+        /// <summary>Ask BEFORE building an expensive diagnostic string. C# evaluates
+        /// arguments first, so `Dev("..." + Census(map))` pays for the census on every
+        /// player's machine even when nothing is logged - the §56.9 lesson, made reusable.
+        /// </summary>
+        public static bool DevEnabled => ABMod.Settings != null && ABMod.Settings.verboseLogging;
+
         public static void Dev(string msg)
         {
             if (ABMod.Settings != null && ABMod.Settings.verboseLogging)

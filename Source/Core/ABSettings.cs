@@ -240,6 +240,20 @@ namespace AsAboveSoBelow
         /// missing feature).</summary>
         public float skyVegetationDensity = 1f;
 
+        // ---- band dressing (§99) --------------------------------------------
+
+        /// <summary>Re-run the map's own feature gensteps once per non-surface band, so
+        /// upper and lower levels get the geysers, gas vents, rock chunks and boulders the
+        /// ground level gets. Also confines the ORIGINAL generation-time pass to the surface
+        /// band, which is what finally gives the ground level its full count - see
+        /// ABBandDressing for why it was only ever receiving a seventh of it.</summary>
+        public bool bandFeatures = true;
+
+        /// <summary>Run vanilla's own initial plant pass on every band, at the band biome's
+        /// real density, instead of our thinner hand-rolled seeders. Off falls back to the
+        /// pre-§99 behaviour (sparse, with an alpine rim curve on summits).</summary>
+        public bool bandVegetationParity = true;
+
         // ---- basement generation -------------------------------------------
 
         /// <summary>Ore lumps per 10k basement cells.</summary>
@@ -339,6 +353,8 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref peakMeadowScale, "peakMeadowScale", 0.024f);
             Scribe_Values.Look(ref peakTerraceMax, "peakTerraceMax", 4);
             Scribe_Values.Look(ref skyVegetationDensity, "skyVegetationDensity", 1f);
+            Scribe_Values.Look(ref bandFeatures, "bandFeatures", true);
+            Scribe_Values.Look(ref bandVegetationParity, "bandVegetationParity", true);
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
             Scribe_Values.Look(ref basementBiomeChoice, "basementBiomeChoice",
                 BiomesCavernsCompat.RandomChoice);
@@ -853,6 +869,12 @@ namespace AsAboveSoBelow
 
             list.Label("AB_SkyVegetationDensity".Translate(skyVegetationDensity.ToString("0.0")));
             skyVegetationDensity = list.Slider(skyVegetationDensity, 0f, 2f);
+
+            list.GapLine();
+            list.CheckboxLabeled("AB_BandFeatures".Translate(), ref bandFeatures,
+                "AB_BandFeaturesDesc".Translate());
+            list.CheckboxLabeled("AB_BandVegetationParity".Translate(), ref bandVegetationParity,
+                "AB_BandVegetationParityDesc".Translate());
         }
 
         // ---- basement tab ----------------------------------------------------

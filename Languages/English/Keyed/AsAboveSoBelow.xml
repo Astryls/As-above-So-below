@@ -18,6 +18,10 @@
   <AB_CavernFormations>Rock formations: {0}</AB_CavernFormations>
 
   <AB_SkyVegetationDensity>Summit vegetation: {0}x</AB_SkyVegetationDensity>
+  <AB_BandFeatures>Natural features on every level</AB_BandFeatures>
+  <AB_BandFeaturesDesc>Runs the map's own feature generators once per level, so upper and lower levels get the steam geysers, gas vents, rock chunks and boulders the ground level gets - including ones added by other mods. Also gives the ground level its full share, which it was not previously getting. Ancient wreckage and anima trees stay on the ground level.</AB_BandFeaturesDesc>
+  <AB_BandVegetationParity>Full biome vegetation on every level</AB_BandVegetationParity>
+  <AB_BandVegetationParityDesc>Plants every level using the game's own wild plant system at the level's real biome density, instead of a thinner approximation. Turn off for sparser, faster-generating upper and lower levels.</AB_BandVegetationParityDesc>
 
   <AB_GoToLevel>{0} (level {1})</AB_GoToLevel>
 
