@@ -156,7 +156,12 @@ namespace AsAboveSoBelow
             // hollows in different places, which is what makes a plateau read as terrain
             // rather than as a noise gradient.
             Perlin moistNoise = new Perlin(0.06, 2.0, 0.5, 4, Rand.Range(0, int.MaxValue), QualityMode.Medium);
-            TerrainDef arable = ArableTerrainFor(map.Biome);
+            // §99.A/A2: the BAND's biome, not the map's. `map.Biome` is the surface tile's
+            // answer and it was wrong here for the same reason it was wrong for rock - a
+            // band can run its own biome, and its ground should be that biome's ground.
+            BiomeDef bandBiome = ABBandRocks.BiomeOfBand(map, bands, band);
+            TerrainDef arable = ArableTerrainFor(bandBiome ?? map.Biome);
+            TerrainDef skyGravel = ABBandRocks.GravelFor(map, bandBiome);
             List<IntVec3> oreCells = new List<IntVec3>();
             List<IntVec3> fogCells = new List<IntVec3>();
             List<IntVec3> plateauCells = new List<IntVec3>();
@@ -210,11 +215,11 @@ namespace AsAboveSoBelow
                             {
                                 // Bare stone shoulders, in the plateau's own rock type.
                                 ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
-                                t = rock.building?.naturalTerrain ?? TerrainDefOf.Gravel;
+                                t = rock.building?.naturalTerrain ?? skyGravel;
                             }
                             else if (n < 0.40f)
                             {
-                                t = TerrainDefOf.Gravel;
+                                t = skyGravel;
                             }
                             else if (n > 1f - soilFrac)
                             {
@@ -228,7 +233,7 @@ namespace AsAboveSoBelow
                                 // (deliberately rare - mud everywhere reads as damage).
                                 t = wet > 0.90f ? (TerrainDefOf.Mud ?? TerrainDefOf.Soil) : TerrainDefOf.Soil;
                             }
-                            grid.SetTerrain(c, t ?? TerrainDefOf.Gravel);
+                            grid.SetTerrain(c, t ?? skyGravel);
                             plateauCells.Add(c);
                             continue;
                         }

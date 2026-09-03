@@ -223,7 +223,9 @@ namespace AsAboveSoBelow
                 }
 
                 lastSummary = stepsRun + " genstep run(s), " + ABBandMutators.workersRun
-                    + " mutator run(s), " + thingsPlaced + " thing(s), "
+                    + " mutator run(s), " + ABBandBiomeTerrain.cellsPainted
+                    + " biome terrain cell(s) on " + ABBandBiomeTerrain.bandsPainted
+                    + " band(s), " + thingsPlaced + " thing(s), "
                     + plantsPlaced + " plant(s), " + ABBandScope.airRejections
                     + " open-air cell(s) refused, terrain writes refused: "
                     + ABBandScope.terrainRefusedVoid + " void / "
@@ -253,6 +255,13 @@ namespace AsAboveSoBelow
             ABBandScope.Push(map, rect, sky, guardTerrain: true);
             try
             {
+                // §99.B1 BEFORE the mutators: patch makers lay the biome's ground character
+                // (lava, tar, marsh, obsidian) and a mutator like a hot spring should be
+                // able to cut through it, not be buried under it. Both are terrain, and
+                // terrain order is authorship order (rule 39: last write wins, so decide
+                // deliberately who writes last).
+                BiomeDef biome = ABBandRocks.BiomeOfBand(map, ABBands.CompOf(map), band);
+                ABBandBiomeTerrain.PaintBand(map, rect, biome, band);
                 ABBandMutators.DressBand(map, band);
             }
             catch (Exception e)

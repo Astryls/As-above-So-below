@@ -1338,7 +1338,10 @@ namespace AsAboveSoBelow
         {
             try
             {
-                foreach (ThingDef rock in Find.World.NaturalRockTypesIn(map.Tile))
+                // §99.A: every rock that can appear on ANY band, not just the tile's list.
+                // Once bands carry their own stone, a band rock missing from this set would
+                // render the cap with no material at all (rule 34).
+                foreach (ThingDef rock in ABBandRocks.AllRocksOnMap(map))
                 {
                     return rock;
                 }

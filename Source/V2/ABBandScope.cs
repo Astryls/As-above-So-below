@@ -97,11 +97,32 @@ namespace AsAboveSoBelow
 
         internal static int terrainRefusedWaterAtDrop;
 
-        /// <summary>No band water within this many cells of a drop. Lifted verbatim from
-        /// ABSkyBandGen's <c>MinTarnEdgeDist</c> and for the user's original reason: "lakes
-        /// should never spawn on upper levels near the edge". A lake lipping over a cliff
-        /// would need the whole waterfall system to make any sense.</summary>
-        private const int MinWaterEdgeDist = 6;
+        /// <summary>No band hazard terrain within this many cells of a drop. Lifted verbatim
+        /// from ABSkyBandGen's <c>MinTarnEdgeDist</c> and for the user's original reason:
+        /// "lakes should never spawn on upper levels near the edge". A lake lipping over a
+        /// cliff would need the whole waterfall system to make any sense.</summary>
+        private const int MinHazardEdgeDist = 6;
+
+        /// <summary>
+        /// ⚠⚠ "WATER" WAS THE WRONG TEST, AND ALPHA BIOMES IS WHY.
+        ///
+        /// The edge rule originally asked <c>newTerr.IsWater</c>. That is correct for a tarn
+        /// and useless for everything a modded biome actually pours: <c>AB_LiquidLava</c>
+        /// declares <c>avoidWander</c> and is NOT water, and the same is true of tar and
+        /// propane. Gating on IsWater would have refused a pond at a cliff edge while
+        /// happily tipping a lava lake over the same drop.
+        ///
+        /// So the test names the PROPERTY that makes a cliff-edge pool wrong - it is a thing
+        /// pawns must not walk into, or cannot - rather than one particular liquid. Rule 54:
+        /// search the capability, not the name.
+        /// </summary>
+        private static bool IsEdgeHazard(TerrainDef t)
+        {
+            return t != null
+                && (t.IsWater
+                    || t.avoidWander
+                    || t.passability == Traversability.Impassable);
+        }
 
         /// <summary>Cells refused for being open air, so "the sky band generated nothing" is
         /// never an unfalsifiable observation (rule 33).</summary>
@@ -196,9 +217,9 @@ namespace AsAboveSoBelow
                 terrainRefusedVoid++;
                 return false;
             }
-            if (rejectOpenAir && newTerr != null && newTerr.IsWater)
+            if (rejectOpenAir && IsEdgeHazard(newTerr))
             {
-                int cells = GenRadial.NumCellsInRadius(MinWaterEdgeDist);
+                int cells = GenRadial.NumCellsInRadius(MinHazardEdgeDist);
                 for (int i = 0; i < cells; i++)
                 {
                     IntVec3 n = c + GenRadial.RadialPattern[i];

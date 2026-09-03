@@ -62,47 +62,89 @@ namespace AsAboveSoBelow
     internal static class ABBandMutators
     {
         /// <summary>
-        /// Cleared worker families, matched as a FRAGMENT of the worker's runtime type name
-        /// so a mod subclassing `TileMutatorWorker_Patches` is cleared too - and, more
-        /// importantly, so a mod subclassing an EXCLUDED family cannot walk out of the
-        /// exclusion by deriving one level deeper.
+        /// ⚠⚠ A BLOCKLIST, NOT A WHITELIST - AND THAT INVERSION IS THE WHOLE POINT.
         ///
-        ///   HotSprings       - hot spring pools and their stone apron. Paints terrain from
-        ///                      one noise field over `map.AllCells`; the field is re-centred
-        ///                      per band by the module wrap below. This is the closest thing
-        ///                      in vanilla to the "vents" in the user's report.
-        ///   Patches          - the whole Marshy / Sandy / Fertile / Muddy / DryGround
-        ///                      family, driven by `def.terrainPatchMakers`. Pure terrain,
-        ///                      walks `map.AllCells`, and it is what gives a level's ground
-        ///                      its variety instead of one flat biome texture.
-        ///   ObsidianDeposits - builds a throwaway `GenStep_ScatterLumpsMineable` and runs
-        ///                      it, so Tier 1's scatterer funnel confines it for free.
+        /// This started as a whitelist of three vanilla worker names (HotSprings, Patches,
+        /// ObsidianDeposits). Surveying Alpha Biomes killed it: that mod ships TWELVE
+        /// TileMutatorWorkers - TarLakes, PropaneLakes, MagmaticQuagmire, HealingSprings,
+        /// MutagenicSprings, QuicksandPits, AgariluxPrime, OnlyGrass and three ancient vents
+        /// - and NOT ONE of them matches a vanilla name fragment. A name-based whitelist
+        /// cannot be mod-aware; it structurally excludes every mod that ever ships, which is
+        /// the exact opposite of what §99 is for.
+        ///
+        /// So the default is RUN IT, and the list below is what must not run. Each entry
+        /// names a reason, and the terrain guard bounds whatever gets through: void cells,
+        /// out-of-band writes and hazardous terrain beside a drop are all refused before
+        /// they land (rule 37 - the guard is the enforcement point, this list is policy).
+        ///
+        /// Matched as a FRAGMENT of the runtime type name so a mod subclassing a blocked
+        /// family cannot walk out of the block by deriving one level deeper.
         /// </summary>
-        private static readonly string[] ClearedWorkerFragments =
+        private static readonly string[] BlockedWorkerFragments =
         {
-            "HotSprings", "Patches", "ObsidianDeposits"
+            // Geography that only makes sense measured from the ground level.
+            "Coast", "River", "Headwater", "Confluence", "Delta", "Island", "Archipelago",
+            "Peninsula", "Bay", "Cove", "Atoll", "Fjord", "Iceberg", "Lakeshore", "Harbor",
+            "Shore", "Beach",
+            // Shape. ABCavernGen owns the basement's shape and ABSkyBandGen owns the
+            // plateau's; these author elevation or carve caves and would fight both.
+            "Cavern", "Cave", "Chasm", "Crevasse", "Hollow", "Basin", "Valley", "Plateau",
+            "Cliffs", "Dune", "Crater", "Volcano", "Caldera", "TerraformingScar", "Scar",
+            // Geological Landforms' own worker. §56r lends it a borrowed decision context
+            // during generation; re-entering it post-carve, outside that borrow, would ask
+            // it to author a landform against inputs it was never given.
+            "Landform",
+            // Man-made and wreckage: the user's ground-level rule, plus §ABStructureFit's
+            // standing objection to structures near seams.
+            "Ancient", "Ruins", "Abandoned", "Stockpile", "Uplink", "Quarry", "Junkyard",
+            "Megahive", "Settlement", "Colony",
+            // Biome authorship. ABBandEnv owns "which biome is this cell in" per band and
+            // the whole per-level climate system reads it (rule 16).
+            "MixedBiome", "Biome"
         };
 
         internal static int workersRun;
 
         internal static bool Enabled => ABMod.Settings?.bandLandmarks ?? true;
 
+        /// <summary>
+        /// ⚠⚠ THE LAKE FAMILY IS BLOCKED BY TYPE, NOT BY NAME, AND THAT DISTINCTION IS THE
+        /// WHOLE REASON THIS METHOD IS SHAPED LIKE THIS.
+        ///
+        /// A name test for "Lake" would be both too broad and too narrow. Alpha Biomes'
+        /// <c>TileMutatorWorker_TarLakes</c> and <c>TileMutatorWorker_PropaneLakes</c> derive
+        /// from vanilla's <c>TileMutatorWorker_Lake</c> - so they inherit
+        /// <c>GetLakeCenter</c>, which <c>Patch_TileMutatorWorker_Lake_ABSurfaceBand</c>
+        /// (§ABWaterV2) deliberately forces into the SURFACE band. Run one on band 2 and it
+        /// computes a centre in band 0, every write lands outside the scope rect, the guard
+        /// refuses all of them, and the result is a silent no-op that LOOKS like a working
+        /// feature. That is the exact trap §99 recorded for Pond, and an <c>is</c> test is
+        /// what catches it for subclasses nobody has heard of.
+        ///
+        /// The content is not lost: Alpha Biomes' tar and lava also arrive through
+        /// <c>terrainPatchMakers</c>, which §99.B1 replays per band. Lake-derived workers
+        /// stay blocked until the water system itself is made scope-aware.
+        /// </summary>
         private static bool Cleared(TileMutatorWorker worker)
         {
             if (worker == null)
             {
                 return false;
             }
-            string type = worker.GetType().Name;
-            for (int i = 0; i < ClearedWorkerFragments.Length; i++)
+            if (worker is TileMutatorWorker_Lake)
             {
-                if (type.IndexOf(ClearedWorkerFragments[i],
+                return false;
+            }
+            string type = worker.GetType().Name;
+            for (int i = 0; i < BlockedWorkerFragments.Length; i++)
+            {
+                if (type.IndexOf(BlockedWorkerFragments[i],
                         StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    return true;
+                    return false;
                 }
             }
-            return false;
+            return true;
         }
 
         /// <summary>

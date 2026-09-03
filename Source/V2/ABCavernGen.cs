@@ -201,13 +201,12 @@ namespace AsAboveSoBelow
             // 4. Thick rock roofs stay everywhere underground, so any carved cell out of
             // roof-holder range gets a natural pillar planted at it, exactly where support
             // is missing. Scan order means later checks already see earlier pillars.
-            List<ThingDef> rocks = Find.World.NaturalRockTypesIn(map.Tile)?.ToList()
-                ?? new List<ThingDef>();
-            if (rocks.Count == 0)
-            {
-                rocks.Add(ThingDefOf.Sandstone);
-            }
-            List<Perlin> rockNoises = ABRockGen.MakeNoises(rocks.Count);
+            // §99.A: this band's stone, from this band's biome - a cavern biome's pillars
+            // must be that biome's rock, not the surface tile's.
+            ABBandRocks.ForBand(map, bands, band, out List<ThingDef> rocks,
+                out List<Perlin> rockNoises);
+            TerrainDef cavernGravel = ABBandRocks.GravelFor(map,
+                ABBandRocks.BiomeOfBand(map, bands, band));
             int pillars = 0;
             for (int i = 0; i < carvedList.Count; i++)
             {
@@ -218,7 +217,7 @@ namespace AsAboveSoBelow
                 }
                 ThingDef rock = rocks[ABRockGen.PickIndex(rockNoises, c)];
                 GenSpawn.Spawn(rock, c, map, WipeMode.Vanish);
-                grid.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
+                grid.SetTerrain(c, rock.building?.naturalTerrain ?? cavernGravel);
                 pillars++;
             }
             if (pillars > 0)

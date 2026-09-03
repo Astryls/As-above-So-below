@@ -465,7 +465,10 @@ namespace AsAboveSoBelow
                 }
                 else if (map.terrainGrid.TerrainAt(c) == ABDefOf.AB_OpenAir)
                 {
-                    map.terrainGrid.SetTerrain(c, TerrainDefOf.Gravel);
+                    // §99.A2: the landing takes the ground of the band it lands ON, so a
+                    // stair into a volcanic or cavern level does not floor itself in
+                    // generic gravel.
+                    map.terrainGrid.SetTerrain(c, ABBandRocks.GravelAt(map, c));
                 }
                 map.fogGrid.Unfog(c);
             }

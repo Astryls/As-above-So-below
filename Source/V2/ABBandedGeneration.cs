@@ -640,6 +640,13 @@ namespace AsAboveSoBelow
 
         private static void Carve(Map map, ABBandMap bands)
         {
+            // §99.A: the palette is now resolved PER BAND, from the band's own biome, so a
+            // basement running a cavern biome is built from that biome's stone rather than
+            // the surface tile's. Reset here rather than lazily - the cache is keyed on
+            // BiomeDef, which is a global def, and carrying it between colonies would hand
+            // this map the noise fields generated for the last one (rule 21).
+            ABBandRocks.Reset();
+            ABBandBiomeTerrain.Reset();
             List<ThingDef> rocks = Find.World.NaturalRockTypesIn(map.Tile).ToList();
             if (rocks.Count == 0)
             {
@@ -715,11 +722,16 @@ namespace AsAboveSoBelow
                         + " slot=" + bands.Slot + ").");
                 }
                 var phase = System.Diagnostics.Stopwatch.StartNew();
+                // §99.A: this band's own stone. Rocks and noises are fetched as a PAIR -
+                // ABRockGen.PickIndex indexes the noise list by rock index, so they can
+                // never be sourced separately (rule 16).
+                ABBandRocks.ForBand(map, bands, band, out List<ThingDef> bandRocks,
+                    out List<Perlin> bandNoises);
                 if (band < bands.surfaceBand)
                 {
                     // depth 1 = the level immediately below the surface. Ore richness and
                     // cave openness both scale with it.
-                    FillRock(map, rect, rocks, noises, bands.surfaceBand - band);
+                    FillRock(map, rect, bandRocks, bandNoises, bands.surfaceBand - band);
                     ABGenProfile.Phase("FillRock band " + band, phase.Elapsed.TotalMilliseconds);
                     GeologicalLandformsCompat.ProbeSurfacePhase(map, surf, ref surfWatch,
                         "FillRock+ScatterOres band " + band);
@@ -752,7 +764,7 @@ namespace AsAboveSoBelow
                     }
                     ABGenProfile.Phase("Sky clear band " + band, phase.Elapsed.TotalMilliseconds);
                     phase.Restart();
-                    ABSkyBandGen.Generate(map, bands, band, rocks, noises);
+                    ABSkyBandGen.Generate(map, bands, band, bandRocks, bandNoises);
                     ABGenProfile.Phase("SkyBandGen band " + band, phase.Elapsed.TotalMilliseconds);
                 }
 
@@ -833,6 +845,11 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 ThingDef rock = rocks[ABRockGen.PickIndex(noises, c)];
+                // §99.A2: the biome's own gravel, not a hardcoded Gravel. Vanilla writes
+                // `biomeDef.gravelTerrain ?? TerrainDefOf.Gravel` (MapGenUtility:651);
+                // Pyroclastic Conflagration wants AB_VolcanicGravel and would otherwise
+                // have had correct obsidian stone standing on wrong ground.
+                TerrainDef fallbackGravel = ABBandRocks.GravelAt(map, c);
                 // KEEP vanilla's rock when it is exactly the rock we would spawn.
                 // RocksFromGrid has already filled the mountainous share of this band, so a
                 // destroy+respawn pair here is pure waste whenever the def matches - and the
@@ -850,7 +867,7 @@ namespace AsAboveSoBelow
                 {
                     ClearCellHard(map, c);
                 }
-                terrain.SetTerrain(c, rock.building?.naturalTerrain ?? TerrainDefOf.Gravel);
+                terrain.SetTerrain(c, rock.building?.naturalTerrain ?? fallbackGravel);
                 if (!keep)
                 {
                     GenSpawn.Spawn(rock, c, map);
