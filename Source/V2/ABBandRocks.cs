@@ -13,32 +13,22 @@ namespace AsAboveSoBelow
     ///     <c>Find.World.NaturalRockTypesIn(map.Tile)</c>
     /// and handed that single list to every band - <c>FillRock</c>, <c>ABCavernGen</c>,
     /// <c>ABSkyBandGen</c> and the mountain-cap renderer all shared it. So a basement band
-    /// running a Biomes! Caverns biome was built out of the SURFACE tile's stone, and any
-    /// biome-specific rock belonging to the band's own biome could never appear at all.
+    /// running its own biome was built out of the SURFACE tile's stone, and any
+    /// biome-specific rock belonging to the band's own biome could never appear.
     ///
     /// ⚠ THE MACHINERY WAS ALREADY MOD-AWARE; ONLY ITS SCOPE WAS WRONG. Vanilla's
     /// <c>NaturalRockTypesIn</c> honours <c>biome.forceRockTypes</c> outright, and otherwise
     /// filters candidates through <c>RockAllowedInBiome</c>, which admits a rock declaring
     /// <c>building.biomeSpecific</c> only when the biome's <c>extraRockTypes</c> lists it.
     /// Mod rocks ride in for free on <c>IsNonResourceNaturalRock</c>. Alpha Biomes is the
-    /// proof: six of its twelve biomes declare <c>forceRockTypes</c> (Pyroclastic
-    /// Conflagration wants <c>AB_Obsidianstone</c> + <c>Slate</c>), and none of it could
+    /// proof: six of its twelve biomes declare <c>forceRockTypes</c>, and none of it could
     /// reach a band while the tile was the only thing being asked.
-    ///
-    /// So this does not invent a selection rule - it re-asks VANILLA'S question with the
-    /// BAND'S biome instead of the tile's (rule 36: run vanilla's predicate).
-    ///
-    /// ⚠ AND IT DELEGATES OUTRIGHT WHEN THE BAND'S BIOME IS THE TILE'S BIOME. The surface
-    /// band, and every band on a map without a per-band biome system, must produce EXACTLY
-    /// the list vanilla produced - not a re-derivation that happens to agree. Vanilla's
-    /// selection is seeded on <c>tile.GetHashCode()</c> and picks 2-3 at random; a
-    /// reimplementation that drifted by one <c>Rand</c> call would silently re-stone the
-    /// colony. Delegating removes the possibility.
     ///
     /// §99.A2 - <c>gravelTerrain</c>. Vanilla writes <c>biomeDef.gravelTerrain ??
     /// TerrainDefOf.Gravel</c> (MapGenUtility:651). We hardcoded <c>TerrainDefOf.Gravel</c>
-    /// in four places, so Pyroclastic Conflagration's <c>AB_VolcanicGravel</c> never
-    /// appeared and a correct rock palette would still have been standing on wrong ground.
+    /// in four places, so Ocular Forest's <c>GU_AlienSand</c> and Pyroclastic
+    /// Conflagration's <c>AB_VolcanicGravel</c> never appeared and a correct rock palette
+    /// would still have been standing on wrong ground.
     /// </summary>
     internal static class ABBandRocks
     {
@@ -150,8 +140,35 @@ namespace AsAboveSoBelow
         /// <summary>
         /// Vanilla's own rule, re-asked for an arbitrary biome.
         ///
-        /// ⚠ THE DELEGATION BRANCH IS THE IMPORTANT ONE - see the class header. When the
-        /// band's biome IS the tile's primary biome we do not re-derive anything.
+        /// ⚠⚠ DIVERGENCE MUST BE REQUESTED, NEVER INCIDENTAL - AND THAT COST 11 SECONDS OF
+        /// GENERATION TIME TO LEARN (run #517).
+        ///
+        /// The first version re-derived a palette for ANY band biome that differed from the
+        /// tile's: two or three natural rocks picked at random, seeded on tile+biome.
+        /// Defensible in isolation, badly wrong in practice. On an <c>AB_OcularForest</c>
+        /// tile - whose biome forces the single rock <c>GU_RoseQuartz</c> - the basement band
+        /// resolved to <c>AB_Underground</c>, a biome with NO opinion about rock at all, and
+        /// the random roll handed it [Sandstone, Slate, Granite]. All 36,100 cells then
+        /// mismatched the rose quartz vanilla had already placed, so <c>FillRock</c>'s
+        /// "keep vanilla's rock when the def matches" shortcut never fired once:
+        /// 36,208 destroys instead of ~8,000, and <c>FillRock band 0</c> went from 2.4 s to
+        /// <b>13.7 s</b>. The destroys are the bill (§91: ListerThings removal is linear),
+        /// and a random re-roll had bought exactly nothing to justify paying it.
+        ///
+        /// So a band now inherits the tile's stone UNLESS its biome actually asks for
+        /// something else:
+        ///   * <c>forceRockTypes</c>  - an explicit demand; honour it and pay the destroys.
+        ///   * <c>extraRockTypes</c>  - an addition, not a replacement; the tile's palette
+        ///                              plus these, so most cells still match and the
+        ///                              shortcut still fires for them.
+        ///   * neither                - the band has no opinion, so neither do we. This is
+        ///                              also the better LOOK: the rock under an ocular
+        ///                              forest should be the ocular forest's rock.
+        ///
+        /// ⚠ THE DELEGATION BRANCH IS LOAD-BEARING for a second reason. Vanilla's selection
+        /// is seeded on <c>tile.GetHashCode()</c>; a reimplementation that drifted by one
+        /// <c>Rand</c> call would silently re-stone the colony. Delegating removes the
+        /// possibility rather than trying to match it.
         /// </summary>
         private static List<ThingDef> ResolveRocks(Map map, BiomeDef biome)
         {
@@ -164,58 +181,34 @@ namespace AsAboveSoBelow
             catch
             {
             }
-            if (biome == null || biome == tileBiome)
-            {
-                return new List<ThingDef>(Find.World.NaturalRockTypesIn(tile));
-            }
-            if (biome.forceRockTypes != null && biome.forceRockTypes.Count > 0)
+
+            // An explicit demand from the band's own biome outranks everything.
+            if (biome != null && biome.forceRockTypes != null && biome.forceRockTypes.Count > 0)
             {
                 return new List<ThingDef>(biome.forceRockTypes);
             }
 
-            List<ThingDef> candidates = new List<ThingDef>();
-            List<ThingDef> all = DefDatabase<ThingDef>.AllDefsListForReading;
-            for (int i = 0; i < all.Count; i++)
+            List<ThingDef> tilePalette = new List<ThingDef>(Find.World.NaturalRockTypesIn(tile));
+            if (biome == null || biome == tileBiome)
             {
-                ThingDef d = all[i];
-                if (!d.IsNonResourceNaturalRock)
-                {
-                    continue;
-                }
-                // RockAllowedInBiome, with THIS biome's extraRockTypes rather than the
-                // tile's. This is the clause that lets a band biome contribute its own
-                // biome-specific stone (Odyssey's SolidIce, a mod's cavern rock).
-                if (d.building != null && d.building.biomeSpecific
-                    && !biome.extraRockTypes.NotNullAndContains(d))
-                {
-                    continue;
-                }
-                candidates.Add(d);
-            }
-            if (candidates.Count == 0)
-            {
-                return new List<ThingDef>(Find.World.NaturalRockTypesIn(tile));
+                return tilePalette;
             }
 
-            // Seeded on tile AND biome, so a given band biome on a given tile always
-            // produces the same stone across regenerations, and two different band biomes
-            // do not accidentally share one palette (rule 19: a shared seed is a shared
-            // answer).
-            Rand.PushState();
-            try
+            // An addition, not a replacement. Only rocks that are actually natural rock are
+            // admitted - extraRockTypes is authored by hand and a typo should not put a
+            // non-mineable def into the carve.
+            if (biome.extraRockTypes != null && biome.extraRockTypes.Count > 0)
             {
-                Rand.Seed = Gen.HashCombineInt(tile.GetHashCode(), biome.shortHash);
-                int take = Rand.RangeInclusive(2, 3);
-                if (take > candidates.Count)
+                for (int i = 0; i < biome.extraRockTypes.Count; i++)
                 {
-                    take = candidates.Count;
+                    ThingDef d = biome.extraRockTypes[i];
+                    if (d != null && d.IsNonResourceNaturalRock && !tilePalette.Contains(d))
+                    {
+                        tilePalette.Add(d);
+                    }
                 }
-                return new List<ThingDef>(candidates.TakeRandomDistinct(take));
             }
-            finally
-            {
-                Rand.PopState();
-            }
+            return tilePalette;
         }
 
         /// <summary>

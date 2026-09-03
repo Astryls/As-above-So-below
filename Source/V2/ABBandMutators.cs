@@ -90,6 +90,7 @@ namespace AsAboveSoBelow
             // plateau's; these author elevation or carve caves and would fight both.
             "Cavern", "Cave", "Chasm", "Crevasse", "Hollow", "Basin", "Valley", "Plateau",
             "Cliffs", "Dune", "Crater", "Volcano", "Caldera", "TerraformingScar", "Scar",
+            "Mountain",
             // Geological Landforms' own worker. §56r lends it a borrowed decision context
             // during generation; re-entering it post-carve, outside that borrow, would ask
             // it to author a landform against inputs it was never given.
@@ -104,6 +105,35 @@ namespace AsAboveSoBelow
         };
 
         internal static int workersRun;
+
+        /// <summary>
+        /// Does this worker actually implement the hook we are about to call?
+        ///
+        /// ⚠ RULE 29 / RULE 74: REPORTED OUTCOMES MUST MEAN SOMETHING. Run #517 proudly
+        /// logged "3 mutator run(s)" - all three were <c>TileMutatorWorker_Mountain</c>,
+        /// which overrides <c>GeneratePostElevationFertility</c> ONLY. We were calling the
+        /// empty base method three times and counting it as work done. A count that includes
+        /// no-ops cannot tell you whether the feature fired, which is the single thing that
+        /// count exists to answer.
+        ///
+        /// Cheap to ask (one reflection lookup per worker per map) and it also skips real
+        /// work: no scope arming, no noise rebinding, no restore, for a call that would do
+        /// nothing.
+        /// </summary>
+        private static bool ImplementsPostTerrain(TileMutatorWorker worker)
+        {
+            try
+            {
+                MethodInfo m = worker.GetType().GetMethod(
+                    nameof(TileMutatorWorker.GeneratePostTerrain),
+                    BindingFlags.Instance | BindingFlags.Public);
+                return m != null && m.DeclaringType != typeof(TileMutatorWorker);
+            }
+            catch
+            {
+                return true; // cannot tell - let it run, the guard bounds it anyway
+            }
+        }
 
         internal static bool Enabled => ABMod.Settings?.bandLandmarks ?? true;
 
@@ -172,7 +202,7 @@ namespace AsAboveSoBelow
             for (int i = 0; i < mutators.Count; i++)
             {
                 TileMutatorWorker worker = mutators[i]?.Worker;
-                if (!Cleared(worker))
+                if (!Cleared(worker) || !ImplementsPostTerrain(worker))
                 {
                     continue;
                 }
