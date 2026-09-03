@@ -206,56 +206,7 @@ namespace AsAboveSoBelow
             }
             try
             {
-                IntVec3 anchor = IntVec3.Invalid;
-                int best = int.MaxValue;
-                int sumX = 0;
-                int sumZ = 0;
-                int n = 0;
-                foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
-                {
-                    sumX += p.Position.x;
-                    sumZ += p.Position.z;
-                    n++;
-                }
-                if (n == 0)
-                {
-                    // No free colonists at all - a mech or animal start, or a scenario that
-                    // spawns nothing. Any player thing is a better aim point than a start
-                    // spot nobody is standing on.
-                    foreach (Thing t in map.listerThings.AllThings)
-                    {
-                        if (t.Faction != null && t.Faction.IsPlayer && t.Spawned)
-                        {
-                            sumX += t.Position.x;
-                            sumZ += t.Position.z;
-                            n++;
-                        }
-                    }
-                }
-                if (n == 0)
-                {
-                    return false;
-                }
-                IntVec3 centroid = new IntVec3(sumX / n, 0, sumZ / n);
-
-                // Aim at the pawn NEAREST the centroid, not the centroid itself: with pods
-                // scattered around a lake or a rock face the mean of the positions can be a
-                // cell nobody is anywhere near, and framing the group on a real member is
-                // both closer to vanilla's intent and never inside a mountain.
-                foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
-                {
-                    int d = (p.Position - centroid).LengthHorizontalSquared;
-                    if (d < best)
-                    {
-                        best = d;
-                        anchor = p.Position;
-                    }
-                }
-                if (!anchor.IsValid)
-                {
-                    anchor = centroid;
-                }
-                if (!anchor.InBounds(map))
+                if (!TryColonyAnchor(map, out IntVec3 anchor))
                 {
                     return false;
                 }
@@ -278,6 +229,71 @@ namespace AsAboveSoBelow
                 Log.Warning(ABLog.Tag + " V2: could not land the camera on the colony: " + e);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// WHERE THE COLONY ACTUALLY IS, as a single cell. Shared by the new-game camera
+        /// landing above and by the Immersive Opening bridge, which needs the same answer
+        /// to aim its cinematic - two callers deriving "the colony" separately would
+        /// eventually disagree, and the cinematic handing over to a different place than it
+        /// framed is exactly the kind of seam a player notices.
+        /// </summary>
+        public static bool TryColonyAnchor(Map map, out IntVec3 anchor)
+        {
+            anchor = IntVec3.Invalid;
+            if (map == null)
+            {
+                return false;
+            }
+            int best = int.MaxValue;
+            int sumX = 0;
+            int sumZ = 0;
+            int n = 0;
+            foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+            {
+                sumX += p.Position.x;
+                sumZ += p.Position.z;
+                n++;
+            }
+            if (n == 0)
+            {
+                // No free colonists at all - a mech or animal start, or a scenario that
+                // spawns nothing. Any player thing is a better aim point than a start
+                // spot nobody is standing on.
+                foreach (Thing t in map.listerThings.AllThings)
+                {
+                    if (t.Faction != null && t.Faction.IsPlayer && t.Spawned)
+                    {
+                        sumX += t.Position.x;
+                        sumZ += t.Position.z;
+                        n++;
+                    }
+                }
+            }
+            if (n == 0)
+            {
+                return false;
+            }
+            IntVec3 centroid = new IntVec3(sumX / n, 0, sumZ / n);
+
+            // Aim at the pawn NEAREST the centroid, not the centroid itself: with pods
+            // scattered around a lake or a rock face the mean of the positions can be a
+            // cell nobody is anywhere near, and framing the group on a real member is
+            // both closer to vanilla's intent and never inside a mountain.
+            foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+            {
+                int d = (p.Position - centroid).LengthHorizontalSquared;
+                if (d < best)
+                {
+                    best = d;
+                    anchor = p.Position;
+                }
+            }
+            if (!anchor.IsValid)
+            {
+                anchor = centroid;
+            }
+            return anchor.InBounds(map);
         }
 
         public static void JumpTo(Map map, IntVec3 cell)

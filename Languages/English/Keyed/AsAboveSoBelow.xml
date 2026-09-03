@@ -133,6 +133,8 @@ You can turn this back off at any time; existing colonies keep the size they wer
   <AB_ClampZoomTip>A level is a band of the map, not the whole of it, so once the view is as tall as the level there is nothing further out to see. Leave this on and the camera simply stops there. Turn it off if you use a camera mod that widens the zoom range and you would rather keep zooming out and see empty backdrop above and below the level. Either way the level next door never shows through.</AB_ClampZoomTip>
   <AB_PSFreezePeek>Hold the character still while looking at another level</AB_PSFreezePeek>
   <AB_PSFreezePeekTip>Perspective Shift only. While you are playing as a character and you look at a level they are not standing on, the camera stays where you put it instead of being pulled back to them. Leave this on and your character holds position, and cannot move or shoot, until you come back to their level. Turn it off to keep walking around off-screen while you watch somewhere else.</AB_PSFreezePeekTip>
+  <AB_IOStackTour>Show the whole stack in the opening cinematic</AB_IOStackTour>
+  <AB_IOStackTourTip>Immersive Opening only. Off, the opening plays out on your colony's level, exactly as that mod intends. On, it works its way down the column instead - a sentence or two on each level you can actually see, starting at the top and finishing on the colony. Levels below ground are skipped either way: they are solid rock until something digs into them, so there is nothing there to film yet.</AB_IOStackTourTip>
   <AB_VerboseLogging>Verbose logging</AB_VerboseLogging>
   <AB_VerboseLoggingTip>Write detailed diagnostic messages to the log. Only useful when hunting a bug.</AB_VerboseLoggingTip>
 

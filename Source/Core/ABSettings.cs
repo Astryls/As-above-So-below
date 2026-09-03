@@ -214,6 +214,11 @@ namespace AsAboveSoBelow
         /// somewhere other than the avatar.</summary>
         public bool psFreezeAvatarWhilePeeking = true;
 
+        /// <summary>Immersive Opening only. Off = the opening cinematic stays on the
+        /// colony's level (ferny's design, just aimed correctly). On = it walks the
+        /// viewable bands top-down, ending on the colony.</summary>
+        public bool ioStackTour;
+
         // ---- sky band generation -------------------------------------------
 
         /// <summary>Meadow-Perlin peaks (varied ledges and plateaus) rather than a plain
@@ -387,6 +392,7 @@ namespace AsAboveSoBelow
                 ABDepthView.DefaultFalloff);
             Scribe_Values.Look(ref transitAnim, "transitAnim", true);
             Scribe_Values.Look(ref clampZoomToLevel, "clampZoomToLevel", true);
+            Scribe_Values.Look(ref ioStackTour, "ioStackTour", false);
             Scribe_Values.Look(ref psFreezeAvatarWhilePeeking, "psFreezeAvatarWhilePeeking",
                 true);
             Scribe_Values.Look(ref belowPawnCache, "belowPawnCache",
@@ -715,6 +721,11 @@ namespace AsAboveSoBelow
             {
                 list.CheckboxLabeled("AB_PSFreezePeek".Translate(),
                     ref psFreezeAvatarWhilePeeking, "AB_PSFreezePeekTip".Translate());
+            }
+            if (ImmersiveOpeningCompat.Present)
+            {
+                list.CheckboxLabeled("AB_IOStackTour".Translate(), ref ioStackTour,
+                    "AB_IOStackTourTip".Translate());
             }
         }
 
