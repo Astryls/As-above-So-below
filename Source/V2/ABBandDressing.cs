@@ -320,11 +320,46 @@ namespace AsAboveSoBelow
                 return;
             }
             WildPlantSpawner spawner = map.wildPlantSpawner;
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            TerrainGrid terrain = map.terrainGrid;
             int placed = 0;
+            int airSkipped = 0;
             foreach (IntVec3 c in rect)
             {
                 if (Rand.Chance(0.001f))
                 {
+                    continue;
+                }
+                // ⚠⚠ NOTHING COMES TO REST ON OPEN AIR - AND VANILLA CANNOT ENFORCE THAT.
+                //
+                // The seeders this pass replaced were safe by accident: both required
+                // `c.Standable(map)`, and AB_OpenAir is Impassable. Handing the job to
+                // vanilla dropped that guard, and vanilla has no equivalent.
+                // `CheckSpawnWildPlantAt`'s fertility veto is skipped ENTIRELY whenever the
+                // map holds any plant with `completelyIgnoreFertility`, and
+                // `PlantUtility.CanEverPlantAt` then tests fertility, terrain TAGS and
+                // blocking things - but never passability. So a zero-fertility impassable
+                // void cell is not, in itself, something vanilla refuses to plant.
+                //
+                // ⚠ IT SURVIVES TODAY ONLY BY COINCIDENCE. Every vanilla ignore-fertility
+                // plant also sets `wildPlantUseDistanceToShore`, whose shore weight rolls 0
+                // away from water - so they self-reject. That is two unrelated flags
+                // happening to line up, not a rule, and the first modded cave or alpine
+                // plant that sets one without the other puts trees over the drop. Rule 14:
+                // ask what is at the destination.
+                //
+                // ⚠ AND ABAirSpawnGuard CANNOT BACKSTOP THIS ONE. It stands down for the
+                // whole of CarveInProgress, which is exactly when this pass runs - by
+                // design, since otherwise it would walk our band content upstairs (§57).
+                // This pass is the authority on its own bands, so it carries the invariant
+                // itself.
+                //
+                // Deliberately NOT `!c.Standable(map)`: that would also refuse deep water,
+                // and reeds in a band tarn are correct vanilla behaviour. The invariant is
+                // about the VOID, so the test names the void.
+                if (air != null && terrain.TerrainAt(c) == air)
+                {
+                    airSkipped++;
                     continue;
                 }
                 try
@@ -342,6 +377,11 @@ namespace AsAboveSoBelow
                 }
             }
             plantsPlaced += placed;
+            if (airSkipped > 0)
+            {
+                ABLog.Dev("Band dressing: band " + band + " plant pass skipped " + airSkipped
+                    + " open-air cell(s), placed " + placed + ".");
+            }
 
             if (placed == 0)
             {
