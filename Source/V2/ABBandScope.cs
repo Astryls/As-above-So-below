@@ -83,6 +83,26 @@ namespace AsAboveSoBelow
 
         private static int depth;
 
+        /// <summary>Hot pre-check for the terrain write guard, separate from <c>Active</c>
+        /// because <c>TerrainGrid.SetTerrain</c> is called tens of thousands of times by the
+        /// carve itself and must not pay a reference compare for a guard that is only armed
+        /// during the dressing pass.</summary>
+        internal static bool GuardTerrain;
+
+        /// <summary>Terrain writes refused, by clause, so "the mutator did nothing" is never
+        /// an unfalsifiable observation (rule 33 / rule 31: say WHICH clause).</summary>
+        internal static int terrainRefusedOutOfBand;
+
+        internal static int terrainRefusedVoid;
+
+        internal static int terrainRefusedWaterAtDrop;
+
+        /// <summary>No band water within this many cells of a drop. Lifted verbatim from
+        /// ABSkyBandGen's <c>MinTarnEdgeDist</c> and for the user's original reason: "lakes
+        /// should never spawn on upper levels near the edge". A lake lipping over a cliff
+        /// would need the whole waterfall system to make any sense.</summary>
+        private const int MinWaterEdgeDist = 6;
+
         /// <summary>Cells refused for being open air, so "the sky band generated nothing" is
         /// never an unfalsifiable observation (rule 33).</summary>
         internal static int airRejections;
@@ -105,7 +125,8 @@ namespace AsAboveSoBelow
         /// backstop that fires thousands of times is a design that has given up - better to
         /// never offer the cell (rule 14: ask what is at the destination).
         /// </summary>
-        internal static void Push(Map map, CellRect rect, bool rejectAir)
+        internal static void Push(Map map, CellRect rect, bool rejectAir,
+            bool guardTerrain = false)
         {
             if (depth != 0)
             {
@@ -121,6 +142,7 @@ namespace AsAboveSoBelow
             randomOrder = null;
             depth = 1;
             Active = true;
+            GuardTerrain = guardTerrain;
         }
 
         internal static void Pop()
@@ -132,8 +154,62 @@ namespace AsAboveSoBelow
             }
             depth = 0;
             Active = false;
+            GuardTerrain = false;
             scopedMap = null;
             randomOrder = null;
+        }
+
+        /// <summary>
+        /// May this terrain write land? Three clauses, each counted separately.
+        ///
+        /// ⚠ THIS EXISTS BECAUSE A TILE MUTATOR HAS NO CONCEPT OF A LEVEL. §99 Tier 2 re-runs
+        /// real mutator workers per band, and they paint terrain from a noise field with no
+        /// idea that two thirds of the rect they were handed is a hole. Left ungoverned,
+        /// HotSprings paves the void with hot spring water and stone, because its only test
+        /// is `noise > 0.85`.
+        ///
+        /// ⚠ AND THE WATER CLAUSE IS THE USER'S OWN STANDING RULE, not a new invention:
+        /// ABSkyBandGen refuses tarn water within 6 cells of a drop, per-cell, because water
+        /// lipping over a three-level cliff needs the whole waterfall system to read as
+        /// anything but broken. A mutator pond has no such rule of its own, so the guard
+        /// enforces it on the mutator's behalf - which is the only place it CAN be enforced,
+        /// since the mutator will never know what a drop is (rule 37: name the enforcement
+        /// point).
+        /// </summary>
+        internal static bool AllowTerrainWrite(Map map, IntVec3 c, TerrainDef newTerr)
+        {
+            if (!scopedRect.Contains(c))
+            {
+                terrainRefusedOutOfBand++;
+                return false;
+            }
+            TerrainDef air = ABDefOf.AB_OpenAir;
+            if (air == null)
+            {
+                return true;
+            }
+            // NEVER PAVE THE VOID. Open air is the band's hole, not a surface awaiting a
+            // floor - and unlike a spawned Thing there is no guard downstream that would
+            // catch it, because terrain has no position to correct.
+            if (map.terrainGrid.TerrainAt(c) == air)
+            {
+                terrainRefusedVoid++;
+                return false;
+            }
+            if (rejectOpenAir && newTerr != null && newTerr.IsWater)
+            {
+                int cells = GenRadial.NumCellsInRadius(MinWaterEdgeDist);
+                for (int i = 0; i < cells; i++)
+                {
+                    IntVec3 n = c + GenRadial.RadialPattern[i];
+                    if (n.InBounds(map) && map.terrainGrid.TerrainAt(n) == air)
+                    {
+                        terrainRefusedWaterAtDrop++;
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         /// <summary>⚠ Rule 15: assert always. A leaked scope would silently confine ordinary
@@ -237,6 +313,33 @@ namespace AsAboveSoBelow
                 return;
             }
             __result = ABBandScope.RandomOrder();
+        }
+    }
+
+    /// <summary>
+    /// The terrain write guard (§99 Tier 2).
+    ///
+    /// ⚠ GATED ON ITS OWN STATIC BOOL, NOT ON <c>ABBandScope.Active</c>. `SetTerrain` is one
+    /// of the hottest methods in the whole generation window - the carve alone calls it tens
+    /// of thousands of times per colony - so the unarmed cost has to be a single static bool
+    /// load and nothing else. It is armed ONLY for the band dressing pass, never for the
+    /// surface-band scope, because a genstep writing terrain during ordinary generation is
+    /// doing its job and is not ours to veto.
+    ///
+    /// ⚠ Other mods prefix this method too (ReGrowth 2 has one). Returning false skips the
+    /// original, which is the intent; their prefix still runs and still sees the call, which
+    /// is correct - we are vetoing the WRITE, not hiding the event.
+    /// </summary>
+    [HarmonyPatch(typeof(TerrainGrid), nameof(TerrainGrid.SetTerrain))]
+    public static class Patch_TerrainGrid_ABBandScopeGuard
+    {
+        private static bool Prefix(Map ___map, IntVec3 c, TerrainDef newTerr)
+        {
+            if (!ABBandScope.GuardTerrain || !ABBandScope.AppliesTo(___map))
+            {
+                return true;
+            }
+            return ABBandScope.AllowTerrainWrite(___map, c, newTerr);
         }
     }
 

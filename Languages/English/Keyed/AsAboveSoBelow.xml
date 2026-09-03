@@ -22,6 +22,8 @@
   <AB_BandFeaturesDesc>Runs the map's own feature generators once per level, so upper and lower levels get the steam geysers, gas vents, rock chunks and boulders the ground level gets - including ones added by other mods. Also gives the ground level its full share, which it was not previously getting. Ancient wreckage and anima trees stay on the ground level.</AB_BandFeaturesDesc>
   <AB_BandVegetationParity>Full biome vegetation on every level</AB_BandVegetationParity>
   <AB_BandVegetationParityDesc>Plants every level using the game's own wild plant system at the level's real biome density, instead of a thinner approximation. Turn off for sparser, faster-generating upper and lower levels.</AB_BandVegetationParityDesc>
+  <AB_BandLandmarks>Landmark features on every level</AB_BandLandmarks>
+  <AB_BandLandmarksDesc>Re-runs the safe parts of the tile's landmark on every level - hot springs, marshy/sandy/fertile/muddy ground patches, obsidian deposits - so a landmark tile reads as one from top to bottom. Lakes, coasts, rivers, cave shaping and ruins are never copied upward: they need the ground level's geography to make sense.</AB_BandLandmarksDesc>
 
   <AB_GoToLevel>{0} (level {1})</AB_GoToLevel>
 

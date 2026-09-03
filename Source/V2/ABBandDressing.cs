@@ -152,6 +152,10 @@ namespace AsAboveSoBelow
             thingsPlaced = 0;
             plantsPlaced = 0;
             ABBandScope.airRejections = 0;
+            ABBandScope.terrainRefusedOutOfBand = 0;
+            ABBandScope.terrainRefusedVoid = 0;
+            ABBandScope.terrainRefusedWaterAtDrop = 0;
+            ABBandMutators.workersRun = 0;
             if (map == null || bands == null || !bands.Banded)
             {
                 return;
@@ -218,9 +222,13 @@ namespace AsAboveSoBelow
                         watch.Elapsed.TotalMilliseconds);
                 }
 
-                lastSummary = stepsRun + " genstep run(s), " + thingsPlaced + " thing(s), "
+                lastSummary = stepsRun + " genstep run(s), " + ABBandMutators.workersRun
+                    + " mutator run(s), " + thingsPlaced + " thing(s), "
                     + plantsPlaced + " plant(s), " + ABBandScope.airRejections
-                    + " open-air cell(s) refused";
+                    + " open-air cell(s) refused, terrain writes refused: "
+                    + ABBandScope.terrainRefusedVoid + " void / "
+                    + ABBandScope.terrainRefusedOutOfBand + " out-of-band / "
+                    + ABBandScope.terrainRefusedWaterAtDrop + " water-at-drop";
                 ABLog.Dev("Band dressing complete: " + lastSummary + ".");
                 ABGroundOnly.AuditBands(map, bands);
             }
@@ -237,6 +245,26 @@ namespace AsAboveSoBelow
 
         private static void DressFeatures(Map map, int band, CellRect rect, bool sky)
         {
+            // §99 TIER 2 FIRST. Mutators write TERRAIN and both later passes validate
+            // against terrain, so running them after the scatterers would let a geyser be
+            // placed on ground a hot spring is about to become. The terrain guard is armed
+            // for this scope only - see Patch_TerrainGrid_ABBandScopeGuard for why it is not
+            // armed during ordinary generation.
+            ABBandScope.Push(map, rect, sky, guardTerrain: true);
+            try
+            {
+                ABBandMutators.DressBand(map, band);
+            }
+            catch (Exception e)
+            {
+                ABLog.Dev("Band dressing: mutator pass failed on band " + band + ": "
+                    + e.Message);
+            }
+            finally
+            {
+                ABBandScope.Pop();
+            }
+
             for (int i = 0; i < ranSteps.Count; i++)
             {
                 GenStepDef def = ranSteps[i].def;

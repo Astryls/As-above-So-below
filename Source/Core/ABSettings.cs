@@ -254,6 +254,13 @@ namespace AsAboveSoBelow
         /// pre-§99 behaviour (sparse, with an alpine rim curve on summits).</summary>
         public bool bandVegetationParity = true;
 
+        /// <summary>Re-run the tile's SAFE landmark mutators (hot springs, terrain patch
+        /// families, obsidian) on every level, so a landmark tile reads as a landmark from
+        /// top to bottom. Water, coast, river, cave-shape, elevation-shape and man-made
+        /// families are deliberately never re-run - see ABBandMutators for the per-family
+        /// reasoning.</summary>
+        public bool bandLandmarks = true;
+
         // ---- basement generation -------------------------------------------
 
         /// <summary>Ore lumps per 10k basement cells.</summary>
@@ -355,6 +362,7 @@ namespace AsAboveSoBelow
             Scribe_Values.Look(ref skyVegetationDensity, "skyVegetationDensity", 1f);
             Scribe_Values.Look(ref bandFeatures, "bandFeatures", true);
             Scribe_Values.Look(ref bandVegetationParity, "bandVegetationParity", true);
+            Scribe_Values.Look(ref bandLandmarks, "bandLandmarks", true);
             Scribe_Values.Look(ref basementOreDensity, "basementOreDensity", 6f);
             Scribe_Values.Look(ref basementBiomeChoice, "basementBiomeChoice",
                 BiomesCavernsCompat.RandomChoice);
@@ -875,6 +883,8 @@ namespace AsAboveSoBelow
                 "AB_BandFeaturesDesc".Translate());
             list.CheckboxLabeled("AB_BandVegetationParity".Translate(), ref bandVegetationParity,
                 "AB_BandVegetationParityDesc".Translate());
+            list.CheckboxLabeled("AB_BandLandmarks".Translate(), ref bandLandmarks,
+                "AB_BandLandmarksDesc".Translate());
         }
 
         // ---- basement tab ----------------------------------------------------
