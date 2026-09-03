@@ -223,15 +223,22 @@ namespace AsAboveSoBelow
                             }
                             else if (n > 1f - soilFrac)
                             {
-                                // The fertile heart: the biome's own arable terrain, going
-                                // to RICH soil where the moisture field also peaks.
-                                t = wet > 0.80f ? (TerrainDefOf.SoilRich ?? arable) : arable;
+                                // The fertile heart. §99.o: ask the BAND BIOME what its own
+                                // high-fertility ground is instead of assuming vanilla's
+                                // SoilRich - on Gallatross Graveyard that is
+                                // AB_RichCrackedMud, on a lava field it is volcanic soil.
+                                t = wet > 0.80f
+                                    ? (BiomeGroundAt(bandBiome, 0.95f) ?? TerrainDefOf.SoilRich ?? arable)
+                                    : arable;
                             }
                             else
                             {
-                                // Ordinary soil, with MUD in the wettest hollows only
+                                // Ordinary ground, with MUD in the wettest hollows only
                                 // (deliberately rare - mud everywhere reads as damage).
-                                t = wet > 0.90f ? (TerrainDefOf.Mud ?? TerrainDefOf.Soil) : TerrainDefOf.Soil;
+                                // The dry case is the biome's own mid-fertility terrain.
+                                t = wet > 0.90f
+                                    ? (TerrainDefOf.Mud ?? TerrainDefOf.Soil)
+                                    : (BiomeGroundAt(bandBiome, 0.6f) ?? TerrainDefOf.Soil);
                             }
                             grid.SetTerrain(c, t ?? skyGravel);
                             plateauCells.Add(c);
@@ -923,7 +930,45 @@ namespace AsAboveSoBelow
             return (float)(noise.GetValue(c.x, 0.0, c.z) + 1.0) * 0.5f;
         }
 
-        /// <summary>Arable patches use the map biome's own fertile terrain, so modded
+        /// <summary>
+        /// §99.o - THE BIOME'S OWN GROUND AT A GIVEN FERTILITY.
+        ///
+        /// Uses vanilla's OWN selector over the biome's <c>terrainsByFertility</c> table
+        /// (rule 36: run vanilla's predicate), which is the same table <c>GenStep_Terrain</c>
+        /// reads for the surface - so a plateau is floored with whatever that biome floors
+        /// its ground with, at the equivalent fertility.
+        ///
+        /// ⚠ THIS IS WHAT LETS FOREIGN CONTENT FIND THE UPPER LEVELS AT ALL, and the
+        /// Gallatross bones are the case that proved it. Alpha Biomes places them from its
+        /// own <c>MapComponentExtender.doMapSpawns</c> at <c>Map.FinalizeInit</c> - AFTER our
+        /// carve, so nothing of ours deletes them - walking <c>map.AllCells</c> across every
+        /// band. The only thing that decided they never appeared upstairs was
+        /// <c>SpecialSpawnsDef.terrainValidationAllowed</c>: the bones require
+        /// <c>AB_CrackedMud</c> or <c>AB_RichCrackedMud</c>, and our plateau was hardcoded to
+        /// vanilla <c>Soil</c> / <c>SoilRich</c>, which are not on that list. Give the band
+        /// the biome's real ground and their own unmodified code places them for us.
+        ///
+        /// The general lesson is worth more than the one mod: a foreign spawner usually gates
+        /// on TERRAIN, so a band floored in generic vanilla terrain is invisible to all of
+        /// them at once (rule 54 - search the capability).
+        /// </summary>
+        private static TerrainDef BiomeGroundAt(BiomeDef biome, float fertility)
+        {
+            if (biome?.terrainsByFertility == null || biome.terrainsByFertility.Count == 0)
+            {
+                return null;
+            }
+            try
+            {
+                return TerrainThreshold.TerrainAtValue(biome.terrainsByFertility, fertility);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Arable patches use the band biome's own fertile terrain, so modded
         /// biomes get their native soil instead of a hardcoded vanilla Soil.</summary>
         private static TerrainDef ArableTerrainFor(BiomeDef biome)
         {
