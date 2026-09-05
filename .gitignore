@@ -3,6 +3,11 @@ Source/obj/
 Source/bin/
 *.pdb
 
+# Circinus transient/local state (schematic.json, cs-assets.json, stubs.json ARE backed up)
+.circinus/publish-stash/
+.circinus/prefs.json
+.circinus/pr1-backup/
+
 # Modmixer transient/local state (.modmixer/schematic.json, art-src/, mockups/ ARE backed up)
 .modmixer/publish-stash/
 .modmixer/prefs.json
