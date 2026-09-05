@@ -34,7 +34,7 @@
   <ResearchProjectDef>
     <defName>AB2_Stairs</defName>
     <label>stairs</label>
-    <description>Cut and shore a stairwell between two levels of the colony. Unlocks stairs up, stairs down, and the wide grand staircases that let traffic pass in both directions at once.</description>
+    <description>Construct stairwells allowing different floors to connect. Multiple colonists can use staircases at the same time, permitting healthy vertical traffic.</description>
     <baseCost>400</baseCost>
     <techLevel>Neolithic</techLevel>
     <researchViewX>0.00</researchViewX>
@@ -53,13 +53,16 @@
         <li>subject_gerund->building stairwells</li>
       </rulesStrings>
     </generalRules>
+		<prerequisites>
+		  <li MayRequire="oskarpotocki.vfe.tribals">VFET_Construction</li>
+		</prerequisites>
   </ResearchProjectDef>
 
   <ResearchProjectDef>
     <defName>AB2_Ladders</defName>
     <label>ladders</label>
-    <description>Lash a fixed ladder into a shaft between two levels of the colony. Cheap and cramped - one cell wide, so colonists queue - but it can be raised almost anywhere.</description>
-    <baseCost>400</baseCost>
+    <description>Lash a fixed ladder into a shaft connecting two vertical levels. Cheap and cramped, only one colonist can use it at a time.</description>
+    <baseCost>300</baseCost>
     <techLevel>Neolithic</techLevel>
     <researchViewX>1.00</researchViewX>
     <researchViewY>6.40</researchViewY>
@@ -77,14 +80,41 @@
         <li>subject_gerund->building ladders</li>
       </rulesStrings>
     </generalRules>
+		<prerequisites>
+		  <li MayRequire="oskarpotocki.vfe.tribals">VFET_Construction</li>
+		</prerequisites>
   </ResearchProjectDef>
 
   <!-- ============================ industrial =========================== -->
 
   <ResearchProjectDef>
+    <defName>AB2_PipeColumns</defName>
+    <label>pipe columns</label>
+    <description>Run piping through a sealed service column so pipes can connect across floors.</description>
+    <baseCost>300</baseCost>
+    <techLevel>Medieval</techLevel>
+    <researchViewX>6.00</researchViewX>
+    <researchViewY>6.40</researchViewY>
+    <generalRules>
+      <rulesStrings>
+        <li>subject->pipe columns</li>
+        <li>subject->vertical utility transfer</li>
+
+        <li>subject_story->maintained the riser shafts of an arcology and knew every trunk by its hum</li>
+        <li>subject_story->rebuilt a habitat's service spine after a coolant burst took out three floors</li>
+
+        <li>subject_gerund->building pipe columns</li>
+      </rulesStrings>
+    </generalRules>
+		<prerequisites>
+		  <li MayRequire="Dubwise.DubsBadHygiene">Plumbing</li>
+		</prerequisites>
+  </ResearchProjectDef>
+
+  <ResearchProjectDef>
     <defName>AB2_TransferColumns</defName>
     <label>transfer columns</label>
-    <description>Run power, piping, ducting and signal lines through a sealed service column so networks on neighbouring levels pool into one. Unlocks the four utility columns and their wall-mounted risers.</description>
+    <description>Run power, ducting, and signal lines through a sealed service column so networks on different floors pool into one.</description>
     <baseCost>1200</baseCost>
     <techLevel>Industrial</techLevel>
     <researchViewX>6.00</researchViewX>
@@ -100,6 +130,9 @@
         <li>subject_gerund->building transfer columns</li>
       </rulesStrings>
     </generalRules>
+		<prerequisites>
+		  <li>Fabrication</li>
+		</prerequisites>
   </ResearchProjectDef>
 
   <ResearchProjectDef>
@@ -121,6 +154,9 @@
         <li>subject_gerund->building elevators</li>
       </rulesStrings>
     </generalRules>
+		<prerequisites>
+		  <li>AB2_Stairs</li>
+		</prerequisites>
   </ResearchProjectDef>
 
 </Defs>
