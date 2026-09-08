@@ -39,6 +39,12 @@ namespace AsAboveSoBelow
 
         private Vector3 offset;
 
+        /// <summary>
+        /// The baked mesh, for a mod compositing onto this layer from a postfix on Regenerate.
+        /// Null between Release() and the next Regenerate().
+        /// </summary>
+        public LayerSubMesh Mesh => mesh;
+
         private static readonly Color32 Transparent = new Color32(0, 0, 0, 0);
 
         public SectionLayer_ABBelowLighting(Section section) : base(section)
@@ -106,21 +112,6 @@ namespace AsAboveSoBelow
                 if (mesh?.mesh != null)
                 {
                     Color32[] colors = BuildColors(map, bands, rect);
-
-                    // Third-party contributions to THIS mesh, folded in here because we own it.
-                    //
-                    // Celestial Lighting writes indoor sky occlusion (alpha) and true line-of-sight
-                    // lamp light (rgb) into vanilla's overlay via postfixes on its Regenerate. We do
-                    // not go through Regenerate - Bake(...) reaches GenerateLightingOverlay directly -
-                    // and vanilla's overlay is suppressed map-wide on a banded map, so without this
-                    // call those two effects are absent from the entire map rather than merely wrong
-                    // on see-through cells. Inert unless Celestial Lighting is installed AND exposes
-                    // the hook.
-                    //
-                    // Kept OUT of BuildColors so BuildColors stays a pure function of our own state -
-                    // which is what lets the dev report probe our colours and each third-party pass
-                    // separately instead of only seeing the composite.
-                    CelestialLightingCompat.ApplyOverlayPasses(map, rect, colors);
 
                     mesh.mesh.colors32 = colors;
                 }
