@@ -189,7 +189,7 @@ namespace AsAboveSoBelow
             }
 
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
-            List<Candidate> candidates = Gather(map, used, surface);
+            List<Candidate> candidates = Gather(map, used, surface, includeContained: false);
             if (candidates.Count == 0)
             {
                 return;
@@ -209,9 +209,9 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Which registered rects are structures worth moving, and are misplaced.</summary>
+        /// <summary>Find qualifying structures, optionally including those inside the surface band.</summary>
         private static List<Candidate> Gather(Map map, List<CellRect> used, CellRect surface,
-            bool includeContained = false)
+            bool includeContained)
         {
             var found = new List<Candidate>();
             for (int i = 0; i < used.Count; i++)
@@ -321,7 +321,7 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                CellRect bound = GroupBounds(cands, g);
+                CellRect bound = GroupBounds(cands, cands[i]);
                 string sample = cands[i].sampleDef;
 
                 if (bound.Height > surface.Height)
@@ -342,7 +342,8 @@ namespace AsAboveSoBelow
                     continue;
                 }
 
-                if (!TryFindDestination(map, surface, bound, out CellRect destination))
+                List<CellRect> reserved = ProtectedStructureRects(map, used, surface);
+                if (!TryFindDestination(map, surface, bound, reserved, out CellRect destination))
                 {
                     Log.Warning(ABLog.Tag + " V2: no safe surface destination for generated"
                         + " structure " + bound + (sample != null ? " (" + sample + ")" : "")
@@ -351,7 +352,7 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 IntVec3 delta = destination.Min - bound.Min;
-                if (Slide(map, bands, bound, destination))
+                if (Slide(map, bands, bound, destination, reserved))
                 {
                     Retarget(used, bound, delta);
                     ABLog.Dev("Structure rescue: moved " + bound.Width + "x" + bound.Height
@@ -362,34 +363,27 @@ namespace AsAboveSoBelow
             }
         }
 
-        private static CellRect GroupBounds(List<Candidate> candidates, int group)
+        private static CellRect GroupBounds(List<Candidate> candidates, Candidate member)
         {
-            CellRect bound = default;
-            bool found = false;
+            CellRect bound = member.rect;
             foreach (Candidate candidate in candidates)
             {
-                if (candidate.group != group)
+                if (candidate.group != member.group)
                 {
                     continue;
                 }
                 CellRect rect = candidate.rect;
-                bound = found
-                    ? new CellRect(Mathf.Min(bound.minX, rect.minX), Mathf.Min(bound.minZ, rect.minZ),
-                        Mathf.Max(bound.maxX, rect.maxX) - Mathf.Min(bound.minX, rect.minX) + 1,
-                        Mathf.Max(bound.maxZ, rect.maxZ) - Mathf.Min(bound.minZ, rect.minZ) + 1)
-                    : rect;
-                found = true;
+                bound = new CellRect(Mathf.Min(bound.minX, rect.minX), Mathf.Min(bound.minZ, rect.minZ),
+                    Mathf.Max(bound.maxX, rect.maxX) - Mathf.Min(bound.minX, rect.minX) + 1,
+                    Mathf.Max(bound.maxZ, rect.maxZ) - Mathf.Min(bound.minZ, rect.minZ) + 1);
             }
             return bound;
         }
 
-        private static List<CellRect> ProtectedStructureRects(Map map, CellRect surface)
+        private static List<CellRect> ProtectedStructureRects(Map map, List<CellRect> used,
+            CellRect surface)
         {
             var reserved = new List<CellRect>();
-            if (!MapGenerator.TryGetVar("UsedRects", out List<CellRect> used) || used == null)
-            {
-                return reserved;
-            }
             // Reserve whole structures, including empty courtyards and module gaps.
             List<Candidate> structures = Gather(map, used, surface, includeContained: true);
             GroupContiguous(structures);
@@ -398,7 +392,7 @@ namespace AsAboveSoBelow
             {
                 if (seen.Add(candidate.group))
                 {
-                    reserved.Add(GroupBounds(structures, candidate.group));
+                    reserved.Add(GroupBounds(structures, candidate));
                 }
             }
             return reserved;
@@ -438,7 +432,8 @@ namespace AsAboveSoBelow
         private static bool CanPlaceAt(Map map, CellRect surface, CellRect source, CellRect destination,
             List<CellRect> reserved)
         {
-            if (destination.minX < surface.minX || destination.maxX > surface.maxX
+            if (source.Width != destination.Width || source.Height != destination.Height
+                || destination.minX < surface.minX || destination.maxX > surface.maxX
                 || destination.minZ < surface.minZ || destination.maxZ > surface.maxZ)
             {
                 return false;
@@ -454,7 +449,7 @@ namespace AsAboveSoBelow
         }
 
         private static bool TryFindDestination(Map map, CellRect surface, CellRect source,
-            out CellRect destination)
+            List<CellRect> reserved, out CellRect destination)
         {
             destination = default;
             if (source.Width > surface.Width || source.Height > surface.Height)
@@ -464,7 +459,6 @@ namespace AsAboveSoBelow
             int preferredX = Mathf.Clamp(source.minX, surface.minX, surface.maxX - source.Width + 1);
             int preferredZ = Mathf.Clamp(source.minZ, surface.minZ, surface.maxZ - source.Height + 1);
             var preferred = new CellRect(preferredX, preferredZ, source.Width, source.Height);
-            List<CellRect> reserved = ProtectedStructureRects(map, surface);
             if (CanPlaceAt(map, surface, source, preferred, reserved))
             {
                 destination = preferred;
@@ -473,49 +467,52 @@ namespace AsAboveSoBelow
 
             // Use a summed-area table for constant-time footprint checks.
             // Rebuild per group to account for earlier relocations.
-            var blocked = new int[surface.Width + 1, surface.Height + 1];
+            var blockedPrefixSums = new int[surface.Width + 1, surface.Height + 1];
             for (int z = 0; z < surface.Height; z++)
             {
                 for (int x = 0; x < surface.Width; x++)
                 {
                     var cell = new IntVec3(surface.minX + x, 0, surface.minZ + z);
-                    blocked[x + 1, z + 1] = (DestinationBlocked(map, cell, source, reserved) ? 1 : 0)
-                        + blocked[x, z + 1] + blocked[x + 1, z] - blocked[x, z];
+                    blockedPrefixSums[x + 1, z + 1] = (DestinationBlocked(map, cell, source, reserved) ? 1 : 0)
+                        + blockedPrefixSums[x, z + 1] + blockedPrefixSums[x + 1, z] - blockedPrefixSums[x, z];
                 }
             }
 
-            long bestDistance = long.MaxValue;
+            long bestDistanceSquared = long.MaxValue;
             for (int z = 0; z <= surface.Height - source.Height; z++)
             {
                 for (int x = 0; x <= surface.Width - source.Width; x++)
                 {
-                    int right = x + source.Width;
-                    int top = z + source.Height;
-                    if (blocked[right, top] - blocked[x, top] - blocked[right, z] + blocked[x, z] != 0)
+                    int rightExclusive = x + source.Width;
+                    int topExclusive = z + source.Height;
+                    int blockedCount = blockedPrefixSums[rightExclusive, topExclusive]
+                        - blockedPrefixSums[x, topExclusive] - blockedPrefixSums[rightExclusive, z]
+                        + blockedPrefixSums[x, z];
+                    if (blockedCount != 0)
                     {
                         continue;
                     }
                     long dx = surface.minX + x - preferredX;
                     long dz = surface.minZ + z - preferredZ;
-                    long distance = dx * dx + dz * dz;
-                    if (distance >= bestDistance)
+                    long distanceSquared = dx * dx + dz * dz;
+                    if (distanceSquared >= bestDistanceSquared)
                     {
                         continue; // ties use ascending z, then x
                     }
-                    bestDistance = distance;
+                    bestDistanceSquared = distanceSquared;
                     destination = new CellRect(surface.minX + x, surface.minZ + z,
                         source.Width, source.Height);
                 }
             }
-            return bestDistance != long.MaxValue;
+            return bestDistanceSquared != long.MaxValue;
         }
 
-        private static bool Slide(Map map, ABBandMap bands, CellRect src, CellRect dst)
+        private static bool Slide(Map map, ABBandMap bands, CellRect src, CellRect dst,
+            List<CellRect> reserved)
         {
             // Validate the entire destination before changing either footprint.
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
-            if (src.Width != dst.Width || src.Height != dst.Height
-                || !CanPlaceAt(map, surface, src, dst, ProtectedStructureRects(map, surface)))
+            if (!CanPlaceAt(map, surface, src, dst, reserved))
             {
                 return false;
             }
