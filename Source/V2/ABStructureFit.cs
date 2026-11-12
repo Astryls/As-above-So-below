@@ -390,9 +390,7 @@ namespace AsAboveSoBelow
             {
                 return reserved;
             }
-            // Reserve courtyards and gaps between modules too. A later rescue copies its
-            // entire bounding rectangle, so occupying its empty ground is unsafe as well.
-            // Gather's size/substance gates exclude the many small scatter-debris entries.
+            // Reserve whole structures, including empty courtyards and module gaps.
             List<Candidate> structures = Gather(map, used, surface, includeContained: true);
             GroupContiguous(structures);
             var seen = new HashSet<int>();
@@ -414,6 +412,7 @@ namespace AsAboveSoBelow
         private static bool DestinationBlocked(Map map, IntVec3 cell, CellRect source,
             List<CellRect> reserved)
         {
+            // Check both terrain layers so bridges cannot hide protected water.
             if (!cell.InBounds(map)
                 || IsProtectedWater(map.terrainGrid.TerrainAt(cell))
                 || IsProtectedWater(map.terrainGrid.UnderTerrainAt(cell)))
@@ -454,8 +453,6 @@ namespace AsAboveSoBelow
             return true;
         }
 
-        /// <summary>Keep the original slide when safe, otherwise find the closest safe
-        /// footprint in the surface band without consuming the map generator's RNG.</summary>
         private static bool TryFindDestination(Map map, CellRect surface, CellRect source,
             out CellRect destination)
         {
@@ -474,8 +471,8 @@ namespace AsAboveSoBelow
                 return true;
             }
 
-            // A summed-area table makes each complete footprint check constant time.
-            // Rebuild for each group so earlier rescues are treated as occupied ground.
+            // Use a summed-area table for constant-time footprint checks.
+            // Rebuild per group to account for earlier relocations.
             var blocked = new int[surface.Width + 1, surface.Height + 1];
             for (int z = 0; z < surface.Height; z++)
             {
@@ -513,21 +510,9 @@ namespace AsAboveSoBelow
             return bestDistance != long.MaxValue;
         }
 
-        /// <summary>
-        /// Move a rect's entire contents - terrain, under-terrain, roof and things - to a
-        /// validated destination.
-        ///
-        /// ⚠ SNAPSHOT FIRST, WRITE SECOND. Source and destination overlap whenever the delta
-        /// is smaller than the rect (which is the common case, a structure nudged off a
-        /// seam), so writing as we walk would feed each row its own already-overwritten
-        /// predecessor and smear the structure across the band. Lifting the whole rect into
-        /// arrays before a single write makes the overlap irrelevant and removes the need to
-        /// reason about iteration direction at all.
-        /// </summary>
         private static bool Slide(Map map, ABBandMap bands, CellRect src, CellRect dst)
         {
-            // Validate before lifting or clearing anything. The original placement checks
-            // do not apply at a new location, and the terrain copy would overwrite a river.
+            // Validate the entire destination before changing either footprint.
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
             if (src.Width != dst.Width || src.Height != dst.Height
                 || !CanPlaceAt(map, surface, src, dst, ProtectedStructureRects(map, surface)))
@@ -542,6 +527,7 @@ namespace AsAboveSoBelow
             TerrainGrid terrain = map.terrainGrid;
             RoofGrid roofs = map.roofGrid;
 
+            // Snapshot first because source and destination can overlap.
             for (int z = 0; z < h; z++)
             {
                 for (int x = 0; x < w; x++)
