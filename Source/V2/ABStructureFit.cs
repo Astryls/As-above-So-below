@@ -189,7 +189,7 @@ namespace AsAboveSoBelow
             }
 
             CellRect surface = bands.RectOfBand(bands.surfaceBand);
-            List<Candidate> candidates = Gather(map, used, surface);
+            List<Candidate> candidates = Gather(map, used, surface, includeContained: false);
             if (candidates.Count == 0)
             {
                 return;
@@ -209,8 +209,9 @@ namespace AsAboveSoBelow
             }
         }
 
-        /// <summary>Which registered rects are structures worth moving, and are misplaced.</summary>
-        private static List<Candidate> Gather(Map map, List<CellRect> used, CellRect surface)
+        /// <summary>Find qualifying structures, optionally including those inside the surface band.</summary>
+        private static List<Candidate> Gather(Map map, List<CellRect> used, CellRect surface,
+            bool includeContained)
         {
             var found = new List<Candidate>();
             for (int i = 0; i < used.Count; i++)
@@ -221,7 +222,7 @@ namespace AsAboveSoBelow
                     continue;
                 }
                 // Wholly inside the surface band: vanilla's own placement, nothing to do.
-                if (r.minZ >= surface.minZ && r.maxZ <= surface.maxZ)
+                if (!includeContained && r.minZ >= surface.minZ && r.maxZ <= surface.maxZ)
                 {
                     continue;
                 }
@@ -320,21 +321,8 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                CellRect bound = cands[i].rect;
+                CellRect bound = GroupBounds(cands, cands[i]);
                 string sample = cands[i].sampleDef;
-                for (int j = i + 1; j < cands.Count; j++)
-                {
-                    if (cands[j].group != g)
-                    {
-                        continue;
-                    }
-                    CellRect o = cands[j].rect;
-                    bound = new CellRect(
-                        Mathf.Min(bound.minX, o.minX), Mathf.Min(bound.minZ, o.minZ),
-                        Mathf.Max(bound.maxX, o.maxX) - Mathf.Min(bound.minX, o.minX) + 1,
-                        Mathf.Max(bound.maxZ, o.maxZ) - Mathf.Min(bound.minZ, o.minZ) + 1);
-                    sample = sample ?? cands[j].sampleDef;
-                }
 
                 if (bound.Height > surface.Height)
                 {
@@ -354,41 +342,181 @@ namespace AsAboveSoBelow
                     continue;
                 }
 
-                int newMinZ = Mathf.Clamp(bound.minZ, surface.minZ, surface.maxZ - bound.Height + 1);
-                int delta = newMinZ - bound.minZ;
-                if (delta == 0)
+                List<CellRect> reserved = ProtectedStructureRects(map, used, surface);
+                if (!TryFindDestination(map, surface, bound, reserved, out CellRect destination))
                 {
+                    Log.Warning(ABLog.Tag + " V2: no safe surface destination for generated"
+                        + " structure " + bound + (sample != null ? " (" + sample + ")" : "")
+                        + ". Rescue skipped to preserve water and existing structures;"
+                        + " the original structure may be removed by band carving.");
                     continue;
                 }
-                if (Slide(map, bands, bound, delta))
+                IntVec3 delta = destination.Min - bound.Min;
+                if (Slide(map, bands, bound, destination, reserved))
                 {
                     Retarget(used, bound, delta);
                     ABLog.Dev("Structure rescue: moved " + bound.Width + "x" + bound.Height
-                        + " structure at " + bound.CenterCell + " by z" + (delta > 0 ? "+" : "")
+                        + " structure at " + bound.CenterCell + " by "
                         + delta + " into the surface band"
                         + (sample != null ? " (" + sample + ")" : "") + ".");
                 }
             }
         }
 
-        /// <summary>
-        /// Move a rect's entire contents - terrain, under-terrain, roof and things - by a z
-        /// delta.
-        ///
-        /// ⚠ SNAPSHOT FIRST, WRITE SECOND. Source and destination overlap whenever the delta
-        /// is smaller than the rect (which is the common case, a structure nudged off a
-        /// seam), so writing as we walk would feed each row its own already-overwritten
-        /// predecessor and smear the structure across the band. Lifting the whole rect into
-        /// arrays before a single write makes the overlap irrelevant and removes the need to
-        /// reason about iteration direction at all.
-        /// </summary>
-        private static bool Slide(Map map, ABBandMap bands, CellRect src, int delta)
+        private static CellRect GroupBounds(List<Candidate> candidates, Candidate member)
         {
-            CellRect dst = new CellRect(src.minX, src.minZ + delta, src.Width, src.Height);
-            if (dst.minZ < 0 || dst.maxZ >= map.Size.z)
+            CellRect bound = member.rect;
+            foreach (Candidate candidate in candidates)
+            {
+                if (candidate.group != member.group)
+                {
+                    continue;
+                }
+                CellRect rect = candidate.rect;
+                bound = new CellRect(Mathf.Min(bound.minX, rect.minX), Mathf.Min(bound.minZ, rect.minZ),
+                    Mathf.Max(bound.maxX, rect.maxX) - Mathf.Min(bound.minX, rect.minX) + 1,
+                    Mathf.Max(bound.maxZ, rect.maxZ) - Mathf.Min(bound.minZ, rect.minZ) + 1);
+            }
+            return bound;
+        }
+
+        private static List<CellRect> ProtectedStructureRects(Map map, List<CellRect> used,
+            CellRect surface)
+        {
+            var reserved = new List<CellRect>();
+            // Reserve whole structures, including empty courtyards and module gaps.
+            List<Candidate> structures = Gather(map, used, surface, includeContained: true);
+            GroupContiguous(structures);
+            var seen = new HashSet<int>();
+            foreach (Candidate candidate in structures)
+            {
+                if (seen.Add(candidate.group))
+                {
+                    reserved.Add(GroupBounds(structures, candidate));
+                }
+            }
+            return reserved;
+        }
+
+        private static bool IsProtectedWater(TerrainDef terrain)
+        {
+            return terrain != null && (terrain.IsWater || terrain.tags?.Contains("River") == true);
+        }
+
+        private static bool DestinationBlocked(Map map, IntVec3 cell, CellRect source,
+            List<CellRect> reserved)
+        {
+            // Check both terrain layers so bridges cannot hide protected water.
+            if (!cell.InBounds(map)
+                || IsProtectedWater(map.terrainGrid.TerrainAt(cell))
+                || IsProtectedWater(map.terrainGrid.UnderTerrainAt(cell)))
+            {
+                return true;
+            }
+            if (source.Contains(cell))
+            {
+                return false; // the source's own structures are carried, not destroyed
+            }
+            foreach (CellRect rect in reserved)
+            {
+                if (rect.Contains(cell))
+                {
+                    return true;
+                }
+            }
+            Building edifice = cell.GetEdifice(map);
+            return edifice != null && edifice.def?.building != null
+                && !edifice.def.building.isNaturalRock;
+        }
+
+        private static bool CanPlaceAt(Map map, CellRect surface, CellRect source, CellRect destination,
+            List<CellRect> reserved)
+        {
+            if (source.Width != destination.Width || source.Height != destination.Height
+                || destination.minX < surface.minX || destination.maxX > surface.maxX
+                || destination.minZ < surface.minZ || destination.maxZ > surface.maxZ)
             {
                 return false;
             }
+            foreach (IntVec3 cell in destination)
+            {
+                if (DestinationBlocked(map, cell, source, reserved))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TryFindDestination(Map map, CellRect surface, CellRect source,
+            List<CellRect> reserved, out CellRect destination)
+        {
+            destination = default;
+            if (source.Width > surface.Width || source.Height > surface.Height)
+            {
+                return false;
+            }
+            int preferredX = Mathf.Clamp(source.minX, surface.minX, surface.maxX - source.Width + 1);
+            int preferredZ = Mathf.Clamp(source.minZ, surface.minZ, surface.maxZ - source.Height + 1);
+            var preferred = new CellRect(preferredX, preferredZ, source.Width, source.Height);
+            if (CanPlaceAt(map, surface, source, preferred, reserved))
+            {
+                destination = preferred;
+                return true;
+            }
+
+            // Use a summed-area table for constant-time footprint checks.
+            // Rebuild per group to account for earlier relocations.
+            var blockedPrefixSums = new int[surface.Width + 1, surface.Height + 1];
+            for (int z = 0; z < surface.Height; z++)
+            {
+                for (int x = 0; x < surface.Width; x++)
+                {
+                    var cell = new IntVec3(surface.minX + x, 0, surface.minZ + z);
+                    blockedPrefixSums[x + 1, z + 1] = (DestinationBlocked(map, cell, source, reserved) ? 1 : 0)
+                        + blockedPrefixSums[x, z + 1] + blockedPrefixSums[x + 1, z] - blockedPrefixSums[x, z];
+                }
+            }
+
+            long bestDistanceSquared = long.MaxValue;
+            for (int z = 0; z <= surface.Height - source.Height; z++)
+            {
+                for (int x = 0; x <= surface.Width - source.Width; x++)
+                {
+                    int rightExclusive = x + source.Width;
+                    int topExclusive = z + source.Height;
+                    int blockedCount = blockedPrefixSums[rightExclusive, topExclusive]
+                        - blockedPrefixSums[x, topExclusive] - blockedPrefixSums[rightExclusive, z]
+                        + blockedPrefixSums[x, z];
+                    if (blockedCount != 0)
+                    {
+                        continue;
+                    }
+                    long dx = surface.minX + x - preferredX;
+                    long dz = surface.minZ + z - preferredZ;
+                    long distanceSquared = dx * dx + dz * dz;
+                    if (distanceSquared >= bestDistanceSquared)
+                    {
+                        continue; // ties use ascending z, then x
+                    }
+                    bestDistanceSquared = distanceSquared;
+                    destination = new CellRect(surface.minX + x, surface.minZ + z,
+                        source.Width, source.Height);
+                }
+            }
+            return bestDistanceSquared != long.MaxValue;
+        }
+
+        private static bool Slide(Map map, ABBandMap bands, CellRect src, CellRect dst,
+            List<CellRect> reserved)
+        {
+            // Validate the entire destination before changing either footprint.
+            CellRect surface = bands.RectOfBand(bands.surfaceBand);
+            if (!CanPlaceAt(map, surface, src, dst, reserved))
+            {
+                return false;
+            }
+            IntVec3 delta = dst.Min - src.Min;
 
             int w = src.Width;
             int h = src.Height;
@@ -396,6 +524,7 @@ namespace AsAboveSoBelow
             TerrainGrid terrain = map.terrainGrid;
             RoofGrid roofs = map.roofGrid;
 
+            // Snapshot first because source and destination can overlap.
             for (int z = 0; z < h; z++)
             {
                 for (int x = 0; x < w; x++)
@@ -552,7 +681,7 @@ namespace AsAboveSoBelow
                 IntVec3 spot = MapGenerator.PlayerStartSpot;
                 if (src.Contains(spot))
                 {
-                    MapGenerator.PlayerStartSpot = spot + new IntVec3(0, 0, delta);
+                    MapGenerator.PlayerStartSpot = spot + delta;
                 }
             }
 
@@ -605,7 +734,8 @@ namespace AsAboveSoBelow
             // this cannot fire today - but it is the one precondition the whole repair rests
             // on, and a future caller passing its own delta would otherwise refog a band the
             // carve has already finished with.
-            if (dst.minZ < surface.minZ || dst.maxZ > surface.maxZ)
+            if (dst.minX < surface.minX || dst.maxX > surface.maxX
+                || dst.minZ < surface.minZ || dst.maxZ > surface.maxZ)
             {
                 Log.Error(ABLog.Tag + " V2: structure rescue moved " + src + " to " + dst
                     + ", which is not inside the surface band " + surface
@@ -613,13 +743,15 @@ namespace AsAboveSoBelow
                 return;
             }
 
+            int minX = Mathf.Max(surface.minX, Mathf.Min(src.minX, dst.minX));
+            int maxX = Mathf.Min(surface.maxX, Mathf.Max(src.maxX, dst.maxX));
             int minZ = Mathf.Max(surface.minZ, Mathf.Min(src.minZ, dst.minZ));
             int maxZ = Mathf.Min(surface.maxZ, Mathf.Max(src.maxZ, dst.maxZ));
             if (maxZ < minZ)
             {
                 return;
             }
-            CellRect repair = new CellRect(dst.minX, minZ, dst.Width, maxZ - minZ + 1)
+            CellRect repair = new CellRect(minX, minZ, maxX - minX + 1, maxZ - minZ + 1)
                 .ClipInsideMap(map);
             if (repair.Area <= 0)
             {
@@ -739,7 +871,7 @@ namespace AsAboveSoBelow
         /// <summary>Move the registry entries too, so anything reading UsedRects after this
         /// (the dev-mode overlay, a late genstep, another mod's postfix) sees where the
         /// structure actually IS rather than where it was built.</summary>
-        private static void Retarget(List<CellRect> used, CellRect bound, int delta)
+        private static void Retarget(List<CellRect> used, CellRect bound, IntVec3 delta)
         {
             for (int i = 0; i < used.Count; i++)
             {
@@ -749,7 +881,7 @@ namespace AsAboveSoBelow
                 {
                     continue;
                 }
-                used[i] = new CellRect(r.minX, r.minZ + delta, r.Width, r.Height);
+                used[i] = new CellRect(r.minX + delta.x, r.minZ + delta.z, r.Width, r.Height);
             }
         }
     }
